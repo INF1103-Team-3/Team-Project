@@ -17,14 +17,14 @@ The application is intended for the general public, especially people who need t
 What information or data will users provide to BiteFinder?
 
 BiteFinder will collect only the information needed to generate relevant recommendations. Inputs include:
-•  Location - current device location with permission, or a manually entered postal code, address, landmark, latitude or longitude
-•  Maximum walking time - the longest time the user is willing to walk
-•  Budget - the maximum amount the user wants to spend
-•  Dietary requirement - for example Halal, vegan or vegetarian
-•  Food allergies - allergens the user needs to avoid, such as peanuts or shellfish
-•  Food or meal preference - preferred dish, cuisine or meal type, such as chicken rice, Japanese food, rice or noodles
-•  Time requirement - for example, open now or open at a specified time
-•  Optional natural-language request - for example, “something spicy but not too expensive”.
+- Location - current device location with permission, or a manually entered postal code, address, landmark, latitude or longitude
+- Maximum walking time - the longest time the user is willing to walk
+- Budget - the maximum amount the user wants to spend
+- Dietary requirement - for example Halal, vegan or vegetarian
+- Food allergies - allergens the user needs to avoid, such as peanuts or shellfish
+- Food or meal preference - preferred dish, cuisine or meal type, such as chicken rice, Japanese food, rice or noodles
+- Time requirement - for example, open now or open at a specified time
+- Optional natural-language request - for example, “something spicy but not too expensive”.
 
 3.  Use of AI
 
