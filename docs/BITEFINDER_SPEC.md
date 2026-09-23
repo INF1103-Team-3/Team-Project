@@ -1018,7 +1018,7 @@ NEVER:
 
 Work on:
 
-<TARGET_BRANCH>
+bitefinder-draft
 
 If TARGET_BRANCH has not been explicitly replaced:
 

@@ -1,4 +1,14 @@
-bitefinder_codex
+bitefinder_codex/
 *.pem
 *.key
 .env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+logs/
+data/users.json
+data/interactions.json
+data/routes_cache.json

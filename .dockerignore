@@ -1,0 +1,9 @@
+*
+!Dockerfile
+!requirements.txt
+!*.py
+!data/
+!data/restaurants.json
+!data/sources.json
+!prompts/
+!prompts/*.txt
