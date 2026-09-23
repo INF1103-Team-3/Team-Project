@@ -61,3 +61,10 @@ def test_malformed_interpretation_retried_once():
 
 def load_tests(loader, tests, pattern):
     return function_suite(globals())
+
+
+def test_interrupted_http_read_is_reported():
+    from http.client import IncompleteRead
+    with patch("ai_manager.urlopen", side_effect=IncompleteRead(b"partial")):
+        result, error = request_completion([], CONFIG)
+        assert result is None and error

@@ -11,7 +11,7 @@ EVENTS = {
     "data_saved", "write_failed", "input_validated", "ai_started",
     "ai_received", "ai_invalid", "ai_failed", "filtered", "ranked",
     "results_displayed", "validation_failed", "route_failed",
-    "route_received", "profile_updated",
+    "route_started", "route_received", "profile_updated",
 }
 
 

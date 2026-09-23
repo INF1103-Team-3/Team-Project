@@ -5,11 +5,14 @@ from datetime import datetime, timezone
 
 from ai_manager import interpret_request
 from data_manager import (
-    append_interaction, load_profile, load_restaurants, query_restaurants,
-    save_profile,
+    append_interaction, load_json, load_profile, load_restaurants,
+    query_restaurants, save_json, save_profile,
 )
 from debug import debug_log
-from logic_manager import prepare_request, recommend, record_selection
+from logic_manager import (
+    eligible_items, prepare_request, recommend, record_selection,
+)
+from routing_service import resolve_routes
 from schemas import empty_request, is_number, is_text_list, valid_coordinates
 
 
@@ -109,17 +112,27 @@ def display_recommendations(results, exclusions):
         restaurant, item = result["restaurant"], result["item"]
         print(f"\n{index}. {restaurant['name']} — {restaurant['address']}")
         price = item.get("price")
-        print(f"   {item['name']} — " + (f"SGD {price:.2f}" if price is not None else "Price unavailable"))
+        price_text = f"SGD {price:.2f}" if price is not None else "Price unavailable"
+        print(f"   {item['name']} — {price_text}")
         walking = result["walking_minutes"]
         print("   Walking: " + (f"{walking:.1f} min" if walking is not None else "unavailable"))
         status = {True: "open", False: "closed", None: "unknown"}[result["open"]]
         print("   Opening status: " + status)
-        print("   Ranking contributions: " + json.dumps(result["scores"]))
-        print("   Dietary evidence: " + json.dumps(item.get("dietary", {})))
-        print("   Allergy evidence: " + json.dumps(item.get("allergen_free", {})))
-        print("   Sources: " + ", ".join(sorted(set(restaurant["source_ids"] + item["source_ids"]))))
+        if result.get("route"):
+            print(f"   Route distance: {result['route']['distance_m']:.0f} m "
+                  "(openrouteservice / OpenStreetMap; estimated outdoor route)")
+        labels = {"food": "Food/cuisine match", "profile": "Past preferences",
+                  "walking": "Walking convenience", "price": "Price", "variety": "Variety"}
+        reasons = [f"{labels[key]}: {points:.1f}" for key, points in result["scores"].items()]
+        print(f"   Ranking: {result['score']:.1f} points (" + "; ".join(reasons) + ")")
+        for field, label in (("dietary", "Dietary"), ("allergen_free", "Allergy")):
+            evidence = [tag for tag, claim in item.get(field, {}).items()
+                        if claim.get("confirmed") is True]
+            print(f"   {label} evidence: " + (", ".join(evidence) if evidence else "unverified"))
+        for reference in restaurant.get("source_references", []):
+            print("   Source: " + reference)
     if results:
-        print("Empty evidence means unverified. Confirm allergy and cross-contact details "
+        print("Confirm allergy and cross-contact details "
               "with the restaurant. Prices are for the listed item only.")
     debug_log("results_displayed", count=len(results))
 
@@ -157,6 +170,27 @@ def choose_result(config, name, profile, results):
     return profile
 
 
+def collect_routes(config, request, restaurants):
+    if request["location"] is None:
+        return {}
+    path = config["data_dir"] / "routes_cache.json"
+    cache, cache_error = load_json(path, dict)
+    if cache_error:
+        print(cache_error + " Using fresh routes without overwriting the cache.")
+    candidates = [r for r in restaurants if eligible_items(r, request)]
+    if candidates:
+        print("Checking walking routes; this can take a few seconds per restaurant.")
+    routes, updated, warnings = resolve_routes(
+        request["location"], candidates, config, cache)
+    for warning in warnings:
+        print(warning)
+    if updated != cache and not cache_error:
+        error = save_json(path, updated)
+        if error:
+            print(error)
+    return routes
+
+
 def run_session(config):
     print("BiteFinder CLI — prices in SGD; menu evidence only, no safety guarantees.")
     name = input("Local profile name (blank for default): ").strip() or "default"
@@ -174,7 +208,11 @@ def run_session(config):
         if warning:
             print(warning)
         restaurants = query_restaurants(restaurants, request["restaurant_name"])
-        results, exclusions, error = recommend(restaurants, request, profile)
+        routes = collect_routes(config, request, restaurants)
+        minutes = {key: value["minutes"] for key, value in routes.items()}
+        results, exclusions, error = recommend(restaurants, request, profile, minutes)
+        for result in results:
+            result["route"] = routes.get(result["restaurant"]["restaurant_id"])
         if error:
             print(error)
             continue

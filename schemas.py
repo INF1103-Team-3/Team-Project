@@ -12,8 +12,12 @@ REQUEST_FIELDS = set(LIST_FIELDS) | {
 
 
 def is_number(value, minimum=0):
-    return (type(value) in (int, float) and math.isfinite(value)
-            and value >= minimum)
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(value) and value >= minimum
+    except OverflowError:
+        return False
 
 
 def is_text(value):
@@ -161,9 +165,12 @@ def valid_opening_hours(hours, source_ids):
 def valid_profile(profile):
     if not isinstance(profile, dict):
         return False
-    for field in ("allergies", "dietary_requirements", "selected_ids"):
+    for field in ("allergies", "dietary_requirements"):
         if not is_text_list(profile.get(field, [])):
             return False
+    selected = profile.get("selected_ids", [])
+    if not isinstance(selected, list) or not all(is_text(item) for item in selected):
+        return False
     counts = profile.get("cuisine_counts", {})
     return (isinstance(counts, dict) and all(is_text(key) and type(value) is int
             and 0 <= value <= 10 for key, value in counts.items()))

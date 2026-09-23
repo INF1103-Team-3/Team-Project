@@ -95,10 +95,16 @@ def load_restaurants(directory):
     sources, error = load_json(Path(directory) / "sources.json")
     if error:
         return [], error
-    source_ids = {s["source_id"] for s in sources if isinstance(s, dict)
-                  and isinstance(s.get("source_id"), str)
-                  and isinstance(s.get("source_reference"), str)
-                  and s["source_reference"].startswith("https://")}
+    references = {}
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        source_id = source.get("source_id")
+        reference = source.get("source_reference")
+        if (isinstance(source_id, str) and isinstance(reference, str)
+                and reference.startswith("https://") and reference.isprintable()):
+            references[source_id] = reference
+    source_ids = set(references)
     valid, seen, rejected = [], set(), 0
     for record in records:
         if not validate_restaurant(record, source_ids):
@@ -106,8 +112,15 @@ def load_restaurants(directory):
         elif record["restaurant_id"] in seen:
             rejected += 1
         else:
+            ids = set(record["source_ids"])
+            for item in record["menu"]:
+                ids.update(item["source_ids"])
+            record["source_references"] = [references[sid] for sid in sorted(ids)]
             valid.append(record)
             seen.add(record["restaurant_id"])
     if rejected:
         debug_log("data_invalid", "error", rejected)
-    return valid, f"Skipped {rejected} invalid or duplicate restaurant records." if rejected else None
+    warning = None
+    if rejected:
+        warning = f"Skipped {rejected} invalid or duplicate restaurant records."
+    return valid, warning

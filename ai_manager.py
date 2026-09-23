@@ -1,6 +1,7 @@
 """OpenRouter communication and request parsing; no restaurant business rules."""
 
 import json
+from http.client import HTTPException
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -45,7 +46,8 @@ def request_completion(messages, config):
     except HTTPError as error:
         debug_log("ai_failed", "error", error.code)
         return None, "AI service rejected the request. Check key, model and account limits."
-    except (URLError, OSError, ValueError, KeyError, IndexError, TypeError):
+    except (URLError, OSError, HTTPException, ValueError,
+            KeyError, IndexError, TypeError, RecursionError):
         debug_log("ai_failed", "error")
         return None, "AI service is unavailable or returned an invalid response."
 

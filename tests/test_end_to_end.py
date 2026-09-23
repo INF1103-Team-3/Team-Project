@@ -85,3 +85,59 @@ def test_manual_search_runs_against_sourced_starter_data():
         assert output.getvalue().count("Saizeriya —") == 3
         history, error = load_json(Path(directory) / "interactions.json")
         assert error is None and len(history[0]["recommendations"]) == 3
+
+
+def test_walk_limit_integrated_and_cache_persists():
+    from routing_service import cache_key
+    origin = [1.301, 103.801]
+    with tempfile.TemporaryDirectory() as directory:
+        seed(directory)
+        config = {"data_dir": Path(directory), "routing_key": "test-placeholder"}
+        req = request(location=origin, walking_time_max=5)
+        answers = ["walker", "a", "walk", "y", "s", "q"]
+        route = {"minutes": 4, "distance_m": 300, "provider": "openrouteservice"}
+        with patch("builtins.input", side_effect=answers), patch("sys.stdout", new_callable=io.StringIO) as output:
+            with patch("io_manager.interpret_request", return_value=(req, None)):
+                with patch("routing_service.fetch_walking_route", return_value=(route, None)) as network:
+                    run_cli(config)
+        # Identical destinations share one cached route even in the same search.
+        assert network.call_count == 1
+        assert "4.0 min" in output.getvalue()
+        cache, error = load_json(Path(directory) / "routes_cache.json", dict)
+        assert error is None and cache_key(origin, [1.3, 103.8]) in cache
+
+
+def test_saved_allergies_exclude_unverified_meals_on_next_run():
+    with tempfile.TemporaryDirectory() as directory:
+        seed(directory)
+        save_json(Path(directory) / "users.json", {"safe": {"allergies": ["soy"]}})
+        answers = ["safe", "a", "rice", "y", "q"]
+        with patch("builtins.input", side_effect=answers), patch("sys.stdout", new_callable=io.StringIO) as output:
+            with patch("io_manager.interpret_request", return_value=(request(), None)):
+                run_cli({"data_dir": Path(directory)})
+        assert "No restaurant meets every requirement" in output.getvalue()
+        history, _ = load_json(Path(directory) / "interactions.json")
+        assert history[0]["request"]["allergies"] == ["soy"]
+        assert history[0]["recommendations"] == []
+
+
+def test_corrupt_route_cache_is_preserved():
+    from io_manager import collect_routes
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "routes_cache.json"
+        path.write_text("broken")
+        route = {"minutes": 4, "distance_m": 300, "provider": "openrouteservice"}
+        with patch("routing_service.fetch_walking_route", return_value=(route, None)):
+            with patch("sys.stdout", new_callable=io.StringIO):
+                result = collect_routes({"data_dir": Path(directory), "routing_key": "test-placeholder"},
+                                        request(location=[1.301, 103.801]), [restaurant()])
+        assert result and path.read_text() == "broken"
+
+
+def test_malformed_sources_are_skipped_without_crashing():
+    with tempfile.TemporaryDirectory() as directory:
+        seed(directory)
+        bad_sources = [None, {"source_id": []}, {"source_id": "test-source"}]
+        save_json(Path(directory) / "sources.json", bad_sources)
+        records, warning = load_restaurants(directory)
+        assert not records and warning

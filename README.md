@@ -48,6 +48,13 @@ The app reads environment variables only. It does not automatically load `.env`
 or read `/run/codex-secrets`. Existing mounted credentials should be injected by
 your container launcher; do not paste them into source code or chat. Safe variable
 names are in `.env.example`. No Telegram key is needed for this CLI MVP.
+
+For walking routes, create an account/key at the
+[openrouteservice dashboard](https://openrouteservice.org/log-in/) and set
+`OPENROUTESERVICE_API_KEY` using the same hidden-input pattern as above. The
+[directions API](https://giscience.github.io/openrouteservice/api-reference/endpoints/directions/requests-and-return-types)
+receives origin/destination coordinates when a confirmed search includes a
+location. Route caches also remain local and ignored by Git.
 `BITEFINDER_DATA_DIR` defaults to the repository `data` directory;
 `BITEFINDER_LOG_DIR` defaults to `logs` relative to the working directory.
 
@@ -62,8 +69,13 @@ restated in manual mode. User confirmation is required because interpretation ca
 omit or misunderstand natural language.
 
 Weekly local opening schedules support overnight hours and date exceptions.
-Missing hours are unknown. Walking limits currently fail closed without route
-evidence; live pedestrian routing is the next increment.
+Missing hours are unknown. Walking routes use openrouteservice's `foot-walking`
+profile and require manual latitude/longitude. No straight-line substitute is used.
+Successful routes are cached for one hour by exact origin/destination coordinates;
+missing, expired or failed routes cannot pass a walking limit. A search makes at
+most 10 uncached routing requests. Limits are applied to the provider's estimated
+outdoor walking time; indoor access, entrances and unexpected closures may differ.
+The routing service may snap coordinates to paths within 100 metres.
 
 Ranking uses cuisine/food match (35), learned cuisine preference (25), walking
 convenience (20), price (15), and variety (5). Individual contributions are shown.
@@ -85,6 +97,7 @@ controlled milestone codes and numeric counts, never user text or API responses.
 - `logic_manager.py`: hard constraints, opening status, ranking and soft learning.
 - `data_manager.py`: JSON storage and restaurant loading; `schemas.py`: validation.
 - `config.py`, `debug.py`: configuration and milestone logging.
+- `routing_service.py`: pedestrian HTTP requests and route-cache validation.
 - `data/`: sourced restaurant data; `tests/`: offline unit/integration tests.
 - `legacy/streamlit_app.py`: preserved prototype, not the runnable MVP; its original
   database/recommender modules were absent from this checkout.
@@ -96,14 +109,16 @@ python -m unittest discover -s tests -v
 python -m compileall -q *.py tests
 
 docker build -t bitefinder .
-docker run --rm -it --env OPENROUTER_API_KEY --env OPENROUTER_MODEL bitefinder
+docker run --rm -it --env OPENROUTER_API_KEY --env OPENROUTER_MODEL \
+  --env OPENROUTESERVICE_API_KEY bitefinder
 ```
 
 All API tests use mocked responses. No live paid requests are required. The Docker
 context explicitly excludes secrets and local user data. For persistent storage,
 mount the project data directory at `/app/data` and logs at `/app/logs`.
 Docker is unavailable in the current development container; image build/run have
-not been verified. OpenRouter live execution awaits environment configuration.
+not been verified. OpenRouter and openrouteservice live execution await
+environment configuration.
 
 ## Troubleshooting and remaining work
 
@@ -115,6 +130,6 @@ not been verified. OpenRouter live execution awaits environment configuration.
 - Failed saves: check directory permissions and free space.
 - Malformed AI output: retry the request or switch to manual entry.
 
-Next: pedestrian routing, broader verified data, live API/Docker validation, richer
+Next: broader verified data, live API/Docker validation, richer
 profile management, and controlled AI-assisted source ingestion. Telegram and web
 interfaces remain future enhancements under the CLI-first specification.

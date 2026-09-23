@@ -111,3 +111,23 @@ def test_selection_only_updates_soft_preferences():
 
 def load_tests(loader, tests, pattern):
     return function_suite(globals())
+
+
+def test_extreme_numbers_and_control_characters_rejected():
+    assert validate_request(request(budget_max=10 ** 1000))
+    assert validate_request(request(cuisines=["rice\x1b[2J"]))
+
+
+def test_opening_evidence_and_holiday_closure():
+    record = restaurant()
+    record["opening_hours"] = {
+        "timezone": "Asia/Singapore", "source_ids": ["missing"],
+        "weekly": {"0": [["22:00", "02:00"]], "1": []},
+        "exceptions": {"2026-09-22": []},
+    }
+    assert not validate_restaurant(record, {"test-source"})
+    record["opening_hours"]["source_ids"] = ["test-source"]
+    assert validate_restaurant(record, {"test-source"})
+    assert opening_status(record, datetime(2026, 9, 21, 17, tzinfo=timezone.utc)) is False
+    record["opening_hours"]["weekly"] = []
+    assert not validate_restaurant(record, {"test-source"})
