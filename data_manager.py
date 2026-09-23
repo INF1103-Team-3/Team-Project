@@ -6,7 +6,9 @@ import tempfile
 from pathlib import Path
 
 from debug import debug_log
-from schemas import is_text, valid_profile, validate_bundle, validate_restaurant
+from schemas import (
+    is_text, valid_google_place_id, valid_profile, validate_bundle, validate_restaurant,
+)
 
 
 def load_json(path, expected_type=list):
@@ -220,3 +222,25 @@ def save_import(directory, bundle):
     if not error:
         debug_log("import_saved", count=len(bundle["restaurants"]))
     return error
+
+
+def load_google_place_ids(directory):
+    identifiers, error = load_json(Path(directory) / "google_place_ids.json")
+    if error:
+        return [], error
+    if not all(valid_google_place_id(value) for value in identifiers):
+        return [], "Saved Google place IDs are invalid; original file preserved."
+    return list(dict.fromkeys(identifiers)), None
+
+
+def save_google_place_ids(directory, identifiers):
+    """Persist only the exempt place identifiers, never Google place content."""
+    if not isinstance(identifiers, list) or not all(
+        valid_google_place_id(value) for value in identifiers
+    ):
+        return "Only valid Google place IDs can be saved."
+    existing, error = load_google_place_ids(directory)
+    if error:
+        return error
+    combined = list(dict.fromkeys(existing + identifiers))
+    return save_json(Path(directory) / "google_place_ids.json", combined)

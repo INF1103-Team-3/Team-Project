@@ -13,6 +13,7 @@ EVENTS = {
     "results_displayed", "validation_failed", "route_failed",
     "route_started", "route_received", "profile_updated",
     "import_invalid", "import_saved",
+    "places_started", "places_received", "places_failed",
 }
 
 

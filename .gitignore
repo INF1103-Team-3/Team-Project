@@ -20,3 +20,4 @@ secrets/
 *.pem
 credentials.json
 service-account*.json
+data/google_place_ids.json

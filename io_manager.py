@@ -1,15 +1,18 @@
 """CLI input, orchestration and display; all normal user-facing output lives here."""
 
+import argparse
 import json
 from datetime import datetime, timezone
 
 from ai_manager import extract_restaurants, interpret_request
 from data_manager import (
-    append_interaction, load_history, load_json, load_profile, load_restaurants,
+    append_interaction, load_google_place_ids, load_history, load_json,
+    load_profile, load_restaurants,
     prepare_import, query_restaurants, read_import_file, read_incoming_json, save_import,
-    save_json, save_profile,
+    save_google_place_ids, save_json, save_profile,
 )
 from debug import debug_log
+from google_places_service import get_place_details, search_nearby_restaurants
 from logic_manager import (
     eligible_items, prepare_extracted_bundle, prepare_request, recommend, record_selection,
 )
@@ -50,9 +53,9 @@ def ask_tags(prompt):
         print("Enter up to 30 short values separated by commas.")
 
 
-def ask_location():
+def ask_location(prompt="Latitude, longitude (blank if not using walking routes): "):
     while True:
-        raw = input("Latitude, longitude (blank if not using walking routes): ").strip()
+        raw = input(prompt).strip()
         if not raw:
             return None
         try:
@@ -84,8 +87,11 @@ def collect_manual_request():
 def collect_request(config, profile, name="default"):
     mode = ask_choice(
         "[m]anual search, [a]i search, [p]rofile, [h]istory, "
-        "[i]mport, [x]tract source, [q]uit: ",
-        ("m", "a", "p", "h", "i", "x", "q"))
+        "[i]mport, [x]tract source, [g]oogle discovery, [q]uit: ",
+        ("m", "a", "p", "h", "i", "x", "g", "q"))
+    if mode == "g":
+        google_discovery_menu(config)
+        return None, False
     if mode == "x":
         extract_catalog(config)
         return None, False
@@ -246,8 +252,10 @@ def run_session(config):
         profile = choose_result(config, name, profile, results)
 
 
-def run_cli(config):
+def run_cli(config, arguments=None):
     try:
+        if arguments:
+            return run_google_command(config, arguments)
         run_session(config)
     except (EOFError, KeyboardInterrupt):
         print("\nBiteFinder closed.")
@@ -350,3 +358,100 @@ def extract_catalog(config):
         return
     print("AI extraction is a draft. Check each quoted fact against its source.")
     review_import(config, bundle)
+
+
+def display_google_places(places):
+    print("\n--- Google Maps ---")
+    if not places:
+        print("No restaurants found for this search.")
+    for index, place in enumerate(places, 1):
+        print(f"{index}. {place['name'] or 'Name unavailable'}")
+        print("   Address: " + (place["address"] or "unavailable"))
+        if place["type"]:
+            print("   Type: " + place["type"].replace("_", " "))
+        if place["business_status"]:
+            print("   Business status: " + place["business_status"].replace("_", " "))
+        if place["maps_url"]:
+            print("   Google Maps: " + place["maps_url"])
+        if place["website"]:
+            print("   Website: " + place["website"])
+        if place["open_now"] is not None:
+            print("   Reported open now: " + ("yes" if place["open_now"] else "no"))
+        for hours in place["opening_hours"]:
+            print("   " + hours)
+        if place["price_level"]:
+            print("   General price level: " + place["price_level"])
+        for attribution in place["attributions"]:
+            print("   Provider: " + attribution["provider"])
+            if attribution["url"]:
+                print("   " + attribution["url"])
+    print("--- End Google Maps results ---")
+    print("Discovery leads only: menu prices, dietary and allergy requirements "
+          "have not been verified. These are separate from meal recommendations.")
+
+
+def discover_google(config, location, radius, limit):
+    places, error = search_nearby_restaurants(location, radius, limit, config)
+    if error:
+        print(error)
+        return [], 1
+    display_google_places(places)
+    if not places:
+        return places, 0
+    error = save_google_place_ids(config["data_dir"],
+                                  [place["place_id"] for place in places])
+    if error:
+        print(error)
+        return places, 1
+    print(f"Discovered {len(places)} restaurants; saved unique place IDs for later lookup.")
+    return places, 0
+
+
+def google_discovery_menu(config):
+    print("Google discovery uses Places API (New). Each lookup may incur API charges.")
+    mode = ask_choice("[n]earby restaurants, [s]aved place IDs, [b]ack: ", ("n", "s", "b"))
+    if mode == "b":
+        return
+    if mode == "n":
+        location = ask_location("Latitude, longitude for discovery (blank to cancel): ")
+        if location is None:
+            return
+        radius = ask_number("Search radius in metres (blank for 1000, maximum 50000): ")
+        places, status = discover_google(config, location, 1000 if radius is None else radius, 20)
+        if status or not places:
+            return
+        identifiers = [place["place_id"] for place in places]
+    else:
+        identifiers, error = load_google_place_ids(config["data_dir"])
+        if error:
+            print(error)
+            return
+        if not identifiers:
+            print("No saved Google place IDs. Run nearby discovery first.")
+            return
+        # Recent IDs only; fetching details is always an explicit single lookup.
+        identifiers = identifiers[-20:]
+        for index, identifier in enumerate(identifiers, 1):
+            print(f"{index}. {identifier}")
+    choices = tuple(str(index) for index in range(1, len(identifiers) + 1)) + ("b",)
+    choice = ask_choice("Choose a number for a live details/website lookup, or [b]ack: ", choices)
+    if choice == "b":
+        return
+    place, error = get_place_details(identifiers[int(choice) - 1], config)
+    if error:
+        print(error)
+        return
+    display_google_places([place])
+
+
+def run_google_command(config, arguments):
+    parser = argparse.ArgumentParser(description="BiteFinder CLI and Google restaurant discovery")
+    parser.add_argument("--discover-google", nargs=2, type=float, metavar=("LAT", "LON"),
+                        help="one nearby search; display results and save place IDs")
+    parser.add_argument("--radius-m", type=float, default=1000)
+    parser.add_argument("--limit", type=int, default=20)
+    options = parser.parse_args(arguments)
+    if options.discover_google is None:
+        parser.error("Supply --discover-google LAT LON, or run without arguments for the menu.")
+    _, status = discover_google(config, options.discover_google, options.radius_m, options.limit)
+    return status

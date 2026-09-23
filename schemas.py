@@ -243,3 +243,10 @@ def validate_source_excerpt(value):
     if not isinstance(text, str) or not 1 <= len(text.strip()) <= 20000:
         return "Supply a public source excerpt between 1 and 20000 characters."
     return None
+
+
+def valid_google_place_id(value):
+    import re
+
+    return (isinstance(value, str)
+            and re.fullmatch(r"[A-Za-z0-9_-]{1,512}", value) is not None)

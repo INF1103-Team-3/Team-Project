@@ -12,5 +12,6 @@ def load_config():
         "api_key": os.environ.get("OPENROUTER_API_KEY", "").strip(),
         "model": os.environ.get("OPENROUTER_MODEL", "").strip(),
         "timeout": 20,
+        "google_maps_key": os.environ.get("GOOGLE_MAPS_API_KEY", "").strip(),
         "routing_key": os.environ.get("OPENROUTESERVICE_API_KEY", "").strip(),
     }

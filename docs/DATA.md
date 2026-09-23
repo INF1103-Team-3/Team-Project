@@ -112,3 +112,13 @@ full draft and supporting source before confirming. Cancellation or failed check
 leave the catalog unchanged. Confirmed drafts use the same atomic import path as
 manual JSON bundles. If the excerpt lacks complete records, the CLI explains the
 limitation instead of inventing missing facts.
+
+
+## Finding more restaurants automatically
+
+Use [Google Places discovery](GOOGLE_PLACES.md) to find nearby restaurant leads.
+Only unique place IDs are saved in `data/google_place_ids.json`; names, addresses
+and other Google content are displayed live and do not enter this catalog.
+Follow restaurant websites to obtain independently checked menu evidence, then
+use the reviewed import or source-extraction workflow above. A Google price level
+is not an exact meal price, and discovery provides no allergy verification.

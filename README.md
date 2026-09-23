@@ -20,6 +20,8 @@ Choose `p` to review/edit the active profile or reset learned preferences; `h`
 shows its latest 10 history entries. Choose `i` to preview and import a reviewed
 restaurant/source bundle (see [import instructions](docs/DATA.md#importing-reviewed-data)).
 Choose `x` to extract draft records from a supplied public source excerpt with AI.
+Choose `g` to discover nearby restaurants using Google Places and revisit saved
+place IDs. See [Google discovery setup and usage](docs/GOOGLE_PLACES.md).
 Choose `q` to exit. EOF and Ctrl+C exit cleanly.
 
 The starter data has three Saizeriya outlets in Singapore. Try manual search,
@@ -64,6 +66,17 @@ location. Route caches also remain local and ignored by Git.
 `BITEFINDER_DATA_DIR` defaults to the repository `data` directory;
 `BITEFINDER_LOG_DIR` defaults to `logs` relative to the working directory.
 
+For Google restaurant discovery, inject your existing key as `GOOGLE_MAPS_API_KEY`
+and enable Places API (New) for its project. One command automatically discovers
+up to 20 nearby restaurants and saves unique place IDs:
+
+```sh
+python3 main.py --discover-google 1.3 103.8 --radius-m 1000 --limit 20
+```
+
+Google results are live discovery leads. Menu prices and dietary/allergy evidence
+still require independently checked sources before entering the meal catalog.
+
 ## Rules and persistence
 
 A single meal must satisfy all hard requirements together. Unknown price excludes
@@ -107,6 +120,7 @@ controlled milestone codes and numeric counts, never user text or API responses.
 - `data_manager.py`: JSON storage and restaurant loading; `schemas.py`: validation.
 - `config.py`, `debug.py`: configuration and milestone logging.
 - `routing_service.py`: pedestrian HTTP requests and route-cache validation.
+- `google_places_service.py`: bounded nearby discovery and live place details.
 - `data/`: sourced restaurant data; `tests/`: offline unit/integration tests.
 - `legacy/streamlit_app.py`: preserved prototype, not the runnable MVP; its original
   database/recommender modules were absent from this checkout.
@@ -119,14 +133,14 @@ python -m compileall -q *.py tests
 
 docker build -t bitefinder .
 docker run --rm -it --env OPENROUTER_API_KEY --env OPENROUTER_MODEL \
-  --env OPENROUTESERVICE_API_KEY bitefinder
+  --env OPENROUTESERVICE_API_KEY --env GOOGLE_MAPS_API_KEY bitefinder
 ```
 
 All API tests use mocked responses. No live paid requests are required. The Docker
 context explicitly excludes secrets and local user data. For persistent storage,
 mount the project data directory at `/app/data` and logs at `/app/logs`.
 Docker is unavailable in the current development container; image build/run have
-not been verified. OpenRouter and openrouteservice live execution await
+not been verified. OpenRouter, openrouteservice and Google Places live execution await
 environment configuration.
 
 ## Troubleshooting and remaining work
