@@ -8,16 +8,7 @@ import requests
 import config
 
 
-# ---------- generic JSON helpers ----------
-
-BAND_THRESHOLDS = (8.0, 15.0, 30.0)  # SG casual dining: <=8 $, <=15 $$, <=30 $$$, else $$$$
-
-def price_to_band(avg_price):
-    """Catalog dollars -> Google-style band, so both data sources compare equally."""
-    for band, upper in zip(("inexpensive", "moderate", "expensive"), BAND_THRESHOLDS):
-        if avg_price <= upper:
-            return band
-    return "very_expensive"
+# ---------- generic helpers ----------
 
 def _load_json(path):
     if not os.path.exists(path):
@@ -36,6 +27,7 @@ def _save_json(path, data):
         return True
     except OSError:
         return False
+
 
 def _log_api_error(context, err):
     """Spec requirement: handle API failure gracefully - log and continue, never crash."""
@@ -62,10 +54,54 @@ def find_by_name(restaurants, name):
     return [r for r in restaurants if name.lower() in r.get("name", "").lower()]
 
 
-# ---------- Google Geocoding API (with permanent cache) ----------
+# ---------- price helpers ----------
+
+BAND_THRESHOLDS = (8.0, 15.0, 30.0)  # <=8 $, <=15 $$, <=30 $$$, else $$$$
+
+def price_to_band(avg_price):
+    for band, upper in zip(("inexpensive", "moderate", "expensive"), BAND_THRESHOLDS):
+        if avg_price <= upper:
+            return band
+    return "very_expensive"
+
+
+def _money_to_float(money):
+    """Google Money object -> float (e.g. {'units': '20', 'nanos': 0} -> 20.0)."""
+    if not isinstance(money, dict) or "units" not in money:
+        return None
+    try:
+        return float(money["units"]) + (money.get("nanos", 0) or 0) / 1e9
+    except (TypeError, ValueError):
+        return None
+
+
+def _fmt_price_range(pr):
+    """priceRange object -> display string like '$20–70'. None if absent."""
+    if not isinstance(pr, dict):
+        return None
+    start = _money_to_float(pr.get("startPrice"))
+    end = _money_to_float(pr.get("endPrice"))
+    if start is None and end is None:
+        return None
+    if start is None:
+        return f"up to ${end:.0f}"
+    if end is None or end <= start:
+        return f"from ${start:.0f}"
+    return f"${start:.0f}–{end:.0f}"
+
+
+def _band_from_range(start, end):
+    """Derive a budget band from a price range (midpoint). None if no numbers."""
+    vals = [v for v in (start, end) if v is not None]
+    if not vals:
+        return None
+    return price_to_band(sum(vals) / len(vals))
+
+
+# ---------- Google Geocoding API (classic, with permanent cache) ----------
 
 def geocode_location(address_text):
-    """'199029' / 'Bugis Junction' -> (lat, lng) or None. Cached forever."""
+    """'postal code' / 'landmark' -> (lat, lng) or None. Cached forever."""
     key = (address_text or "").strip().lower()
     if not key:
         return None
@@ -117,16 +153,15 @@ def _search_radius_m(req):
     return max(500, min((walk if walk else 15) * 100, 20000))
 
 
-def fetch_nearby_restaurants(origin, req):
-    """ONE Places request per search (up to 20 places in the response). [] on failure."""
+def fetch_nearby_restaurants(origin, req, debug=False):
+    """ONE Places request per search (up to 20 places). [] on failure."""
     lat, lng = origin
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": config.GOOGLE_MAPS_API_KEY,
-        # Essentials-tier fields only -> cheaper billing SKU.
-        # (Adding regularOpeningHours would bump to Pro tier.)
         "X-Goog-FieldMask": ("places.displayName,places.formattedAddress,"
-                             "places.location,places.rating,places.priceLevel,places.types"),
+                             "places.location,places.rating,places.priceLevel,"
+                             "places.priceRange,places.types"),
     }
     body = {
         "includedTypes": ["restaurant", "cafe", "fast_food_restaurant"],
@@ -139,12 +174,16 @@ def fetch_nearby_restaurants(origin, req):
     }
     try:
         resp = requests.post(config.PLACES_URL, headers=headers, json=body, timeout=15)
+        if debug:
+            print("DEBUG status:", resp.status_code)
+            print("DEBUG body:", resp.text[:500])
         resp.raise_for_status()
         places = []
         for p in resp.json().get("places", []):
             name = p.get("displayName", {}).get("text")
             if not name:
                 continue
+            pr = p.get("priceRange") or {}
             places.append({
                 "name": name,
                 "address": p.get("formattedAddress", "unavailable"),
@@ -152,10 +191,14 @@ def fetch_nearby_restaurants(origin, req):
                 "lng": p["location"]["longitude"],
                 "rating": p.get("rating"),
                 "price_level": (p.get("priceLevel") or "").replace("PRICE_LEVEL_", "").lower() or None,
+                "price_start": _money_to_float(pr.get("startPrice")),
+                "price_end": _money_to_float(pr.get("endPrice")),
+                "price_range": _fmt_price_range(pr),
                 "types": p.get("types", []),
             })
         return places
-    except (requests.RequestException, KeyError, ValueError):
+    except (requests.RequestException, KeyError, ValueError) as err:
+        _log_api_error("places_search", err)
         return []
 
 
@@ -179,6 +222,10 @@ def enrich_place(place, catalog):
     None/'unknown' — never invented (business rule)."""
     entry = _match_catalog(place, catalog)
     if entry:
+        avg_price = entry.get("avg_price")
+        band = (price_to_band(avg_price) if avg_price is not None
+                else (place.get("price_level")
+                      or _band_from_range(place.get("price_start"), place.get("price_end"))))
         return {
             "name": entry.get("name", place["name"]),
             "address": place["address"],
@@ -186,14 +233,16 @@ def enrich_place(place, catalog):
             "cuisine": entry.get("cuisine") or _cuisine_from_types(place["types"]),
             "dietary": entry.get("dietary", "unknown"),
             "allergens": entry.get("allergens"),
-            "avg_price": entry.get("avg_price"),
-            "price_band": (price_to_band(entry["avg_price"])
-                           if entry.get("avg_price") is not None else None),
-            "price_level": place["price_level"],
+            "avg_price": avg_price,
+            "price_band": band,
+            "price_start": place.get("price_start"),
+            "price_end": place.get("price_end"),
+            "price_range": place.get("price_range"),
+            "rating": place.get("rating"),
             "open_hours": entry.get("open_hours"),
             "spicy_options": entry.get("spicy_options"),
             "certification": entry.get("certification", "unknown"),
-            "walk_minutes": None,      # filled by Routes matrix
+            "walk_minutes": None,
             "source": "catalog + google places",
         }
     return {
@@ -204,17 +253,34 @@ def enrich_place(place, catalog):
         "dietary": "unknown",
         "allergens": None,
         "avg_price": None,
-        "price_band": place["price_level"],   # already a band string from Google
-        "price_level": place["price_level"],
+        "price_band": (place.get("price_level")
+                       or _band_from_range(place.get("price_start"), place.get("price_end"))),
+        "price_start": place.get("price_start"),
+        "price_end": place.get("price_end"),
+        "price_range": place.get("price_range"),
+        "rating": place.get("rating"),
         "open_hours": None,
         "spicy_options": None,
         "certification": "unknown",
         "walk_minutes": None,
-        "source": "google places (partial data)",
+        "source": "google places",
     }
 
 
-# ---------- Google Routes API: matrix (walk times) + on-demand route ----------
+# ---------- Google Routes API ----------
+
+def _haversine_km(a, b):
+    lat1, lng1, lat2, lng2 = map(math.radians, (a[0], a[1], b[0], b[1]))
+    h = (math.sin((lat2 - lat1) / 2) ** 2
+         + math.cos(lat1) * math.cos(lat2) * math.sin((lng2 - lng1) / 2) ** 2)
+    return 2 * 6371.0 * math.asin(math.sqrt(h))
+
+
+def _estimate_walk_minutes(origin, r):
+    """Straight-line distance / 80 m per min, +20% street factor. Labeled estimate."""
+    meters = _haversine_km(origin, (r["lat"], r["lng"])) * 1000 * 1.2
+    return max(1, round(meters / 80))
+
 
 def walk_times_matrix(origin, restaurants):
     """ONE request for ALL restaurants. Sets r['walk_minutes'] (minutes or None).
@@ -254,7 +320,6 @@ def walk_times_matrix(origin, restaurants):
                 continue
     except (requests.RequestException, AttributeError, KeyError, ValueError) as err:
         _log_api_error("routes_matrix", err)
-        # walk_minutes stays None -> build_candidates' estimate fallback still applies
 
 
 def get_walking_route(origin, destination):
@@ -297,7 +362,7 @@ def build_maps_link(origin, destination):
             f"&destination={destination[0]},{destination[1]}&travelmode=walking")
 
 
-# ---------- candidate builder (the only function main.py needs) ----------
+# ---------- candidate builder ----------
 
 def build_candidates(origin, req, catalog):
     """Live mode: Places -> catalog enrichment -> Routes walk times.
@@ -315,6 +380,10 @@ def build_candidates(origin, req, catalog):
             seen.add(key)
             candidates.append(c)
     walk_times_matrix(origin, candidates)
+    for r in candidates:                      # fallback if matrix fails
+        if r.get("walk_minutes") is None:
+            r["walk_minutes"] = _estimate_walk_minutes(origin, r)
+            r["walk_source"] = "estimate"
     return candidates
 
 
