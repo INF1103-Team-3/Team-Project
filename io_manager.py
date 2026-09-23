@@ -1,6 +1,6 @@
 """Input layer — all user boundaries. Every input() and print() lives here.
-Generic filters mirror Google Maps search filters (price band, rating,
-open-now, distance); dietary/allergy/certification are BiteFinder's own."""
+Generic filters mirror Google Maps search filters (price band OR dollar range,
+rating, open-now, distance); dietary/allergy/certification are BiteFinder's own."""
 
 BAND_SYMBOLS = {
     "inexpensive": "$",
@@ -8,6 +8,9 @@ BAND_SYMBOLS = {
     "expensive": "$$$",
     "very_expensive": "$$$$",
 }
+
+BAND_MENU = {"$": "inexpensive", "$$": "moderate",
+             "$$$": "expensive", "$$$$": "very_expensive"}
 
 
 def print_welcome():
@@ -27,15 +30,33 @@ def ask_int(prompt):
         print("  Please enter a positive whole number (e.g. 15).")
 
 
-def ask_price_band(prompt):
-    """Google Maps-style price filter: any / $ / $$ / $$$ / $$$$."""
-    menu = {"any": None, "$": "inexpensive", "$$": "moderate",
-            "$$$": "expensive", "$$$$": "very_expensive"}
+def ask_budget(prompt):
+    """Budget as band (any/$/$$/$$$/$$$$), a max (12), or a range (5-15).
+    Returns (band, budget_min, budget_max)."""
     while True:
-        raw = input(f"{prompt} (any / $ / $$ / $$$ / $$$$): ").strip()
-        if raw in menu:
-            return menu[raw]
-        print("  Please type any, $, $$, $$$ or $$$$.")
+        raw = input(f"{prompt} (any / $ / $$ / $$$ / $$$$ / e.g. 5-15 or 12): ").strip()
+        if raw in ("", "any"):
+            return None, None, None
+        if raw in BAND_MENU:
+            return BAND_MENU[raw], None, None
+        cleaned = raw.replace("$", "").replace(" ", "")
+        if "-" in cleaned:
+            parts = cleaned.split("-")
+            if len(parts) == 2:
+                try:
+                    lo, hi = float(parts[0]), float(parts[1])
+                    if 0 <= lo <= hi:
+                        return None, lo, hi
+                except ValueError:
+                    pass
+        else:
+            try:
+                value = float(cleaned)
+                if value > 0:
+                    return None, None, value
+            except ValueError:
+                pass
+        print("  Enter any, a band ($/$$/$$$/$$$$), a max (12), or a range (5-15).")
 
 
 def ask_rating(prompt):
@@ -67,10 +88,13 @@ def get_user_requirements():
     while not location:
         location = input("Location (SG postal code / address / landmark): ").strip()
     allergies_raw = input("Allergies to avoid (comma separated): ").strip()
+    band, bmin, bmax = ask_budget("Budget")
     return {
         "location": location,
         "max_walk_minutes": ask_int("Max walking time (minutes): "),
-        "budget_band": ask_price_band("Max budget"),
+        "budget_band": band,
+        "budget_min": bmin,
+        "budget_max": bmax,
         "dietary": ask_choice("Dietary (none/halal/vegetarian/vegan): ",
                               ["none", "halal", "vegetarian", "vegan"]),
         "allergies": [a.strip() for a in allergies_raw.split(",") if a.strip()],
@@ -80,13 +104,20 @@ def get_user_requirements():
         "free_text": input("Anything else? (e.g. 'something spicy'): ").strip(),
     }
 
+
 def print_parsed(req):
-    band = BAND_SYMBOLS.get(req.get("budget_band"), "any")
+    bmin, bmax = req.get("budget_min"), req.get("budget_max")
+    if bmax is not None:
+        budget_txt = (f"${bmin:.0f}–{bmax:.0f}" if bmin is not None
+                      else f"up to ${bmax:.0f}")
+    else:
+        budget_txt = BAND_SYMBOLS.get(req.get("budget_band"), "any")
     rating = req.get("min_rating")
     rating_txt = f"{rating}+" if rating else "any"
     print("\n[BiteFinder understood your request as]")
     print(f"  cuisine: {req.get('cuisine')} | dietary: {req.get('dietary')} | "
-          f"budget: {band} | rating: {rating_txt} | walk: {req.get('max_walk_minutes')} min | "
+          f"budget: {budget_txt} | rating: {rating_txt} | "
+          f"walk: {req.get('max_walk_minutes')} min | "
           f"allergies: {req.get('allergies')} | time: {req.get('eat_time')}")
 
 
@@ -96,10 +127,13 @@ def print_ai_model(model_id):
 
 
 def _fmt_price(r):
-    sym = BAND_SYMBOLS.get(r.get("price_band"), "")
     price = r.get("avg_price")
     if price is not None:
-        return f"${price:.2f} ({sym})" if sym else f"${price:.2f}"
+        return f"${price:.2f}"
+    pr = r.get("price_range")
+    if pr:
+        return pr
+    sym = BAND_SYMBOLS.get(r.get("price_band"), "")
     return sym if sym else "price unavailable"
 
 
@@ -109,31 +143,38 @@ def _fmt_walk(r):
     return f"{w} min walk{src}" if w is not None else "walk time unavailable"
 
 
+def _fmt_address(r):
+    if r.get("address"):
+        return r["address"]
+    if r.get("lat") is not None and r.get("lng") is not None:
+        return f"approx. location: {r['lat']:.4f}, {r['lng']:.4f} (map link after selecting)"
+    return "address unavailable"
+
+
 def print_results(results):
     matches, alternatives = results["matches"], results["alternatives"]
+
     if not matches and not alternatives:
-        print("\nNo options found. Try relaxing budget, walking time, or another location.")
+        if results.get("hidden"):
+            print(f"\n({results['hidden']} place(s) hidden by your hard filters: "
+                  f"dietary, allergies, minimum rating)")
+        print("\nNo options found. Try lowering your minimum rating, or relaxing "
+              "budget and walking time, or another location.")
         return
 
-    # Guidance when nothing in this area can be verified (no matches, all-unknowns)
-    if not matches and alternatives:
-        unknown_only = all(
-            ("unknown" in reason) or ("unavailable" in reason)
-            for item in alternatives for reason in item["reasons"]
-        )
-        if unknown_only:
-            print("\nNo certified matches in this area yet — nearby places lack verified")
-            print("dietary/price data, so nothing can be recommended as a match. Options:")
-            print("  - Try a location covered by our verified catalog")
-            print("  - Or search with dietary 'none' to rank by Google data (rating, price band)")
+    if results.get("hidden"):
+        print(f"\n({results['hidden']} place(s) hidden by your hard filters: "
+              f"dietary, allergies, minimum rating)")
 
+    number = 1
     if matches:
         print(f"\n=== {len(matches)} match(es) for you ===")
         for item in matches:
             r = item["restaurant"]
             rating = r.get("rating")
             rating_txt = f"rating: {rating}" if rating is not None else "rating: unavailable"
-            print(f"\n{r['name']}  (score {item['score']})")
+            print(f"\n{number}. {r['name']}  (score {item['score']})")
+            print(f"  {_fmt_address(r)}")
             print(f"  {r.get('cuisine', 'unknown')} | {_fmt_price(r)} | {_fmt_walk(r)} "
                   f"| {rating_txt} | dietary: {r.get('dietary', 'unknown')} "
                   f"| certification: {r.get('certification', 'unknown')}")
@@ -144,24 +185,30 @@ def print_results(results):
                 print("  data: unverified (google only)")
             for reason in item["reasons"]:
                 print(f"  + {reason}")
+            number += 1
     else:
         print("\nNo exact match, but here are the closest alternatives")
         print("(your dietary and allergy rules were NOT relaxed):")
+
     if alternatives:
         if matches:
             print("\n=== Alternatives (what would need to change) ===")
         for item in alternatives:
             r = item["restaurant"]
-            print(f"\n{r['name']}  [data: {r.get('source', 'catalog')}]")
+            print(f"\n{number}. {r['name']}  [data: {r.get('source', 'catalog')}]")
+            print(f"  {_fmt_address(r)}")
             for reason in item["reasons"]:
                 print(f"  ! {reason}")
+            number += 1
 
 
 def choose_restaurant(results):
+    """User types the number shown next to a restaurant above. None to skip."""
     options = results["matches"] + results["alternatives"]
     if not options:
         return None
-    print("\nShow walking route: enter a number above (or Enter to skip):")
+    print("\nShow walking route: enter the number of a restaurant above "
+          f"(1-{len(options)}), or Enter to skip:")
     while True:
         raw = input("> ").strip()
         if raw == "":
