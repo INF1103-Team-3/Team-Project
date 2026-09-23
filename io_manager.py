@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from ai_manager import interpret_request
 from data_manager import (
-    append_interaction, load_json, load_profile, load_restaurants,
+    append_interaction, load_history, load_json, load_profile, load_restaurants,
     query_restaurants, save_json, save_profile,
 )
 from debug import debug_log
@@ -13,7 +13,9 @@ from logic_manager import (
     eligible_items, prepare_request, recommend, record_selection,
 )
 from routing_service import resolve_routes
-from schemas import empty_request, is_number, is_text_list, valid_coordinates
+from schemas import (
+    empty_request, is_number, is_text, is_text_list, valid_coordinates,
+)
 
 
 def ask_choice(prompt, choices):
@@ -78,8 +80,16 @@ def collect_manual_request():
     return request
 
 
-def collect_request(config, profile):
-    mode = ask_choice("Search: [m]anual, [a]i, [q]uit: ", ("m", "a", "q"))
+def collect_request(config, profile, name="default"):
+    mode = ask_choice(
+        "[m]anual search, [a]i search, [p]rofile, [h]istory, [q]uit: ",
+        ("m", "a", "p", "h", "q"))
+    if mode == "p":
+        edit_profile(config, name, profile)
+        return None, False
+    if mode == "h":
+        display_history(config, name)
+        return None, False
     if mode == "q":
         return None, True
     if mode == "a":
@@ -161,10 +171,12 @@ def choose_result(config, name, profile, results):
     if choice != "r":
         restaurant = results[int(choice) - 1]["restaurant"]
         event["restaurant_id"] = restaurant["restaurant_id"]
-        profile = record_selection(profile, restaurant)
-        error = save_profile(config["data_dir"], name, profile)
+        updated = record_selection(profile, restaurant)
+        error = save_profile(config["data_dir"], name, updated)
         if error:
             print(error)
+        else:
+            profile = updated
     error = append_interaction(config["data_dir"], event)
     print(error or "Choice saved.")
     return profile
@@ -193,13 +205,13 @@ def collect_routes(config, request, restaurants):
 
 def run_session(config):
     print("BiteFinder CLI — prices in SGD; menu evidence only, no safety guarantees.")
-    name = input("Local profile name (blank for default): ").strip() or "default"
+    name = ask_profile_name()
     profile, error = load_profile(config["data_dir"], name)
     if error:
         print(error)
         return
     while True:
-        request, quit_requested = collect_request(config, profile)
+        request, quit_requested = collect_request(config, profile, name)
         if quit_requested:
             return
         if request is None:
@@ -231,3 +243,55 @@ def run_cli(config):
         run_session(config)
     except (EOFError, KeyboardInterrupt):
         print("\nBiteFinder closed.")
+
+
+def ask_profile_name():
+    while True:
+        name = input("Local profile name (blank for default): ").strip() or "default"
+        if is_text(name):
+            return name
+        print("Use a printable profile name of at most 200 characters.")
+
+
+def edit_profile(config, name, profile):
+    print("Current saved preferences:")
+    print(json.dumps(profile, indent=2, ensure_ascii=True))
+    choice = ask_choice("[e]dit preferences, [r]eset learning, [b]ack: ",
+                        ("e", "r", "b"))
+    if choice == "b":
+        return
+    updated = dict(profile)
+    if choice == "r":
+        updated["cuisine_counts"] = {}
+        updated["selected_ids"] = []
+    else:
+        print("Enter each full replacement list. Blank clears that saved list.")
+        for field, label in (("allergies", "Allergies"),
+                             ("dietary_requirements", "Mandatory diets"),
+                             ("preferred_cuisines", "Preferred cuisines"),
+                             ("preferred_foods", "Preferred foods")):
+            updated[field] = ask_tags(label + ": ")
+    print("Proposed saved preferences:")
+    print(json.dumps(updated, indent=2, ensure_ascii=True))
+    if ask_choice("Save these profile changes? y/n: ", ("y", "n")) != "y":
+        print("Profile unchanged.")
+        return
+    error = save_profile(config["data_dir"], name, updated)
+    if error:
+        print(error + " Active profile unchanged.")
+        return
+    profile.clear()
+    profile.update(updated)
+    debug_log("profile_updated")
+    print("Profile saved.")
+
+
+def display_history(config, name):
+    history, error = load_history(config["data_dir"], name)
+    if error:
+        print(error)
+        return
+    if not history:
+        print("No saved history for this profile.")
+    for record in history:
+        print(json.dumps(record, ensure_ascii=True))

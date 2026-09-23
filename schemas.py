@@ -165,7 +165,8 @@ def valid_opening_hours(hours, source_ids):
 def valid_profile(profile):
     if not isinstance(profile, dict):
         return False
-    for field in ("allergies", "dietary_requirements"):
+    for field in ("allergies", "dietary_requirements",
+                  "preferred_cuisines", "preferred_foods"):
         if not is_text_list(profile.get(field, [])):
             return False
     selected = profile.get("selected_ids", [])

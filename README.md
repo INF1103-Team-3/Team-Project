@@ -16,7 +16,8 @@ python main.py
 Enter a local profile name, then choose manual (`m`) or AI (`a`) search. Manual
 search works without credentials. Confirm the interpreted requirements, review
 up to five results, select a restaurant or reject the results, and search again.
-Choose `q` to exit. EOF and Ctrl+C exit cleanly.
+Choose `p` to review/edit the active profile or reset learned preferences; `h`
+shows its latest 10 history entries. Choose `q` to exit. EOF and Ctrl+C exit cleanly.
 
 The starter data has three Saizeriya outlets in Singapore. Try manual search,
 SGD 10, Italian cuisine, and leave walking, dietary, allergy and opening constraints
@@ -81,8 +82,11 @@ Ranking uses cuisine/food match (35), learned cuisine preference (25), walking
 convenience (20), price (15), and variety (5). Individual contributions are shown.
 Scores are ranking points, not probabilities or safety ratings. Tie-breaking uses
 restaurant IDs. Repeated selections increase only bounded soft cuisine counts;
-allergy and dietary requirements persist and are never learned away. To deliberately
-change saved safety requirements, use a different local profile for now.
+allergy and dietary requirements persist and are never learned away. The profile
+editor lets you deliberately change them after reviewing the full replacement.
+Cancelling or a failed save leaves the active profile unchanged. Saved cuisine and
+food preferences fill empty search preferences; explicit search preferences take
+precedence. Resetting learning preserves every explicit and safety preference.
 
 Atomic JSON saves preserve existing files on failure. Corrupt history/profile
 files are reported and not overwritten. The app supports one CLI process per data
@@ -130,6 +134,6 @@ environment configuration.
 - Failed saves: check directory permissions and free space.
 - Malformed AI output: retry the request or switch to manual entry.
 
-Next: broader verified data, live API/Docker validation, richer
-profile management, and controlled AI-assisted source ingestion. Telegram and web
+Next: broader verified data, live API/Docker validation, and controlled
+AI-assisted source ingestion. Telegram and web
 interfaces remain future enhancements under the CLI-first specification.

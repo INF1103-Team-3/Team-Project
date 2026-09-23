@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 from debug import debug_log
+from schemas import is_text, valid_profile, validate_restaurant
 
 
 def load_json(path, expected_type=list):
@@ -64,14 +65,14 @@ def append_interaction(directory, interaction):
 def load_profile(directory, name):
     profiles, error = load_json(Path(directory) / "users.json", dict)
     profile = profiles.get(name, {})
-    from schemas import valid_profile
-
     if not valid_profile(profile):
         return {}, "Stored profile is invalid."
     return profile, error
 
 
 def save_profile(directory, name, profile):
+    if not is_text(name) or not valid_profile(profile):
+        return "Profile name or preferences are invalid."
     path = Path(directory) / "users.json"
     profiles, error = load_json(path, dict)
     if error:
@@ -87,8 +88,6 @@ def query_restaurants(restaurants, name=""):
 
 def load_restaurants(directory):
     """Load sourced, validated records; report rejected rows to the caller."""
-    from schemas import validate_restaurant
-
     records, error = load_json(Path(directory) / "restaurants.json")
     if error:
         return [], error
@@ -124,3 +123,12 @@ def load_restaurants(directory):
     if rejected:
         warning = f"Skipped {rejected} invalid or duplicate restaurant records."
     return valid, warning
+
+
+def load_history(directory, name, limit=10):
+    records, error = load_json(Path(directory) / "interactions.json")
+    if error:
+        return [], error
+    matches = [record for record in records if isinstance(record, dict)
+               and record.get("profile") == name]
+    return matches[-limit:], None

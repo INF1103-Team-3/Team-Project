@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from debug import debug_log
-from schemas import is_number, normalize_request, validate_request
+from schemas import is_number, normalize_request, valid_profile, validate_request
 
 WEIGHTS = {"food": 35, "profile": 25, "walking": 20, "price": 15, "variety": 5}
 
@@ -14,12 +14,18 @@ def prepare_request(request, profile=None):
     if error:
         return None, error
     result = normalize_request(request)
-    profile = profile or {}
+    profile = profile if profile is not None else {}
+    if not valid_profile(profile):
+        return None, "Stored preferences are invalid; repair the profile first."
     for field in ("allergies", "dietary_requirements"):
         saved = profile.get(field, [])
         if not isinstance(saved, list) or not all(isinstance(v, str) for v in saved):
             return None, "Stored safety preferences are invalid; repair the profile first."
-        result[field] = sorted(set(result[field]) | {v.casefold() for v in saved})
+        result[field] = sorted(set(result[field]) | {v.strip().casefold() for v in saved})
+    for field in ("cuisines", "foods"):
+        if not result[field]:
+            result[field] = sorted({value.strip().casefold()
+                                    for value in profile.get("preferred_" + field, [])})
     if result["unsupported_requirements"]:
         return None, "Some requirements need clarification. Use manual search to restate them."
     if result["walking_time_max"] is not None and result["location"] is None:
