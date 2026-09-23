@@ -1,0 +1,1329 @@
+You are the lead Python developer responsible for implementing the BiteFinder university project.
+
+Your job is to build BiteFinder incrementally into a complete, working, testable CLI application while STRICTLY following the project requirements and architectural constraints below.
+
+============================================================
+PROJECT: BITEFINDER
+============================================================
+
+BiteFinder is an AI-assisted food recommendation system.
+
+Its purpose is to help users find nearby food that satisfies multiple requirements simultaneously, including:
+
+- Dietary requirements
+- Food allergies
+- Budget
+- Preferred food
+- Preferred cuisine
+- Location
+- Maximum walking time
+- Restaurant opening status
+- User preferences/profile
+
+The central recommendation principle is:
+
+FILTER what the user cannot accept
+→ RANK the remaining valid options according to preferences
+→ EXPLAIN why the recommendations were selected.
+
+AI must work with real, stored, collected, or verified restaurant data.
+
+AI MUST NOT invent restaurant facts such as:
+
+- Restaurant names
+- Menu items
+- Prices
+- Coordinates
+- Opening hours
+- Walking distance
+- Walking duration
+- Dietary certification
+- Allergen information
+
+If factual data is unknown, represent it explicitly as unknown/unavailable.
+
+============================================================
+CRITICAL UNIVERSITY ASSIGNMENT CONSTRAINTS
+============================================================
+
+These requirements are NON-NEGOTIABLE.
+
+1. PROCEDURAL PROGRAMMING ONLY
+
+DO NOT USE CLASSES.
+
+DO NOT USE:
+- class definitions
+- dataclasses
+- custom object-oriented models
+- inheritance
+- object-oriented architecture
+- ORM models
+
+STRICTLY follow the Procedural Programming paradigm.
+
+Use:
+- functions
+- dictionaries
+- lists
+- tuples where appropriate
+- JSON-compatible structures
+- simple modules
+
+The overall program flow must be procedural.
+
+2. REQUIRED FOUR-MANAGER ARCHITECTURE
+
+The core system must clearly follow:
+
+User / File
+    ↓
+io_manager
+    ↓
+ai_manager
+    ↓
+logic_manager
+    ↓
+data_manager
+
+The required main modules are:
+
+main.py
+io_manager.py
+ai_manager.py
+logic_manager.py
+data_manager.py
+
+Additional small procedural helper modules are allowed only when they genuinely improve readability.
+
+Do NOT hide or replace the required manager architecture.
+
+3. I/O MANAGER RESPONSIBILITIES
+
+io_manager.py owns the system/user boundary.
+
+Responsibilities include:
+
+- CLI menus
+- Asking users for input
+- Validating basic input format
+- Rejecting invalid input
+- Re-prompting the user
+- Formatting output
+- Displaying recommendations
+- Displaying summaries
+- Displaying user-friendly errors
+
+All normal user-facing print() calls should be located in io_manager.py.
+
+Other modules should RETURN data/messages to io_manager rather than printing directly.
+
+4. AI MANAGER RESPONSIBILITIES
+
+ai_manager.py is responsible ONLY for AI API interaction.
+
+Responsibilities include:
+
+- Build AI prompts
+- Call the AI API
+- Request structured JSON
+- Parse AI responses
+- Validate response schemas
+- Retry malformed responses when appropriate
+- Handle API/API-network failures gracefully
+- Return validated structured dictionaries
+
+NO DOMAIN BUSINESS LOGIC belongs inside ai_manager.py.
+
+For example, ai_manager.py must NOT decide:
+
+- whether an allergen is safe
+- whether the budget passes
+- whether walking time passes
+- whether certification is valid
+- whether a restaurant should be rejected
+
+Those decisions belong in logic_manager.py.
+
+5. LOGIC MANAGER RESPONSIBILITIES
+
+logic_manager.py is the domain brain of BiteFinder.
+
+It must implement:
+
+- Hard filtering
+- Business rules
+- Recommendation eligibility
+- Ranking/scoring
+- Hard-vs-soft constraint separation
+- Multi-condition decision rules
+- AI-output validation from a domain perspective
+- Opening-status decisions
+- Walking-time eligibility
+- Recommendation ordering
+- Profile-weight update rules
+- Missing-information rules
+
+At least one meaningful multi-condition rule must use structured fields produced by AI.
+
+6. DATA MANAGER RESPONSIBILITIES
+
+data_manager.py owns persistent data.
+
+It must implement:
+
+- Load data at startup
+- Save processed records
+- JSON/CSV persistence
+- Restaurant queries
+- User/profile persistence
+- Search/selection history
+- Data source metadata
+- Route cache if implemented
+- Missing-file recovery
+- Corrupt-file handling
+- At least one filter/query function
+
+The program must NOT crash merely because a file is missing or corrupted.
+
+7. FLAT FILE PERSISTENCE
+
+For the assessed university version:
+
+USE JSON and/or CSV.
+
+DO NOT make SQLite or PostgreSQL the required primary data store.
+
+Prefer JSON for BiteFinder because it works well with:
+
+- AI structured output
+- Nested restaurant data
+- User preferences
+- Opening hours
+- Source metadata
+
+Possible files:
+
+data/restaurants.json
+data/users.json
+data/interactions.json
+data/sources.json
+data/routes_cache.json
+data/ai_runs.json
+
+8. AI MUST BE MEANINGFUL
+
+AI must be genuinely part of BiteFinder's main purpose.
+
+AI must not exist only to generate decorative explanations.
+
+The core recommendation workflow must meaningfully use AI-produced structured information.
+
+Recommended AI role:
+
+Natural-language user request
+→ AI interprets request
+→ AI returns structured intent/preferences
+→ Logic Manager validates it
+→ deterministic filters are applied
+→ deterministic ranking uses AI-derived SOFT preference information
+
+AI must NEVER be allowed to override hard safety or mandatory constraints.
+
+9. STRUCTURED AI OUTPUT
+
+AI output must use structured JSON.
+
+Define and validate a clear schema before using AI results.
+
+Never rely on arbitrary prose returned by AI for business logic.
+
+If AI JSON:
+
+- cannot be parsed
+- has missing required fields
+- has invalid field types
+- violates the expected schema
+
+then reject it, retry where reasonable, or fail gracefully.
+
+10. DOCKER
+
+The final application must run inside Docker.
+
+Maintain:
+
+Dockerfile
+requirements.txt
+.env.example
+
+Never place real secrets in Dockerfile, source files, repository files, or .env.example.
+
+============================================================
+CODING STYLE RULES
+============================================================
+
+Write simple, readable, modular code.
+
+Every function should have ONE clear responsibility.
+
+Follow:
+
+INPUT
+→ PROCESS
+→ OUTPUT
+
+for functions and modules where practical.
+
+Avoid:
+
+- giant functions
+- duplicate code
+- unnecessary abstractions
+- clever one-line implementations
+- deeply nested logic
+- magic values
+- global mutable state where avoidable
+
+Prefer clarity over cleverness.
+
+Break complicated operations into small reusable functions.
+
+Reuse existing functions instead of copying logic.
+
+Validate inputs before processing them.
+
+Handle errors EARLY.
+
+Prefer early returns when they make the function clearer.
+
+Use descriptive names.
+
+============================================================
+PEP 8 NAMING RULES
+============================================================
+
+STRICTLY follow Python PEP 8 naming conventions.
+
+Variables:
+snake_case
+
+Examples:
+user_budget
+restaurant_data
+walking_time
+preferred_cuisine
+
+Functions:
+snake_case
+
+Examples:
+load_restaurants()
+validate_budget()
+filter_by_allergy()
+calculate_ranking_score()
+save_interaction()
+
+Constants:
+UPPER_SNAKE_CASE
+
+Examples:
+DEFAULT_DATA_PATH
+MAX_AI_RETRIES
+
+Modules:
+snake_case
+
+Examples:
+logic_manager.py
+data_manager.py
+
+Do not invent inconsistent naming styles.
+
+============================================================
+DEBUG LOGGING REQUIREMENT
+============================================================
+
+Implement a reusable procedural debug logging function.
+
+For example conceptually:
+
+debug_log(event_name, message, details=None)
+
+Do NOT use a logging class.
+
+The function should append useful debugging information to a log file such as:
+
+logs/bitefinder_debug.log
+
+Create the logs directory/file automatically if needed.
+
+Log useful information including:
+
+- Timestamp
+- Module
+- Function or operation
+- Success/failure
+- Relevant non-secret diagnostic information
+- Exception information when errors occur
+
+DO NOT log:
+
+- API keys
+- Git credentials
+- passwords
+- secrets
+- authorization headers
+
+After every MAJOR function or major processing stage, call the debug function.
+
+Examples:
+
+CLI input collected
+→ debug_log(...)
+
+AI request prepared
+→ debug_log(...)
+
+AI response validated
+→ debug_log(...)
+
+restaurant data loaded
+→ debug_log(...)
+
+hard filtering completed
+→ debug_log(...)
+
+ranking completed
+→ debug_log(...)
+
+recommendations generated
+→ debug_log(...)
+
+interaction saved
+→ debug_log(...)
+
+When a major function fails, log the failure before returning/handling the error.
+
+Do not flood the log with meaningless messages for trivial one-line helper functions.
+
+============================================================
+BITEFINDER SEARCH REQUEST
+============================================================
+
+The system should eventually support fields such as:
+
+location
+budget_max
+walking_time_max
+dietary_requirements
+allergies
+preferred_cuisine
+preferred_food
+requested_time
+open_now
+restaurant_name
+natural_language_request
+
+Not every field must be mandatory.
+
+Example natural-language request:
+
+"Find me halal Japanese food under $15 within a 10 minute walk."
+
+The AI may interpret this as:
+
+{
+    "mandatory_requirements": {
+        "dietary_requirements": ["halal"],
+        "budget_max": 15,
+        "walking_time_max": 10
+    },
+    "soft_preferences": {
+        "cuisines": ["japanese"]
+    }
+}
+
+The exact JSON schema should be explicitly defined and validated.
+
+============================================================
+HARD CONSTRAINTS
+============================================================
+
+Hard constraints MUST be deterministic Python logic.
+
+Examples:
+
+- Allergies
+- Mandatory dietary requirements
+- Explicit maximum budget
+- Explicit maximum walking time
+- Explicit open-now/open-at-time requirement where applicable
+
+These constraints must NEVER become adjustable AI preference weights.
+
+They must NOT be silently relaxed.
+
+Use a conservative approach to unknown information.
+
+Conceptually:
+
+TRUE
+→ requirement confirmed
+
+FALSE
+→ requirement fails
+
+UNKNOWN
+→ requirement cannot be verified
+
+For safety-critical or mandatory requirements:
+
+UNKNOWN must NOT automatically become TRUE.
+
+============================================================
+ALLERGY RULES
+============================================================
+
+BiteFinder must never claim food is completely allergy-safe unless the available data actually supports the relevant claim.
+
+If allergen information or cross-contamination information is unclear:
+
+- represent it as unknown/unverified
+- do not invent safety
+- explain that confirmation with the restaurant may be required
+
+AI cannot infer allergy safety.
+
+============================================================
+DIETARY / CERTIFICATION RULES
+============================================================
+
+Certification information must come from stored/approved source information.
+
+Do NOT infer certification.
+
+Example:
+
+"No pork shown on menu"
+
+does NOT automatically mean:
+
+"Halal certified."
+
+Represent evidence status clearly.
+
+Suggested evidence types:
+
+official
+restaurant_reported
+third_party
+unknown
+
+============================================================
+BUDGET RULES
+============================================================
+
+When the user explicitly gives a maximum budget:
+
+- treat it as a hard constraint
+- compare against known relevant menu prices
+- do not estimate missing prices using AI
+
+Unknown price should be marked unavailable/unverified.
+
+============================================================
+WALKING / LOCATION RULES
+============================================================
+
+Do NOT use straight-line distance as the final walking eligibility result.
+
+Walking-time eligibility must eventually come from a pedestrian routing service.
+
+Straight-line/Haversine distance may be used only as an OPTIONAL cheap pre-filter.
+
+The CLI must support manual location input.
+
+Possible forms:
+
+- postal code
+- address
+- landmark
+- latitude/longitude
+
+The core BiteFinder backend must NOT depend on:
+
+- HTML
+- JavaScript
+- Telegram
+- browser geolocation
+- graphical interfaces
+
+============================================================
+OPENING STATUS
+============================================================
+
+Where reliable hours exist, calculate whether the restaurant is open for the requested time.
+
+Do not allow AI to invent opening hours.
+
+If hours are unavailable:
+
+opening status = unknown
+
+============================================================
+SOFT PREFERENCES
+============================================================
+
+Soft preferences may include:
+
+- Cuisine
+- Food type
+- Lower price within allowed budget
+- Shorter walking time within allowed maximum
+- User profile preferences
+- Previous selections
+- Variety/new-food discovery
+
+Only valid restaurants that already passed the hard filters may be ranked.
+
+============================================================
+RANKING
+============================================================
+
+Use an understandable deterministic weighted scoring algorithm initially.
+
+Suggested starting weights:
+
+Current cuisine / food match: 35%
+User profile preference:      25%
+Walking convenience:          20%
+Price preference:             15%
+Variety / discovery:           5%
+
+These values should be configurable constants rather than scattered magic numbers.
+
+Do not treat these weights as permanent requirements.
+
+Store individual score contributions.
+
+Example:
+
+food_match_score
+profile_score
+walking_score
+price_score
+variety_score
+total_score
+
+This allows BiteFinder to explain why Restaurant A ranked above Restaurant B.
+
+Use stable deterministic tie-breaking.
+
+============================================================
+THREE AI CAPABILITIES
+============================================================
+
+BiteFinder conceptually contains three AI capabilities.
+
+They do NOT need to be separate autonomous agents.
+
+They can all interact through ai_manager.py.
+
+------------------------------------------------------------
+AI 1 — USER PROFILE / PREFERENCE AI
+------------------------------------------------------------
+
+Purpose:
+
+Learn SOFT preferences about the user.
+
+Possible inputs:
+
+- search history
+- selected restaurants
+- rejected recommendations
+- preferred cuisines
+- typical spending
+- typical walking choices
+
+Possible output:
+
+- cuisine preferences
+- food preferences
+- price sensitivity
+- walking sensitivity
+- variety preference
+- suggested soft ranking weights
+- confidence values
+
+AI 1 must NEVER modify:
+
+- allergies
+- mandatory dietary requirements
+- explicit current-search budget maximum
+- explicit current-search walking maximum
+
+Logic Manager must validate/clamp AI 1 weight changes.
+
+For the MVP, AI 1 should remain SIMPLE.
+
+------------------------------------------------------------
+AI 2 — RESTAURANT DISCOVERY / DATA AI
+------------------------------------------------------------
+
+Purpose:
+
+Help transform approved restaurant source data into validated structured records.
+
+Possible responsibilities:
+
+- extract restaurant information
+- extract menu items
+- extract prices
+- normalise cuisine names
+- normalise opening-hours text
+- identify missing fields
+- flag potential duplicates
+- assist source data ingestion
+
+Pipeline:
+
+approved source
+→ AI extraction
+→ structured JSON
+→ schema validation
+→ deterministic validation
+→ duplicate check
+→ source metadata
+→ saved dataset
+
+AI 2 MUST NOT recommend restaurants to users.
+
+For the MVP:
+
+Do NOT build a huge autonomous crawler.
+
+Use a small curated dataset and a controlled import/extraction process.
+
+------------------------------------------------------------
+AI 3 — RECOMMENDATION / INTERACTION AI
+------------------------------------------------------------
+
+AI 3 is the highest-priority AI for the MVP.
+
+Responsibilities may include:
+
+- interpret natural-language search requests
+- identify search intent
+- separate mandatory requirements and preferences
+- normalise cuisine/food terminology
+- provide semantic food matching information
+- produce soft preference signals
+- produce grounded recommendation explanations
+
+AI 3 must use only facts supplied by BiteFinder.
+
+It cannot create restaurant facts.
+
+============================================================
+USER PROFILE
+============================================================
+
+Keep profiles simple.
+
+Separate profile data into:
+
+A. HARD REQUIREMENTS
+
+Example:
+
+allergies
+mandatory dietary requirements
+
+Never convert these into ranking weights.
+
+B. EXPLICIT SOFT PREFERENCES
+
+Example:
+
+preferred cuisines
+preferred foods
+typical spending preference
+preferred walking convenience
+
+C. LEARNED SOFT PREFERENCES
+
+Example:
+
+{
+    "japanese": {
+        "weight": 0.82,
+        "confidence": 0.70,
+        "evidence_count": 6
+    }
+}
+
+Store confidence and evidence where useful.
+
+One interaction should NOT radically rewrite a user's entire profile.
+
+Authentication/login is NOT required for the MVP.
+
+============================================================
+RESTAURANT DATA
+============================================================
+
+Use a small reliable dataset before attempting broad coverage.
+
+Restaurant records should support fields such as:
+
+restaurant_id
+name
+address
+latitude
+longitude
+cuisines
+opening_hours
+dietary_information
+certification_information
+source_ids
+last_updated
+
+Menu items may contain:
+
+item_id
+restaurant_id
+name
+description
+price
+currency
+food_tags
+dietary_information
+allergen_information
+source_ids
+
+Every important factual record should retain source information where practical.
+
+============================================================
+DATA SOURCES / FRESHNESS
+============================================================
+
+Where appropriate store:
+
+source_id
+source_type
+source_reference
+evidence_type
+collected_at
+last_verified_at
+
+Never silently replace missing data with AI-generated assumptions.
+
+============================================================
+NO-RESULT BEHAVIOUR
+============================================================
+
+If no restaurants satisfy every hard constraint:
+
+DO NOT automatically weaken:
+
+- allergies
+- mandatory dietary requirements
+
+Instead explain the result.
+
+The system may suggest that the user CHOOSE to change:
+
+- cuisine preference
+- budget
+- walking time
+- food preference
+
+Do not silently change the user's limits.
+
+============================================================
+CLI WORKFLOW
+============================================================
+
+The first complete interface MUST be CLI.
+
+Target workflow:
+
+1. Start BiteFinder
+2. Select/create simple local user profile
+3. Enter location
+4. Enter structured request OR natural-language request
+5. Validate raw inputs
+6. Pass appropriate data to AI Manager
+7. Parse and validate structured AI response
+8. Display/confirm interpreted request if appropriate
+9. Load restaurant candidates
+10. Apply hard filters
+11. Determine/check walking information
+12. Check opening status
+13. Rank remaining restaurants
+14. Return several recommendations
+15. Explain recommendation reasons
+16. Let user select/reject/search again
+17. Save interaction
+18. Update permitted profile signals
+
+Prefer returning approximately 3-5 useful recommendations rather than one unexplained result.
+
+============================================================
+RECOMMENDATION OUTPUT
+============================================================
+
+For each recommendation, display available information such as:
+
+- Restaurant name
+- Relevant cuisine/food
+- Relevant menu item
+- Price
+- Walking time
+- Walking distance if available
+- Opening status
+- Dietary/certification evidence
+- Match explanation
+
+Never display unknown data as confirmed.
+
+Examples:
+
+"Price unavailable"
+
+"Opening hours unavailable"
+
+"Certification information unavailable"
+
+"Allergy information could not be verified"
+
+============================================================
+INITIAL PROJECT STRUCTURE
+============================================================
+
+Use approximately:
+
+BiteFinder/
+│
+├── main.py
+├── io_manager.py
+├── ai_manager.py
+├── logic_manager.py
+├── data_manager.py
+├── config.py
+├── schemas.py
+│
+├── data/
+│   ├── restaurants.json
+│   ├── users.json
+│   ├── interactions.json
+│   ├── sources.json
+│   ├── routes_cache.json
+│   └── ai_runs.json
+│
+├── logs/
+│   └── bitefinder_debug.log
+│
+├── tests/
+│   ├── fixtures/
+│   ├── test_io_manager.py
+│   ├── test_ai_manager.py
+│   ├── test_logic_manager.py
+│   ├── test_data_manager.py
+│   └── test_end_to_end.py
+│
+├── requirements.txt
+├── Dockerfile
+├── .env.example
+├── .gitignore
+└── README.md
+
+Do not create dozens of modules prematurely.
+
+Only extract helper modules when files genuinely become difficult to understand.
+
+============================================================
+ERROR HANDLING
+============================================================
+
+Handle errors close to where they occur.
+
+Examples:
+
+- invalid CLI input
+- missing JSON file
+- corrupted JSON
+- missing environment variable
+- AI timeout
+- malformed AI JSON
+- routing API timeout
+- unknown restaurant data
+- invalid coordinates
+- failed file write
+
+The user should receive a useful message rather than a Python traceback during normal operation.
+
+Log technical error information to the debug log.
+
+============================================================
+TESTING
+============================================================
+
+Write tests alongside functionality.
+
+Prioritise tests for:
+
+- budget validation
+- walking-time validation
+- allergy filtering
+- dietary filtering
+- unknown allergen handling
+- unknown certification handling
+- missing price handling
+- opening status
+- ranking calculations
+- deterministic tie breaking
+- malformed AI JSON
+- missing AI fields
+- wrong AI field types
+- API failures
+- missing files
+- corrupt JSON
+- route unavailable
+- zero valid restaurants
+- recommendation ordering
+- persistence across runs
+
+Use fixtures and mocked external API responses for repeatable automated tests.
+
+Do not require live paid APIs to run every unit test.
+
+============================================================
+GIT / GITHUB WORKFLOW
+============================================================
+
+Use the existing authenticated Git/GitHub configuration on the machine.
+
+NEVER:
+
+- hardcode credentials
+- display credentials
+- write credentials into source files
+- write credentials into logs
+- commit API keys
+- commit access tokens
+- commit .env containing secrets
+
+Work on:
+
+<TARGET_BRANCH>
+
+If TARGET_BRANCH has not been explicitly replaced:
+
+1. inspect the current Git branch
+2. remain on the current intended feature/project branch
+3. do not arbitrarily switch branches
+
+AFTER EVERY SIZEABLE, WORKING CHANGE:
+
+1. Review git status
+2. Run relevant tests
+3. Ensure no secret files are staged
+4. Stage only appropriate project files
+5. Create a descriptive commit
+6. Push the commit to the target/current branch
+
+Examples of sizeable changes:
+
+- completed project skeleton
+- completed Data Manager
+- completed AI structured-response pipeline
+- completed hard filtering
+- completed ranking
+- completed routing integration
+- completed profile functionality
+- completed test suite section
+- completed Docker configuration
+
+Use clear commit messages such as:
+
+feat: add procedural project skeleton
+feat: implement restaurant JSON persistence
+feat: add dietary and allergy filtering
+feat: implement weighted recommendation ranking
+feat: add structured AI request parsing
+test: add hard constraint filtering tests
+fix: handle corrupted restaurant data
+docs: update BiteFinder setup instructions
+
+Do NOT create meaningless commits after every tiny line edit.
+
+Maintain useful granular Git history.
+
+============================================================
+IMPLEMENTATION PRIORITY — TWO WEEK DEADLINE
+============================================================
+
+The project is under severe time pressure.
+
+Do not over-engineer.
+
+Development philosophy:
+
+SMALL WORKING VERSION
+→ TEST
+→ IMPROVE
+→ INTEGRATE
+
+Priority order:
+
+PHASE 1 — REQUIRED PROJECT SKELETON
+
+Build:
+
+main.py
+io_manager.py
+ai_manager.py
+logic_manager.py
+data_manager.py
+config.py
+schemas.py
+debug logging
+data files
+tests structure
+Docker skeleton
+
+Make sure the application starts.
+
+PHASE 2 — FIRST END-TO-END THIN SLICE
+
+Get this working as soon as possible:
+
+CLI
+→ AI structured interpretation
+→ Logic Manager
+→ Data Manager
+→ hard filter
+→ basic ranking
+→ CLI recommendations
+→ saved interaction
+
+Use a small known JSON restaurant dataset.
+
+THIS SHOULD WORK BEFORE BUILDING ADVANCED FEATURES.
+
+PHASE 3 — HARD FILTERS
+
+Implement:
+
+- dietary filtering
+- allergy filtering
+- budget filtering
+- missing data rules
+- opening filtering where applicable
+
+PHASE 4 — RANKING
+
+Implement transparent weighted ranking.
+
+PHASE 5 — LOCATION / ROUTING
+
+Add manual location and real walking routing.
+
+Use caching where sensible.
+
+PHASE 6 — AI 3 IMPROVEMENTS
+
+Improve natural-language request interpretation and grounded explanations.
+
+PHASE 7 — BASIC AI 1
+
+Add lightweight preference learning.
+
+PHASE 8 — BASIC AI 2
+
+Add controlled structured restaurant-data ingestion.
+
+PHASE 9 — INTEGRATION
+
+Make all required functionality work through CLI.
+
+PHASE 10 — TEST / DOCKER / DOCUMENT
+
+Run all tests.
+
+Run Docker.
+
+Verify on clean environments.
+
+Finish README.
+
+============================================================
+MVP — MUST PRIORITISE
+============================================================
+
+The minimum viable assessed BiteFinder should contain:
+
+- Python CLI
+- procedural code only
+- four required managers
+- AI API integration
+- structured validated AI JSON
+- JSON persistence
+- curated restaurant dataset
+- dietary input
+- allergy input
+- budget input
+- cuisine/food preference
+- walking-time input
+- manual location
+- deterministic hard filters
+- explainable ranking
+- multiple recommendations
+- recommendation reasons
+- missing-information handling
+- source-aware restaurant information
+- debug log
+- tests
+- Docker
+- Git history
+
+============================================================
+DO NOT PRIORITISE
+============================================================
+
+Treat these as FUTURE ENHANCEMENTS unless all core functionality is already stable:
+
+- HTML frontend
+- JavaScript frontend
+- Telegram bot
+- PostgreSQL
+- SQLite migration
+- authentication/login
+- reservations
+- payments
+- social features
+- complex ML recommender
+- autonomous city-wide scraper
+- restaurant review system
+- map GUI
+- cloud microservices
+- enterprise architecture
+
+============================================================
+DEVELOPMENT BEHAVIOUR
+============================================================
+
+Before implementing a sizeable feature:
+
+1. Inspect the existing code.
+2. Understand current interfaces.
+3. Reuse existing functions where possible.
+4. Identify which manager owns the responsibility.
+5. Avoid duplicate implementations.
+
+While implementing:
+
+1. Keep functions short and focused.
+2. Validate input.
+3. Handle errors.
+4. Add debug calls at major stages.
+5. Maintain procedural design.
+6. Follow PEP 8.
+7. Add/update tests.
+
+After implementing:
+
+1. Run syntax/static checks where available.
+2. Run relevant tests.
+3. Run the application where appropriate.
+4. Check the debug log for unexpected failures.
+5. Review the diff.
+6. Ensure no secrets are included.
+7. Commit the sizeable working change.
+8. Push it to the designated/current branch.
+
+If tests fail:
+
+DO NOT blindly commit/push broken code.
+
+Investigate and fix the failure first, unless the user explicitly asks to preserve a work-in-progress commit.
+
+============================================================
+IMPORTANT ARCHITECTURAL QUESTION TO ASK FOR EVERY FEATURE
+============================================================
+
+Before adding any AI functionality, ask:
+
+"Does this genuinely need AI?"
+
+Use deterministic Python if it is:
+
+- safer
+- easier to verify
+- easier to test
+- a hard business rule
+- a factual database lookup
+- numerical filtering
+
+Use AI primarily when semantic interpretation or personalised preference reasoning provides meaningful value.
+
+============================================================
+FINAL RULES
+============================================================
+
+DO NOT USE CLASSES.
+
+DO NOT USE OBJECT ORIENTED PROGRAMMING.
+
+FOLLOW PROCEDURAL PROGRAMMING THROUGHOUT THE ENTIRE CODEBASE.
+
+DO NOT INVENT RESTAURANT INFORMATION.
+
+DO NOT LET AI OVERRIDE HARD CONSTRAINTS.
+
+DO NOT SILENTLY RELAX USER SAFETY REQUIREMENTS.
+
+DO NOT HIDE MISSING DATA.
+
+DO NOT PUT BUSINESS LOGIC IN AI MANAGER.
+
+DO NOT PRINT FROM RANDOM MODULES.
+
+DO NOT STORE SECRETS IN SOURCE CONTROL.
+
+DO NOT OVER-ENGINEER.
+
+Keep BiteFinder understandable enough that another student can open any file and understand what each function is doing.
+
+============================================================
+FIRST ACTION
+============================================================
+
+Before writing substantial implementation code:
+
+1. Inspect the entire existing repository.
+2. Inspect the current Git branch and git status.
+3. Identify which BiteFinder files already exist.
+4. Compare the repository with the architecture above.
+5. Do NOT delete working code unnecessarily.
+6. Produce a concise implementation checklist.
+7. Identify the smallest changes required to establish the required architecture.
+8. Then implement the first complete end-to-end BiteFinder thin slice.
+
+The first technical milestone is:
+
+User enters a food request in the CLI
+→ AI returns validated structured requirements/preferences
+→ restaurant candidates are loaded from JSON
+→ Logic Manager deterministically applies hard constraints
+→ valid candidates are ranked
+→ several recommendations are displayed
+→ the interaction is saved
+→ major processing stages are written to the debug log
+→ tests pass
+→ the sizeable change is committed and pushed.
+
+Proceed incrementally and keep the repository working after each completed stage.
