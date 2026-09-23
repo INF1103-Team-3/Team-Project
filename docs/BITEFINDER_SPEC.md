@@ -1327,3 +1327,37 @@ User enters a food request in the CLI
 → the sizeable change is committed and pushed.
 
 Proceed incrementally and keep the repository working after each completed stage.
+
+
+============================================================
+SECURITY AND API CREDENTIAL RULES
+============================================================
+
+API credentials are supplied externally by the runtime environment.
+
+Never:
+
+- commit API keys or credentials to Git
+- print API keys to logs
+- include API keys in debug output
+- store API keys in source code
+- store API keys in configuration files committed to Git
+- modify or remove provider spending limits
+- create additional provider credentials
+- expose secrets through HTTP responses
+- include secrets in tests or fixtures
+
+Secrets must be loaded using the project's secret-loading
+functions.
+
+Development credentials are intentionally rate-limited and
+spending-limited.
+
+When testing paid APIs:
+
+- minimize the number of requests
+- never create uncontrolled loops that call paid APIs
+- mock external APIs wherever integration testing is unnecessary
+- cache repeated development requests where appropriate
+- use fixtures for repeatable tests
+- stop retrying after a bounded number of attempts
