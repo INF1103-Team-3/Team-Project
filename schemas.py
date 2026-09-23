@@ -84,7 +84,7 @@ def normalize_request(request):
 
 def valid_evidence(value):
     return (isinstance(value, dict) and type(value.get("confirmed")) is bool
-            and value.get("evidence_type") in {"official", "restaurant_reported"}
+            and value.get("evidence_type") in ("official", "restaurant_reported")
             and is_text_list(value.get("source_ids")) and bool(value["source_ids"]))
 
 
@@ -175,3 +175,60 @@ def valid_profile(profile):
     counts = profile.get("cuisine_counts", {})
     return (isinstance(counts, dict) and all(is_text(key) and type(value) is int
             and 0 <= value <= 10 for key, value in counts.items()))
+
+
+def valid_source(source):
+    """Require a public HTTPS reference and explicit verification metadata."""
+    from urllib.parse import urlsplit
+
+    if not isinstance(source, dict):
+        return False
+    if not is_text(source.get("source_id")):
+        return False
+    reference = source.get("source_reference")
+    if not isinstance(reference, str) or not reference.isprintable():
+        return False
+    try:
+        url = urlsplit(reference)
+        if url.scheme != "https" or not url.hostname or url.username or url.password:
+            return False
+        for field in ("collected_at", "last_verified_at"):
+            raw = source[field]
+            if datetime.strptime(raw, "%Y-%m-%d").strftime("%Y-%m-%d") != raw:
+                return False
+    except (ValueError, TypeError, KeyError):
+        return False
+    return source.get("evidence_type") in (
+        "official", "restaurant_reported", "third_party", "unknown",
+    )
+
+
+def validate_bundle(bundle):
+    if not isinstance(bundle, dict) or set(bundle) != {"sources", "restaurants"}:
+        return "An import must contain sources and restaurants lists."
+    sources, records = bundle["sources"], bundle["restaurants"]
+    if not isinstance(sources, list) or not 1 <= len(sources) <= 100:
+        return "Supply between 1 and 100 source records."
+    if not isinstance(records, list) or not 1 <= len(records) <= 100:
+        return "Supply between 1 and 100 restaurant records."
+    if not all(valid_source(source) for source in sources):
+        return "Each source needs a public HTTPS URL, evidence type and ISO verification dates."
+    source_map = {source["source_id"]: source for source in sources}
+    if len(source_map) != len(sources):
+        return "Duplicate source IDs in import."
+    for record in records:
+        if not validate_restaurant(record, set(source_map)):
+            return "A restaurant or its menu/evidence fields failed validation."
+        if not record["menu"]:
+            return "Each imported restaurant needs at least one menu item."
+        for item in record["menu"]:
+            for field in ("dietary", "allergen_free"):
+                for claim in item.get(field, {}).values():
+                    if any(source_map[sid]["evidence_type"] not in
+                           {"official", "restaurant_reported"}
+                           for sid in claim["source_ids"]):
+                        return "Safety claims require official or restaurant-reported sources."
+                    cross_contact = claim.get("cross_contact_excluded")
+                    if cross_contact is not None and type(cross_contact) is not bool:
+                        return "Cross-contact evidence must be a boolean."
+    return None

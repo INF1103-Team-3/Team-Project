@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from debug import debug_log
-from schemas import is_text, valid_profile, validate_restaurant
+from schemas import is_text, valid_profile, validate_bundle, validate_restaurant
 
 
 def load_json(path, expected_type=list):
@@ -20,7 +20,7 @@ def load_json(path, expected_type=list):
     except FileNotFoundError:
         debug_log("data_missing")
         return expected_type(), None
-    except (OSError, ValueError, UnicodeError):
+    except (OSError, ValueError, UnicodeError, RecursionError):
         debug_log("data_invalid", "error")
         return expected_type(), "Stored data could not be read; original file preserved."
 
@@ -42,7 +42,7 @@ def save_json(path, data):
         temporary.replace(path)
         debug_log("data_saved")
         return None
-    except (OSError, ValueError, TypeError):
+    except (OSError, ValueError, TypeError, RecursionError):
         debug_log("write_failed", "error")
         return "Could not save data. Check directory permissions and free space."
     finally:
@@ -94,6 +94,20 @@ def load_restaurants(directory):
     sources, error = load_json(Path(directory) / "sources.json")
     if error:
         return [], error
+    imported, import_error = load_imported_catalog(directory)
+    if import_error:
+        return [], import_error
+    from logic_manager import validate_import_conflicts
+
+    for bundle in imported:
+        existing = [record for record in records if isinstance(record, dict)
+                    and all(is_text(record.get(field)) for field in
+                            ("restaurant_id", "name", "address"))]
+        error = validate_import_conflicts(existing, sources, bundle)
+        if error:
+            return [], "Imported catalog conflicts with existing data; original files preserved."
+        records.extend(bundle["restaurants"])
+        sources.extend(bundle["sources"])
     references = {}
     for source in sources:
         if not isinstance(source, dict):
@@ -132,3 +146,71 @@ def load_history(directory, name, limit=10):
     matches = [record for record in records if isinstance(record, dict)
                and record.get("profile") == name]
     return matches[-limit:], None
+
+
+def load_imported_catalog(directory):
+    bundles, error = load_json(Path(directory) / "catalog_imports.json")
+    if error:
+        return [], error
+    if any(validate_bundle(bundle) for bundle in bundles):
+        return [], "Imported catalog is invalid; repair it before searching or importing."
+    return bundles, None
+
+
+def read_import_file(directory, filename):
+    """Read a bounded JSON file strictly inside data/incoming; never follow escapes."""
+    if (not isinstance(filename, str) or Path(filename).name != filename
+            or not filename.endswith(".json")):
+        return None, "Enter a JSON filename from the data/incoming directory."
+    try:
+        root = Path(directory).resolve()
+        incoming = root / "incoming"
+        if incoming.is_symlink():
+            return None, "The incoming directory cannot be a symbolic link."
+        path = incoming / filename
+        if path.is_symlink() or path.resolve().parent != incoming:
+            return None, "Import files must stay inside data/incoming."
+        with path.open("rb") as source:
+            content = source.read(1_000_001)
+        if len(content) > 1_000_000:
+            return None, "Import files must be no larger than 1 MB."
+        bundle = json.loads(content)
+    except (OSError, ValueError, RecursionError):
+        return None, "Import file is missing, unreadable or not valid JSON."
+    error = validate_bundle(bundle)
+    if error:
+        debug_log("import_invalid", "error")
+        return None, error
+    return bundle, None
+
+
+def prepare_import(directory, bundle):
+    """Recheck against the current catalog both before preview and before save."""
+    from logic_manager import validate_import_conflicts
+
+    records, error = load_restaurants(directory)
+    if error:
+        return None, error
+    sources, error = load_json(Path(directory) / "sources.json")
+    if error:
+        return None, error
+    imported, error = load_imported_catalog(directory)
+    if error:
+        return None, error
+    for previous in imported:
+        sources.extend(previous["sources"])
+    error = validate_import_conflicts(records, sources, bundle)
+    if error:
+        debug_log("import_invalid", "error")
+        return None, error
+    return imported + [bundle], None
+
+
+def save_import(directory, bundle):
+    catalog, error = prepare_import(directory, bundle)
+    if error:
+        return error
+    error = save_json(Path(directory) / "catalog_imports.json", catalog)
+    if not error:
+        debug_log("import_saved", count=len(bundle["restaurants"]))
+    return error

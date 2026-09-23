@@ -43,3 +43,35 @@ list closes that entire date, including overnight service from the previous day.
 
 Test fixtures in `tests/support.py` are explicitly synthetic and never loaded as
 production restaurant data. Extend real data only with checked source evidence.
+
+
+## Importing reviewed data
+
+1. Create the `data/incoming` directory (or `incoming` under `BITEFINDER_DATA_DIR`).
+2. Prepare a `.json` bundle with exactly two top-level arrays: `sources` and
+   `restaurants`, using the record formats above and the bundled data as reference.
+3. Include every source referenced by the incoming records. Each source needs a
+   unique `source_id`, a public HTTPS `source_reference`, `evidence_type`, and
+   `collected_at`/`last_verified_at` dates in `YYYY-MM-DD` format.
+4. Run the CLI, choose `i`, and enter only the JSON filename. Review the full
+   preview against the cited sources, then confirm to save.
+
+Each bundle supports 1–100 restaurants and 1–100 sources, up to 1 MB. Importing
+adds records; it does not overwrite existing restaurants or redefine a source ID.
+Duplicate restaurant IDs and matching names/addresses (ignoring case and repeated
+spaces) reject the entire bundle. This is a basic duplicate check; spelling variants
+and address abbreviations still need human review. A source ID may be reused only
+with exactly matching metadata. Dietary/allergy claims require official or
+restaurant-reported source metadata as well as the evidence fields described above.
+
+Validated additions are saved together in `data/catalog_imports.json` through one
+atomic write. Source and restaurant additions cannot be partially saved. Searches
+combine this file with the bundled catalog. Corrupt imports stop catalog loading
+and are preserved for repair. Failed validation, cancellation and failed saves leave
+existing data unchanged. Files are restricted to `data/incoming`; path traversal
+and symbolic-link escapes are rejected. Incoming files and saved imports are ignored
+by Git and excluded from the Docker image. Mount your data directory to persist them.
+
+Validation checks structure and references, not whether the webpage supports the
+claims. The person confirming an import must verify the factual evidence. No API
+key or network request is needed for a reviewed JSON import.

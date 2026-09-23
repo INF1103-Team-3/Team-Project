@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from ai_manager import interpret_request
 from data_manager import (
     append_interaction, load_history, load_json, load_profile, load_restaurants,
-    query_restaurants, save_json, save_profile,
+    prepare_import, query_restaurants, read_import_file, save_import,
+    save_json, save_profile,
 )
 from debug import debug_log
 from logic_manager import (
@@ -82,8 +83,11 @@ def collect_manual_request():
 
 def collect_request(config, profile, name="default"):
     mode = ask_choice(
-        "[m]anual search, [a]i search, [p]rofile, [h]istory, [q]uit: ",
-        ("m", "a", "p", "h", "q"))
+        "[m]anual search, [a]i search, [p]rofile, [h]istory, [i]mport, [q]uit: ",
+        ("m", "a", "p", "h", "i", "q"))
+    if mode == "i":
+        import_catalog(config)
+        return None, False
     if mode == "p":
         edit_profile(config, name, profile)
         return None, False
@@ -295,3 +299,25 @@ def display_history(config, name):
         print("No saved history for this profile.")
     for record in history:
         print(json.dumps(record, ensure_ascii=True))
+
+
+def import_catalog(config):
+    print("Import a reviewed restaurant/source JSON bundle from data/incoming.")
+    filename = input("JSON filename (blank to cancel): ").strip()
+    if not filename:
+        return
+    bundle, error = read_import_file(config["data_dir"], filename)
+    if not error:
+        _, error = prepare_import(config["data_dir"], bundle)
+    if error:
+        print(error)
+        return
+    print("Review the proposed records and all supporting sources:")
+    print(json.dumps(bundle, indent=2, ensure_ascii=True))
+    choice = ask_choice("Have you verified these facts and want to import them? y/n: ",
+                        ("y", "n"))
+    if choice != "y":
+        print("Import cancelled; catalog unchanged.")
+        return
+    error = save_import(config["data_dir"], bundle)
+    print(error or f"Imported {len(bundle['restaurants'])} restaurant records.")

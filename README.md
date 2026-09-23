@@ -17,7 +17,9 @@ Enter a local profile name, then choose manual (`m`) or AI (`a`) search. Manual
 search works without credentials. Confirm the interpreted requirements, review
 up to five results, select a restaurant or reject the results, and search again.
 Choose `p` to review/edit the active profile or reset learned preferences; `h`
-shows its latest 10 history entries. Choose `q` to exit. EOF and Ctrl+C exit cleanly.
+shows its latest 10 history entries. Choose `i` to preview and import a reviewed
+restaurant/source bundle (see [import instructions](docs/DATA.md#importing-reviewed-data)).
+Choose `q` to exit. EOF and Ctrl+C exit cleanly.
 
 The starter data has three Saizeriya outlets in Singapore. Try manual search,
 SGD 10, Italian cuisine, and leave walking, dietary, allergy and opening constraints
@@ -134,6 +136,6 @@ environment configuration.
 - Failed saves: check directory permissions and free space.
 - Malformed AI output: retry the request or switch to manual entry.
 
-Next: broader verified data, live API/Docker validation, and controlled
-AI-assisted source ingestion. Telegram and web
+Reviewed JSON imports are implemented. Next: broader verified data, live
+API/Docker validation, and AI-assisted source extraction. Telegram and web
 interfaces remain future enhancements under the CLI-first specification.

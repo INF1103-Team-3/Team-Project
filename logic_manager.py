@@ -161,3 +161,32 @@ def record_selection(profile, restaurant):
                                     {restaurant["restaurant_id"]})
     debug_log("profile_updated")
     return result
+
+
+def validate_import_conflicts(existing_records, existing_sources, bundle):
+    """Reject overwrites and matching name/address pairs before persistence."""
+    from schemas import validate_bundle
+
+    error = validate_bundle(bundle)
+    if error:
+        return error
+    source_map = {source["source_id"]: source for source in existing_sources
+                  if isinstance(source, dict) and isinstance(source.get("source_id"), str)}
+    for source in bundle["sources"]:
+        prior = source_map.get(source["source_id"])
+        if prior is not None and prior != source:
+            return "A source ID already exists with different metadata."
+    identifiers = {record["restaurant_id"] for record in existing_records}
+    identities = {restaurant_identity(record) for record in existing_records}
+    for record in bundle["restaurants"]:
+        identity = restaurant_identity(record)
+        if record["restaurant_id"] in identifiers or identity in identities:
+            return "A restaurant ID or matching name/address already exists."
+        identifiers.add(record["restaurant_id"])
+        identities.add(identity)
+    return None
+
+
+def restaurant_identity(record):
+    return tuple(" ".join(record[field].casefold().split())
+                 for field in ("name", "address"))

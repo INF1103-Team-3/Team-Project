@@ -12,3 +12,11 @@ logs/
 data/users.json
 data/interactions.json
 data/routes_cache.json
+data/incoming/
+data/catalog_imports.json
+secrets/
+*.secret
+*.key
+*.pem
+credentials.json
+service-account*.json
