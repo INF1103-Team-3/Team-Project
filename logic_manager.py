@@ -37,6 +37,8 @@ def opening_status(restaurant, when):
     try:
         local = when.astimezone(ZoneInfo(hours["timezone"]))
         exceptions = hours.get("exceptions", {})
+        if exceptions.get(local.date().isoformat()) == []:
+            return False
         known_today = False
         for offset in (0, -1):
             day = local.date() + timedelta(days=offset)

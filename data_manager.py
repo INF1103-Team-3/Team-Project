@@ -64,7 +64,9 @@ def append_interaction(directory, interaction):
 def load_profile(directory, name):
     profiles, error = load_json(Path(directory) / "users.json", dict)
     profile = profiles.get(name, {})
-    if not isinstance(profile, dict):
+    from schemas import valid_profile
+
+    if not valid_profile(profile):
         return {}, "Stored profile is invalid."
     return profile, error
 

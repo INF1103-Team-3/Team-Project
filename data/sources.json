@@ -1,1 +1,44 @@
-[]
+[
+  {
+    "source_id": "saizeriya-menu",
+    "source_reference": "https://www.saizeriya.com.sg/menu/mobilemenu/grand_menu/menu.php",
+    "evidence_type": "restaurant_reported",
+    "collected_at": "2026-09-23",
+    "last_verified_at": "2026-09-23"
+  },
+  {
+    "source_id": "saizeriya-outlets",
+    "source_reference": "https://www.saizeriya.com.sg/search/",
+    "evidence_type": "restaurant_reported",
+    "collected_at": "2026-09-23",
+    "last_verified_at": "2026-09-23"
+  },
+  {
+    "source_id": "saizeriya-concept",
+    "source_reference": "https://www.saizeriya.com.sg/",
+    "evidence_type": "restaurant_reported",
+    "collected_at": "2026-09-23",
+    "last_verified_at": "2026-09-23"
+  },
+  {
+    "source_id": "map-city-square",
+    "source_reference": "https://maps.app.goo.gl/s6CecrmeRv8CfV25A",
+    "evidence_type": "third_party",
+    "collected_at": "2026-09-23",
+    "last_verified_at": "2026-09-23"
+  },
+  {
+    "source_id": "map-cathay",
+    "source_reference": "https://maps.app.goo.gl/Vuah77MpKWPqw87e6",
+    "evidence_type": "third_party",
+    "collected_at": "2026-09-23",
+    "last_verified_at": "2026-09-23"
+  },
+  {
+    "source_id": "map-aperia",
+    "source_reference": "https://maps.app.goo.gl/tJ8sAs7vxCfELyzC9",
+    "evidence_type": "third_party",
+    "collected_at": "2026-09-23",
+    "last_verified_at": "2026-09-23"
+  }
+]

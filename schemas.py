@@ -2,6 +2,7 @@
 
 import math
 from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 LIST_FIELDS = ("dietary_requirements", "allergies", "cuisines", "foods")
 REQUEST_FIELDS = set(LIST_FIELDS) | {
@@ -16,7 +17,8 @@ def is_number(value, minimum=0):
 
 
 def is_text(value):
-    return isinstance(value, str) and 0 < len(value.strip()) <= 200
+    return (isinstance(value, str) and 0 < len(value.strip()) <= 200
+            and all(char.isprintable() for char in value))
 
 
 def is_text_list(value):
@@ -96,6 +98,8 @@ def validate_restaurant(record, source_ids):
     location = record.get("location")
     if location is not None and not valid_coordinates(location):
         return False
+    if not valid_opening_hours(record.get("opening_hours"), source_ids):
+        return False
     if not isinstance(record.get("menu"), list):
         return False
     for item in record["menu"]:
@@ -121,3 +125,45 @@ def validate_restaurant(record, source_ids):
                 if not set(claim["source_ids"]) <= source_ids:
                     return False
     return True
+
+
+def valid_opening_hours(hours, source_ids):
+    if hours is None:
+        return True
+    if not isinstance(hours, dict):
+        return False
+    if not is_text_list(hours.get("source_ids")) or not hours["source_ids"]:
+        return False
+    if not set(hours["source_ids"]) <= source_ids:
+        return False
+    try:
+        ZoneInfo(hours["timezone"])
+        weekly, exceptions = hours["weekly"], hours.get("exceptions", {})
+        if not isinstance(weekly, dict) or not isinstance(exceptions, dict):
+            return False
+        if not set(weekly) <= set("0123456"):
+            return False
+        for date in exceptions:
+            datetime.strptime(date, "%Y-%m-%d")
+        for intervals in list(weekly.values()) + list(exceptions.values()):
+            if not isinstance(intervals, list):
+                return False
+            for interval in intervals:
+                if not isinstance(interval, list) or len(interval) != 2:
+                    return False
+                for value in interval:
+                    datetime.strptime(value, "%H:%M")
+        return True
+    except (KeyError, ValueError, TypeError, ZoneInfoNotFoundError):
+        return False
+
+
+def valid_profile(profile):
+    if not isinstance(profile, dict):
+        return False
+    for field in ("allergies", "dietary_requirements", "selected_ids"):
+        if not is_text_list(profile.get(field, [])):
+            return False
+    counts = profile.get("cuisine_counts", {})
+    return (isinstance(counts, dict) and all(is_text(key) and type(value) is int
+            and 0 <= value <= 10 for key, value in counts.items()))

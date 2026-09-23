@@ -1,1 +1,182 @@
-[]
+[
+  {
+    "restaurant_id": "saizeriya-city-square",
+    "name": "Saizeriya — City Square Mall",
+    "address": "180 Kitchener Road, #B2-55/56, Singapore 208539",
+    "location": [
+      1.3114516,
+      103.8561608
+    ],
+    "cuisines": [
+      "italian"
+    ],
+    "source_ids": [
+      "saizeriya-outlets",
+      "saizeriya-concept",
+      "map-city-square"
+    ],
+    "last_updated": "2026-09-23",
+    "opening_hours": null,
+    "menu": [
+      {
+        "name": "Bolognese",
+        "price": 3.9,
+        "currency": "SGD",
+        "food_tags": [
+          "pasta"
+        ],
+        "source_ids": [
+          "saizeriya-menu"
+        ],
+        "dietary": {},
+        "allergen_free": {}
+      },
+      {
+        "name": "Margherita",
+        "price": 7.9,
+        "currency": "SGD",
+        "food_tags": [
+          "pizza"
+        ],
+        "source_ids": [
+          "saizeriya-menu"
+        ],
+        "dietary": {},
+        "allergen_free": {}
+      },
+      {
+        "name": "Milano Doria",
+        "price": 4.9,
+        "currency": "SGD",
+        "food_tags": [
+          "rice"
+        ],
+        "source_ids": [
+          "saizeriya-menu"
+        ],
+        "dietary": {},
+        "allergen_free": {}
+      }
+    ]
+  },
+  {
+    "restaurant_id": "saizeriya-cathay",
+    "name": "Saizeriya — The Cathay",
+    "address": "2 Handy Road, #B1-11, Singapore 229233",
+    "location": [
+      1.2995083,
+      103.8477778
+    ],
+    "cuisines": [
+      "italian"
+    ],
+    "source_ids": [
+      "saizeriya-outlets",
+      "saizeriya-concept",
+      "map-cathay"
+    ],
+    "last_updated": "2026-09-23",
+    "opening_hours": null,
+    "menu": [
+      {
+        "name": "Bolognese",
+        "price": 3.9,
+        "currency": "SGD",
+        "food_tags": [
+          "pasta"
+        ],
+        "source_ids": [
+          "saizeriya-menu"
+        ],
+        "dietary": {},
+        "allergen_free": {}
+      },
+      {
+        "name": "Margherita",
+        "price": 7.9,
+        "currency": "SGD",
+        "food_tags": [
+          "pizza"
+        ],
+        "source_ids": [
+          "saizeriya-menu"
+        ],
+        "dietary": {},
+        "allergen_free": {}
+      },
+      {
+        "name": "Milano Doria",
+        "price": 4.9,
+        "currency": "SGD",
+        "food_tags": [
+          "rice"
+        ],
+        "source_ids": [
+          "saizeriya-menu"
+        ],
+        "dietary": {},
+        "allergen_free": {}
+      }
+    ]
+  },
+  {
+    "restaurant_id": "saizeriya-aperia",
+    "name": "Saizeriya — Aperia",
+    "address": "12 Kallang Avenue, #02-14/15, Singapore 339511",
+    "location": [
+      1.3096388,
+      103.8644851
+    ],
+    "cuisines": [
+      "italian"
+    ],
+    "source_ids": [
+      "saizeriya-outlets",
+      "saizeriya-concept",
+      "map-aperia"
+    ],
+    "last_updated": "2026-09-23",
+    "opening_hours": null,
+    "menu": [
+      {
+        "name": "Bolognese",
+        "price": 3.9,
+        "currency": "SGD",
+        "food_tags": [
+          "pasta"
+        ],
+        "source_ids": [
+          "saizeriya-menu"
+        ],
+        "dietary": {},
+        "allergen_free": {}
+      },
+      {
+        "name": "Margherita",
+        "price": 7.9,
+        "currency": "SGD",
+        "food_tags": [
+          "pizza"
+        ],
+        "source_ids": [
+          "saizeriya-menu"
+        ],
+        "dietary": {},
+        "allergen_free": {}
+      },
+      {
+        "name": "Milano Doria",
+        "price": 4.9,
+        "currency": "SGD",
+        "food_tags": [
+          "rice"
+        ],
+        "source_ids": [
+          "saizeriya-menu"
+        ],
+        "dietary": {},
+        "allergen_free": {}
+      }
+    ]
+  }
+]
