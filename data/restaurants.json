@@ -1,0 +1,113 @@
+[
+    {
+        "name": "Encik Tan",
+        "cuisine": "malay",
+        "dietary": "halal",
+        "avg_price": 6.5,
+        "allergens": [
+            "egg",
+            "peanuts"
+        ],
+        "walk_minutes": 5,
+        "open_hours": "10:00-20:30",
+        "spicy_options": true,
+        "certification": "official"
+    },
+    {
+        "name": "Sakura Sushi Bar",
+        "cuisine": "japanese",
+        "dietary": "none",
+        "avg_price": 12.0,
+        "allergens": [
+            "shellfish",
+            "soy"
+        ],
+        "walk_minutes": 8,
+        "open_hours": "11:00-21:00",
+        "spicy_options": false,
+        "certification": "unknown"
+    },
+    {
+        "name": "Green Dot",
+        "cuisine": "chinese",
+        "dietary": "vegan",
+        "avg_price": 8.0,
+        "allergens": [
+            "soy"
+        ],
+        "walk_minutes": 6,
+        "open_hours": "11:00-21:30",
+        "spicy_options": true,
+        "certification": "restaurant-reported"
+    },
+    {
+        "name": "Prata Wala",
+        "cuisine": "indian",
+        "dietary": "halal",
+        "avg_price": 7.0,
+        "allergens": [
+            "dairy",
+            "egg"
+        ],
+        "walk_minutes": 4,
+        "open_hours": "08:00-22:00",
+        "spicy_options": true,
+        "certification": "official"
+    },
+    {
+        "name": "Simply Wrapps",
+        "cuisine": "western",
+        "dietary": "vegetarian",
+        "avg_price": 9.5,
+        "allergens": [
+            "gluten",
+            "dairy"
+        ],
+        "walk_minutes": 7,
+        "open_hours": "10:00-20:00",
+        "spicy_options": false,
+        "certification": "restaurant-reported"
+    },
+    {
+        "name": "Uncle Chicken Rice",
+        "cuisine": "chicken rice",
+        "dietary": "none",
+        "avg_price": 5.0,
+        "allergens": [
+            "soy"
+        ],
+        "walk_minutes": 3,
+        "open_hours": "10:30-19:30",
+        "spicy_options": true,
+        "certification": "unknown"
+    },
+    {
+        "name": "Han's Cafe",
+        "cuisine": "western",
+        "dietary": "none",
+        "avg_price": 11.0,
+        "allergens": [
+            "gluten",
+            "egg",
+            "dairy"
+        ],
+        "walk_minutes": 10,
+        "open_hours": "08:00-21:00",
+        "spicy_options": false,
+        "certification": "unknown"
+    },
+    {
+        "name": "Loving Hut",
+        "cuisine": "asian",
+        "dietary": "vegan",
+        "avg_price": 10.0,
+        "allergens": [
+            "soy",
+            "peanuts"
+        ],
+        "walk_minutes": 12,
+        "open_hours": "11:00-20:00",
+        "spicy_options": true,
+        "certification": "official"
+    }
+]
