@@ -15,7 +15,8 @@ python -m unittest discover -s tests -v
 
 The initial increment provides configuration, atomic JSON persistence and safe
 milestone logging. Restaurant data is currently empty; no facts are invented.
-Search and AI interpretation are the next increment.
+AI interpretation, request validation, hard meal filters and weighted ranking
+are implemented and tested as modules. Interactive search is the next increment.
 
 Configuration comes from environment variables (see `.env.example`). The CLI
 does not automatically load `.env` or read mounted secret files. Never commit
@@ -34,3 +35,9 @@ docker run --rm -it bitefinder
 
 Docker is not installed in the current development container, so image build
 and execution have not yet been verified.
+
+The AI client uses OpenRouter's [chat completions API](https://openrouter.ai/docs/quickstart)
+with JSON mode and local validation. Create a key at
+[OpenRouter API Keys](https://openrouter.ai/settings/keys), then set
+`OPENROUTER_API_KEY` and a JSON-capable model ID in `OPENROUTER_MODEL`.
+The test suite mocks all API calls and needs no credentials.

@@ -81,3 +81,31 @@ def save_profile(directory, name, profile):
 def query_restaurants(restaurants, name=""):
     """Filter stored records by a case-insensitive name substring."""
     return [r for r in restaurants if name.casefold() in r["name"].casefold()]
+
+
+def load_restaurants(directory):
+    """Load sourced, validated records; report rejected rows to the caller."""
+    from schemas import validate_restaurant
+
+    records, error = load_json(Path(directory) / "restaurants.json")
+    if error:
+        return [], error
+    sources, error = load_json(Path(directory) / "sources.json")
+    if error:
+        return [], error
+    source_ids = {s["source_id"] for s in sources if isinstance(s, dict)
+                  and isinstance(s.get("source_id"), str)
+                  and isinstance(s.get("source_reference"), str)
+                  and s["source_reference"].startswith("https://")}
+    valid, seen, rejected = [], set(), 0
+    for record in records:
+        if not validate_restaurant(record, source_ids):
+            rejected += 1
+        elif record["restaurant_id"] in seen:
+            rejected += 1
+        else:
+            valid.append(record)
+            seen.add(record["restaurant_id"])
+    if rejected:
+        debug_log("data_invalid", "error", rejected)
+    return valid, f"Skipped {rejected} invalid or duplicate restaurant records." if rejected else None
