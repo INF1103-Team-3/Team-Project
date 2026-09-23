@@ -8,10 +8,14 @@ import data_manager
 
 def run_bitefinder():
     io_manager.print_welcome()
-    catalog = data_manager.load_restaurants()        # load all records on startup
-    if not catalog:
-        io_manager.print_error(f"No catalog data found at {config.RESTAURANT_FILE}")
+
+    problems = ai_manager.validate_chain()          # <-- HERE — before anything else runs
+    if problems:
+        io_manager.print_error("MODEL_CHAIN has placeholder/broken entries: "
+                               + "; ".join(problems))
         return
+
+    catalog = data_manager.load_restaurants()
 
     while True:
         choice = input("\n1 = new search, q = quit :> ").strip().lower()
