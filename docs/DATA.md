@@ -75,3 +75,40 @@ by Git and excluded from the Docker image. Mount your data directory to persist 
 Validation checks structure and references, not whether the webpage supports the
 claims. The person confirming an import must verify the factual evidence. No API
 key or network request is needed for a reviewed JSON import.
+
+
+## AI-assisted source extraction
+
+Choose `x` in the CLI to turn a supplied public source excerpt into draft records.
+This uses the existing `OPENROUTER_API_KEY` and `OPENROUTER_MODEL`; no additional
+credential is required. Put a JSON file under `data/incoming` with exactly:
+
+- `source`: one source metadata object (the same fields used by JSON imports).
+- `text`: the public source excerpt, up to 20,000 characters.
+
+Supply only text you have checked and are allowed to send to the model provider.
+The application does not crawl or fetch the URL; it sends the supplied excerpt and
+metadata to OpenRouter. Never put credentials or private documents into an excerpt.
+Extraction makes at most two requests (one schema-repair retry), each with a
+20-second timeout and a 4,000-token response limit. HTTP/network failures are not
+retried. The same provider account and spending limits apply.
+
+The model may extract up to five restaurants. Records need a literal name, address
+and at least one menu item. Each restaurant/menu item includes an `evidence_quote`
+copied verbatim from the excerpt, no longer than 1,000 characters. Names, addresses,
+cuisine/food tags and numeric prices are checked against those quotes. A numeric
+price needs an explicit `SGD` or `S$` marker and one unambiguous amount in its quote;
+bare `$`, other currencies and missing prices must remain null. Quotes are retained
+in saved records for later review.
+
+The AI cannot establish dietary/allergy safety claims, coordinates or opening
+schedules through this flow. Those fields must remain empty/null. Such information
+can be added only through separately reviewed source-backed data. Extra AI fields,
+unknown source references and conflicting catalog identities are rejected.
+
+Grounding tests catch missing or invented text, but cannot prove that an amount
+belongs to the right meal or that an excerpt is true/current. You must inspect the
+full draft and supporting source before confirming. Cancellation or failed checks
+leave the catalog unchanged. Confirmed drafts use the same atomic import path as
+manual JSON bundles. If the excerpt lacks complete records, the CLI explains the
+limitation instead of inventing missing facts.

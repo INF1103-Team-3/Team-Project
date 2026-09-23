@@ -19,6 +19,7 @@ up to five results, select a restaurant or reject the results, and search again.
 Choose `p` to review/edit the active profile or reset learned preferences; `h`
 shows its latest 10 history entries. Choose `i` to preview and import a reviewed
 restaurant/source bundle (see [import instructions](docs/DATA.md#importing-reviewed-data)).
+Choose `x` to extract draft records from a supplied public source excerpt with AI.
 Choose `q` to exit. EOF and Ctrl+C exit cleanly.
 
 The starter data has three Saizeriya outlets in Singapore. Try manual search,
@@ -35,7 +36,9 @@ The model ID is not a credential. The integration uses the
 [OpenRouter chat API](https://openrouter.ai/docs/quickstart) with JSON mode, a
 20-second timeout, local schema validation, and at most one retry for malformed
 interpretation. Network/HTTP failures return a readable error. Manual mode stays
-available. Natural-language request text is sent to OpenRouter only in AI mode.
+available. AI search sends the entered request to OpenRouter; AI extraction sends
+only the supplied source excerpt and its metadata. Manual search and JSON imports
+make no AI requests.
 
 For an interactive Bash session, avoid putting the key itself in shell history:
 
@@ -136,6 +139,9 @@ environment configuration.
 - Failed saves: check directory permissions and free space.
 - Malformed AI output: retry the request or switch to manual entry.
 
-Reviewed JSON imports are implemented. Next: broader verified data, live
-API/Docker validation, and AI-assisted source extraction. Telegram and web
+Reviewed JSON imports and grounded AI-assisted source extraction are implemented.
+See [the extraction workflow](docs/DATA.md#ai-assisted-source-extraction) for input
+format and review requirements. Next: broader verified data and live API/Docker
+validation. Profile learning currently uses deterministic selection counts;
+AI-based preference suggestions remain an optional improvement. Telegram and web
 interfaces remain future enhancements under the CLI-first specification.

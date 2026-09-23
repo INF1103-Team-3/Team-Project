@@ -190,3 +190,60 @@ def validate_import_conflicts(existing_records, existing_sources, bundle):
 def restaurant_identity(record):
     return tuple(" ".join(record[field].casefold().split())
                  for field in ("name", "address"))
+
+
+def quote_contains(quote, value):
+    if not isinstance(quote, str) or not isinstance(value, str):
+        return False
+    return " ".join(value.casefold().split()) in " ".join(quote.casefold().split())
+
+
+def grounded_quote(quote, source_text, values):
+    return (isinstance(quote, str) and 1 <= len(quote) <= 1000
+            and quote in source_text
+            and all(quote_contains(quote, value) for value in values))
+
+
+def quoted_price_matches(quote, price):
+    import re
+    from decimal import Decimal
+
+    if price is None:
+        return True
+    amounts = re.findall(
+        r"(?<![A-Za-z])(?:S\$|SGD\s*)\s*(\d+(?:\.\d{1,2})?)(?![\d.,])",
+        quote, flags=re.IGNORECASE)
+    values = {Decimal(amount) for amount in amounts}
+    return len(values) == 1 and Decimal(str(price)) in values
+
+
+def prepare_extracted_bundle(records, source_excerpt):
+    """Ground extracted facts in verbatim evidence; human review still required."""
+    from schemas import validate_bundle, validate_source_excerpt
+
+    error = validate_source_excerpt(source_excerpt)
+    if error:
+        return None, error
+    if not records:
+        return None, "No complete restaurant records were found in the source excerpt."
+    source = source_excerpt["source"]
+    bundle = {"sources": [source], "restaurants": records}
+    error = validate_bundle(bundle)
+    if error:
+        return None, error
+    for record in records:
+        if record.get("location") is not None or record.get("opening_hours") is not None:
+            return None, "AI extraction cannot establish coordinates or opening schedules."
+        values = [record["name"], record["address"]] + record["cuisines"]
+        if not grounded_quote(record.get("evidence_quote"), source_excerpt["text"], values):
+            return None, "Restaurant facts are not grounded in the supplied excerpt."
+        for item in record["menu"]:
+            if item.get("dietary") or item.get("allergen_free"):
+                return None, "AI extraction cannot establish dietary or allergy safety claims."
+            values = [item["name"]] + item.get("food_tags", [])
+            quote = item.get("evidence_quote")
+            if not grounded_quote(quote, source_excerpt["text"], values):
+                return None, "Menu facts are not grounded in the supplied excerpt."
+            if not quoted_price_matches(quote, item.get("price")):
+                return None, "An extracted price is not supported by its source quote."
+    return bundle, None

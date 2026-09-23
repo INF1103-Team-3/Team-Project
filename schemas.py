@@ -232,3 +232,14 @@ def validate_bundle(bundle):
                     if cross_contact is not None and type(cross_contact) is not bool:
                         return "Cross-contact evidence must be a boolean."
     return None
+
+
+def validate_source_excerpt(value):
+    if not isinstance(value, dict) or set(value) != {"source", "text"}:
+        return "Source input must contain source metadata and text."
+    if not valid_source(value["source"]):
+        return "The source needs valid public metadata and verification dates."
+    text = value["text"]
+    if not isinstance(text, str) or not 1 <= len(text.strip()) <= 20000:
+        return "Supply a public source excerpt between 1 and 20000 characters."
+    return None

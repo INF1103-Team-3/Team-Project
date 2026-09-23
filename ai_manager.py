@@ -7,7 +7,9 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from debug import debug_log
-from schemas import normalize_request, validate_request
+from schemas import (
+    normalize_request, validate_request, validate_restaurant, validate_source_excerpt,
+)
 
 ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 MAX_RESPONSE_BYTES = 100_000
@@ -21,10 +23,10 @@ def build_messages(text):
     ]
 
 
-def request_completion(messages, config):
+def request_completion(messages, config, max_tokens=1000):
     body = {
         "model": config["model"], "messages": messages, "temperature": 0,
-        "max_tokens": 1000, "response_format": {"type": "json_object"},
+        "max_tokens": max_tokens, "response_format": {"type": "json_object"},
     }
     request = Request(
         ENDPOINT, data=json.dumps(body).encode(),
@@ -83,3 +85,53 @@ def interpret_request(text, config):
         messages.append({"role": "user", "content":
                          "Return valid JSON matching every required field and type."})
     return None, "AI interpretation failed validation. Please use manual search."
+
+
+def parse_extracted_restaurants(content, source_id):
+    try:
+        payload = json.loads(content)
+    except (ValueError, TypeError, RecursionError):
+        return None, "Extraction did not return valid JSON."
+    if not isinstance(payload, dict) or set(payload) != {"restaurants"}:
+        return None, "Extraction must return a restaurants list."
+    records = payload["restaurants"]
+    if not isinstance(records, list) or not 0 <= len(records) <= 5:
+        return None, "Extraction supports up to five restaurants."
+    record_fields = {"restaurant_id", "name", "address", "evidence_quote", "location",
+                     "cuisines", "opening_hours", "source_ids", "menu"}
+    item_fields = {"name", "price", "currency", "food_tags", "evidence_quote",
+                   "source_ids", "dietary", "allergen_free"}
+    for record in records:
+        if not validate_restaurant(record, {source_id}) or set(record) != record_fields:
+            return None, "Extracted records failed schema validation."
+        if any(set(item) != item_fields for item in record["menu"]):
+            return None, "Extracted menu items failed schema validation."
+    return records, None
+
+
+def extract_restaurants(source_excerpt, config):
+    error = validate_source_excerpt(source_excerpt)
+    if error:
+        return None, error
+    if not config.get("api_key") or not config.get("model"):
+        return None, "Set OPENROUTER_API_KEY and OPENROUTER_MODEL for extraction."
+    try:
+        prompt = (Path(__file__).parent / "prompts" / "extract_restaurants.txt")
+        messages = [
+            {"role": "system", "content": prompt.read_text(encoding="utf-8")},
+            {"role": "user", "content": json.dumps(source_excerpt)},
+        ]
+    except (OSError, UnicodeError):
+        return None, "Extraction prompt file is unavailable."
+    for attempt in range(2):
+        content, error = request_completion(messages, config, max_tokens=4000)
+        if error:
+            return None, error
+        records, error = parse_extracted_restaurants(
+            content, source_excerpt["source"]["source_id"])
+        if not error:
+            return records, None
+        debug_log("ai_invalid", "error")
+        messages.append({"role": "user", "content":
+                         "Return the required JSON restaurant records with every field."})
+    return None, "Extraction failed validation. Prepare a reviewed JSON import instead."

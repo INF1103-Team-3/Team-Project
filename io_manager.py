@@ -3,15 +3,15 @@
 import json
 from datetime import datetime, timezone
 
-from ai_manager import interpret_request
+from ai_manager import extract_restaurants, interpret_request
 from data_manager import (
     append_interaction, load_history, load_json, load_profile, load_restaurants,
-    prepare_import, query_restaurants, read_import_file, save_import,
+    prepare_import, query_restaurants, read_import_file, read_incoming_json, save_import,
     save_json, save_profile,
 )
 from debug import debug_log
 from logic_manager import (
-    eligible_items, prepare_request, recommend, record_selection,
+    eligible_items, prepare_extracted_bundle, prepare_request, recommend, record_selection,
 )
 from routing_service import resolve_routes
 from schemas import (
@@ -83,8 +83,12 @@ def collect_manual_request():
 
 def collect_request(config, profile, name="default"):
     mode = ask_choice(
-        "[m]anual search, [a]i search, [p]rofile, [h]istory, [i]mport, [q]uit: ",
-        ("m", "a", "p", "h", "i", "q"))
+        "[m]anual search, [a]i search, [p]rofile, [h]istory, "
+        "[i]mport, [x]tract source, [q]uit: ",
+        ("m", "a", "p", "h", "i", "x", "q"))
+    if mode == "x":
+        extract_catalog(config)
+        return None, False
     if mode == "i":
         import_catalog(config)
         return None, False
@@ -307,8 +311,14 @@ def import_catalog(config):
     if not filename:
         return
     bundle, error = read_import_file(config["data_dir"], filename)
-    if not error:
-        _, error = prepare_import(config["data_dir"], bundle)
+    if error:
+        print(error)
+        return
+    review_import(config, bundle)
+
+
+def review_import(config, bundle):
+    _, error = prepare_import(config["data_dir"], bundle)
     if error:
         print(error)
         return
@@ -321,3 +331,22 @@ def import_catalog(config):
         return
     error = save_import(config["data_dir"], bundle)
     print(error or f"Imported {len(bundle['restaurants'])} restaurant records.")
+
+
+def extract_catalog(config):
+    print("AI extraction sends a supplied public source excerpt to OpenRouter.")
+    filename = input("Source JSON filename in data/incoming (blank to cancel): ").strip()
+    if not filename:
+        return
+    excerpt, error = read_incoming_json(config["data_dir"], filename)
+    if error:
+        print(error)
+        return
+    records, error = extract_restaurants(excerpt, config)
+    if not error:
+        bundle, error = prepare_extracted_bundle(records, excerpt)
+    if error:
+        print(error)
+        return
+    print("AI extraction is a draft. Check each quoted fact against its source.")
+    review_import(config, bundle)

@@ -157,7 +157,7 @@ def load_imported_catalog(directory):
     return bundles, None
 
 
-def read_import_file(directory, filename):
+def read_incoming_json(directory, filename):
     """Read a bounded JSON file strictly inside data/incoming; never follow escapes."""
     if (not isinstance(filename, str) or Path(filename).name != filename
             or not filename.endswith(".json")):
@@ -177,7 +177,13 @@ def read_import_file(directory, filename):
         bundle = json.loads(content)
     except (OSError, ValueError, RecursionError):
         return None, "Import file is missing, unreadable or not valid JSON."
-    error = validate_bundle(bundle)
+    return bundle, None
+
+
+def read_import_file(directory, filename):
+    bundle, error = read_incoming_json(directory, filename)
+    if not error:
+        error = validate_bundle(bundle)
     if error:
         debug_log("import_invalid", "error")
         return None, error
