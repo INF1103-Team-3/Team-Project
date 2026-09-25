@@ -244,21 +244,30 @@ def fetch_nearby_restaurants(origin, req, debug=False):
         return []
 
 
+_VENUE_WORDS = ("food", "cafe", "hawker", "restaurant", "centre", "center",
+                "court", "market", "kopi", "canteen", "bakery", "bar")
+
 def fetch_by_profile_text(origin, req):
-    """Places Text Search scoped by dietary and/or cuisine
-    (e.g. 'halal chinese food', 'vegetarian food'). Returns [] on failure
-    or when nothing is set."""
+    """Places Text Search scoped by dietary/cuisine and/or the user's
+    free-text query (e.g. 'spicy', 'cafe', 'hawker centre').
+    Returns [] on failure or when nothing is set."""
     lat, lng = origin
     cuisine = (req.get("cuisine") or "").strip()
     dietary = (req.get("dietary") or "none").strip()
+    free_text = (req.get("free_text") or "").strip().lower()[:30]
     terms = []
     if dietary not in ("none", ""):
         terms.append(dietary)
     if cuisine not in ("any", ""):
         terms.append(cuisine)
+    if free_text:
+        terms.append(free_text)
     if not terms:
         return []
-    query = " ".join(terms) + " food"
+    query = " ".join(terms)
+    if not any(w in query for w in _VENUE_WORDS):
+        query += " food"          # 'halal chinese' -> 'halal chinese food'
+        # but 'hawker centre' stays as-is
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": config.GOOGLE_MAPS_API_KEY,
@@ -267,7 +276,7 @@ def fetch_by_profile_text(origin, req):
                              "places.priceRange,places.types,"
                              "places.regularOpeningHours"),
     }
-    delta = _search_radius(req) / 111000.0   # <-- HERE: last line before body
+    delta = _search_radius(req) / 111000.0   # meters -> degrees
     body = {
         "textQuery": query,
         "languageCode": "en",
@@ -289,7 +298,6 @@ def fetch_by_profile_text(origin, req):
     except (requests.RequestException, KeyError, ValueError) as err:
         _log_api_error("places_profile_text", err)
         return []
-
 
 # ---------- enrichment: Places results x catalog ----------
 
@@ -471,15 +479,16 @@ def build_maps_link(origin, destination, mode):
 # ---------- candidate builder ----------
 
 def build_candidates(origin, req, catalog):
-    """Live mode: profile-scoped search (dietary + cuisine) -> catalog
-    enrichment -> BOTH walk and drive times. Offline mode: catalog only."""
+    """Live mode: profile-scoped search (dietary + cuisine + free text) ->
+    catalog enrichment -> BOTH walk and drive times. Offline: catalog only."""
     if not config.USE_LIVE_GOOGLE:
         return [dict(r) for r in catalog]
     cuisine = (req.get("cuisine") or "any").lower()
     dietary = (req.get("dietary") or "none").lower()
+    free_text = (req.get("free_text") or "").strip()
     places = []
-    if cuisine not in ("any", "") or dietary not in ("none", ""):
-        places = fetch_by_profile_text(origin, req)
+    if cuisine not in ("any", "") or dietary not in ("none", "") or free_text:
+        places = fetch_by_profile_text(origin, req)      # trigger lives HERE
     if not places:                       # fallback: generic nearby search
         places = fetch_nearby_restaurants(origin, req)
     if not places:
