@@ -19,6 +19,7 @@ MODEL_CHAIN = [
 # --- Data layer: Google Maps Platform ---
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
+TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 PLACES_URL = "https://places.googleapis.com/v1/places:searchNearby"
 MATRIX_URL = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
 ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
