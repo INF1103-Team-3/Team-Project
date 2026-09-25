@@ -175,7 +175,7 @@ def get_user_requirements():
         "min_rating": ask_rating("Min rating"),
         "eat_time": eat["eat_time"],
         "eat_day": eat["eat_day"],
-        "free_text": input("Anything else? (e.g. 'something spicy'): ").strip(),
+        "free_text": input("Search text (e.g. 'spicy', 'cafe', 'hawker centre'; Enter = skip): ").strip(),
     }
 
 
