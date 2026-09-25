@@ -9,13 +9,16 @@ import data_manager
 def run_bitefinder():
     io_manager.print_welcome()
 
-    problems = ai_manager.validate_chain()          # <-- HERE — before anything else runs
+    problems = ai_manager.validate_chain()
     if problems:
         io_manager.print_error("MODEL_CHAIN has placeholder/broken entries: "
                                + "; ".join(problems))
         return
 
     catalog = data_manager.load_restaurants()
+    if not catalog:
+        io_manager.print_error(f"No catalog data found at {config.RESTAURANT_FILE}")
+        return
 
     while True:
         choice = input("\n1 = new search, q = quit :> ").strip().lower()
@@ -34,15 +37,15 @@ def run_bitefinder():
         io_manager.print_parsed(req)
         io_manager.print_ai_model(ai_model)
 
-        origin = data_manager.geocode_location(record["location"])   # 4a. DATA: geocode
+        origin = data_manager.geocode_location(record["location"])   # 4a. DATA
         if origin is None:
             io_manager.print_error("Could not find that location — try a Singapore "
                                    "postal code or a landmark name.")
             continue
 
-        candidates = data_manager.build_candidates(origin, req, catalog)  # 4b. DATA: places + routes
+        candidates = data_manager.build_candidates(origin, req, catalog)  # 4b. DATA
         if not candidates:
-            io_manager.print_error("No restaurants found near that location. Try another.")
+            io_manager.print_error(f"No restaurants found near {origin} — try another location.")
             continue
 
         results = logic_manager.rank_restaurants(candidates, req)    # 3. LOGIC LAYER
@@ -56,16 +59,17 @@ def run_bitefinder():
                                        "— add lat/lng in the catalog.")
             else:
                 dest = (chosen["lat"], chosen["lng"])
-                route = data_manager.get_walking_route(origin, dest)
-                route_link = data_manager.build_maps_link(origin, dest)
-                io_manager.print_route(chosen["name"], route, route_link)
+                route = data_manager.get_route(origin, dest, record["mode"])
+                route_link = data_manager.build_maps_link(origin, dest, record["mode"])
+                io_manager.print_route(chosen["name"], route, route_link, record["mode"])
 
         data_manager.save_history({                          # 4c. DATA: persist
-            "ai_model": ai_model,
             "input": record,
             "parsed": req,
             "mode": "live-google" if config.USE_LIVE_GOOGLE else "offline-catalog",
+            "travel_mode": record["mode"],
             "origin": list(origin),
+            "ai_model": ai_model,
             "top_matches": [m["restaurant"]["name"] for m in results["matches"]],
             "route_link": route_link,
         })
