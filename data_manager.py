@@ -76,7 +76,7 @@ def _money_to_float(money):
 
 
 def _fmt_price_range(pr):
-    """priceRange object -> display string like '$20–70'. None if absent."""
+    """priceRange object -> display string like '$20-70'. None if absent."""
     if not isinstance(pr, dict):
         return None
     start = _money_to_float(pr.get("startPrice"))
@@ -87,7 +87,7 @@ def _fmt_price_range(pr):
         return f"up to ${end:.0f}"
     if end is None or end <= start:
         return f"from ${start:.0f}"
-    return f"${start:.0f}–{end:.0f}"
+    return f"${start:.0f}-{end:.0f}"
 
 
 def _band_from_range(start, end):
@@ -128,7 +128,7 @@ def geocode_location(address_text):
         return None
 
 
-# ---------- Google Places API (New): nearby search ----------
+# ---------- Google Places API (New): nearby + profile text search ----------
 
 _CUISINE_MAP = {
     "cafe": "cafe", "fast_food_restaurant": "fast food", "bakery": "bakery",
@@ -147,8 +147,31 @@ def _cuisine_from_types(types):
     return "unknown"
 
 
-def _search_radius_m(req):
-    """~80 m/min walking + buffer, clamped to Places limits (500-20000)."""
+def _parse_place(p):
+    """Shared place-dict builder for both search endpoints."""
+    name = p.get("displayName", {}).get("text")
+    if not name:
+        return None
+    pr = p.get("priceRange") or {}
+    return {
+        "name": name,
+        "address": p.get("formattedAddress", "unavailable"),
+        "lat": p["location"]["latitude"],
+        "lng": p["location"]["longitude"],
+        "rating": p.get("rating"),
+        "price_level": (p.get("priceLevel") or "").replace("PRICE_LEVEL_", "").lower() or None,
+        "price_start": _money_to_float(pr.get("startPrice")),
+        "price_end": _money_to_float(pr.get("endPrice")),
+        "price_range": _fmt_price_range(pr),
+        "types": p.get("types", []),
+    }
+
+
+def _search_radius(req):
+    """Search extent from travel input. Walk: ~100 m/min. Drive: km -> meters,
+    scaled by ~0.8 (roads are longer than straight lines), clamped to 50 km."""
+    if req.get("mode") == "drive" and req.get("max_drive_km"):
+        return max(1000, min(int(req["max_drive_km"] * 1000 * 0.8), 50000))
     walk = req.get("max_walk_minutes")
     return max(500, min((walk if walk else 15) * 100, 20000))
 
@@ -169,7 +192,7 @@ def fetch_nearby_restaurants(origin, req, debug=False):
         "rankPreference": "DISTANCE",
         "locationRestriction": {"circle": {
             "center": {"latitude": lat, "longitude": lng},
-            "radius": _search_radius_m(req),
+            "radius": _search_radius(req),
         }},
     }
     try:
@@ -180,25 +203,57 @@ def fetch_nearby_restaurants(origin, req, debug=False):
         resp.raise_for_status()
         places = []
         for p in resp.json().get("places", []):
-            name = p.get("displayName", {}).get("text")
-            if not name:
-                continue
-            pr = p.get("priceRange") or {}
-            places.append({
-                "name": name,
-                "address": p.get("formattedAddress", "unavailable"),
-                "lat": p["location"]["latitude"],
-                "lng": p["location"]["longitude"],
-                "rating": p.get("rating"),
-                "price_level": (p.get("priceLevel") or "").replace("PRICE_LEVEL_", "").lower() or None,
-                "price_start": _money_to_float(pr.get("startPrice")),
-                "price_end": _money_to_float(pr.get("endPrice")),
-                "price_range": _fmt_price_range(pr),
-                "types": p.get("types", []),
-            })
+            parsed = _parse_place(p)
+            if parsed:
+                places.append(parsed)
         return places
     except (requests.RequestException, KeyError, ValueError) as err:
         _log_api_error("places_search", err)
+        return []
+
+
+def fetch_by_profile_text(origin, req):
+    """Places Text Search scoped by dietary and/or cuisine
+    (e.g. 'halal chinese food', 'vegetarian food'). Google does the
+    matching server-side. Returns [] on failure or when nothing is set."""
+    lat, lng = origin
+    cuisine = (req.get("cuisine") or "").strip()
+    dietary = (req.get("dietary") or "none").strip()
+    terms = []
+    if dietary not in ("none", ""):
+        terms.append(dietary)
+    if cuisine not in ("any", ""):
+        terms.append(cuisine)
+    if not terms:
+        return []
+    query = " ".join(terms) + " food"
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": config.GOOGLE_MAPS_API_KEY,
+        "X-Goog-FieldMask": ("places.displayName,places.formattedAddress,"
+                             "places.location,places.rating,places.priceLevel,"
+                             "places.priceRange,places.types"),
+    }
+    body = {
+        "textQuery": query,
+        "languageCode": "en",
+        "pageSize": 20,
+        "locationRestriction": {"rectangle": {
+            "low": {"latitude": max(-90, lat - 0.09), "longitude": max(-180, lng - 0.09)},
+            "high": {"latitude": min(90, lat + 0.09), "longitude": min(180, lng + 0.09)},
+        }},
+    }
+    try:
+        resp = requests.post(config.TEXT_SEARCH_URL, headers=headers, json=body, timeout=15)
+        resp.raise_for_status()
+        places = []
+        for p in resp.json().get("places", []):
+            parsed = _parse_place(p)
+            if parsed:
+                places.append(parsed)
+        return places
+    except (requests.RequestException, KeyError, ValueError) as err:
+        _log_api_error("places_profile_text", err)
         return []
 
 
@@ -242,7 +297,8 @@ def enrich_place(place, catalog):
             "open_hours": entry.get("open_hours"),
             "spicy_options": entry.get("spicy_options"),
             "certification": entry.get("certification", "unknown"),
-            "walk_minutes": None,
+            "walk_minutes": None, "walk_meters": None,
+            "drive_minutes": None, "drive_meters": None,
             "source": "catalog + google places",
         }
     return {
@@ -262,7 +318,8 @@ def enrich_place(place, catalog):
         "open_hours": None,
         "spicy_options": None,
         "certification": "unknown",
-        "walk_minutes": None,
+        "walk_minutes": None, "walk_meters": None,
+        "drive_minutes": None, "drive_meters": None,
         "source": "google places",
     }
 
@@ -276,15 +333,18 @@ def _haversine_km(a, b):
     return 2 * 6371.0 * math.asin(math.sqrt(h))
 
 
-def _estimate_walk_minutes(origin, r):
-    """Straight-line distance / 80 m per min, +20% street factor. Labeled estimate."""
+def _estimate_travel_minutes(origin, r, mode):
+    """Straight-line distance / speed, +20% street factor. Labeled estimate.
+    Walk: 80 m/min. Drive: ~500 m/min (~30 km/h urban SG average)."""
+    speed = 80 if mode == "walk" else 500
     meters = _haversine_km(origin, (r["lat"], r["lng"])) * 1000 * 1.2
-    return max(1, round(meters / 80))
+    return max(1, round(meters / speed))
 
 
-def walk_times_matrix(origin, restaurants):
-    """ONE request for ALL restaurants. Sets r['walk_minutes'] (minutes or None).
-    NOTE: computeRouteMatrix returns a bare JSON ARRAY (not the usual Google envelope)."""
+def travel_times_matrix(origin, restaurants, mode):
+    """ONE request for ALL restaurants, for ONE mode.
+    Writes r[f'{mode}_minutes'] and r[f'{mode}_meters'].
+    mode = 'walk' | 'drive'. NOTE: computeRouteMatrix returns a bare JSON ARRAY."""
     if not restaurants:
         return
     headers = {
@@ -298,7 +358,7 @@ def walk_times_matrix(origin, restaurants):
             "latitude": origin[0], "longitude": origin[1]}}}}],
         "destinations": [{"waypoint": {"location": {"latLng": {
             "latitude": r["lat"], "longitude": r["lng"]}}}} for r in restaurants],
-        "travelMode": "WALK",
+        "travelMode": "WALK" if mode == "walk" else "DRIVE",
     }
     try:
         resp = requests.post(config.MATRIX_URL, headers=headers, json=body, timeout=20)
@@ -313,21 +373,30 @@ def walk_times_matrix(origin, restaurants):
                 status_code = (el.get("status") or {}).get("code", 0)
                 if status_code not in (0, None):
                     continue
-                minutes = round(int(el["duration"].rstrip("s")) / 60)
-                restaurants[idx]["walk_minutes"] = minutes
-                restaurants[idx]["walk_source"] = "routes-api"
+                restaurants[idx][f"{mode}_minutes"] = round(int(el["duration"].rstrip("s")) / 60)
+                restaurants[idx][f"{mode}_meters"] = int(el.get("distanceMeters", 0))
             except (KeyError, ValueError, TypeError):
                 continue
     except (requests.RequestException, AttributeError, KeyError, ValueError) as err:
-        _log_api_error("routes_matrix", err)
+        _log_api_error(f"routes_matrix_{mode}", err)
 
 
-def get_walking_route(origin, destination):
-    """ONE on-demand call for the user's chosen restaurant. None on failure."""
+def _fill_travel_estimates(origin, restaurants):
+    """Per-mode fallback: fill missing walk/drive times with labeled estimates."""
+    for r in restaurants:
+        for mode in ("walk", "drive"):
+            if r.get(f"{mode}_minutes") is None:
+                r[f"{mode}_minutes"] = _estimate_travel_minutes(origin, r, mode)
+                r[f"{mode}_meters"] = int(_haversine_km(origin, (r["lat"], r["lng"])) * 1000)
+                r[f"{mode}_source"] = "estimate"
+
+
+def get_route(origin, destination, mode):
+    """ONE on-demand call for the chosen restaurant. None on failure."""
     body = {
         "origin": {"location": {"latLng": {"latitude": origin[0], "longitude": origin[1]}}},
         "destination": {"location": {"latLng": {"latitude": destination[0], "longitude": destination[1]}}},
-        "travelMode": "WALK",
+        "travelMode": "WALK" if mode == "walk" else "DRIVE",
     }
     headers = {
         "Content-Type": "application/json",
@@ -355,21 +424,28 @@ def get_walking_route(origin, destination):
         return None
 
 
-def build_maps_link(origin, destination):
-    """Free, no API call — opens the walking route in Google Maps."""
+def build_maps_link(origin, destination, mode):
+    """Free, no API call — opens the route in Google Maps (mode-aware)."""
+    travelmode = "walking" if mode == "walk" else "driving"
     return (f"https://www.google.com/maps/dir/?api=1"
             f"&origin={origin[0]},{origin[1]}"
-            f"&destination={destination[0]},{destination[1]}&travelmode=walking")
+            f"&destination={destination[0]},{destination[1]}&travelmode={travelmode}")
 
 
 # ---------- candidate builder ----------
 
 def build_candidates(origin, req, catalog):
-    """Live mode: Places -> catalog enrichment -> Routes walk times.
-    Offline mode: catalog only (deterministic; demo backup)."""
+    """Live mode: profile-scoped search (dietary + cuisine) -> catalog
+    enrichment -> BOTH walk and drive times. Offline mode: catalog only."""
     if not config.USE_LIVE_GOOGLE:
         return [dict(r) for r in catalog]
-    places = fetch_nearby_restaurants(origin, req)
+    cuisine = (req.get("cuisine") or "any").lower()
+    dietary = (req.get("dietary") or "none").lower()
+    places = []
+    if cuisine not in ("any", "") or dietary not in ("none", ""):
+        places = fetch_by_profile_text(origin, req)
+    if not places:                       # fallback: generic nearby search
+        places = fetch_nearby_restaurants(origin, req)
     if not places:
         return []
     candidates, seen = [], set()
@@ -379,11 +455,9 @@ def build_candidates(origin, req, catalog):
         if key not in seen:
             seen.add(key)
             candidates.append(c)
-    walk_times_matrix(origin, candidates)
-    for r in candidates:                      # fallback if matrix fails
-        if r.get("walk_minutes") is None:
-            r["walk_minutes"] = _estimate_walk_minutes(origin, r)
-            r["walk_source"] = "estimate"
+    for mode in ("walk", "drive"):       # dual mode: BOTH matrices
+        travel_times_matrix(origin, candidates, mode)
+    _fill_travel_estimates(origin, candidates)
     return candidates
 
 
