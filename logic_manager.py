@@ -11,7 +11,6 @@ ALLOWED_DIETARY = {
 }
 
 BAND_ORDER = ["inexpensive", "moderate", "expensive", "very_expensive"]
-# lower bounds of each band, in SG dollars (mirror of data_manager.BAND_THRESHOLDS)
 BAND_LOW = {"inexpensive": 0.0, "moderate": 8.0, "expensive": 15.0, "very_expensive": 30.0}
 
 
@@ -53,9 +52,9 @@ def open_status(restaurant, eat_time):
 
 def decide_outcome(restaurant, req):
     """MULTI-CONDITION RULE using AI output fields.
-    Hard rules (dietary, allergies, verified-low rating, budget_max exceeded)
-    -> reject/hidden. Relaxable (band budget, walk) -> alternative.
-    Unverifiable unknowns -> alternative. Otherwise scored match."""
+    Hard rules (dietary, allergies, verified-low rating, budget_max exceeded,
+    chosen-mode travel limit exceeded) -> reject/hidden.
+    Relaxable (band budget) -> alternative. Unknowns -> alternative."""
     reasons = []
 
     # --- HARD RULE 1: dietary (never relaxed) ---
@@ -92,7 +91,6 @@ def decide_outcome(restaurant, req):
     price_verified = False
 
     if bmax is not None:
-        # exact-dollar budget: the "not exceeding" rule
         if cheapest is not None:
             price_verified = True
             if cheapest > bmax:
@@ -102,19 +100,29 @@ def decide_outcome(restaurant, req):
             if BAND_LOW.get(r_band, 0.0) > bmax:
                 return "alternative", 0, [f"price band {BAND_SYMBOLS[r_band]} starts "
                                           f"above your ${bmax:.0f} max"]
-            price_verified = True   # band starts at/below max: optimistically fits
-        # else: no price signal at all -> unknowns section below
+            price_verified = True
     elif wanted_band and r_band is not None:
         price_verified = True
         if _band_index(r_band) > _band_index(wanted_band):
             return "alternative", 0, [f"price band {BAND_SYMBOLS[r_band]} exceeds "
                                       f"your {BAND_SYMBOLS[wanted_band]} budget"]
 
-    # --- RELAXABLE: walking time ---
-    r_walk = restaurant.get("walk_minutes")
-    walk = req.get("max_walk_minutes")
-    if walk is not None and r_walk is not None and r_walk > walk:
-        return "alternative", 0, [f"would need to walk {r_walk - walk} more minutes"]
+    # --- TRAVEL: filter ONLY on the user's chosen mode; other mode is display info ---
+    mode = req.get("mode", "walk")
+    if mode == "drive":
+        km_limit = req.get("max_drive_km")
+        d_meters = restaurant.get("drive_meters")
+        if km_limit is not None and d_meters is not None:
+            if (d_meters / 1000) > km_limit:
+                return "alternative", 0, [f"would be a {d_meters / 1000:.1f} km drive, "
+                                          f"over your {km_limit:.0f} km limit"]
+        travel_unknown = (km_limit is not None and d_meters is None)
+    else:
+        walk_limit = req.get("max_walk_minutes")
+        w_minutes = restaurant.get("walk_minutes")
+        if walk_limit is not None and w_minutes is not None and w_minutes > walk_limit:
+            return "alternative", 0, [f"would need to walk {w_minutes - walk_limit} more minutes"]
+        travel_unknown = (walk_limit is not None and w_minutes is None)
 
     # --- UNVERIFIABLE DATA (relevant unknowns -> alternative, shown as unavailable) ---
     unknowns = []
@@ -122,8 +130,8 @@ def decide_outcome(restaurant, req):
         unknowns.append(f"price unavailable — cannot verify your ${bmax:.0f} max")
     if bmax is None and wanted_band and r_band is None:
         unknowns.append("price band unavailable — cannot verify budget")
-    if walk is not None and r_walk is None:
-        unknowns.append("walking time unavailable — cannot verify distance")
+    if travel_unknown:
+        unknowns.append("travel time unavailable — cannot verify distance")
     if min_rating is not None and rating is None:
         unknowns.append("rating unavailable — cannot verify quality")
     if unknowns:
@@ -179,4 +187,5 @@ def rank_restaurants(restaurants, req):
     matches.sort(key=lambda x: x["score"], reverse=True)
     return {"matches": matches[:config.MAX_MATCHES_SHOWN],
             "alternatives": alternatives[:config.MAX_ALTERNATIVES_SHOWN],
-            "hidden": hidden}
+            "hidden": hidden,
+            "mode": req.get("mode", "walk")}
