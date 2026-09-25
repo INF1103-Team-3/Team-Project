@@ -1,6 +1,6 @@
 """Input layer — all user boundaries. Every input() and print() lives here.
 Generic filters mirror Google Maps search filters (price band OR dollar range,
-rating, open-now, distance); dietary/allergy/certification are BiteFinder's own."""
+rating, open-now, dual-mode travel); dietary/allergy/certification are our own."""
 
 BAND_SYMBOLS = {
     "inexpensive": "$",
@@ -28,6 +28,21 @@ def ask_int(prompt):
         if raw.isdigit() and int(raw) > 0:
             return int(raw)
         print("  Please enter a positive whole number (e.g. 15).")
+
+
+def ask_float(prompt):
+    """Reject and re-prompt on bad data."""
+    while True:
+        raw = input(prompt).strip()
+        if raw == "":
+            return None
+        try:
+            value = float(raw)
+            if value > 0:
+                return value
+        except ValueError:
+            pass
+        print("  Please enter a positive number (e.g. 5 or 2.5).")
 
 
 def ask_budget(prompt):
@@ -74,6 +89,27 @@ def ask_rating(prompt):
         print("  Enter 'any' or a rating between 1.0 and 5.0.")
 
 
+def ask_travel_mode():
+    """Ask walking vs driving, then distance in the matching unit (required)."""
+    while True:
+        raw = input("Travel by walking or driving? (walk / drive): ").strip().lower()
+        if raw in ("walk", "w"):
+            minutes = None
+            while minutes is None:
+                minutes = ask_int("Max walking time (minutes): ")
+                if minutes is None:
+                    print("  Walking time is required (this is your search radius).")
+            return {"mode": "walk", "max_walk_minutes": minutes, "max_drive_km": None}
+        if raw in ("drive", "d", "car"):
+            km = None
+            while km is None:
+                km = ask_float("Max driving distance (km): ")
+                if km is None:
+                    print("  Driving distance is required (this is your search radius).")
+            return {"mode": "drive", "max_walk_minutes": None, "max_drive_km": km}
+        print("  Please type walk or drive.")
+
+
 def ask_choice(prompt, options):
     while True:
         raw = input(prompt).strip().lower()
@@ -88,10 +124,13 @@ def get_user_requirements():
     while not location:
         location = input("Location (SG postal code / address / landmark): ").strip()
     allergies_raw = input("Allergies to avoid (comma separated): ").strip()
+    travel = ask_travel_mode()
     band, bmin, bmax = ask_budget("Budget")
     return {
         "location": location,
-        "max_walk_minutes": ask_int("Max walking time (minutes): "),
+        "mode": travel["mode"],
+        "max_walk_minutes": travel["max_walk_minutes"],
+        "max_drive_km": travel["max_drive_km"],
         "budget_band": band,
         "budget_min": bmin,
         "budget_max": bmax,
@@ -114,10 +153,13 @@ def print_parsed(req):
         budget_txt = BAND_SYMBOLS.get(req.get("budget_band"), "any")
     rating = req.get("min_rating")
     rating_txt = f"{rating}+" if rating else "any"
+    if req.get("mode") == "drive":
+        travel_txt = f"drive up to {req.get('max_drive_km')} km"
+    else:
+        travel_txt = f"walk up to {req.get('max_walk_minutes')} min"
     print("\n[BiteFinder understood your request as]")
     print(f"  cuisine: {req.get('cuisine')} | dietary: {req.get('dietary')} | "
-          f"budget: {budget_txt} | rating: {rating_txt} | "
-          f"walk: {req.get('max_walk_minutes')} min | "
+          f"budget: {budget_txt} | rating: {rating_txt} | {travel_txt} | "
           f"allergies: {req.get('allergies')} | time: {req.get('eat_time')}")
 
 
@@ -137,10 +179,23 @@ def _fmt_price(r):
     return sym if sym else "price unavailable"
 
 
-def _fmt_walk(r):
-    w = r.get("walk_minutes")
-    src = " (est.)" if r.get("walk_source") == "estimate" else ""
-    return f"{w} min walk{src}" if w is not None else "walk time unavailable"
+def _fmt_travel(r, mode):
+    """Dual-mode display: both times when available, chosen mode first, marked."""
+    parts = []
+    w, w_m = r.get("walk_minutes"), r.get("walk_meters")
+    d, d_m = r.get("drive_minutes"), r.get("drive_meters")
+    walk_txt = f"{w} min walk" if w is not None else None
+    drive_txt = (f"{d} min drive ({(d_m or 0) / 1000:.1f} km)"
+                 if d is not None else None)
+    if mode == "drive":
+        first, second = drive_txt, walk_txt
+    else:
+        first, second = walk_txt, drive_txt
+    if first:
+        parts.append(f"→ {first}")          # arrow marks the user's mode
+    if second:
+        parts.append(second)
+    return " | ".join(parts) if parts else "travel time unavailable"
 
 
 def _fmt_address(r):
@@ -153,13 +208,14 @@ def _fmt_address(r):
 
 def print_results(results):
     matches, alternatives = results["matches"], results["alternatives"]
+    mode = results.get("mode", "walk")
 
     if not matches and not alternatives:
         if results.get("hidden"):
             print(f"\n({results['hidden']} place(s) hidden by your hard filters: "
                   f"dietary, allergies, minimum rating)")
         print("\nNo options found. Try lowering your minimum rating, or relaxing "
-              "budget and walking time, or another location.")
+              "budget and travel distance, or another location.")
         return
 
     if results.get("hidden"):
@@ -175,8 +231,9 @@ def print_results(results):
             rating_txt = f"rating: {rating}" if rating is not None else "rating: unavailable"
             print(f"\n{number}. {r['name']}  (score {item['score']})")
             print(f"  {_fmt_address(r)}")
-            print(f"  {r.get('cuisine', 'unknown')} | {_fmt_price(r)} | {_fmt_walk(r)} "
-                  f"| {rating_txt} | dietary: {r.get('dietary', 'unknown')} "
+            print(f"  {r.get('cuisine', 'unknown')} | {_fmt_price(r)} | "
+                  f"{_fmt_travel(r, mode)} | {rating_txt} "
+                  f"| dietary: {r.get('dietary', 'unknown')} "
                   f"| certification: {r.get('certification', 'unknown')}")
             source = r.get("source", "catalog")
             if "catalog" in source:
@@ -207,7 +264,7 @@ def choose_restaurant(results):
     options = results["matches"] + results["alternatives"]
     if not options:
         return None
-    print("\nShow walking route: enter the number of a restaurant above "
+    print("\nShow route: enter the number of a restaurant above "
           f"(1-{len(options)}), or Enter to skip:")
     while True:
         raw = input("> ").strip()
@@ -218,12 +275,15 @@ def choose_restaurant(results):
         print(f"  Please enter a number 1-{len(options)} (or Enter to skip).")
 
 
-def print_route(name, route, link):
-    print(f"\n--- Walking route to {name} ---")
+def print_route(name, route, link, mode):
+    label = "Walking route" if mode == "walk" else "Driving route"
+    print(f"\n--- {label} to {name} ---")
     if route is None:
         print("  Detailed route unavailable right now — open this map link instead:")
     else:
-        print(f"  {route['duration_min']} min | {route['distance_m']} m")
+        km = route["distance_m"] / 1000
+        dist_txt = f"{km:.1f} km" if mode == "drive" else f"{route['distance_m']} m"
+        print(f"  {route['duration_min']} min | {dist_txt}")
         for i, step in enumerate(route["steps"], start=1):
             print(f"  {i}. {step}")
         print("  Visual map:")
