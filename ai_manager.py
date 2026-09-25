@@ -18,6 +18,7 @@ Return ONLY a JSON object with exactly these keys:
   "budget_max": number or null,
   "min_rating": number (1-5) or null,
   "max_walk_minutes": number or null,
+  "max_drive_km": number or null,
   "eat_time": string,
   "free_text_notes": string
 }
@@ -31,6 +32,8 @@ Rules:
   "cheap"/"budget"/"affordable" with no dollars -> budget_band "inexpensive".
   No budget mention -> budget_band "any", budget_min null, budget_max null.
 - "min_rating": "well reviewed" -> 4.0; "top rated" -> 4.5; no mention -> null.
+- "max_drive_km": copy from the record's max_drive_km (driving mode); null otherwise.
+- "max_walk_minutes": copy from the record's max_walk_minutes (walking mode); null otherwise.
 - Normalise: "ten minutes" -> 10. Use null when unmentioned
   ("any" cuisine, [] allergies, "now" eat_time if unspecified).
 - Keep extra wishes (spicy, quiet, etc.) in "free_text_notes".
@@ -38,7 +41,7 @@ Rules:
 
 REQUIRED_KEYS = ["cuisine", "dietary", "allergies", "budget_band",
                  "budget_min", "budget_max", "min_rating",
-                 "max_walk_minutes", "eat_time", "free_text_notes"]
+                 "max_walk_minutes", "max_drive_km", "eat_time", "free_text_notes"]
 VALID_BANDS = ("any", "inexpensive", "moderate", "expensive", "very_expensive")
 
 
@@ -74,7 +77,8 @@ def validate_ai_output(data):
     for key in REQUIRED_KEYS:
         if key not in data:
             return False, f"AI output missing required key: {key}"
-    for key in ("max_walk_minutes", "min_rating", "budget_min", "budget_max"):
+    for key in ("max_walk_minutes", "max_drive_km", "min_rating",
+                "budget_min", "budget_max"):
         if data[key] is not None and not isinstance(data[key], (int, float)):
             return False, f"AI output field '{key}' must be a number or null"
     if data.get("min_rating") is not None and not (1 <= data["min_rating"] <= 5):
