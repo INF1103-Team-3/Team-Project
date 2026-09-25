@@ -146,13 +146,44 @@ def _cuisine_from_types(types):
             return t[: -len("_restaurant")]
     return "unknown"
 
+def _weekday_index(name):
+    days = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+    return days.index(name.lower()) if name.lower() in days else None
+
+
+def _hours_string_for_day(regular_hours, weekday_index):
+    """regularOpeningHours.periods -> 'HH:MM-HH:MM' for the given day, or None.
+    Google weekday index: 0=Sunday..6=Saturday. Handles past-midnight closes
+    by using the period's OPEN day (e.g. Fri 18:00-02:00 shows under Friday)."""
+    if not isinstance(regular_hours, dict):
+        return None
+    for period in regular_hours.get("periods", []):
+        open_info = period.get("open", {})
+        close_info = period.get("close", {})
+        if open_info.get("day") != weekday_index:
+            continue
+        o_h, o_m = open_info.get("hour", 0), open_info.get("minute", 0)
+        if close_info:
+            c_h, c_m = close_info.get("hour", 0), close_info.get("minute", 0)
+        else:                       # open-ended (rare)
+            c_h, c_m = 23, 59
+        return (f"{o_h:02d}:{o_m:02d}-{c_h:02d}:{c_m:02d}")
+    return None
 
 def _parse_place(p):
-    """Shared place-dict builder for both search endpoints."""
+    """Raw Google place object -> our normalized dict (or None if unusable).
+    Also builds the weekly opening-hours map (Google day index: 0=Sunday)."""
     name = p.get("displayName", {}).get("text")
     if not name:
         return None
     pr = p.get("priceRange") or {}
+    weekly = {}
+    for period in (p.get("regularOpeningHours") or {}).get("periods", []):
+        open_info = period.get("open", {})
+        close_info = period.get("close", {}) or {"hour": 23, "minute": 59}
+        o = f"{open_info.get('hour', 0):02d}:{open_info.get('minute', 0):02d}"
+        c = f"{close_info['hour']:02d}:{close_info['minute']:02d}"
+        weekly[open_info.get("day", -1)] = f"{o}-{c}"
     return {
         "name": name,
         "address": p.get("formattedAddress", "unavailable"),
@@ -164,8 +195,8 @@ def _parse_place(p):
         "price_end": _money_to_float(pr.get("endPrice")),
         "price_range": _fmt_price_range(pr),
         "types": p.get("types", []),
+        "weekly_hours": weekly if weekly else None,
     }
-
 
 def _search_radius(req):
     """Search extent from travel input. Walk: ~100 m/min. Drive: km -> meters,
@@ -184,7 +215,8 @@ def fetch_nearby_restaurants(origin, req, debug=False):
         "X-Goog-Api-Key": config.GOOGLE_MAPS_API_KEY,
         "X-Goog-FieldMask": ("places.displayName,places.formattedAddress,"
                              "places.location,places.rating,places.priceLevel,"
-                             "places.priceRange,places.types"),
+                             "places.priceRange,places.types,"
+                             "places.regularOpeningHours"),
     }
     body = {
         "includedTypes": ["restaurant", "cafe", "fast_food_restaurant"],
@@ -214,8 +246,8 @@ def fetch_nearby_restaurants(origin, req, debug=False):
 
 def fetch_by_profile_text(origin, req):
     """Places Text Search scoped by dietary and/or cuisine
-    (e.g. 'halal chinese food', 'vegetarian food'). Google does the
-    matching server-side. Returns [] on failure or when nothing is set."""
+    (e.g. 'halal chinese food', 'vegetarian food'). Returns [] on failure
+    or when nothing is set."""
     lat, lng = origin
     cuisine = (req.get("cuisine") or "").strip()
     dietary = (req.get("dietary") or "none").strip()
@@ -232,15 +264,17 @@ def fetch_by_profile_text(origin, req):
         "X-Goog-Api-Key": config.GOOGLE_MAPS_API_KEY,
         "X-Goog-FieldMask": ("places.displayName,places.formattedAddress,"
                              "places.location,places.rating,places.priceLevel,"
-                             "places.priceRange,places.types"),
+                             "places.priceRange,places.types,"
+                             "places.regularOpeningHours"),
     }
+    delta = _search_radius(req) / 111000.0   # <-- HERE: last line before body
     body = {
         "textQuery": query,
         "languageCode": "en",
         "pageSize": 20,
         "locationRestriction": {"rectangle": {
-            "low": {"latitude": max(-90, lat - 0.09), "longitude": max(-180, lng - 0.09)},
-            "high": {"latitude": min(90, lat + 0.09), "longitude": min(180, lng + 0.09)},
+            "low": {"latitude": max(-90, lat - delta), "longitude": max(-180, lng - delta)},
+            "high": {"latitude": min(90, lat + delta), "longitude": min(180, lng + delta)},
         }},
     }
     try:
@@ -295,6 +329,7 @@ def enrich_place(place, catalog):
             "price_range": place.get("price_range"),
             "rating": place.get("rating"),
             "open_hours": entry.get("open_hours"),
+            "weekly_hours": place.get("weekly_hours"),
             "spicy_options": entry.get("spicy_options"),
             "certification": entry.get("certification", "unknown"),
             "walk_minutes": None, "walk_meters": None,
@@ -316,6 +351,7 @@ def enrich_place(place, catalog):
         "price_range": place.get("price_range"),
         "rating": place.get("rating"),
         "open_hours": None,
+        "weekly_hours": place.get("weekly_hours"),
         "spicy_options": None,
         "certification": "unknown",
         "walk_minutes": None, "walk_meters": None,
@@ -450,6 +486,9 @@ def build_candidates(origin, req, catalog):
         return []
     candidates, seen = [], set()
     for p in places:
+        if not isinstance(p, dict) or "name" not in p:
+            _log_api_error("candidate_build", f"malformed place skipped: {p}")
+            continue
         c = enrich_place(p, catalog)
         key = _norm(c["name"])
         if key not in seen:
