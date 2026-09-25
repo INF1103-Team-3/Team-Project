@@ -1,6 +1,7 @@
 """Input layer — all user boundaries. Every input() and print() lives here.
-Generic filters mirror Google Maps search filters (price band OR dollar range,
-rating, open-now, dual-mode travel); dietary/allergy/certification are our own."""
+Generic filters mirror Google Maps search filters; dietary/allergy/certification
+are BiteFinder's own. Travel is dual-mode (walk + drive)."""
+from datetime import datetime, timedelta
 
 BAND_SYMBOLS = {
     "inexpensive": "$",
@@ -11,6 +12,11 @@ BAND_SYMBOLS = {
 
 BAND_MENU = {"$": "inexpensive", "$$": "moderate",
              "$$$": "expensive", "$$$$": "very_expensive"}
+
+DAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+DAY_ABBR = {"mon": "monday", "tue": "tuesday", "tues": "tuesday", "wed": "wednesday",
+            "thu": "thursday", "thur": "thursday", "thurs": "thursday",
+            "fri": "friday", "sat": "saturday", "sun": "sunday"}
 
 
 def print_welcome():
@@ -46,8 +52,7 @@ def ask_float(prompt):
 
 
 def ask_budget(prompt):
-    """Budget as band (any/$/$$/$$$/$$$$), a max (12), or a range (5-15).
-    Returns (band, budget_min, budget_max)."""
+    """Budget as band, a max (12), or a range (5-15). Returns (band, min, max)."""
     while True:
         raw = input(f"{prompt} (any / $ / $$ / $$$ / $$$$ / e.g. 5-15 or 12): ").strip()
         if raw in ("", "any"):
@@ -75,7 +80,7 @@ def ask_budget(prompt):
 
 
 def ask_rating(prompt):
-    """Google Maps-style rating filter: any / 4.0 / 4.5."""
+    """Rating filter: any / 4.0 / 4.5."""
     while True:
         raw = input(f"{prompt} (any / 4.0 / 4.5): ").strip().lower()
         if raw in ("", "any"):
@@ -90,7 +95,7 @@ def ask_rating(prompt):
 
 
 def ask_travel_mode():
-    """Ask walking vs driving, then distance in the matching unit (required)."""
+    """Walking vs driving, then distance in the matching unit (required)."""
     while True:
         raw = input("Travel by walking or driving? (walk / drive): ").strip().lower()
         if raw in ("walk", "w"):
@@ -118,6 +123,34 @@ def ask_choice(prompt, options):
         print(f"  Please type one of: {', '.join(options)}")
 
 
+def ask_eat_time(prompt):
+    """Eat time as: Enter/'now' (today now), 'HH:MM' (today), or '<day> HH:MM'
+    (e.g. 'sat 19:30', 'sunday 1300'). Returns {"eat_time": str, "eat_day": str}.
+    eat_day: 'today' or a weekday name."""
+    while True:
+        raw = input(prompt).strip().lower()
+        if raw in ("", "now"):
+            return {"eat_time": "now", "eat_day": "today"}
+        # day + time?
+        parts = raw.split()
+        if len(parts) == 2:
+            day_word, time_word = parts
+            day = DAY_ABBR.get(day_word, day_word if day_word in DAYS else None)
+            if day:
+                hhmm = time_word.replace(":", "").zfill(4)
+                if hhmm.isdigit() and len(hhmm) == 4:
+                    h, m = int(hhmm[:2]), int(hhmm[2:])
+                    if 0 <= h <= 23 and 0 <= m <= 59:
+                        return {"eat_time": f"{h:02d}:{m:02d}", "eat_day": day}
+        # time only?
+        hhmm = raw.replace(":", "").zfill(4)
+        if hhmm.isdigit() and len(hhmm) == 4:
+            h, m = int(hhmm[:2]), int(hhmm[2:])
+            if 0 <= h <= 23 and 0 <= m <= 59:
+                return {"eat_time": f"{h:02d}:{m:02d}", "eat_day": "today"}
+        print("  Enter 'now', a time (19:30), or a day + time (sat 19:30).")
+
+
 def get_user_requirements():
     print("\n--- Your request (Enter = skip optional) ---")
     location = ""
@@ -126,6 +159,7 @@ def get_user_requirements():
     allergies_raw = input("Allergies to avoid (comma separated): ").strip()
     travel = ask_travel_mode()
     band, bmin, bmax = ask_budget("Budget")
+    eat = ask_eat_time("Eat time (Enter=now / 19:30 / sat 19:30): ")
     return {
         "location": location,
         "mode": travel["mode"],
@@ -139,7 +173,8 @@ def get_user_requirements():
         "allergies": [a.strip() for a in allergies_raw.split(",") if a.strip()],
         "food_preference": input("Food/cuisine preference: ").strip(),
         "min_rating": ask_rating("Min rating"),
-        "eat_time": input("Open now or at a time (Enter = now / HH:MM): ").strip() or "now",
+        "eat_time": eat["eat_time"],
+        "eat_day": eat["eat_day"],
         "free_text": input("Anything else? (e.g. 'something spicy'): ").strip(),
     }
 
@@ -147,7 +182,7 @@ def get_user_requirements():
 def print_parsed(req):
     bmin, bmax = req.get("budget_min"), req.get("budget_max")
     if bmax is not None:
-        budget_txt = (f"${bmin:.0f}–{bmax:.0f}" if bmin is not None
+        budget_txt = (f"${bmin:.0f}-{bmax:.0f}" if bmin is not None
                       else f"up to ${bmax:.0f}")
     else:
         budget_txt = BAND_SYMBOLS.get(req.get("budget_band"), "any")
@@ -157,10 +192,11 @@ def print_parsed(req):
         travel_txt = f"drive up to {req.get('max_drive_km')} km"
     else:
         travel_txt = f"walk up to {req.get('max_walk_minutes')} min"
+    day_txt = "today" if req.get("eat_day", "today") == "today" else req.get("eat_day")
     print("\n[BiteFinder understood your request as]")
     print(f"  cuisine: {req.get('cuisine')} | dietary: {req.get('dietary')} | "
           f"budget: {budget_txt} | rating: {rating_txt} | {travel_txt} | "
-          f"allergies: {req.get('allergies')} | time: {req.get('eat_time')}")
+          f"allergies: {req.get('allergies')} | time: {day_txt} {req.get('eat_time')}")
 
 
 def print_ai_model(model_id):
@@ -180,7 +216,7 @@ def _fmt_price(r):
 
 
 def _fmt_travel(r, mode):
-    """Dual-mode display: both times when available, chosen mode first, marked."""
+    """Dual-mode display: chosen mode first (marked), other mode as context."""
     parts = []
     w, w_m = r.get("walk_minutes"), r.get("walk_meters")
     d, d_m = r.get("drive_minutes"), r.get("drive_meters")
@@ -192,7 +228,7 @@ def _fmt_travel(r, mode):
     else:
         first, second = walk_txt, drive_txt
     if first:
-        parts.append(f"→ {first}")          # arrow marks the user's mode
+        parts.append(f"> {first}")
     if second:
         parts.append(second)
     return " | ".join(parts) if parts else "travel time unavailable"
@@ -206,9 +242,23 @@ def _fmt_address(r):
     return "address unavailable"
 
 
+def _fmt_hours(r, eat_day, eat_time):
+    """Show the operating hours relevant to the user's requested day."""
+    if eat_time == "now" and (eat_day or "today") == "today":
+        # today+now is the default case: just show the day's window
+        hours = r.get("open_hours")
+        return f"hours today: {hours}" if hours else None
+    hours = r.get("open_hours")
+    if not hours:
+        return None
+    return f"hours on {eat_day}: {hours}"
+
+
 def print_results(results):
     matches, alternatives = results["matches"], results["alternatives"]
     mode = results.get("mode", "walk")
+    eat_day = results.get("eat_day", "today")
+    eat_time = results.get("eat_time", "now")
 
     if not matches and not alternatives:
         if results.get("hidden"):
@@ -235,13 +285,16 @@ def print_results(results):
                   f"{_fmt_travel(r, mode)} | {rating_txt} "
                   f"| dietary: {r.get('dietary', 'unknown')} "
                   f"| certification: {r.get('certification', 'unknown')}")
+            hours_txt = _fmt_hours(r, eat_day, eat_time)
+            if hours_txt:
+                print(f"  {hours_txt}")
             source = r.get("source", "catalog")
             if "catalog" in source:
                 print("  data: verified (catalog)")
             else:
                 print("  data: unverified (google only)")
             for reason in item["reasons"]:
-                print(f"  + {reason}")
+                print(f"  {reason}")
             number += 1
     else:
         print("\nNo exact match, but here are the closest alternatives")
@@ -252,10 +305,19 @@ def print_results(results):
             print("\n=== Alternatives (what would need to change) ===")
         for item in alternatives:
             r = item["restaurant"]
+            rating = r.get("rating")
+            rating_txt = f"rating: {rating}" if rating is not None else "rating: unavailable"
             print(f"\n{number}. {r['name']}  [data: {r.get('source', 'catalog')}]")
             print(f"  {_fmt_address(r)}")
+            print(f"  {r.get('cuisine', 'unknown')} | {_fmt_price(r)} | "
+                  f"{_fmt_travel(r, mode)} | {rating_txt} "
+                  f"| dietary: {r.get('dietary', 'unknown')} "
+                  f"| certification: {r.get('certification', 'unknown')}")
+            hours_txt = _fmt_hours(r, eat_day, eat_time)
+            if hours_txt:
+                print(f"  {hours_txt}")
             for reason in item["reasons"]:
-                print(f"  ! {reason}")
+                print(f"  {reason}")
             number += 1
 
 
@@ -268,7 +330,7 @@ def choose_restaurant(results):
           f"(1-{len(options)}), or Enter to skip:")
     while True:
         raw = input("> ").strip()
-        if raw == "":
+        if raw == "" or raw.lower() in ("q", "quit", "exit"):
             return None
         if raw.isdigit() and 1 <= int(raw) <= len(options):
             return options[int(raw) - 1]["restaurant"]

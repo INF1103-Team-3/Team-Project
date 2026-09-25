@@ -5,6 +5,8 @@ import ai_manager
 import logic_manager
 import data_manager
 
+QUIT_WORDS = ("q", "quit", "exit")
+
 
 def run_bitefinder():
     io_manager.print_welcome()
@@ -22,7 +24,7 @@ def run_bitefinder():
 
     while True:
         choice = input("\n1 = new search, q = quit :> ").strip().lower()
-        if choice == "q":
+        if choice in QUIT_WORDS:
             print("Goodbye!")
             break
         if choice != "1":
@@ -34,6 +36,13 @@ def run_bitefinder():
         if not ok:
             io_manager.print_error(req)
             continue
+
+        # Structured form fields are authoritative: the AI schema does not
+        # carry them, so restore from the raw record. The AI's job is
+        # interpretation (cuisine, free-text budget, notes) — not transport.
+        for key in ("mode", "max_walk_minutes", "max_drive_km", "eat_day"):
+            req[key] = record.get(key)
+
         io_manager.print_parsed(req)
         io_manager.print_ai_model(ai_model)
 
@@ -76,4 +85,7 @@ def run_bitefinder():
 
 
 if __name__ == "__main__":
-    run_bitefinder()
+    try:
+        run_bitefinder()
+    except KeyboardInterrupt:
+        print("\nGoodbye!")   # clean exit on Ctrl+C instead of a traceback
