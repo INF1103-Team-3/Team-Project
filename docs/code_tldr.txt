@@ -1,0 +1,62 @@
+BiteFinder chatbot — code TLDR
+
+Purpose
+Collect and save user profiles and preferences. Restaurant searches and
+recommendations belong to later project components.
+
+The five main files
+main.py          Coordinates account selection, sessions, and approved updates.
+io_manager.py    Owns terminal questions, validation feedback, and confirmations.
+ai_manager.py    Interprets input with OpenRouter and rotates configured API keys.
+data_manager.py  Reads/writes JSON accounts, finds emails, and handles migration.
+logic_manager.py Applies profile rules, travel conversions, and typo suggestions.
+
+Supporting folders
+sources/  Authoritative schema, cuisine vocabulary, questions, and AI prompts.
+support/  Environment loading, SMTP delivery, and debug logging utilities.
+docs/     This explanation and the original project reference documents.
+
+Typical flow
+1. Sign up with email and username, or resume using email.
+2. Verify email unless SMTP_BYPASS=true; bypass does not mark email verified.
+3. Answer the preference questions. AI_BYPASS=true uses fixed CLI questions.
+4. Validate input and confirm suggestions or conflicting cuisine choices.
+5. Apply the approved changes and atomically save the account's profile.
+6. /logout returns to account selection; /quit saves and exits.
+
+Saved data
+data/users.json stores accounts keyed by userID; username is outside preferences.
+data/profile_state.json stores verification and pending migration review state.
+New accounts start empty; they cannot import another user's legacy profile.
+Travel uses an approximate 1 km = 20 minutes conversion and saves both values.
+Dietary values are halal, vegan, both, or [] for none.
+Cuisines use the agreed vocabulary in sources/profile_schema.py.
+The AI cannot bypass schema validation or change account identity fields.
+
+Logs
+logs/bitefinder.log is relative to the project folder, not your shell location.
+It is created when the first event is logged. Set DEBUG=true in .env to
+also display operational events on stderr. Lines include time, level, event,
+and message. Travel updates log both distance and time. Raw user messages,
+verification codes, and API keys must not be passed to the logger.
+
+Coding conventions
+Procedural functions, four-space indentation, PEP 8 formatting, and descriptive
+names. Application statements have no more than four indentation levels.
+Small helpers and early returns reduce else chains. For example:
+
+    def handle_action(action):
+        if action is None:
+            return
+        process_action(action)
+
+This is an illustrative pattern, not a standalone application function.
+Wrapped expressions may use continuation indentation; they do not add branches.
+
+Run and check formatting
+python main.py
+python -m pycodestyle *.py sources support
+
+Configure model, API keys, and bypass flags in .env; see .env.example.
+Old-schema data requires the explicit python -c "from main import run_migration; run_migration()" command, which
+backs up files first. Accounts may need to review migrated answers.

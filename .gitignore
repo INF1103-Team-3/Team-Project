@@ -18,10 +18,12 @@ data/.users-*.tmp
 .idea/
 .DS_Store
 
-# Test cache
-.pytest_cache/
-
 # API key files
 secrets/
 openrouter_keys.json
 openrouter_keys.txt
+
+# Private migration backups and internal verification/review state
+data/*.bak
+data/profile_state.json
+data/.profile-*.tmp
