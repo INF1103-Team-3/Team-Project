@@ -1,0 +1,27 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Runtime data
+logs/*.log
+data/user_profile.json
+data/users.json
+data/.users-*.tmp
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Test cache
+.pytest_cache/
+
+# API key files
+secrets/
+openrouter_keys.json
+openrouter_keys.txt
