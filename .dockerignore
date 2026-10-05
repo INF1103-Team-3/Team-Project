@@ -1,0 +1,16 @@
+.git
+.gitignore 
+
+.env
+.venv
+venv 
+
+__pycache__
+*.pyc
+*.pyo
+
+.vscode
+.idea
+
+data/api_errors.log 
+data/search_history.json
