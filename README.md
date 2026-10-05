@@ -52,3 +52,23 @@ The recommendation process will follow a set of simple rules so the AI only work
 - Walking time will come from a routing service, and the restaurant's opening status will be checked for the requested time.
 - If there is no exact match, important dietary and allergy requirements will stay unchanged. BiteFinder will show the closest alternatives and explain what other requirements would need to change.
 - Every recommendation will include a short explanation. BiteFinder will also avoid collecting unnecessary personal data and will refresh time-sensitive restaurant information instead of assuming old data is still correct.
+
+
+## Docker Deployment
+
+BiteFinder can be run inside a Docker container to provide a consistent environment across different systems.
+
+### Prerequisites
+
+- Docker Desktop
+- A `.env` file containing the required API keys
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and provide the required values:
+
+```env
+OPENROUTER_API_KEY=
+GEMINI_API_KEY=
+GOOGLE_MAPS_API_KEY=
+USE_LIVE_GOOGLE=true
