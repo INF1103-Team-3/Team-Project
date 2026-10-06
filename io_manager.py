@@ -90,7 +90,6 @@ def get_user_requirements():
     location = ""
     while not location:
         location = input("Location (SG postal code / address / landmark): ").strip()
-    allergies_raw = input("Allergies to avoid (comma separated): ").strip()
     band, bmin, bmax = ask_budget("Budget")
     return {
         "location": location,
@@ -100,7 +99,6 @@ def get_user_requirements():
         "budget_max": bmax,
         "dietary": ask_choice("Dietary (none/halal/vegetarian/vegan): ",
                               ["none", "halal", "vegetarian", "vegan"]),
-        "allergies": [a.strip() for a in allergies_raw.split(",") if a.strip()],
         "food_preference": input("Food/cuisine preference: ").strip(),
         "min_rating": ask_rating("Min rating"),
         "eat_time": input("Open now or at a time (Enter = now / HH:MM): ").strip() or "now",
@@ -121,7 +119,7 @@ def print_parsed(req):
     print(f"  cuisine: {req.get('cuisine')} | dietary: {req.get('dietary')} | "
           f"budget: {budget_txt} | rating: {rating_txt} | "
           f"walk: {req.get('max_walk_minutes')} min | "
-          f"allergies: {req.get('allergies')} | time: {req.get('eat_time')}")
+          f"time: {req.get('eat_time')}")
 
 
 def print_ai_model(model_id):
@@ -170,17 +168,7 @@ def _fmt_cuisines(r):
 
 
 def _fmt_hours(r):
-    """One-line summary of today's hours based on weekday_hours.
-
-    Examples:
-      "Open now · until 23:00"
-      "Closed · opens 11:00"
-      "Closed since 22:00"
-      "Open 24 hours"
-      "closed today"
-      "hours unknown"
-      "hours unavailable"
-    """
+    """One-line summary of today's hours based on weekday_hours."""
     from datetime import datetime
 
     wh = r.get("weekday_hours")
@@ -202,7 +190,6 @@ def _fmt_hours(r):
     except (IndexError, TypeError):
         return "hours unknown"
 
-    # 24-hour case
     if open_t == "0000" and close_t == "2359":
         return "Open 24 hours"
 
@@ -212,7 +199,6 @@ def _fmt_hours(r):
     open_str = f"{open_t[:2]}:{open_t[2:]}"
     close_str = f"{close_t[:2]}:{close_t[2:]}"
 
-    # Overnight (closes next day)
     if close_m < open_m:
         if current >= open_m or current <= close_m:
             return f"Open now · until {close_str}"
@@ -231,14 +217,14 @@ def print_results(results):
     if not matches and not alternatives:
         if results.get("hidden"):
             print(f"\n({results['hidden']} place(s) hidden by your hard filters: "
-                  f"dietary, allergies, minimum rating)")
+                  f"dietary, minimum rating)")
         print("\nNo options found. Try lowering your minimum rating, or relaxing "
               "budget and walking time, or another location.")
         return
 
     if results.get("hidden"):
         print(f"\n({results['hidden']} place(s) hidden by your hard filters: "
-              f"dietary, allergies, minimum rating)")
+              f"dietary, minimum rating)")
 
     number = 1
     if matches:
@@ -266,7 +252,7 @@ def print_results(results):
             number += 1
     else:
         print("\nNo exact match, but here are the closest alternatives")
-        print("(your dietary and allergy rules were NOT relaxed):")
+        print("(your dietary rules were NOT relaxed):")
 
     if alternatives:
         if matches:
@@ -285,9 +271,7 @@ def print_results(results):
 
 
 def choose_restaurant(results):
-    """Let the user pick a restaurant for walking-route details.
-    Always gives the user a chance to read the output first, even
-    when there are no matches or alternatives."""
+    """Let the user pick a restaurant for walking-route details."""
     options = results["matches"] + results["alternatives"]
 
     if not options:

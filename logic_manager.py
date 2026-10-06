@@ -127,18 +127,7 @@ def decide_outcome(restaurant, req):
         elif r_dietary not in ALLOWED_DIETARY[wanted]:
             return "reject", 0, ["dietary requirement not met"]
 
-    # --- HARD RULE 2: allergies ---
-    wanted_allergies = {a.lower() for a in (req.get("allergies") or [])}
-    if wanted_allergies:
-        allergens = restaurant.get("allergens")
-        if allergens is None:
-            return "alternative", 0, ["ingredient information unavailable — cannot verify your allergies"]
-        overlap = wanted_allergies & {a.lower() for a in allergens}
-        if overlap:
-            return "reject", 0, [f"contains allergen(s): {', '.join(sorted(overlap))} "
-                                 "(confirm with restaurant — never assumed allergy-safe)"]
-
-    # --- HARD RULE 3: rating ---
+    # --- HARD RULE 2: rating ---
     min_rating = req.get("min_rating")
     rating = restaurant.get("rating")
     if min_rating is not None and rating is not None and rating < min_rating:
