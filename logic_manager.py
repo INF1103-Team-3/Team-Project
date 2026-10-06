@@ -11,7 +11,6 @@ ALLOWED_DIETARY = {
 }
 
 BAND_ORDER = ["inexpensive", "moderate", "expensive", "very_expensive"]
-# lower bounds of each band, in SG dollars (mirror of data_manager.BAND_THRESHOLDS)
 BAND_LOW = {"inexpensive": 0.0, "moderate": 8.0, "expensive": 15.0, "very_expensive": 30.0}
 
 
@@ -20,7 +19,6 @@ def _band_index(band):
 
 
 def _cheapest_price(r):
-    """Best available price signal: exact catalog price, then range start, then range end."""
     if r.get("avg_price") is not None:
         return r["avg_price"]
     if r.get("price_start") is not None:
@@ -35,39 +33,101 @@ def _minutes(hhmm):
     return int(h) * 60 + int(m)
 
 
+def _cuisine_matches(wanted, restaurant_cuisines):
+    w = (wanted or "").strip().lower()
+    if w in ("", "any"):
+        return True
+    for rc in restaurant_cuisines or []:
+        rc = (rc or "").lower()
+        if not rc:
+            continue
+        if w == rc or w in rc or rc in w:
+            return True
+    return False
+
+
+def _restaurant_cuisines(r):
+    lst = r.get("cuisines")
+    if isinstance(lst, list) and lst:
+        return lst
+    single = r.get("cuisine")
+    return [single] if single else []
+
+
 def open_status(restaurant, eat_time):
-    hours = restaurant.get("open_hours")
-    if not hours or "-" not in hours:
+    """Return 'open', 'closed', or 'unknown' for the given time.
+
+    Reads restaurant['weekday_hours']:
+      {"monday": ["1100", "2330"], "tuesday": [], "wednesday": None, ...}
+      [] = closed, None = unknown, ["0000", "2359"] = 24 hours.
+    """
+    wh = restaurant.get("weekday_hours")
+    if not wh:
         return "unknown"
-    start, end = (_minutes(s.strip()) for s in hours.split("-"))
+
+    now = datetime.now()
+    weekday = now.strftime("%A").lower()
+
     if eat_time == "now":
-        now = datetime.now()
-        t = now.hour * 60 + now.minute
+        current = now.hour * 60 + now.minute
     else:
         try:
-            t = _minutes(eat_time)
+            h, m = eat_time.split(":")
+            current = int(h) * 60 + int(m)
         except (ValueError, AttributeError):
             return "unknown"
-    return "open" if start <= t <= end else "closed"
+
+    day_hours = wh.get(weekday)
+    if day_hours is None:
+        return "unknown"
+    if not day_hours:
+        return "closed"
+
+    try:
+        open_m = int(day_hours[0][:2]) * 60 + int(day_hours[0][2:])
+        close_m = int(day_hours[1][:2]) * 60 + int(day_hours[1][2:])
+    except (IndexError, ValueError, TypeError):
+        return "unknown"
+
+    # 24-hour case
+    if day_hours == ["0000", "2359"]:
+        return "open"
+
+    # Overnight (closes next day, e.g. 22:00 → 02:00)
+    if close_m < open_m:
+        if current >= open_m or current <= close_m:
+            return "open"
+        return "closed"
+
+    return "open" if open_m <= current <= close_m else "closed"
 
 
 def decide_outcome(restaurant, req):
-    """MULTI-CONDITION RULE using AI output fields.
-    Hard rules (dietary, allergies, verified-low rating, budget_max exceeded)
-    -> reject/hidden. Relaxable (band budget, walk) -> alternative.
-    Unverifiable unknowns -> alternative. Otherwise scored match."""
+    """MULTI-CONDITION RULE using AI output fields."""
     reasons = []
 
-    # --- HARD RULE 1: dietary (never relaxed) ---
+    # --- HARD RULE 1: dietary ---
     wanted = (req.get("dietary") or "none").lower()
     r_dietary = restaurant.get("dietary", "none")
-    if r_dietary == "unknown":
-        if wanted != "none":
-            return "alternative", 0, ["dietary certification unknown — please confirm with the restaurant"]
-    elif r_dietary not in ALLOWED_DIETARY[wanted]:
-        return "reject", 0, ["dietary requirement not met"]
+    halal_flag = restaurant.get("halal_certified")
 
-    # --- HARD RULE 2: allergies (never relaxed) ---
+    if wanted == "halal":
+        if halal_flag is True or r_dietary == "halal":
+            pass
+        elif halal_flag is None and r_dietary == "unknown":
+            return "alternative", 0, ["halal certification not verified — "
+                                      "please confirm with the restaurant"]
+        else:
+            return "reject", 0, ["not halal certified"]
+    else:
+        if r_dietary == "unknown":
+            if wanted != "none":
+                return "alternative", 0, ["dietary certification unknown — "
+                                          "please confirm with the restaurant"]
+        elif r_dietary not in ALLOWED_DIETARY[wanted]:
+            return "reject", 0, ["dietary requirement not met"]
+
+    # --- HARD RULE 2: allergies ---
     wanted_allergies = {a.lower() for a in (req.get("allergies") or [])}
     if wanted_allergies:
         allergens = restaurant.get("allergens")
@@ -78,21 +138,22 @@ def decide_outcome(restaurant, req):
             return "reject", 0, [f"contains allergen(s): {', '.join(sorted(overlap))} "
                                  "(confirm with restaurant — never assumed allergy-safe)"]
 
-    # --- HARD RULE 3: verified rating below user's minimum -> hidden entirely ---
+    # --- HARD RULE 3: rating ---
     min_rating = req.get("min_rating")
     rating = restaurant.get("rating")
     if min_rating is not None and rating is not None and rating < min_rating:
         return "reject", 0, [f"rating {rating} is below your {min_rating} minimum"]
 
-    # --- BUDGET: exact-dollar mode (budget_max) or band mode ---
+    # --- BUDGET ---
     wanted_band = req.get("budget_band")
+    if wanted_band == "any":
+        wanted_band = None
     bmin, bmax = req.get("budget_min"), req.get("budget_max")
     r_band = restaurant.get("price_band")
     cheapest = _cheapest_price(restaurant)
     price_verified = False
 
     if bmax is not None:
-        # exact-dollar budget: the "not exceeding" rule
         if cheapest is not None:
             price_verified = True
             if cheapest > bmax:
@@ -102,8 +163,7 @@ def decide_outcome(restaurant, req):
             if BAND_LOW.get(r_band, 0.0) > bmax:
                 return "alternative", 0, [f"price band {BAND_SYMBOLS[r_band]} starts "
                                           f"above your ${bmax:.0f} max"]
-            price_verified = True   # band starts at/below max: optimistically fits
-        # else: no price signal at all -> unknowns section below
+            price_verified = True
     elif wanted_band and r_band is not None:
         price_verified = True
         if _band_index(r_band) > _band_index(wanted_band):
@@ -116,7 +176,7 @@ def decide_outcome(restaurant, req):
     if walk is not None and r_walk is not None and r_walk > walk:
         return "alternative", 0, [f"would need to walk {r_walk - walk} more minutes"]
 
-    # --- UNVERIFIABLE DATA (relevant unknowns -> alternative, shown as unavailable) ---
+    # --- UNVERIFIABLE DATA ---
     unknowns = []
     if bmax is not None and not price_verified:
         unknowns.append(f"price unavailable — cannot verify your ${bmax:.0f} max")
@@ -129,10 +189,19 @@ def decide_outcome(restaurant, req):
     if unknowns:
         return "alternative", 0, unknowns
 
-    # --- PREFERENCES (only scored after all rules pass) ---
+    # --- CUISINE ---
+    wanted_cuisine = (req.get("cuisine") or "any").strip().lower()
+    restaurant_cuisines = _restaurant_cuisines(restaurant)
+
+    if wanted_cuisine not in ("any", "") and not _cuisine_matches(wanted_cuisine,
+                                                                  restaurant_cuisines):
+        listed = ", ".join(restaurant_cuisines) or "unknown"
+        return "alternative", 0, [f"cuisine is {listed}, not {req.get('cuisine')}"]
+
+    # --- PREFERENCES (scoring) ---
     score = 0
-    cuisine = (req.get("cuisine") or "any").lower()
-    if cuisine not in ("any", "") and cuisine in (restaurant.get("cuisine") or "").lower():
+    if wanted_cuisine not in ("any", "") and _cuisine_matches(wanted_cuisine,
+                                                              restaurant_cuisines):
         score += 3
         reasons.append("matches your cuisine preference")
     if bmax is not None and cheapest is not None:
@@ -176,7 +245,7 @@ def rank_restaurants(restaurants, req):
             alternatives.append({"restaurant": r, "score": 0, "reasons": reasons})
         else:
             hidden += 1
-    matches.sort(key=lambda x: x["score"], reverse=True)
+    matches.sort(key=lambda item: item["score"], reverse=True)
     return {"matches": matches[:config.MAX_MATCHES_SHOWN],
             "alternatives": alternatives[:config.MAX_ALTERNATIVES_SHOWN],
             "hidden": hidden}

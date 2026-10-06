@@ -24,15 +24,25 @@ Return ONLY a JSON object with exactly these keys:
 
 Rules:
 - "dietary" must be one of: "none", "halal", "vegetarian", "vegan".
+  If the input record already contains a dietary value, copy it through exactly.
 - Budget: if the record already contains budget_band / budget_min / budget_max
   (chosen from a menu), copy them through exactly.
   Free-text dollars: "$10" or "under 10" -> budget_max 10, budget_band "any".
   "between 5 and 15" or "5 to 15 dollars" -> budget_min 5, budget_max 15, budget_band "any".
   "cheap"/"budget"/"affordable" with no dollars -> budget_band "inexpensive".
   No budget mention -> budget_band "any", budget_min null, budget_max null.
-- "min_rating": "well reviewed" -> 4.0; "top rated" -> 4.5; no mention -> null.
-- Normalise: "ten minutes" -> 10. Use null when unmentioned
-  ("any" cuisine, [] allergies, "now" eat_time if unspecified).
+- "min_rating": if the input record already contains a numeric min_rating,
+  copy it through EXACTLY as given (do not round, do not change it to
+  "well reviewed" defaults). Otherwise: "well reviewed" -> 4.0;
+  "top rated" -> 4.5; no mention -> null.
+- "max_walk_minutes": if the input record already contains a numeric
+  max_walk_minutes, copy it through EXACTLY. Otherwise: "ten minutes" -> 10;
+  unmentioned -> null.
+- "eat_time": if the input record already contains a value, copy it through
+  exactly. Otherwise "now" if unspecified.
+- "cuisine": if the input record already contains a food_preference value,
+  copy that value through as the cuisine (lowercased). Otherwise "any".
+- Normalise: use null when unmentioned ("any" cuisine, [] allergies).
 - Keep extra wishes (spicy, quiet, etc.) in "free_text_notes".
 - Output JSON only. No explanations, no markdown fences."""
 
@@ -49,7 +59,7 @@ def validate_chain():
         model = entry.get("model", "")
         if "<" in model or ">" in model or " " in model:
             problems.append(f"{entry.get('provider')}/{model}")
-    return problems   # empty list = healthy
+    return problems
 
 
 def build_prompt(user_record):
@@ -68,12 +78,14 @@ def parse_json_reply(content):
 
 
 def validate_ai_output(data):
-    """Schema validation required by the spec. Returns (True, data) or (False, error)."""
+    """Schema validation. Returns (True, data) or (False, error)."""
     if not isinstance(data, dict):
         return False, "AI output is not a JSON object"
     for key in REQUIRED_KEYS:
         if key not in data:
             return False, f"AI output missing required key: {key}"
+    if not isinstance(data.get("cuisine"), str):
+        return False, "AI output field 'cuisine' must be a string"
     for key in ("max_walk_minutes", "min_rating", "budget_min", "budget_max"):
         if data[key] is not None and not isinstance(data[key], (int, float)):
             return False, f"AI output field '{key}' must be a number or null"
@@ -111,18 +123,31 @@ def _call_openrouter(model_id, system_prompt, user_text):
         if use_json_mode:
             payload["response_format"] = {"type": "json_object"}
         try:
-            resp = requests.post(config.OPENROUTER_URL, headers=headers, json=payload, timeout=30)
+            resp = requests.post(config.OPENROUTER_URL, headers=headers,
+                                 json=payload, timeout=30)
         except requests.RequestException as err:
             return False, f"network error: {err}"
         if resp.status_code == 429:
             return False, "429 rate limited / free quota used"
         if resp.status_code == 400 and use_json_mode:
-            continue                        # retry same model without json mode
+            continue  # retry same model without json mode
         if resp.status_code != 200:
             return False, f"HTTP {resp.status_code}: {resp.text[:300]}"
+
         try:
-            return True, resp.json()["choices"][0]["message"]["content"]
-        except (KeyError, ValueError) as err:
+            data = resp.json()
+        except ValueError as err:
+            return False, f"non-JSON response: {err}"
+
+        if isinstance(data, dict) and "error" in data:
+            return False, f"API error: {data['error']}"
+
+        if not isinstance(data, dict) or "choices" not in data or not data["choices"]:
+            return False, f"missing choices in response: {str(data)[:300]}"
+
+        try:
+            return True, data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as err:
             return False, f"unexpected response shape: {err}"
     return False, "request rejected"
 
@@ -130,7 +155,8 @@ def _call_openrouter(model_id, system_prompt, user_text):
 def _call_gemini(model_name, system_prompt, user_text):
     """One direct Google-Gemini attempt. Returns (True, reply_text) or (False, error)."""
     url = f"{config.GEMINI_URL}/{model_name}:generateContent"
-    headers = {"x-goog-api-key": config.GEMINI_API_KEY, "Content-Type": "application/json"}
+    headers = {"x-goog-api-key": config.GEMINI_API_KEY,
+               "Content-Type": "application/json"}
     body = {
         "systemInstruction": {"parts": [{"text": system_prompt}]},
         "contents": [{"role": "user", "parts": [{"text": user_text}]}],
@@ -147,15 +173,64 @@ def _call_gemini(model_name, system_prompt, user_text):
         if resp.status_code == 429:
             return False, "429 rate limited"
         if resp.status_code == 400 and use_json:
-            continue                        # retry without json mime type
+            continue  # retry without json mime type
         if resp.status_code != 200:
             return False, f"HTTP {resp.status_code}: {resp.text[:300]}"
+
         try:
-            parts = resp.json()["candidates"][0]["content"]["parts"]
+            data = resp.json()
+        except ValueError as err:
+            return False, f"non-JSON response: {err}"
+
+        if isinstance(data, dict) and "error" in data:
+            return False, f"API error: {data['error']}"
+
+        if not isinstance(data, dict) or "candidates" not in data or not data["candidates"]:
+            return False, f"no candidates in response: {str(data)[:300]}"
+
+        try:
+            parts = data["candidates"][0]["content"]["parts"]
             return True, "".join(p.get("text", "") for p in parts)
-        except (KeyError, IndexError, ValueError) as err:
+        except (KeyError, IndexError, TypeError) as err:
             return False, f"unexpected response shape: {err}"
     return False, "request rejected"
+
+
+def build_req_without_ai(record):
+    """Fallback: construct a request dict directly from user input,
+    bypassing the AI. Used when all AI providers are unavailable, or
+    when the input is simple enough that AI parsing adds no value.
+
+    Since the input record is already structured (menus, not free text),
+    most fields map 1:1 to the request dict."""
+    return {
+        "cuisine": (record.get("food_preference") or "any").strip().lower() or "any",
+        "dietary": (record.get("dietary") or "none").strip().lower() or "none",
+        "allergies": record.get("allergies", []),
+        "budget_band": record.get("budget_band") or "any",
+        "budget_min": record.get("budget_min"),
+        "budget_max": record.get("budget_max"),
+        "min_rating": record.get("min_rating"),
+        "max_walk_minutes": record.get("max_walk_minutes"),
+        "eat_time": record.get("eat_time") or "now",
+        "free_text_notes": record.get("free_text") or "",
+    }
+
+
+def needs_ai(record):
+    """True if the AI actually adds value for this input.
+    False → we can build req directly and skip the AI call entirely."""
+    if (record.get("free_text") or "").strip():
+        return True
+    if record.get("allergies"):
+        return True
+    if (record.get("eat_time") or "now").lower() not in ("now", ""):
+        return True
+    # Multi-word cuisine descriptions like "japanese ramen" → let AI parse.
+    pref = (record.get("food_preference") or "").strip().lower()
+    if pref and " " in pref:
+        return True
+    return False
 
 
 def call_ai(user_record):
