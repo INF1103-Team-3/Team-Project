@@ -95,7 +95,7 @@ def validate_ai_output(data):
 def _log_ai_event(context, detail):
     """Spec: handle API failure gracefully — log and continue, never crash."""
     try:
-        with open("data/api_errors.log", "a", encoding="utf-8") as f:
+        with open(config.API_ERROR_FILE, "a", encoding="utf-8") as f:
             f.write(f"ai_manager: {context}: {detail}\n")
     except OSError:
         pass

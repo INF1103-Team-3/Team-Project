@@ -1,54 +1,164 @@
-# BiteFinder: Project Scope - Team 3
+# BiteFinder
 
-Repo Link: [https://github.com/INF1103-Team-3/Team-Project](https://github.com/INF1103-Team-3/Team-Project)
+BiteFinder currently contains two independent Python command-line applications:
 
-1.  Problem Statement and Target Users
+| Application | Purpose | Run from the repository root |
+| --- | --- | --- |
+| **BIS** — BiteFinder Interaction System | Sign up or resume an account and save food preferences | `python3 BIS/main.py` |
+| **BRNS** — BiteFinder Recommendation & Navigation System | Find, rank, and route to restaurants | `python3 BRNS/main.py` |
 
-What real-world problem does your application aim to solve?
+BIS profiles do not feed into BRNS searches yet. BRNS is based on the `main`
+branch snapshot `43e91b6`; BIS comes from `bitefinder-chatbot-draft`. The
+[original project scope](ProjectInitialDetails.md) describes the intended
+combined system, including allergy handling. The current CLIs do not implement
+every feature in that scope.
 
-Finding suitable food becomes difficult when users must satisfy several conditions at once, such as Halal, vegan or vegetarian requirements, food allergies, a limited budget, a preferred food or cuisine, and a maximum walking time. Existing maps, food-discovery and dietary services often separate this information, so users must manually compare menus, prices, certification details and walking routes. BiteFinder combines these constraints into one recommendation process and returns suitable options with a clear explanation of why they match.
+## Install
 
-Who are the intended users of the application?
+Use Python 3.9 or newer. From the repository root:
 
-The application is intended for the general public, especially people who need to make food decisions quickly or have specific restrictions. Key users include students and educational staff, office workers, people with dietary requirements or food allergies, budget-conscious diners, tourists and visitors, and other time-constrained users.
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r requirements.txt
+```
 
-2.  User Inputs
+On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` instead.
+The root `requirements.txt` covers both applications. The optional
+`requirements-dev.txt` adds `pycodestyle`.
 
-What information or data will users provide to BiteFinder?
+Both applications read the same `.env` file at the repository root. If you do
+not have one yet, copy `.env.example` to `.env` and edit the settings you need:
 
-BiteFinder will collect only the information needed to generate relevant recommendations. Inputs include:
-- Location - current device location with permission, or a manually entered postal code, address, landmark, latitude or longitude
-- Maximum walking time - the longest time the user is willing to walk
-- Budget - the maximum amount the user wants to spend
-- Dietary requirement - for example Halal, vegan or vegetarian
-- Food allergies - allergens the user needs to avoid, such as peanuts or shellfish
-- Food or meal preference - preferred dish, cuisine or meal type, such as chicken rice, Japanese food, rice or noodles
-- Time requirement - for example, open now or open at a specified time
-- Optional natural-language request - for example, “something spicy but not too expensive”.
+```bash
+cp .env.example .env
+```
 
-3.  Use of AI
+Keep `.env` and API keys private. The root `.env` is ignored by Git.
 
-How will AI be utilized within the application?
+## BIS: profiles and preferences
 
-AI will help understand what the user is asking for and turn it into clear requirements. It will then compare suitable restaurants, rank the best matches, explain why they were recommended, and suggest alternatives if there is no exact match. Important and non-negotiable restrictions will be checked first before the AI ranks anything. The AI will not make up restaurant details, which will come from trusted external data and routing services. 
+To use BIS locally without AI requests or verification emails, set
+`AI_BYPASS=true` and `SMTP_BYPASS=true` in the root `.env`, then run:
 
-What outputs, insights, or recommendations will the AI generate from the user inputs?
+```bash
+python3 BIS/main.py
+```
 
-The AI will generate several suitable food recommendations based on the user’s requirements, instead of giving only one result. For each option, it will show the restaurant and food type, price, walking time, opening status, and relevant dietary or halal certification information.
+Choose **Sign up** to create an account with an email and username, or
+**Resume by email** to continue an existing profile. Usernames accept 1–50
+characters. BIS asks one preference question at a time and saves each account's
+answers locally. It does not search for restaurants.
 
-It will also explain why each option matches the user’s needs, such as being within budget, meeting dietary requirements, or being close enough to walk to. If there is no exact match, the AI will suggest the closest alternatives and clearly explain what would need to change, while keeping important dietary and allergy restrictions unchanged.
+### BIS commands
 
-4.  Business Rules
+| Command | What it does |
+| --- | --- |
+| `/help` | Show available commands |
+| `/help [command]` | Explain a command, its accepted values, and examples |
+| `/profile` | Show the saved profile |
+| `/edit` | Show how to change an answer |
+| `/add-location` | Add areas to saved locations |
+| `/remove-location` | Remove saved areas; at least one must remain |
+| `/reset` | Clear preferences, keeping the account and username |
+| `/logout` | Save and return to the account menu |
+| `/quit` or `/exit` | Save and close the chatbot |
 
-What business rules, validations, or decision-making logic will be applied to the AI-generated outputs?
+For example, type `/edit budget`, then enter `10` for a new budget in SGD.
+Use `/help edit` for all editable fields and accepted answers. Editing replaces
+an answer; `/add-location` keeps existing areas.
 
-The recommendation process will follow a set of simple rules so the AI only works with valid information:
+Dietary requirements are halal, vegan, both, or none. Cuisine answers use the
+accepted list in [`BIS/sources/profile_schema.py`](BIS/sources/profile_schema.py);
+spelling suggestions require confirmation. Travel accepts distance or time,
+using **1 km ≈ 20 minutes**. Both values are saved as an estimate, not a
+calculated route.
 
-- Non negotiable and important requirements will be checked first. Dietary needs, allergies, budget limits and walking-time limits will be checked before the AI ranks any restaurants. Things like preferred cuisine, cheaper prices or shorter walking distance will be treated as preferences.
-- The AI will only use approved restaurant, menu, routing and certification data. It will not make up details such as prices, opening hours, certification status or walking time. If something is missing, it will be shown as unavailable.
-- User inputs will be checked before processing. For example, budget and walking time must be valid numbers, the location must be valid, and required fields cannot be left empty.
-- Official dietary certification must come from a trusted source. BiteFinder will also make it clear whether information is official, restaurant-reported, third-party reported or unknown.
-- BiteFinder will not claim that food is completely allergy-safe. If ingredient or cross-contamination information is unclear, users will be told to confirm with the restaurant.
-- Walking time will come from a routing service, and the restaurant's opening status will be checked for the requested time.
-- If there is no exact match, important dietary and allergy requirements will stay unchanged. BiteFinder will show the closest alternatives and explain what other requirements would need to change.
-- Every recommendation will include a short explanation. BiteFinder will also avoid collecting unnecessary personal data and will refresh time-sensitive restaurant information instead of assuming old data is still correct.
+### BIS AI and email settings
+
+Signup uses fixed prompts and Python validation. AI can interpret preference
+answers, but saved updates must still pass validation. To enable AI, set these
+values in the root `.env`:
+
+```dotenv
+AI_BYPASS=false
+OPENROUTER_MODEL=your-model-slug
+OPENROUTER_API_KEYS='["first-key", "second-key"]'
+```
+
+Keys rotate in order, including failed requests, and rotation resets on
+launch. Alternatively, use `OPENROUTER_API_KEYS_FILE=secrets/openrouter_keys.json`
+with a JSON list or comma/newline-separated key file. That relative path still
+resolves from `BIS/`. The key list takes priority over the file, then the shared
+`OPENROUTER_API_KEY` setting. BRNS uses only `OPENROUTER_API_KEY`.
+
+To send verification codes, set `SMTP_BYPASS=false` and fill in the SMTP
+settings in [`.env.example`](.env.example). Codes expire after ten
+minutes and allow five attempts. SMTP bypass does not mark an email as
+verified. Email format checks cannot prove that an inbox exists. Resuming an
+already verified account uses email selection, not a password. Restart BIS
+after changing its settings.
+
+### BIS saved files and migration
+
+| Path | Purpose |
+| --- | --- |
+| `BIS/data/users.json` | Accounts keyed by user ID; username is outside preferences |
+| `BIS/data/profile_state.json` | Verification and migration review state |
+| `BIS/logs/bitefinder.log` | Operational logs, created on the first logged event |
+| [`BIS/docs/code_tldr.txt`](BIS/docs/code_tldr.txt) | Short code overview |
+
+Data and logs stay local. Use one BIS process per saved database. Set
+`DEBUG=true` in the root `.env` to also display logs in the terminal. Logs include
+travel distance and time; do not log API keys or verification codes.
+
+If BIS reports an old profile schema, close it and run this from the repository
+root:
+
+```bash
+cd BIS
+python3 -c "from main import run_migration; run_migration()"
+```
+
+Migration creates timestamped backups before updating the database. Accounts
+may be asked to review old answers. New users never import another user's
+profile. Corrupt data blocks writes so existing accounts are not overwritten.
+
+## BRNS: restaurant search and routes
+
+In the root `.env`, supply an `OPENROUTER_API_KEY` or `GEMINI_API_KEY` for request
+interpretation. BRNS tries the configured model chain in order. For live Google
+restaurant, geocoding,
+and route data, also set `GOOGLE_MAPS_API_KEY` and `USE_LIVE_GOOGLE=true`.
+Set `USE_LIVE_GOOGLE=false` to search the bundled restaurant catalog; AI
+interpretation still needs an AI provider key. Cached locations may work
+without a Maps key, while uncached locations need geocoding.
+
+```bash
+python3 BRNS/main.py
+```
+
+BRNS asks for a Singapore location, walking time or driving distance, budget,
+meal time, dietary requirement, food preference, minimum rating, and optional
+search text. It ranks matching restaurants, explains alternatives, and offers
+a route or map link when coordinates are available. The current input supports
+`none`, `halal`, and `vegetarian` dietary choices; it does not ask for allergies.
+
+BRNS reads the root `.env` and keeps its data relative to `BRNS/`, regardless of
+the working directory. The bundled catalog is at `BRNS/data/restaurants.json`.
+Search history and API error logs are local runtime files ignored by Git.
+
+## Code layout and development
+
+Both applications have a `main.py` and separate `io_manager.py`,
+`ai_manager.py`, `logic_manager.py`, and `data_manager.py` modules. BIS also has
+`sources/` for its profile schema and prompts, and `support/` for configuration,
+email delivery, and logging. BRNS has its own `config.py` and restaurant data.
+
+To install the optional formatting checker and run it on BIS:
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+cd BIS
+python3 -m pycodestyle *.py sources support
+```
