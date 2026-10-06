@@ -1,11 +1,13 @@
 # BiteFinder
 
-BiteFinder currently contains two independent Python command-line applications:
+BiteFinder currently contains two independent Python command-line applications
+and a folder reserved for future work:
 
 | Application | Purpose | Run from the repository root |
 | --- | --- | --- |
 | **BIS** — BiteFinder Interaction System | Sign up or resume an account and save food preferences | `python3 BIS/main.py` |
 | **BRNS** — BiteFinder Recommendation & Navigation System | Find, rank, and route to restaurants | `python3 BRNS/main.py` |
+| **BRC** — BiteFinder Restaurant Checker | Reserved for team members to add restaurant checking functionality | No command yet |
 
 BIS profiles do not feed into BRNS searches yet. BRNS is based on the `main`
 branch snapshot `43e91b6`; BIS comes from `bitefinder-chatbot-draft`. The
