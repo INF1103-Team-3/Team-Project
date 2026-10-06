@@ -9,9 +9,33 @@ from support import config as settings
 from support import debug_log
 
 
+def run_search(session, config, automatic=False):
+    if logic_manager.next_field(session["user"]["preferences"]) is not None:
+        io_manager.display_message("Complete your profile before using /search.")
+        return
+    user_id = session["user"]["userID"]
+    try:
+        if automatic and data_manager.get_state("search", user_id):
+            return
+        if data_manager.get_state("search", user_id) is None:
+            data_manager.set_state("search", user_id, {"started": True})
+        if automatic:
+            io_manager.display_message("Profile complete. Starting /search.")
+        request = io_manager.collect_search(session["user"], config)
+    except (ValueError, RuntimeError, OSError) as error:
+        io_manager.display_message(error)
+        return
+    if request is None:
+        io_manager.display_message("Search cancelled. Your profile is saved.")
+        return
+    session["search"] = request
+    io_manager.display_search_summary(request)
+
+
 def save_update(action, session, config, from_ai):
     """Save only a fully resolved update, then advance the session."""
     user = session["user"]
+    was_incomplete = logic_manager.next_field(user["preferences"]) is not None
     updates = io_manager.resolve_proposed_updates(
         user["preferences"], action["updates"], from_ai,
     )
@@ -24,6 +48,8 @@ def save_update(action, session, config, from_ai):
     saved = data_manager.save_preferences(user["userID"], preferences, config)
     session.update(user=saved, field=None, location_action="add")
     io_manager.display_message("Preferences saved.")
+    if was_incomplete and logic_manager.next_field(saved["preferences"]) is None:
+        run_search(session, config, automatic=True)
 
 
 def rename_user(session):
@@ -60,6 +86,9 @@ def handle_action(action, session, config, from_ai=False):
     if intent == "show_profile":
         io_manager.display_profile(session["user"])
         return None
+    if intent == "search":
+        run_search(session, config)
+        return None
     if intent == "help":
         io_manager.display_help(action.get("topic"))
         return None
@@ -86,6 +115,8 @@ def run_session(user, config):
     """Retain the saved state if collection, confirmation, or saving fails."""
     io_manager.display_welcome(user)
     session = {"user": user, "field": None, "location_action": "add"}
+    if logic_manager.next_field(user["preferences"]) is None:
+        run_search(session, config, automatic=True)
     while True:
         action = {}
         try:
@@ -119,16 +150,6 @@ def run_accounts(config):
             return
         if run_session(user, config) != "logout":
             return
-
-
-def run_migration():
-    outcome = data_manager.migrate_users()
-    io_manager.display_message(
-        f"Migrated {outcome['migrated']} accounts; "
-        f"{outcome['reviews']} need review."
-    )
-    for backup in outcome["backups"]:
-        io_manager.display_message("Backup: " + backup)
 
 
 def main():

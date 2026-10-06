@@ -33,6 +33,7 @@ def load_config():
             os.getenv("OPENROUTER_TIMEOUT_SECONDS", "30"),
             default=30,
         ),
+        "google_maps_api_key": os.getenv("GOOGLE_MAPS_API_KEY", "").strip(),
         "smtp_host": os.getenv("SMTP_HOST", "").strip(),
         "smtp_bypass": (
             os.getenv("SMTP_BYPASS", "false").strip().lower() == "true"

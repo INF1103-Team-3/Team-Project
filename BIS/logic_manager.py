@@ -1,6 +1,7 @@
-"""Procedural profile decisions, conversions, migration, and verification."""
+"""Procedural profile decisions, conversions, and verification."""
 
 import hashlib
+import math
 import re
 import secrets
 import time
@@ -11,9 +12,35 @@ from sources.profile_schema import (
     CUISINES, CUISINE_FIELDS, MINUTES_PER_KM, OTHER_PREFERENCES,
     UNSUPPORTED_CUISINES, VERIFICATION_MAX_ATTEMPTS,
     VERIFICATION_RESEND_SECONDS, VERIFICATION_TTL_SECONDS,
-    PREFERENCE_FIELDS, empty_preferences, normalize_username,
-    validate_preferences, validate_updates, validate_value,
+    PREFERENCE_FIELDS, validate_preferences, validate_updates,
 )
+
+COORDINATES = re.compile(
+    r"\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)\s*"
+)
+
+
+def in_singapore(latitude, longitude):
+    """Reject locations outside the app's supported search area."""
+    return (math.isfinite(latitude) and math.isfinite(longitude)
+            and 1.15 <= latitude <= 1.48
+            and 103.60 <= longitude <= 104.10)
+
+
+def parse_coordinates(text):
+    match = COORDINATES.fullmatch(text)
+    if not match:
+        return None
+    latitude, longitude = map(float, match.groups())
+    if not in_singapore(latitude, longitude):
+        raise ValueError("Enter coordinates within Singapore.")
+    return latitude, longitude
+
+
+def is_direct_location_input(text):
+    return parse_coordinates(text) is not None or bool(
+        re.fullmatch(r"\d{6}", text)
+    )
 
 
 def estimate_travel_limits(updates):
@@ -143,17 +170,17 @@ def parse_local_answer(text, field):
         if lowered in {"none", "no restrictions", "no dietary requirements"}:
             items = []
         elif lowered == "both":
-            items = ["halal", "vegan"]
+            items = ["halal", "vegetarian"]
         else:
             items = re.split(r"\s*(?:,|\band\b|&)\s*", lowered)
         return validate_updates({field: items})
     if field in CUISINE_FIELDS:
         return validate_updates({field: cuisine_tokens(text, field)})
     if field == OTHER_PREFERENCES:
-        return {
-            field: "" if text.lower() in {
-                "none",
-                "no preference"} else text}
+        items = [] if text.lower() in {
+            "none", "no preference", "no preferences",
+        } else text.split(",")
+        return validate_updates({field: items})
     raise ValueError("Choose a valid preference field.")
 
 
@@ -204,63 +231,6 @@ def check_challenge(challenge, code, now=None):
             updated["code_hash"],
         )
     return updated, None if valid else "Incorrect verification code."
-
-
-def migrate_record(old):
-    """Return a new record and review notes without modifying the source."""
-    legacy = old.get("preferences", {})
-    notes = {"notices": []}
-    user = {key: old[key] for key in ("userID", "email")}
-    user["email_verified"] = old.get("email_verified", False)
-    name = old.get("username")
-    if not name:
-        names = list(dict.fromkeys(v for v in (
-            legacy.get("username"), legacy.get("name"),
-        ) if isinstance(v, str) and v.strip()))
-        name = names[0] if len(names) == 1 else None
-    try:
-        user["username"] = normalize_username(name)
-    except ValueError:
-        user["username"] = None
-        notes["notices"].append(
-            "Please confirm a username of 1–50 characters.")
-    preferences = empty_preferences()
-    for field in PREFERENCE_FIELDS:
-        value = legacy.get(field)
-        if field == "location" and isinstance(value, str):
-            value = [value]
-        try:
-            preferences[field] = validate_value(field, value)
-        except ValueError:
-            notes["notices"].append(f"Please answer {field} again.")
-    if cuisine_conflicts(preferences, {}):
-        preferences["liked_cuisines"] = None
-        preferences["disliked_cuisines"] = None
-        notes["notices"].append("Please clarify your cuisine preferences.")
-    preferences.update(estimate_travel_limits({
-        key: preferences[key] for key in (
-            "max_distance_km", "max_travel_time_minutes",
-        ) if preferences[key] is not None
-    }))
-    if preferences[OTHER_PREFERENCES] is None:
-        fragments = []
-        spice = legacy.get("spice_preference")
-        if isinstance(spice, str) and spice.strip():
-            fragments.append("Spice preference: " + spice.strip())
-        dining = legacy.get("dining_preferences")
-        if isinstance(dining, list) and all(isinstance(v, str)
-                                            for v in dining):
-            if dining:
-                fragments.append("Dining preferences: " + ", ".join(dining))
-        proposed = "; ".join(fragments)
-        if proposed:
-            try:
-                notes["other_text"] = validate_value(
-                    OTHER_PREFERENCES, proposed)
-            except ValueError:
-                notes["notices"].append("Please re-enter extra preferences.")
-    user["preferences"] = validate_preferences(preferences)
-    return user, notes
 
 
 def validate_challenge(challenge):

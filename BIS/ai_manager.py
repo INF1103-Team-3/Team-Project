@@ -209,3 +209,29 @@ def process(record, config):
         _parse_json_response(
             _call_openrouter(
                 payload, config)))
+
+
+def interpret_location(text, config):
+    """Extract a location query; geocoding and user confirmation follow."""
+    from sources.profile_schema import clean_text
+
+    text = clean_text(text, 200)
+    if config.get("ai_bypass"):
+        return text
+    payload = {
+        "model": config["openrouter_model"],
+        "messages": [
+            {"role": "system", "content": (
+                "Extract only the location named by the user. Return one JSON "
+                "object with exactly the key location_query. Keep addresses "
+                "and postal codes as stated. Do not invent a location."
+            )},
+            {"role": "user", "content": text},
+        ],
+        "temperature": 0,
+        "max_tokens": 100,
+    }
+    parsed = _parse_json_response(_call_openrouter(payload, config))
+    if set(parsed) != {"location_query"}:
+        raise ValueError("Could not interpret the location. Please try again.")
+    return clean_text(parsed["location_query"], 200)
