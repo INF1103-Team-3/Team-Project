@@ -83,11 +83,11 @@ def decide_outcome(restaurant, req):
     Outcomes:
       'match'       -> all hard rules pass; scored on preferences.
       'alternative' -> shown with verified positives ('+'), disqualifiers
-                       ('!') and honest unknowns ('!'): dietary/allergen
+                       ('!') and honest unknowns ('!'): dietary
                        unverifiable, budget over max, travel over limit,
                        or a requested field unverifiable.
-      'reject'      -> hard-failed (verified dietary conflict, verified
-                       allergen overlap, rating below minimum) -> hidden.
+      'reject'      -> hard-failed (verified dietary conflict,
+                       overlap, rating below minimum) -> hidden.
     Reasons are tagged here; display prints them verbatim."""
     reasons = []    # positive reasons (why it's interesting)
     problems = []   # disqualifiers (why it is not a match right now)
@@ -103,19 +103,7 @@ def decide_outcome(restaurant, req):
     elif r_dietary not in ALLOWED_DIETARY[wanted]:
         return "reject", 0, ["dietary requirement not met"]
 
-    # ---------- HARD RULE 2: allergies ----------
-    wanted_allergies = {a.lower() for a in (req.get("allergies") or [])}
-    if wanted_allergies:
-        allergens = restaurant.get("allergens")
-        if allergens is None:
-            unverified.append("ingredient information unavailable — cannot verify your allergies")
-        else:
-            overlap = wanted_allergies & {a.lower() for a in allergens}
-            if overlap:
-                return "reject", 0, [f"contains allergen(s): {', '.join(sorted(overlap))} "
-                                     "(confirm with restaurant — never assumed allergy-safe)"]
-
-    # ---------- HARD RULE 3: rating (verified-below-minimum -> hidden) ----------
+    # ---------- HARD RULE 2: rating (verified-below-minimum -> hidden) ----------
     min_rating = req.get("min_rating")
     rating = restaurant.get("rating")
     if min_rating is not None and rating is not None and rating < min_rating:

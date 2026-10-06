@@ -12,7 +12,6 @@ Return ONLY a JSON object with exactly these keys:
 {
   "cuisine": string,
   "dietary": string,
-  "allergies": [string],
   "budget_band": "any" | "inexpensive" | "moderate" | "expensive" | "very_expensive",
   "budget_min": number or null,
   "budget_max": number or null,
@@ -35,11 +34,11 @@ Rules:
 - "max_drive_km": copy from the record's max_drive_km (driving mode); null otherwise.
 - "max_walk_minutes": copy from the record's max_walk_minutes (walking mode); null otherwise.
 - Normalise: "ten minutes" -> 10. Use null when unmentioned
-  ("any" cuisine, [] allergies, "now" eat_time if unspecified).
+  ("any" cuisine, "now" eat_time if unspecified).
 - Keep extra wishes (spicy, quiet, etc.) in "free_text_notes".
 - Output JSON only. No explanations, no markdown fences."""
 
-REQUIRED_KEYS = ["cuisine", "dietary", "allergies", "budget_band",
+REQUIRED_KEYS = ["cuisine", "dietary", "budget_band",
                  "budget_min", "budget_max", "min_rating",
                  "max_walk_minutes", "max_drive_km", "eat_time", "free_text_notes"]
 VALID_BANDS = ("any", "inexpensive", "moderate", "expensive", "very_expensive")
@@ -88,8 +87,6 @@ def validate_ai_output(data):
         return False, "AI output budget_min exceeds budget_max"
     if data.get("budget_band") not in VALID_BANDS:
         return False, "AI output field 'budget_band' has an invalid value"
-    if not isinstance(data["allergies"], list):
-        return False, "AI output field 'allergies' must be a list"
     if data.get("dietary") not in ("none", "halal", "vegetarian", "vegan"):
         return False, "AI output field 'dietary' has an invalid value"
     return True, data
