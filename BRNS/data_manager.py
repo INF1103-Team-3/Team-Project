@@ -32,7 +32,7 @@ def _save_json(path, data):
 def _log_api_error(context, err):
     """Spec requirement: handle API failure gracefully - log and continue, never crash."""
     try:
-        with open("data/api_errors.log", "a", encoding="utf-8") as f:
+        with open(config.API_ERROR_FILE, "a", encoding="utf-8") as f:
             f.write(f"{context}: {type(err).__name__}: {err}\n")
     except OSError:
         pass

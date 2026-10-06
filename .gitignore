@@ -1,5 +1,14 @@
-.env
+# Shared local environments and Python caches
 .venv/
+venv/
 __pycache__/
-data/search_history.json
-data/api_errors.log
+*.py[cod]
+
+# Local settings and runtime data
+.env
+BIS/data/users.json
+BIS/data/profile_state.json
+BIS/data/*.bak
+BIS/logs/*.log
+BRNS/data/search_history.json
+BRNS/data/api_errors.log
