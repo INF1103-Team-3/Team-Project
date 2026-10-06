@@ -3,7 +3,7 @@
 import math
 import re
 
-OTHER_PREFERENCES = "other preferences(handled by google text input)"
+OTHER_PREFERENCES = "other_preferences"
 PREFERENCE_FIELDS = (
     "location", "max_distance_km", "max_travel_time_minutes",
     "budget_per_person", "dietary_requirements", "liked_cuisines",
@@ -16,7 +16,7 @@ CUISINES = (
     "french", "american", "mexican", "turkish", "middle eastern",
     "mediterranean", "fusion", "lebanese",
 )
-DIETARY_CHOICES = ("halal", "vegan")
+DIETARY_CHOICES = ("halal", "vegetarian")
 CUISINE_FIELDS = ("liked_cuisines", "disliked_cuisines")
 NUMBER_LIMITS = {
     "max_distance_km": (0.01, 100),
@@ -105,6 +105,8 @@ def validate_value(field, value):
         return normalize_list(value, required=True)
     if field == "dietary_requirements":
         return normalize_list(value, DIETARY_CHOICES)
+    if field == OTHER_PREFERENCES:
+        return normalize_list(value)
     if field in CUISINE_FIELDS:
         return normalize_list(value, CUISINES)
     return clean_text(value, 1000, allow_empty=True)
@@ -127,7 +129,7 @@ def validate_preferences(preferences):
     if not isinstance(preferences, dict) or set(preferences) != set(
         PREFERENCE_FIELDS
     ):
-        raise ValueError("Profile schema changed. See the repository README.md to migrate.")
+        raise ValueError("Saved profile does not match the current BIS schema.")
     result = {key: validate_value(key, value)
               for key, value in preferences.items()}
     overlap = set(result["liked_cuisines"] or []) & set(
@@ -139,9 +141,9 @@ def validate_preferences(preferences):
 
 
 def validate_user(user):
-    """Require the exact user schema; migrated usernames may be pending."""
+    """Require the exact account and preference schema."""
     if not isinstance(user, dict) or set(user) != USER_FIELDS:
-        raise ValueError("User schema changed. See the repository README.md to migrate.")
+        raise ValueError("Saved account does not match the current BIS schema.")
     if not isinstance(user["userID"], str) or not user["userID"]:
         raise ValueError("Invalid userID.")
     if type(user["email_verified"]) is not bool:

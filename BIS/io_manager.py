@@ -1,5 +1,6 @@
-"""All terminal input/output for the BiteFinder profile-only chatbot."""
+"""All terminal input/output for BiteFinder profiles and search setup."""
 
+import re
 import sys
 import time
 
@@ -9,12 +10,14 @@ from sources.prompts import (
 )
 
 import data_manager
+import ai_manager
 from support import email_delivery
 import logic_manager
 from support.debug_log import debug_log
 from sources.profile_schema import (
     CUISINES, CUISINE_FIELDS, OTHER_PREFERENCES, PREFERENCE_FIELDS,
     clean_text, normalize_email, normalize_username, validate_updates,
+    validate_value,
 )
 
 
@@ -153,32 +156,12 @@ def verify_email_interactively(user, config):
             display_message(error)
 
 
-def review_migration(user, config):
-    notes = data_manager.get_state("migration", user["userID"])
-    if not notes:
-        return user
-    for message in notes.get("notices", []):
-        display_message(message)
-    suggestion = notes.get("other_text")
-    if suggestion and user["preferences"][OTHER_PREFERENCES] is None:
-        confirmed = ask_yes_no(
-            "Keep these previous extra preferences: " + suggestion + "?")
-        if confirmed is None:
-            return user
-        if confirmed:
-            preferences = logic_manager.apply_updates(user["preferences"], {
-                OTHER_PREFERENCES: suggestion,
-            })
-            user = data_manager.save_preferences(
-                user["userID"], preferences, config)
-    data_manager.set_state("migration", user["userID"], None)
-    return user
-
-
 def find_or_register_user(choice, email):
     email = normalize_email(email)
     if choice == "2":
         return data_manager.find_user(email)
+    if data_manager.email_exists(email):
+        raise ValueError("This email is already registered. Choose resume.")
     username = prompt_username()
     if username is None:
         return None
@@ -194,12 +177,11 @@ def complete_account(user, config):
     if user is None:
         return None
     if user["username"] is not None:
-        return review_migration(user, config)
+        return user
     username = prompt_username()
     if username is None:
         return None
-    user = data_manager.save(dict(user, username=username))
-    return review_migration(user, config)
+    return data_manager.save(dict(user, username=username))
 
 
 def select_user(config):
@@ -221,6 +203,195 @@ def select_user(config):
             return complete_account(user, config)
         except (ValueError, RuntimeError) as error:
             display_message(error)
+
+
+def _cancelled(value):
+    return value is None or value.lower() in {"/cancel", "/quit", "/exit"}
+
+
+def ask_search_location(config):
+    while True:
+        raw = read_input(
+            "Where are you now? Postal code, address, landmark, or "
+            "lat,lng (/cancel): "
+        )
+        if _cancelled(raw):
+            return None
+        if raw.lower() in {"here", "current", "current location", "my location"}:
+            display_message("Enter an address, postal code, landmark, or coordinates.")
+            continue
+        try:
+            raw = clean_text(raw, 200)
+            cached = data_manager.lookup_cached_location(raw)
+            query = raw if cached or logic_manager.is_direct_location_input(raw) else (
+                ai_manager.interpret_location(raw, config)
+            )
+            location = data_manager.resolve_location(
+                query, config.get("google_maps_api_key", ""))
+        except (ValueError, RuntimeError, OSError) as error:
+            display_message(error)
+            continue
+        print(
+            f"Found: {location['label']} "
+            f"({location['latitude']:.6f}, {location['longitude']:.6f})"
+        )
+        confirmed = ask_yes_no("Is this your current location?")
+        if confirmed is None:
+            return None
+        if confirmed:
+            try:
+                data_manager.remember_location((raw, query), location)
+            except RuntimeError:
+                display_message("Location confirmed, but could not save the cache.")
+            return location
+
+
+def ask_search_mode():
+    while True:
+        value = read_input("Travel by walking or driving? (walk/drive, /cancel): ")
+        if _cancelled(value):
+            return None
+        mode = value.lower()
+        if mode in {"walk", "walking"}:
+            return "walk"
+        if mode in {"drive", "driving"}:
+            return "drive"
+        display_message("Choose walk or drive.")
+
+
+def ask_search_distance(profile, mode):
+    default = profile["max_distance_km"] if mode == "walk" else None
+    while True:
+        hint = f" [Enter = {default:g} km from profile]" if default else ""
+        value = read_input(f"Maximum {mode} distance in km{hint} (/cancel): ")
+        if _cancelled(value):
+            return None
+        if not value and default is not None:
+            return default
+        match = re.fullmatch(r"(\d+(?:\.\d{1,2})?)\s*(?:km)?", value.lower())
+        if match:
+            try:
+                return validate_value("max_distance_km", float(match[1]))
+            except ValueError as error:
+                display_message(error)
+                continue
+        display_message("Enter a positive distance in km, such as 2 or 2.5 km.")
+
+
+def ask_search_cuisine(profile):
+    liked = profile["liked_cuisines"] or []
+    if liked:
+        print("Saved liked cuisines:")
+        for number, cuisine in enumerate(liked, 1):
+            print(f"  {number}. {cuisine.title()}")
+    while True:
+        value = read_input(
+            "Choose one number or enter a new cuisine (/cancel): "
+        )
+        if _cancelled(value):
+            return None
+        if value.isdigit() and 1 <= int(value) <= len(liked):
+            return liked[int(value) - 1]
+        cuisine = value.lower().strip()
+        if cuisine in CUISINES:
+            return cuisine
+        suggestions = logic_manager.cuisine_suggestions(cuisine)
+        if len(suggestions) == 1:
+            confirmed = ask_yes_no(f"Did you mean {suggestions[0].title()}?")
+            if confirmed is None:
+                return None
+            if confirmed:
+                return suggestions[0]
+        display_message("Choose one saved number or one supported cuisine name.")
+
+
+def ask_search_budget(profile):
+    default = profile["budget_per_person"]
+    while True:
+        value = read_input(
+            f"Budget today in SGD [Enter = {default:g} from profile] "
+            "(/cancel): "
+        )
+        if _cancelled(value):
+            return None
+        if not value:
+            return default
+        if re.fullmatch(r"\d+(?:\.\d{1,2})?", value):
+            try:
+                return validate_value("budget_per_person", float(value))
+            except ValueError as error:
+                display_message(error)
+                continue
+        display_message("Enter a positive SGD amount, such as 12 or 12.50.")
+
+
+def ask_search_other(profile):
+    saved = profile[OTHER_PREFERENCES] or []
+    if saved:
+        print("Saved other preferences:")
+        for number, item in enumerate(saved, 1):
+            print(f"  {number}. {item}")
+    while True:
+        value = read_input(
+            "Other preferences today [Enter = all saved; numbers, none, "
+            "or new comma-separated items] (/cancel): "
+        )
+        if _cancelled(value):
+            return None
+        if not value or value.lower() == "all":
+            return list(saved)
+        if value.lower() == "none":
+            return []
+        if re.fullmatch(r"\d+(?:\s*,\s*\d+)*", value):
+            numbers = [int(part.strip()) for part in value.split(",")]
+            if saved and all(1 <= number <= len(saved) for number in numbers):
+                return list(dict.fromkeys(saved[number - 1] for number in numbers))
+            display_message("Choose numbers shown in the saved list.")
+            continue
+        try:
+            return validate_value(OTHER_PREFERENCES, value.split(","))
+        except ValueError as error:
+            display_message(error)
+
+
+def collect_search(user, config):
+    """Collect one search request without changing the saved user profile."""
+    profile = user["preferences"]
+    location = ask_search_location(config)
+    if location is None:
+        return None
+    mode = ask_search_mode()
+    if mode is None:
+        return None
+    distance = ask_search_distance(profile, mode)
+    if distance is None:
+        return None
+    cuisine = ask_search_cuisine(profile)
+    if cuisine is None:
+        return None
+    budget = ask_search_budget(profile)
+    if budget is None:
+        return None
+    other = ask_search_other(profile)
+    if other is None:
+        return None
+    return {
+        "origin": location, "mode": mode, "max_distance_km": distance,
+        "cuisine": cuisine, "budget_per_person": budget,
+        OTHER_PREFERENCES: other,
+        "dietary_requirements": list(profile["dietary_requirements"] or []),
+        "disliked_cuisines": list(profile["disliked_cuisines"] or []),
+    }
+
+
+def display_search_summary(request):
+    display_message("Today's search is ready:")
+    print(f"  From: {request['origin']['label']}")
+    print(f"  Travel: {request['mode']} up to {request['max_distance_km']} km")
+    print(f"  Cuisine: {request['cuisine']}")
+    print(f"  Budget: SGD {request['budget_per_person']}")
+    print(f"  Other preferences: {', '.join(request[OTHER_PREFERENCES]) or 'none'}")
+    display_message("Restaurant results will appear after BRNS is connected.")
 
 
 def resolve_cuisine_token(token, field):
@@ -266,9 +437,8 @@ def resolve_cuisines(text, field, preferences):
     if resolved or not tokens:
         updates[field] = list(dict.fromkeys(resolved))
     if extras:
-        existing = preferences[OTHER_PREFERENCES] or ""
-        updates[OTHER_PREFERENCES] = "; ".join(
-            filter(None, [existing] + extras))
+        existing = preferences[OTHER_PREFERENCES] or []
+        updates[OTHER_PREFERENCES] = list(dict.fromkeys(existing + extras))
     return validate_updates(updates)
 
 
@@ -352,7 +522,7 @@ def collect_action(user, config, field=None, location_action="add"):
     preferences = user["preferences"]
     field = field or logic_manager.next_field(preferences)
     display_message(QUESTIONS.get(
-        field, "Profile complete. Use /edit, /profile, /logout, or /quit.",
+        field, "Profile complete. Use /search, /edit, /profile, /logout, or /quit.",
     ))
     text = read_input()
     if text is None:

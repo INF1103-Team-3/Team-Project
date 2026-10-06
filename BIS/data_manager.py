@@ -1,22 +1,26 @@
-"""Flat-file account storage. No terminal IO or AI interaction."""
+"""Account persistence and location data lookup. No terminal IO or AI."""
 
 import json
 import os
-import shutil
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+import requests
+
+import logic_manager
 from support.debug_log import debug_log
 from sources.profile_schema import (
-    MINUTES_PER_KM, empty_preferences, normalize_email, normalize_username,
-    validate_user, validate_preferences,
+    MINUTES_PER_KM, empty_preferences, normalize_email,
+    normalize_username, validate_user, validate_preferences,
 )
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 USERS_FILE = DATA_DIR / "users.json"
 STATE_FILE = DATA_DIR / "profile_state.json"
+CACHE_FILE = DATA_DIR / "geocode_cache.json"
+BRNS_CACHE_FILE = DATA_DIR.parent.parent / "BRNS" / "data" / "geocode_cache.json"
+GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 LAST_ERROR = None
 
 
@@ -36,31 +40,27 @@ def _read_json(path):
     return value
 
 
-def _registry(validate=True):
+def _registry():
     users = _read_json(USERS_FILE)
     emails = set()
     for user_id, user in users.items():
-        if (
-            not isinstance(user, dict) or not user_id
-            or user.get("userID") != user_id
-            or not isinstance(user.get("preferences"), dict)
-            or type(user.get("email_verified", False)) is not bool
+        if not isinstance(user_id, str) or not user_id or (
+            not isinstance(user, dict) or user.get("userID") != user_id
         ):
             raise ValueError(
                 "Invalid user record in data/users.json; saved data was "
-                "retained. See the repository README.md for migration or restore a backup."
+                "retained. Restore a valid copy before writing."
             )
-        email = normalize_email(user.get("email"))
+        users[user_id] = validate_user(user)
+        email = users[user_id]["email"]
         if email in emails:
             raise ValueError("Duplicate saved emails; restore the user file.")
         emails.add(email)
-        if validate:
-            users[user_id] = validate_user(user)
     return users
 
 
 def load():
-    """Return records, or [] on read errors; keep the file and block writes."""
+    """Return validated accounts, or [] if saved data cannot be read."""
     global LAST_ERROR
     try:
         records = list(_registry().values())
@@ -130,6 +130,11 @@ def register_user(email, username):
     })
 
 
+def email_exists(email):
+    email = normalize_email(email)
+    return any(user["email"] == email for user in _registry().values())
+
+
 def find_user(email):
     email = normalize_email(email)
     users = _registry()
@@ -184,51 +189,74 @@ def set_state(section, user_id, value):
     _atomic_write(STATE_FILE, state)
 
 
-def _backup(path):
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    target = path.with_name(f"{path.name}.{stamp}.{uuid4().hex[:8]}.bak")
-    shutil.copy2(path, target)
-    return str(target)
+def _read_cache(path):
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
-def migrate_users():
-    """Explicit, backed-up maintenance; never called during signup/startup."""
-    from logic_manager import migrate_record
+def lookup_cached_location(query):
+    key = query.strip().lower()
+    for path in (CACHE_FILE, BRNS_CACHE_FILE):
+        pair = _read_cache(path).get(key)
+        if (isinstance(pair, list) and len(pair) == 2
+                and all(type(number) in (int, float) for number in pair)
+                and logic_manager.in_singapore(*pair)):
+            return {
+                "query": query, "label": query,
+                "latitude": pair[0], "longitude": pair[1],
+            }
+    return None
 
-    users = _registry(validate=False)
-    if not users:
-        return {"migrated": 0, "backups": [], "reviews": 0}
-    state = _read_json(STATE_FILE)
-    for section in ("migration", "verification"):
-        if not isinstance(state.get(section, {}), dict):
-            raise RuntimeError("Invalid internal profile state.")
-        state.setdefault(section, {})
-    migrated = {}
-    count = 0
-    reviews = 0
-    for user_id, old in users.items():
+
+def resolve_location(query, api_key):
+    """Retrieve an origin from coordinates, cache, or Google Geocoding."""
+    coordinates = logic_manager.parse_coordinates(query)
+    if coordinates:
+        return {
+            "query": query, "label": f"{coordinates[0]}, {coordinates[1]}",
+            "latitude": coordinates[0], "longitude": coordinates[1],
+        }
+    cached = lookup_cached_location(query)
+    if cached:
+        return cached
+    if not api_key:
+        raise RuntimeError(
+            "This location is not cached. Set GOOGLE_MAPS_API_KEY or enter "
+            "Singapore coordinates."
+        )
+    try:
+        response = requests.get(
+            GEOCODE_URL,
+            params={"address": query + ", Singapore", "key": api_key},
+            timeout=10,
+        )
+        response.raise_for_status()
+        results = response.json().get("results", [])
+    except (requests.RequestException, ValueError, AttributeError) as error:
+        raise RuntimeError("Geocoding is unavailable. Try again.") from error
+    for result in results:
         try:
-            migrated[user_id] = validate_user(old)
+            point = result["geometry"]["location"]
+            latitude = float(point["lat"])
+            longitude = float(point["lng"])
+        except (KeyError, TypeError, ValueError):
             continue
-        except ValueError:
-            pass
-        user, notes = migrate_record(old)
-        migrated[user_id] = validate_user(user)
-        if notes.get("notices") or notes.get("other_text"):
-            state["migration"][user_id] = notes
-            reviews += 1
-        challenge = old.get("email_verification")
-        if isinstance(challenge, dict) and not user["email_verified"]:
-            state["verification"][user_id] = challenge
-        count += 1
-    if not count:
-        return {"migrated": 0, "backups": [], "reviews": 0}
-    backups = [_backup(USERS_FILE)]
-    if STATE_FILE.exists():
-        backups.append(_backup(STATE_FILE))
-    # Save review information first so a failed registry write loses no notes.
-    _atomic_write(STATE_FILE, state)
-    _atomic_write(USERS_FILE, migrated)
-    debug_log("Registry migration completed with backup.",
-              "INFO", "data.migrate")
-    return {"migrated": count, "backups": backups, "reviews": reviews}
+        if logic_manager.in_singapore(latitude, longitude):
+            return {
+                "query": query,
+                "label": result.get("formatted_address") or query,
+                "latitude": latitude, "longitude": longitude,
+            }
+    raise ValueError("No Singapore location found. Try another address or postal code.")
+
+
+def remember_location(queries, location):
+    """Persist only a location the user has confirmed."""
+    cache = _read_cache(CACHE_FILE)
+    pair = [location["latitude"], location["longitude"]]
+    for query in queries:
+        cache[query.strip().lower()] = pair
+    _atomic_write(CACHE_FILE, cache)
