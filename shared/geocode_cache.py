@@ -4,6 +4,7 @@ import json
 import math
 import os
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 CACHE_FILE = Path(__file__).resolve().parent.parent / "data" / "geocode_cache.json"
@@ -43,6 +44,34 @@ def lookup(query):
     return _point(_read().get(key)) if key else None
 
 
+@contextmanager
+def _cache_lock(path):
+    """Hold one lock file across the read-modify-write on each platform."""
+    with path.open("a+b") as lock:
+        if os.name == "nt":
+            import msvcrt
+
+            lock.seek(0, os.SEEK_END)
+            if lock.tell() == 0:
+                lock.write(b"\0")
+                lock.flush()
+            lock.seek(0)
+            msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                lock.seek(0)
+                msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+
+
 def remember(queries, latitude, longitude):
     """Atomically save successful lookups under every supplied query."""
     point = _point([latitude, longitude])
@@ -54,9 +83,7 @@ def remember(queries, latitude, longitude):
         return
     CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
     lock_path = CACHE_FILE.with_suffix(".lock")
-    with lock_path.open("a+") as lock:
-        import fcntl
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with _cache_lock(lock_path):
         data = _read()
         for key in keys:
             data[key] = list(point)
