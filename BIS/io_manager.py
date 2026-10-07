@@ -334,15 +334,15 @@ def ask_search_other(profile):
             print(f"  {number}. {item}")
     while True:
         value = read_input(
-            "Other preferences today [Enter = all saved; numbers, none, "
+            "Other preferences today [Enter = none; all, numbers, "
             "or new comma-separated items] (/cancel): "
         )
         if _cancelled(value):
             return None
-        if not value or value.lower() == "all":
-            return list(saved)
-        if value.lower() == "none":
+        if not value or value.lower() == "none":
             return []
+        if value.lower() == "all":
+            return list(saved)
         if re.fullmatch(r"\d+(?:\s*,\s*\d+)*", value):
             numbers = [int(part.strip()) for part in value.split(",")]
             if saved and all(1 <= number <= len(saved) for number in numbers):
