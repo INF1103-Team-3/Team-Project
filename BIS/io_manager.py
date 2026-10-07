@@ -522,9 +522,8 @@ def collect_action(user, config, field=None, location_action="add"):
     """Collect a typed action; never persist or call the AI API."""
     preferences = user["preferences"]
     field = field or logic_manager.next_field(preferences)
-    display_message(QUESTIONS.get(
-        field, "Profile complete. Use /search, /edit, /profile, /logout, or /quit.",
-    ))
+    if field is not None:
+        display_message(QUESTIONS[field])
     text = read_input()
     if text is None:
         return {"action": "exit"}
