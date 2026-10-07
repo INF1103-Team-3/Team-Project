@@ -5,7 +5,7 @@ import os
 import re
 import math
 import requests
-import config
+from BRNS import config
 from pathlib import Path
 import sys
 
@@ -175,8 +175,9 @@ def _hours_string_for_day(regular_hours, weekday_index):
 def _parse_place(p):
     """Raw Google place object -> our normalized dict (or None if unusable).
     Also builds the weekly opening-hours map (Google day index: 0=Sunday)."""
-    name = p.get("displayName", {}).get("text")
-    if not name:
+    name = (p.get("displayName") or {}).get("text")
+    point = p.get("location") or {}
+    if not name or "latitude" not in point or "longitude" not in point:
         return None
     pr = p.get("priceRange") or {}
     weekly = {}
@@ -189,8 +190,8 @@ def _parse_place(p):
     return {
         "name": name,
         "address": p.get("formattedAddress", "unavailable"),
-        "lat": p["location"]["latitude"],
-        "lng": p["location"]["longitude"],
+        "lat": point["latitude"],
+        "lng": point["longitude"],
         "rating": p.get("rating"),
         "price_level": (p.get("priceLevel") or "").replace("PRICE_LEVEL_", "").lower() or None,
         "price_start": _money_to_float(pr.get("startPrice")),
@@ -205,6 +206,9 @@ def _search_radius(req):
     scaled by ~0.8 (roads are longer than straight lines), clamped to 50 km."""
     if req.get("mode") == "drive" and req.get("max_drive_km"):
         return max(1000, min(int(req["max_drive_km"] * 1000 * 0.8), 50000))
+    distance = req.get("max_distance_km")
+    if distance is not None:
+        return max(500, min(int(distance * 1000), 20000))
     walk = req.get("max_walk_minutes")
     return max(500, min((walk if walk else 15) * 100, 20000))
 
@@ -255,11 +259,9 @@ def fetch_by_profile_text(origin, req):
     Returns [] on failure or when nothing is set."""
     lat, lng = origin
     cuisine = (req.get("cuisine") or "").strip()
-    dietary = (req.get("dietary") or "none").strip()
-    free_text = (req.get("free_text") or "").strip().lower()[:30]
-    terms = []
-    if dietary not in ("none", ""):
-        terms.append(dietary)
+    dietary = req.get("dietary_requirements") or []
+    free_text = (req.get("free_text") or "").strip().lower()[:200]
+    terms = list(dietary)
     if cuisine not in ("any", ""):
         terms.append(cuisine)
     if free_text:
@@ -311,8 +313,12 @@ def _match_catalog(place, catalog):
     p = _norm(place["name"])
     for entry in catalog:
         e = _norm(entry.get("name", ""))
-        if e and (e == p or e in p or p in e):
-            return entry
+        if e != p:
+            continue
+        address = _norm(entry.get("address", ""))
+        if not address or address != _norm(place.get("address", "")):
+            continue
+        return entry
     return None
 
 
@@ -329,8 +335,9 @@ def enrich_place(place, catalog):
             "name": entry.get("name", place["name"]),
             "address": place["address"],
             "lat": place["lat"], "lng": place["lng"],
-            "cuisine": entry.get("cuisine") or _cuisine_from_types(place["types"]),
-            "dietary": entry.get("dietary", "unknown"),
+            "cuisines": entry.get("cuisines") or [
+                _cuisine_from_types(place["types"])],
+            "dietary_requirements": entry.get("dietary_requirements", []),
             "avg_price": avg_price,
             "price_band": band,
             "price_start": place.get("price_start"),
@@ -349,8 +356,8 @@ def enrich_place(place, catalog):
         "name": place["name"],
         "address": place["address"],
         "lat": place["lat"], "lng": place["lng"],
-        "cuisine": _cuisine_from_types(place["types"]),
-        "dietary": "unknown",
+        "cuisines": [_cuisine_from_types(place["types"])],
+        "dietary_requirements": [],
         "avg_price": None,
         "price_band": (place.get("price_level")
                        or _band_from_range(place.get("price_start"), place.get("price_end"))),
@@ -418,7 +425,8 @@ def travel_times_matrix(origin, restaurants, mode):
                 if status_code not in (0, None):
                     continue
                 restaurants[idx][f"{mode}_minutes"] = round(int(el["duration"].rstrip("s")) / 60)
-                restaurants[idx][f"{mode}_meters"] = int(el.get("distanceMeters", 0))
+                restaurants[idx][f"{mode}_meters"] = int(el["distanceMeters"])
+                restaurants[idx][f"{mode}_source"] = "route"
             except (KeyError, ValueError, TypeError):
                 continue
     except (requests.RequestException, AttributeError, KeyError, ValueError) as err:
@@ -479,16 +487,16 @@ def build_maps_link(origin, destination, mode):
 # ---------- candidate builder ----------
 
 def build_candidates(origin, req, catalog):
-    """Live mode: profile-scoped search (dietary + cuisine + free text) ->
-    catalog enrichment -> BOTH walk and drive times. Offline: catalog only."""
+    """Live Places search with catalog enrichment; retain the catalog fallback."""
     if not config.USE_LIVE_GOOGLE:
         return [dict(r) for r in catalog]
     cuisine = (req.get("cuisine") or "any").lower()
-    dietary = (req.get("dietary") or "none").lower()
+    dietary = req.get("dietary_requirements") or []
     free_text = (req.get("free_text") or "").strip()
     places = []
-    if cuisine not in ("any", "") or dietary not in ("none", "") or free_text:
-        places = fetch_by_profile_text(origin, req)      # trigger lives HERE
+    if cuisine not in ("any", "") or dietary or free_text:
+        places = fetch_by_profile_text(origin, req)
+    from_dietary_search = bool(places and "halal" in dietary)
     if not places:                       # fallback: generic nearby search
         places = fetch_nearby_restaurants(origin, req)
     if not places:
@@ -499,12 +507,13 @@ def build_candidates(origin, req, catalog):
             _log_api_error("candidate_build", f"malformed place skipped: {p}")
             continue
         c = enrich_place(p, catalog)
+        if from_dietary_search:
+            c["halal_hint"] = True
         key = _norm(c["name"])
         if key not in seen:
             seen.add(key)
             candidates.append(c)
-    for mode in ("walk", "drive"):       # dual mode: BOTH matrices
-        travel_times_matrix(origin, candidates, mode)
+    travel_times_matrix(origin, candidates, req.get("mode", "walk"))
     _fill_travel_estimates(origin, candidates)
     return candidates
 

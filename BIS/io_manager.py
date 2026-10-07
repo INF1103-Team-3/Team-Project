@@ -392,7 +392,7 @@ def display_search_summary(request):
     print(f"  Cuisine: {request['cuisine']}")
     print(f"  Budget: SGD {request['budget_per_person']}")
     print(f"  Other preferences: {', '.join(request[OTHER_PREFERENCES]) or 'none'}")
-    display_message("Restaurant results will appear after BRNS is connected.")
+    display_message("Searching restaurants...")
 
 
 def resolve_cuisine_token(token, field):

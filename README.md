@@ -52,8 +52,9 @@ Choose **Sign up** to create an account with an email and username, or
 characters. BIS asks one preference question at a time and saves each account's
 answers locally. When a profile becomes complete, BIS starts `/search` once.
 An already complete profile starts it on the next resume if it has not run yet.
-The command collects today's search choices; restaurant results will be added
-when BIS and BRNS are connected.
+The command collects today's search choices and sends them to BRNS for
+restaurant results. With `AI_BYPASS=true`, BIS shows the choices without
+calling BRNS; this is the chatbot test mode.
 
 ### BIS commands
 
@@ -134,23 +135,18 @@ writes so existing accounts are not overwritten.
 
 ## BRNS: restaurant search and routes
 
-In the root `.env`, supply an `OPENROUTER_API_KEY` or `GEMINI_API_KEY` for request
-interpretation. BRNS tries the configured model chain in order. For live Google
-restaurant, geocoding,
-and route data, also set `GOOGLE_MAPS_API_KEY` and `USE_LIVE_GOOGLE=true`.
-Set `USE_LIVE_GOOGLE=false` to search the bundled restaurant catalog; AI
-interpretation still needs an AI provider key. Cached locations may work
-without a Maps key, while uncached locations need geocoding.
+BIS sends BRNS the confirmed search request, including origin coordinates,
+travel mode and distance, cuisine, budget, and dietary preferences. BRNS does
+not ask those questions again or require an AI model for this structured request.
+For live Google restaurant and route data, set `GOOGLE_MAPS_API_KEY` and
+`USE_LIVE_GOOGLE=true` in the root `.env`. The existing
+`USE_LIVE_GOOGLE=false` catalog fallback remains available for local use.
 
-```bash
-python3 BRNS/main.py
-```
-
-BRNS asks for a Singapore location, walking time or driving distance, budget,
-meal time, dietary requirement, food preference, minimum rating, and optional
-search text. It ranks matching restaurants, explains alternatives, and offers
-a route or map link when coordinates are available. The current input supports
-`none`, `halal`, and `vegetarian` dietary choices; it does not ask for allergies.
+BRNS ranks candidates and explains alternatives. Halal results are labeled
+unofficial until the restaurant checker is integrated. A route or map link
+is offered when a result has coordinates. Standalone BRNS accepts one BIS
+search JSON object on standard input instead of opening an interactive
+questionnaire.
 
 BRNS reads the root `.env` and keeps its data relative to `BRNS/`, regardless of
 the working directory. The bundled catalog is at `BRNS/data/restaurants.json`.
