@@ -6,6 +6,11 @@ import re
 import math
 import requests
 import config
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from shared import geocode_cache
 
 
 # ---------- generic helpers ----------
@@ -101,15 +106,13 @@ def _band_from_range(start, end):
 # ---------- Google Geocoding API (classic, with permanent cache) ----------
 
 def geocode_location(address_text):
-    """'postal code' / 'landmark' -> (lat, lng) or None. Cached forever."""
-    key = (address_text or "").strip().lower()
+    """'postal code' / 'landmark' -> (lat, lng) or None. Cached globally."""
+    key = (address_text or "").strip()
     if not key:
         return None
-    cache = _load_json(config.GEOCODE_CACHE_FILE)
-    if not isinstance(cache, dict):
-        cache = {}
-    if key in cache:
-        return tuple(cache[key])
+    cached = geocode_cache.lookup(key)
+    if cached:
+        return cached
     try:
         resp = requests.get(
             config.GEOCODE_URL,
@@ -121,10 +124,9 @@ def geocode_location(address_text):
         if not results:
             return None
         loc = results[0]["geometry"]["location"]
-        cache[key] = [loc["lat"], loc["lng"]]
-        _save_json(config.GEOCODE_CACHE_FILE, cache)
+        geocode_cache.remember((key,), loc["lat"], loc["lng"])
         return loc["lat"], loc["lng"]
-    except (requests.RequestException, KeyError, ValueError):
+    except (requests.RequestException, KeyError, ValueError, RuntimeError):
         return None
 
 

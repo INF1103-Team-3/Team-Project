@@ -180,9 +180,11 @@ def validate_response(data):
     if "profile_updates" not in data:
         raise ValueError("The AI response is missing profile_updates.")
     updates = validate_updates(data["profile_updates"])
-    action = data.get("location_action", "add")
-    if action not in ("add", "replace", "remove"):
-        raise ValueError("The AI returned an invalid location action.")
+    action = "add"
+    if "location" in updates:
+        action = data.get("location_action", "add")
+        if action not in ("add", "replace", "remove"):
+            raise ValueError("The AI returned an invalid location action.")
     if intent != "profile_update" and updates:
         raise ValueError("Utility commands cannot also change preferences.")
     return {"action": intent, "updates": updates, "location_action": action}
