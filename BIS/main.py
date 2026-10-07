@@ -4,6 +4,8 @@ import ai_manager
 import data_manager
 import io_manager
 import logic_manager
+from BRNS import io_manager as brns_io
+from BRNS import main as brns_main
 from sources.profile_schema import empty_preferences
 from support import config as settings
 from support import debug_log
@@ -15,21 +17,49 @@ def run_search(session, config, automatic=False):
         return
     user_id = session["user"]["userID"]
     try:
-        if automatic and data_manager.get_state("search", user_id):
+        state = data_manager.get_state("search", user_id)
+        if automatic and state and state.get("completed"):
             return
-        if data_manager.get_state("search", user_id) is None:
-            data_manager.set_state("search", user_id, {"started": True})
         if automatic:
             io_manager.display_message("Profile complete. Starting /search.")
         request = io_manager.collect_search(session["user"], config)
+        if request is None:
+            io_manager.display_message("Search cancelled. Your profile is saved.")
+            return
+        io_manager.display_search_summary(request)
+        if config.get("ai_bypass"):
+            session["search"] = request
+            data_manager.set_state("search", user_id, {"completed": True})
+            io_manager.display_message(
+                "Chatbot test mode: restaurant search skipped.")
+            return
+        results = brns_main.search(request)
+        session["search"] = request
+        data_manager.set_state("search", user_id, {"completed": True})
+        brns_io.show_results(results)
+        options = results["matches"] + results["alternatives"]
+        if not any(item["restaurant"].get("lat") is not None
+                   and item["restaurant"].get("lng") is not None
+                   for item in options):
+            return
+        while True:
+            answer = io_manager.read_input(
+                "Show a route? Enter a result number, or Enter to skip: ")
+            if answer is None or not answer or answer.lower() == "/cancel":
+                return
+            if answer.isdigit() and 1 <= int(answer) <= len(options):
+                chosen = options[int(answer) - 1]["restaurant"]
+                if chosen.get("lat") is None or chosen.get("lng") is None:
+                    io_manager.display_message(
+                        "No route is available for that restaurant.")
+                    continue
+                route = brns_main.route_to(chosen, request)
+                brns_io.show_route(**route)
+                return
+            io_manager.display_message(
+                f"Choose a result number from 1 to {len(options)}, or Enter.")
     except (ValueError, RuntimeError, OSError) as error:
         io_manager.display_message(error)
-        return
-    if request is None:
-        io_manager.display_message("Search cancelled. Your profile is saved.")
-        return
-    session["search"] = request
-    io_manager.display_search_summary(request)
 
 
 def save_update(action, session, config, from_ai):

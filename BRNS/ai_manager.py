@@ -4,7 +4,7 @@ Zero domain logic here. Never crashes: returns (ok, result_or_error, model_used_
 import json
 import time
 import requests
-import config
+from BRNS import config
 
 SYSTEM_PROMPT = """You convert a user's food request into strict JSON.
 

@@ -154,7 +154,7 @@ resume if it was already complete. Run /search again for new choices. You will
 confirm your current location,
 then choose walk/drive, maximum distance, one cuisine, today's budget, and
 other preferences. Today's choices do not change your saved profile.
-Restaurant recommendations will be added when BRNS is connected.
+BRNS shows restaurant results after your search choices are confirmed.
 Example: /search""",
     "add-location": """/add-location — Add areas to your saved locations.
 Accepted values: No value after the command. When prompted, enter areas
