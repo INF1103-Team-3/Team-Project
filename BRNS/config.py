@@ -38,6 +38,6 @@ USE_LIVE_GOOGLE = os.getenv("USE_LIVE_GOOGLE", "true").lower() == "true"
 # --- Files ---
 RESTAURANT_FILE = BASE_DIR / "data" / "restaurants.json"
 HISTORY_FILE = BASE_DIR / "data" / "search_history.json"
-GEOCODE_CACHE_FILE = BASE_DIR / "data" / "geocode_cache.json"
+GEOCODE_CACHE_FILE = BASE_DIR.parent / "data" / "geocode_cache.json"
 
 API_ERROR_FILE = BASE_DIR / "data" / "api_errors.log"

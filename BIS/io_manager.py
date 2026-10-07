@@ -223,11 +223,16 @@ def ask_search_location(config):
         try:
             raw = clean_text(raw, 200)
             cached = data_manager.lookup_cached_location(raw)
-            query = raw if cached or logic_manager.is_direct_location_input(raw) else (
-                ai_manager.interpret_location(raw, config)
-            )
+            query = raw
+            if not cached and not logic_manager.is_direct_location_input(raw):
+                try:
+                    query = ai_manager.interpret_location(raw, config)
+                except RuntimeError:
+                    # Google can geocode the original landmark when the AI is unavailable.
+                    query = raw
             location = data_manager.resolve_location(
                 query, config.get("google_maps_api_key", ""))
+            data_manager.remember_location((raw, query), location)
         except (ValueError, RuntimeError, OSError) as error:
             display_message(error)
             continue
@@ -239,10 +244,6 @@ def ask_search_location(config):
         if confirmed is None:
             return None
         if confirmed:
-            try:
-                data_manager.remember_location((raw, query), location)
-            except RuntimeError:
-                display_message("Location confirmed, but could not save the cache.")
             return location
 
 
@@ -537,6 +538,10 @@ def collect_action(user, config, field=None, location_action="add"):
         ):
             return interpretation_action(preferences, field, text)
         updates = resolve_cuisines(text, field, preferences)
+        return {"action": "profile_update", "updates": updates,
+                "location_action": location_action}
+    if field == OTHER_PREFERENCES:
+        updates = logic_manager.parse_local_answer(text, field)
         return {"action": "profile_update", "updates": updates,
                 "location_action": location_action}
     if not config.get("ai_bypass"):

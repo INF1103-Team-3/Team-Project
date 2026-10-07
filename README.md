@@ -50,7 +50,10 @@ python3 BIS/main.py
 Choose **Sign up** to create an account with an email and username, or
 **Resume by email** to continue an existing profile. Usernames accept 1–50
 characters. BIS asks one preference question at a time and saves each account's
-answers locally. It does not search for restaurants.
+answers locally. When a profile becomes complete, BIS starts `/search` once.
+An already complete profile starts it on the next resume if it has not run yet.
+The command collects today's search choices; restaurant results will be added
+when BIS and BRNS are connected.
 
 ### BIS commands
 
@@ -59,6 +62,7 @@ answers locally. It does not search for restaurants.
 | `/help` | Show available commands |
 | `/help [command]` | Explain a command, its accepted values, and examples |
 | `/profile` | Show the saved profile |
+| `/search` | Choose today's location, travel mode and distance, cuisine, budget, and other preferences |
 | `/edit` | Show how to change an answer |
 | `/add-location` | Add areas to saved locations |
 | `/remove-location` | Remove saved areas; at least one must remain |
@@ -70,11 +74,20 @@ For example, type `/edit budget`, then enter `10` for a new budget in SGD.
 Use `/help edit` for all editable fields and accepted answers. Editing replaces
 an answer; `/add-location` keeps existing areas.
 
-Dietary requirements are halal, vegan, both, or none. Cuisine answers use the
+Dietary requirements are halal, vegetarian, both, or none. Cuisine answers use the
 accepted list in [`BIS/sources/profile_schema.py`](BIS/sources/profile_schema.py);
 spelling suggestions require confirmation. Travel accepts distance or time,
-using **1 km ≈ 20 minutes**. Both values are saved as an estimate, not a
-calculated route.
+using **1 km ≈ 20 minutes of walking**. Both values are saved as an estimate,
+not a calculated route. Other preferences are stored as a list; enter items
+separated by commas, or `none` for an empty list.
+
+For `/search`, BIS confirms your current location before asking the other
+questions. Enter a Singapore postal code, address, landmark, or latitude and
+longitude. Cached locations and coordinates work without a Maps key; uncached
+addresses need `GOOGLE_MAPS_API_KEY` in the root `.env`. Walking searches offer
+your saved walking distance as the default. Driving searches ask for a new
+distance. Search choices do not change your saved profile. Use `/help search`
+for the full sequence.
 
 ### BIS AI and email settings
 
@@ -101,30 +114,23 @@ verified. Email format checks cannot prove that an inbox exists. Resuming an
 already verified account uses email selection, not a password. Restart BIS
 after changing its settings.
 
-### BIS saved files and migration
+### BIS saved files
 
 | Path | Purpose |
 | --- | --- |
 | `BIS/data/users.json` | Accounts keyed by user ID; username is outside preferences |
-| `BIS/data/profile_state.json` | Verification and migration review state |
+| `BIS/data/profile_state.json` | Email verification and first-search state |
+| `data/geocode_cache.json` | Shared BIS, BRC, and BRNS geocode results, including successful /search lookups |
 | `BIS/logs/bitefinder.log` | Operational logs, created on the first logged event |
-| [`BIS/docs/code_tldr.txt`](BIS/docs/code_tldr.txt) | Short code overview |
 
 Data and logs stay local. Use one BIS process per saved database. Set
 `DEBUG=true` in the root `.env` to also display logs in the terminal. Logs include
 travel distance and time; do not log API keys or verification codes.
 
-If BIS reports an old profile schema, close it and run this from the repository
-root:
-
-```bash
-cd BIS
-python3 -c "from main import run_migration; run_migration()"
-```
-
-Migration creates timestamped backups before updating the database. Accounts
-may be asked to review old answers. New users never import another user's
-profile. Corrupt data blocks writes so existing accounts are not overwritten.
+Profiles use the current BIS schema only. The local user registry was reset for
+this change, so sign up again to create a new profile. New users never import
+another user's profile. Unreadable JSON or malformed account records block
+writes so existing accounts are not overwritten.
 
 ## BRNS: restaurant search and routes
 

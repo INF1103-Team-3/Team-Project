@@ -3,10 +3,14 @@
 import json
 import os
 import tempfile
+import sys
 from pathlib import Path
 from uuid import uuid4
 
 import requests
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from shared import geocode_cache
 
 import logic_manager
 from support.debug_log import debug_log
@@ -18,8 +22,6 @@ from sources.profile_schema import (
 DATA_DIR = Path(__file__).resolve().parent / "data"
 USERS_FILE = DATA_DIR / "users.json"
 STATE_FILE = DATA_DIR / "profile_state.json"
-CACHE_FILE = DATA_DIR / "geocode_cache.json"
-BRNS_CACHE_FILE = DATA_DIR.parent.parent / "BRNS" / "data" / "geocode_cache.json"
 GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 LAST_ERROR = None
 
@@ -189,25 +191,13 @@ def set_state(section, user_id, value):
     _atomic_write(STATE_FILE, state)
 
 
-def _read_cache(path):
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    return value if isinstance(value, dict) else {}
-
-
 def lookup_cached_location(query):
-    key = query.strip().lower()
-    for path in (CACHE_FILE, BRNS_CACHE_FILE):
-        pair = _read_cache(path).get(key)
-        if (isinstance(pair, list) and len(pair) == 2
-                and all(type(number) in (int, float) for number in pair)
-                and logic_manager.in_singapore(*pair)):
-            return {
-                "query": query, "label": query,
-                "latitude": pair[0], "longitude": pair[1],
-            }
+    pair = geocode_cache.lookup(query)
+    if pair and logic_manager.in_singapore(*pair):
+        return {
+            "query": query, "label": query,
+            "latitude": pair[0], "longitude": pair[1],
+        }
     return None
 
 
@@ -245,6 +235,7 @@ def resolve_location(query, api_key):
         except (KeyError, TypeError, ValueError):
             continue
         if logic_manager.in_singapore(latitude, longitude):
+            geocode_cache.remember((query,), latitude, longitude)
             return {
                 "query": query,
                 "label": result.get("formatted_address") or query,
@@ -254,9 +245,7 @@ def resolve_location(query, api_key):
 
 
 def remember_location(queries, location):
-    """Persist only a location the user has confirmed."""
-    cache = _read_cache(CACHE_FILE)
-    pair = [location["latitude"], location["longitude"]]
-    for query in queries:
-        cache[query.strip().lower()] = pair
-    _atomic_write(CACHE_FILE, cache)
+    """Save aliases for a resolved location in the shared cache."""
+    geocode_cache.remember(
+        queries, location["latitude"], location["longitude"],
+    )

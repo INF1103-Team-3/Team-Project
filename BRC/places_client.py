@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import logging
 import math
+import sys
+from pathlib import Path
 from urllib.parse import urlencode
 
 import requests
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from shared import geocode_cache
 
 from models import SearchRequest
 
@@ -52,6 +57,9 @@ def _check(resp: requests.Response, name: str):
 
 
 def geocode(location: str, api_key: str) -> tuple[float, float, str]:
+    cached = geocode_cache.lookup(location)
+    if cached:
+        return cached[0], cached[1], location
     resp = requests.get(
         GEOCODE_URL,
         params={"address": location, "key": api_key},
@@ -66,6 +74,7 @@ def geocode(location: str, api_key: str) -> tuple[float, float, str]:
         raise PlacesError(f"Geocoding failed ({status}). {detail}".strip())
     top = data["results"][0]
     loc = top["geometry"]["location"]
+    geocode_cache.remember((location,), loc["lat"], loc["lng"])
     return loc["lat"], loc["lng"], top.get("formatted_address", location)
 
 
