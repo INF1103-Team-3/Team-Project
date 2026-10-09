@@ -12,7 +12,7 @@ import io_manager
 import logic_manager
 from BRNS import io_manager as brns_io
 from BRNS import main as brns_main
-from sources.profile_schema import empty_preferences
+from sources.profile_schema import OTHER_PREFERENCES, empty_preferences
 from support import config as settings
 from shared import debug_log
 
@@ -61,7 +61,7 @@ def run_search(session, config, automatic=False):
                     debug_log.debug_log("Clarification required.", "WARNING",
                                         "BIS.logic.validate_search_request")
                     io_manager.display_message(error)
-                    today_request = io_manager.ask_search_intent(config)
+                    today_request = io_manager.ask_search_clarification(config)
                     if today_request is None:
                         io_manager.display_message("Search cancelled. Your profile is saved.")
                         return
@@ -75,6 +75,7 @@ def run_search(session, config, automatic=False):
         payload = data_manager.serialize_search_request(request)
         debug_log.debug_log("Validated request serialized to JSON.", "INFO",
                             "BIS.data.serialize_search_request")
+        remember_search_wishes(session, request, config)
         if config.get("ai_bypass"):
             io_manager.display_search_summary(request)
             session["search"] = request
@@ -126,6 +127,23 @@ def run_search(session, config, automatic=False):
             f"Search flow finished in {time.monotonic() - started:.2f}s.",
             "INFO", "BIS.main.run_search")
         debug_log.end_trace(trace_token)
+
+
+def remember_search_wishes(session, request, config):
+    """Keep confirmed new wishes in the profile for later searches."""
+    user = session["user"]
+    saved = user["preferences"][OTHER_PREFERENCES] or []
+    additions = [item for item in request[OTHER_PREFERENCES]
+                 if item not in saved]
+    if not additions:
+        return
+    preferences = dict(user["preferences"])
+    preferences[OTHER_PREFERENCES] = saved + additions
+    session["user"] = data_manager.save_preferences(
+        user["userID"], preferences, config)
+    debug_log.debug_log(
+        f"Saved {len(additions)} new special requests for later searches.",
+        "INFO", "BIS.data.save_preferences")
 
 
 def save_update(action, session, config, from_ai):

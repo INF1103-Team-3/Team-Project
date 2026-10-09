@@ -31,6 +31,20 @@ class SearchClarificationNeeded(ValueError):
     """The AI interpretation disagrees with a confirmed user choice."""
 
 
+def validate_special_request_text(text):
+    """Check a short English request before BIS sends it for interpretation."""
+    text = clean_text(text, 100)
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()\-]*", text):
+        raise ValueError(
+            "Write your special request in English letters and words, "
+            "such as chicken rice or a quiet cafe.")
+    words = re.findall(r"[A-Za-z]+", text)
+    if not words or not any(len(word) > 1 for word in words):
+        raise ValueError(
+            "Describe your request in English words, or press Enter for none.")
+    return text
+
+
 def validate_search_request(request, ai_response=None):
     """Validate AI interpretation while protecting confirmed search choices."""
     confirmed = _validate_search_fields(request)

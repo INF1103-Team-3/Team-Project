@@ -70,10 +70,14 @@ Choose **Sign up** to create an account with an email and username, or
 characters. BIS asks one preference question at a time and saves each account's
 answers locally. When a profile becomes complete, BIS starts `/search` once.
 An already complete profile starts it on the next resume if it has not run yet.
-The command collects today's location and search limits, then asks what you
-want in your own words. BIS AI proposes a search request. BIS Logic protects
+The command collects today's location and search limits, then asks one
+optional question about what you want. Enter skips extra wishes; saved
+special requests can be chosen by number or `all`, and a new request can be
+entered in English. BIS checks new text and asks before using any AI wording
+correction. BIS AI then proposes a search request. BIS Logic protects
 confirmed choices and validates the proposal; you confirm it before BIS Data
-serializes the request to JSON. BRNS receives that JSON for restaurant results.
+serializes the request to JSON. Confirmed new special requests are saved for
+future searches. BRNS receives that JSON for restaurant results.
 AI may add wishes from your description but cannot remove selected preferences.
 With `AI_BYPASS=true`, BIS shows the choices without calling AI or BRNS; this
 is the chatbot test mode.

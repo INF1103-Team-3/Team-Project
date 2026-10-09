@@ -51,6 +51,12 @@ class IntegrationTests(unittest.TestCase):
                                 return_value=True)
         provider.start()
         self.addCleanup(provider.stop)
+        saved_preferences = patch.object(
+            bis_main.data_manager, "save_preferences",
+            side_effect=lambda user_id, preferences, config: {
+                "userID": user_id, "preferences": preferences})
+        self.saved_preferences = saved_preferences.start()
+        self.addCleanup(saved_preferences.stop)
 
     def test_search_menu_typo_requires_confirmation(self):
         from BIS import io_manager as bis_io
@@ -108,7 +114,7 @@ class IntegrationTests(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 brns_io.accept_bis_json(dict(valid, **change))
 
-    def test_search_collection_requires_live_free_text_and_preserves_test_mode(self):
+    def test_search_collection_uses_one_optional_wish_question(self):
         from BIS import io_manager as bis_io
 
         profile = empty_preferences()
@@ -122,15 +128,103 @@ class IntegrationTests(unittest.TestCase):
             patch.object(bis_io, "ask_search_distance", return_value=2),
             patch.object(bis_io, "ask_search_cuisine", return_value="malay"),
             patch.object(bis_io, "ask_search_budget", return_value=10),
-            patch.object(bis_io, "ask_search_other", return_value=[]),
-            patch.object(bis_io, "read_input", side_effect=["", "quiet place"]),
-            patch.object(bis_io, "display_message"),
+            patch.object(bis_io, "ask_search_wishes",
+                         return_value={"selected": [], "text": "quiet place"}),
         ):
             result = bis_io.collect_search(user, {"ai_bypass": False})
         self.assertEqual(result["today_request"], "quiet place")
         self.assertEqual(result["request"]["dietary_requirements"], ["halal"])
         with patch.object(bis_io, "read_input", return_value=""):
-            self.assertEqual(bis_io.ask_search_intent({"ai_bypass": True}), "")
+            self.assertEqual(bis_io.ask_search_wishes(profile, {}),
+                             {"selected": [], "text": ""})
+
+    def test_special_request_validation_and_reuse(self):
+        from BIS import io_manager as bis_io
+
+        profile = empty_preferences()
+        profile["other_preferences"] = ["spicy food", "hawker center"]
+        offline = {"ai_bypass": True}
+        with patch.object(bis_io, "read_input", return_value="2, 1"):
+            self.assertEqual(bis_io.ask_search_wishes(profile, offline), {
+                "selected": ["hawker center", "spicy food"], "text": ""})
+        with patch.object(bis_io, "read_input", return_value="chicken rice"):
+            self.assertEqual(bis_io.ask_search_wishes(profile, offline), {
+                "selected": [], "text": "chicken rice"})
+        with (
+            patch.object(bis_io, "read_input",
+                         side_effect=["你好", ""]),
+            patch.object(bis_io, "display_message") as message,
+        ):
+            self.assertEqual(bis_io.ask_search_wishes(profile, offline), {
+                "selected": [], "text": ""})
+        self.assertIn("English letters", str(message.call_args.args[0]))
+
+    def test_new_special_request_is_reviewed_and_confirmed_before_search_ai(self):
+        from BIS import io_manager as bis_io
+
+        with (
+            patch.object(bis_io, "read_input", return_value="chikcen rice"),
+            patch.object(bis_io.ai_manager, "review_special_request",
+                         return_value="chicken rice") as review,
+            patch.object(bis_io, "ask_yes_no", return_value=True) as confirm,
+        ):
+            wishes = bis_io.ask_search_wishes(
+                empty_preferences(), {"ai_bypass": False})
+        self.assertEqual(wishes, {"selected": [], "text": "chicken rice"})
+        review.assert_called_once()
+        confirm.assert_called_once()
+
+        with (
+            patch.object(bis_io, "read_input",
+                         side_effect=["chikcen rice", ""]),
+            patch.object(bis_io.ai_manager, "review_special_request",
+                         return_value="chicken rice"),
+            patch.object(bis_io, "ask_yes_no", return_value=False),
+        ):
+            self.assertEqual(bis_io.ask_search_wishes(
+                empty_preferences(), {"ai_bypass": False}),
+                {"selected": [], "text": ""})
+
+    def test_special_request_ai_review_rejects_changed_ok_response(self):
+        from BIS import ai_manager as bis_ai
+
+        with patch.object(bis_ai, "_call_openrouter",
+                          return_value='{"status":"ok","text":"new wish"}'):
+            with self.assertRaisesRegex(RuntimeError, "Could not check"):
+                bis_ai.review_special_request(
+                    "chicken rice", {"openrouter_model": "test"})
+
+    def test_special_request_waits_for_ai_wording_review(self):
+        from BIS import io_manager as bis_io
+
+        with (
+            patch.object(bis_io, "read_input",
+                         side_effect=["chikcen rice", ""]),
+            patch.object(bis_io.ai_manager, "review_special_request",
+                         side_effect=RuntimeError("AI unavailable")),
+            patch.object(bis_io, "display_message") as message,
+        ):
+            wishes = bis_io.ask_search_wishes(
+                empty_preferences(), {"ai_bypass": False})
+        self.assertEqual(wishes, {"selected": [], "text": ""})
+        self.assertIn("Could not check the wording", message.call_args.args[0])
+
+    def test_confirmed_new_request_is_saved_for_next_search(self):
+        from BIS import io_manager as bis_io
+
+        profile = empty_preferences()
+        profile["other_preferences"] = ["spicy food"]
+        session = {"user": {"userID": "test", "preferences": profile}}
+        bis_main.remember_search_wishes(
+            session, dict(request(), other_preferences=[
+                "spicy food", "chicken rice"]), {})
+        self.saved_preferences.assert_called_once()
+        self.assertEqual(session["user"]["preferences"]["other_preferences"],
+                         ["spicy food", "chicken rice"])
+        with patch.object(bis_io, "read_input", return_value="2"):
+            self.assertEqual(bis_io.ask_search_wishes(
+                session["user"]["preferences"], {"ai_bypass": True}),
+                {"selected": ["chicken rice"], "text": ""})
 
     def test_brns_requires_ai_before_places_and_does_not_save_on_ai_failure(self):
         with (
@@ -517,7 +611,7 @@ class IntegrationTests(unittest.TestCase):
             patch.object(bis_main.data_manager, "set_state"),
             patch.object(bis_main.io_manager, "collect_search",
                          return_value=collected()),
-            patch.object(bis_main.io_manager, "ask_search_intent",
+            patch.object(bis_main.io_manager, "ask_search_clarification",
                          return_value="spicy food") as clarify,
             patch.object(bis_main.io_manager, "confirm_search_request",
                          return_value=True),
