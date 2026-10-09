@@ -1,7 +1,7 @@
 # BiteFinder
 
-BiteFinder currently contains two independent Python command-line applications
-and a folder reserved for future work:
+BiteFinder contains two connected Python command-line applications and a
+folder reserved for future work:
 
 | Application | Purpose | Run from the repository root |
 | --- | --- | --- |
@@ -9,8 +9,7 @@ and a folder reserved for future work:
 | **BRNS** — BiteFinder Recommendation & Navigation System | Find, rank, and route to restaurants | `python3 BRNS/main.py` |
 | **BRC** — BiteFinder Restaurant Checker | Reserved for team members to add restaurant checking functionality | No command yet |
 
-BIS profiles do not feed into BRNS searches yet. BRNS is based on the `main`
-branch snapshot `43e91b6`; BIS comes from `bitefinder-chatbot-draft`. The
+BIS sends today's confirmed search as JSON to BRNS. The
 [original project scope](ProjectInitialDetails.md) describes the intended
 combined system, including allergy handling. The current CLIs do not implement
 every feature in that scope.
@@ -27,7 +26,24 @@ python3 -m pip install -r requirements.txt
 
 On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` instead.
 The root `requirements.txt` covers both applications. The optional
-`requirements-dev.txt` adds `pycodestyle`.
+`requirements-dev.txt` adds `pycodestyle` and the function graph tools.
+
+To generate the function call PNGs on Windows, run these commands from the
+repository root in PowerShell or Command Prompt:
+
+```text
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe visualise_functions.py
+```
+
+Use the same Python executable for the install and the script. Pillow is
+installed as `Pillow` but imported as `PIL`. The PNGs appear in
+`function_graphs/`: `bis_to_brns.png` is the grouped manager flow,
+`bis_to_brns_functions.png` shows the reachable function calls, and
+`all_functions.png` covers every application function. Add `--trace` to run
+BIS and capture a live session graph. The grouped flow shows
+BIS IO → AI → Logic → Data (JSON) → BRNS IO → AI → Logic → Data.
 
 Both applications read the same `.env` file at the repository root. If you do
 not have one yet, copy `.env.example` to `.env` and edit the settings you need:
@@ -52,9 +68,12 @@ Choose **Sign up** to create an account with an email and username, or
 characters. BIS asks one preference question at a time and saves each account's
 answers locally. When a profile becomes complete, BIS starts `/search` once.
 An already complete profile starts it on the next resume if it has not run yet.
-The command collects today's search choices and sends them to BRNS for
-restaurant results. With `AI_BYPASS=true`, BIS shows the choices without
-calling BRNS; this is the chatbot test mode.
+The command collects today's search choices, asks BIS AI to prioritize the
+supplied free-text preferences, validates the AI output in BIS Logic, and
+serializes the request to JSON in BIS Data. BRNS receives that JSON for
+restaurant results. The AI cannot add or remove your confirmed preferences.
+With `AI_BYPASS=true`, BIS shows the choices without calling AI or BRNS; this
+is the chatbot test mode.
 
 ### BIS commands
 
@@ -106,7 +125,8 @@ Keys rotate in order, including failed requests, and rotation resets on
 launch. Alternatively, use `OPENROUTER_API_KEYS_FILE=secrets/openrouter_keys.json`
 with a JSON list or comma/newline-separated key file. That relative path still
 resolves from `BIS/`. The key list takes priority over the file, then the shared
-`OPENROUTER_API_KEY` setting. BRNS uses only `OPENROUTER_API_KEY`.
+`OPENROUTER_API_KEY` setting. BRNS uses `OPENROUTER_API_KEY` or
+`GEMINI_API_KEY` according to its configured model chain.
 
 To send verification codes, set `SMTP_BYPASS=false` and fill in the SMTP
 settings in [`.env.example`](.env.example). Codes expire after ten
@@ -136,8 +156,11 @@ writes so existing accounts are not overwritten.
 ## BRNS: restaurant search and routes
 
 BIS sends BRNS the confirmed search request, including origin coordinates,
-travel mode and distance, cuisine, budget, and dietary preferences. BRNS does
-not ask those questions again or require an AI model for this structured request.
+travel mode and distance, cuisine, budget, and dietary preferences. BRNS IO
+validates it and gathers restaurant facts through Google Places. BRNS AI orders
+candidate IDs; Logic checks the candidates against the request and creates
+matches and alternatives; Data stores a validated search summary. If the AI
+providers are unavailable, Logic uses its deterministic ranking instead.
 For live Google restaurant and route data, set `GOOGLE_MAPS_API_KEY` and
 `USE_LIVE_GOOGLE=true` in the root `.env`. The existing
 `USE_LIVE_GOOGLE=false` catalog fallback remains available for local use.
@@ -157,7 +180,8 @@ Search history and API error logs are local runtime files ignored by Git.
 Both applications have a `main.py` and separate `io_manager.py`,
 `ai_manager.py`, `logic_manager.py`, and `data_manager.py` modules. BIS also has
 `sources/` for its profile schema and prompts, and `support/` for configuration,
-email delivery, and logging. BRNS has its own `config.py` and restaurant data.
+email delivery, and logging. BRNS has its own `config.py` and an IO-owned
+`places_client.py` for Google Places, geocoding, and routing.
 
 To install the optional formatting checker and run it on BIS:
 

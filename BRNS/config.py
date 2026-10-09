@@ -19,7 +19,7 @@ MODEL_CHAIN = [
     {"provider": "gemini", "model": "gemini-3.6-flash"},        # separate daily pool
 ]
 
-# --- Data layer: Google Maps Platform ---
+# --- IO layer: Google Maps Platform ---
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"

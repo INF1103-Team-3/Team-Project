@@ -107,10 +107,25 @@ def decide_outcome(restaurant, request):
     return "match", len(reasons), reasons
 
 
-def rank_restaurants(restaurants, request):
+def rank_restaurants(restaurants, request, suggested_order=None):
+    """Validate every AI suggestion; use its order only within safe groups."""
+    if suggested_order is None:
+        order = list(range(len(restaurants)))
+    else:
+        if (not isinstance(suggested_order, list)
+                or any(type(index) is not int or index < 0
+                       or index >= len(restaurants)
+                       for index in suggested_order)
+                or len(suggested_order) != len(set(suggested_order))):
+            raise ValueError("BRNS AI returned invalid restaurant IDs.")
+        order = suggested_order + [
+            index for index in range(len(restaurants))
+            if index not in suggested_order
+        ]
     matches, alternatives = [], []
     hidden = 0
-    for raw in restaurants:
+    for index in order:
+        raw = restaurants[index]
         restaurant = normalize_candidate(
             raw, offline=raw.get("source") == "offline catalog")
         status, score, reasons = decide_outcome(restaurant, request)
@@ -121,7 +136,8 @@ def rank_restaurants(restaurants, request):
             alternatives.append(item)
         else:
             hidden += 1
-    matches.sort(key=lambda item: item["score"], reverse=True)
+    if suggested_order is None:
+        matches.sort(key=lambda item: item["score"], reverse=True)
     return {
         "matches": matches[:config.MAX_MATCHES_SHOWN],
         "alternatives": alternatives[:config.MAX_ALTERNATIVES_SHOWN],

@@ -22,10 +22,15 @@ def run_search(session, config, automatic=False):
             return
         if automatic:
             io_manager.display_message("Profile complete. Starting /search.")
-        request = io_manager.collect_search(session["user"], config)
-        if request is None:
+        collected = io_manager.collect_search(session["user"], config)
+        if collected is None:
             io_manager.display_message("Search cancelled. Your profile is saved.")
             return
+        interpreted = None
+        if not config.get("ai_bypass"):
+            interpreted = ai_manager.interpret_search_request(collected, config)
+        request = logic_manager.validate_search_request(collected, interpreted)
+        payload = data_manager.serialize_search_request(request)
         io_manager.display_search_summary(request)
         if config.get("ai_bypass"):
             session["search"] = request
@@ -33,7 +38,7 @@ def run_search(session, config, automatic=False):
             io_manager.display_message(
                 "Chatbot test mode: restaurant search skipped.")
             return
-        results = brns_main.search(request)
+        results = brns_main.search(payload)
         session["search"] = request
         data_manager.set_state("search", user_id, {"completed": True})
         brns_io.show_results(results)
