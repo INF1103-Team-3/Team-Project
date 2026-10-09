@@ -6,18 +6,80 @@ import re
 import secrets
 import time
 from copy import deepcopy
+from collections import Counter
 from difflib import SequenceMatcher
 
 from sources.profile_schema import (
     CUISINES, CUISINE_FIELDS, MINUTES_PER_KM, OTHER_PREFERENCES,
     UNSUPPORTED_CUISINES, VERIFICATION_MAX_ATTEMPTS,
     VERIFICATION_RESEND_SECONDS, VERIFICATION_TTL_SECONDS,
-    PREFERENCE_FIELDS, validate_preferences, validate_updates,
+    PREFERENCE_FIELDS, clean_text, validate_preferences, validate_updates,
+    validate_value,
 )
 
 COORDINATES = re.compile(
     r"\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)\s*"
 )
+
+SEARCH_FIELDS = {
+    "origin", "mode", "max_distance_km", "cuisine",
+    "budget_per_person", OTHER_PREFERENCES,
+    "dietary_requirements", "disliked_cuisines",
+}
+
+
+def validate_search_request(request, ai_response=None):
+    """Validate the confirmed search before BIS sends JSON to BRNS."""
+    if not isinstance(request, dict) or set(request) != SEARCH_FIELDS:
+        raise ValueError("Today's search has an invalid set of fields.")
+    origin = request["origin"]
+    if not isinstance(origin, dict) or set(origin) != {
+        "query", "label", "latitude", "longitude"
+    }:
+        raise ValueError("Today's search needs a confirmed location.")
+    latitude, longitude = origin["latitude"], origin["longitude"]
+    if (type(latitude) not in (int, float)
+            or type(longitude) not in (int, float)
+            or not in_singapore(latitude, longitude)):
+        raise ValueError("Today's search location must be in Singapore.")
+    if request["mode"] not in ("walk", "drive"):
+        raise ValueError("Choose walk or drive for today's search.")
+    if request["cuisine"] not in CUISINES:
+        raise ValueError("Choose a supported cuisine for today's search.")
+    for field in (OTHER_PREFERENCES, "dietary_requirements",
+                  "disliked_cuisines"):
+        if not isinstance(request[field], list):
+            raise ValueError(f"{field} must be a list.")
+    distance = validate_value("max_distance_km", request["max_distance_km"])
+    budget = validate_value("budget_per_person", request["budget_per_person"])
+    if distance is None or budget is None:
+        raise ValueError("Today's search needs a distance and budget.")
+    preferences = validate_value(
+        OTHER_PREFERENCES, request[OTHER_PREFERENCES])
+    if ai_response is not None:
+        if (not isinstance(ai_response, dict)
+                or set(ai_response) != {OTHER_PREFERENCES}
+                or not isinstance(ai_response[OTHER_PREFERENCES], list)):
+            raise ValueError("The AI returned invalid search preferences.")
+        suggested = validate_value(
+            OTHER_PREFERENCES, ai_response[OTHER_PREFERENCES])
+        if Counter(suggested) != Counter(preferences):
+            raise ValueError("The AI changed your search preferences. Please retry.")
+        preferences = suggested
+    return {
+        "origin": {
+            "query": clean_text(origin["query"], 200),
+            "label": clean_text(origin["label"], 500),
+            "latitude": latitude, "longitude": longitude,
+        },
+        "mode": request["mode"], "max_distance_km": distance,
+        "cuisine": request["cuisine"], "budget_per_person": budget,
+        OTHER_PREFERENCES: preferences,
+        "dietary_requirements": validate_value(
+            "dietary_requirements", request["dietary_requirements"]),
+        "disliked_cuisines": validate_value(
+            "disliked_cuisines", request["disliked_cuisines"]),
+    }
 
 
 def in_singapore(latitude, longitude):

@@ -1,7 +1,9 @@
 """BRNS request boundary and output. BIS owns all user input."""
 
+import json
 import math
 
+from BRNS import places_client
 from BIS.sources.profile_schema import (
     CUISINES, clean_text, validate_value,
 )
@@ -16,6 +18,11 @@ ORIGIN_FIELDS = {"query", "label", "latitude", "longitude"}
 
 def accept_bis_json(payload):
     """Validate one BIS search request without prompting or changing it."""
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except ValueError as error:
+            raise ValueError("BRNS requires valid BIS search JSON.") from error
     if not isinstance(payload, dict) or set(payload) != SEARCH_FIELDS:
         raise ValueError("BRNS requires the eight BIS search fields only.")
     origin = payload["origin"]
@@ -59,6 +66,25 @@ def accept_bis_json(payload):
         "disliked_cuisines": validate_value(
             "disliked_cuisines", payload["disliked_cuisines"]),
     }
+
+
+def find_candidates(request):
+    """Collect restaurant facts through Places or the catalog fallback."""
+    origin = (request["origin"]["latitude"],
+              request["origin"]["longitude"])
+    lookup = dict(request)
+    lookup["free_text"] = " ".join(request["other_preferences"])
+    catalog = places_client.load_catalog()
+    return places_client.build_candidates(origin, lookup, catalog)
+
+
+def get_route(origin, destination, mode):
+    """Fetch a route through the IO-owned external service client."""
+    return places_client.get_route(origin, destination, mode)
+
+
+def build_maps_link(origin, destination, mode):
+    return places_client.build_maps_link(origin, destination, mode)
 
 
 def show_results(results):

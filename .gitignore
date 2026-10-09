@@ -14,6 +14,7 @@ BIS/data/*.bak
 BIS/logs/*.log
 BRNS/data/search_history.json
 BRNS/data/api_errors.log
+function_graphs/
 
 # Local project documentation
 BIS/docs/

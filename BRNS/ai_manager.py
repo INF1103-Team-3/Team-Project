@@ -189,3 +189,64 @@ def call_ai(user_record):
         _log_ai_event("fallback", f"{provider}/{model} -> {content}")
         time.sleep(1)
     return False, "; ".join(errors), None
+
+
+RECOMMEND_SYSTEM_PROMPT = """Rank the supplied restaurant candidates for the
+validated search request. Return only JSON: {"ordered_ids": [integer, ...]}.
+Use only candidate IDs from the input, most suitable first. Consider cuisine,
+budget, dietary needs, travel, and other preferences. Do not invent restaurant
+facts or treat a halal search hint as official certification. The next layer
+will enforce hard requirements and may reject or relabel your suggestions."""
+
+
+def recommend_candidates(request, candidates):
+    """Return AI-selected candidate indices, or None for a safe fallback."""
+    if not candidates:
+        return None
+    mode = request["mode"]
+    facts = []
+    for index, candidate in enumerate(candidates):
+        facts.append({
+            "id": index,
+            "name": candidate.get("name"),
+            "cuisines": candidate.get("cuisines"),
+            "dietary_requirements": candidate.get("dietary_requirements"),
+            "halal_hint_unofficial": bool(candidate.get("halal_hint")),
+            "avg_price": candidate.get("avg_price"),
+            "price_start": candidate.get("price_start"),
+            "rating": candidate.get("rating"),
+            "travel_meters": candidate.get(f"{mode}_meters"),
+            "travel_source": candidate.get(f"{mode}_source"),
+        })
+    user_text = json.dumps({"request": request, "candidates": facts},
+                           separators=(",", ":"))
+    for entry in config.MODEL_CHAIN:
+        provider, model = entry["provider"], entry["model"]
+        if provider == "openrouter" and config.OPENROUTER_API_KEY:
+            ok, content = _call_openrouter(
+                model, RECOMMEND_SYSTEM_PROMPT, user_text)
+        elif provider == "gemini" and config.GEMINI_API_KEY:
+            ok, content = _call_gemini(
+                model, RECOMMEND_SYSTEM_PROMPT, user_text)
+        else:
+            continue
+        if not ok:
+            _log_ai_event("recommendation", f"{provider}/{model}: {content}")
+            continue
+        try:
+            reply = parse_json_reply(content)
+        except (ValueError, TypeError, AttributeError):
+            _log_ai_event("recommendation", f"{provider}/{model}: invalid JSON")
+            continue
+        if not isinstance(reply, dict) or set(reply) != {"ordered_ids"}:
+            _log_ai_event("recommendation", f"{provider}/{model}: wrong keys")
+            continue
+        order = reply["ordered_ids"]
+        if (not isinstance(order, list) or not order
+                or any(type(index) is not int or index < 0
+                       or index >= len(candidates) for index in order)
+                or len(order) != len(set(order))):
+            _log_ai_event("recommendation", f"{provider}/{model}: invalid IDs")
+            continue
+        return order
+    return None

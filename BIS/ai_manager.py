@@ -1,4 +1,4 @@
-"""Temporary profile AI adapter; replace process() with the team integration.
+"""BIS AI adapter for profile input and today's search preferences.
 
 No persistence, user interaction, or restaurant recommendation logic.
 """
@@ -237,3 +237,28 @@ def interpret_location(text, config):
     if set(parsed) != {"location_query"}:
         raise ValueError("Could not interpret the location. Please try again.")
     return clean_text(parsed["location_query"], 200)
+
+
+def interpret_search_request(request, config):
+    """Prioritize the user's search preferences without changing their choices."""
+    if config.get("ai_bypass"):
+        raise RuntimeError("AI is disabled for local testing.")
+    payload = {
+        "model": config["openrouter_model"],
+        "messages": [
+            {"role": "system", "content": (
+                "For this restaurant search, order other_preferences by "
+                "relevance to the user's cuisine and search context. Return "
+                "only JSON with exactly one key: other_preferences. Copy "
+                "each supplied preference exactly once, without adding, "
+                "rewriting, or removing any. If the list is empty, return []."
+            )},
+            {"role": "user", "content": json.dumps(
+                {"cuisine": request["cuisine"],
+                 "other_preferences": request["other_preferences"]},
+                ensure_ascii=False)},
+        ],
+        "temperature": 0,
+        "max_tokens": 300,
+    }
+    return _parse_json_response(_call_openrouter(payload, config))

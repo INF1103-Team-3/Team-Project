@@ -26,6 +26,12 @@ GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 LAST_ERROR = None
 
 
+def serialize_search_request(request):
+    """Produce the exact JSON object handed from BIS to BRNS IO."""
+    return json.dumps(request, ensure_ascii=False, allow_nan=False,
+                      separators=(",", ":"))
+
+
 def _read_json(path):
     try:
         with path.open(encoding="utf-8") as file:
