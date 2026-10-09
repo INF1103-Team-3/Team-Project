@@ -41,7 +41,9 @@ Use the same Python executable for the install and the script. Pillow is
 installed as `Pillow` but imported as `PIL`. The PNGs appear in
 `function_graphs/`: `bis_to_brns.png` is the grouped manager flow,
 `bis_to_brns_functions.png` shows the reachable function calls, and
-`all_functions.png` covers every application function. Add `--trace` to run
+`all_functions.png` covers every application function. `project_workflow.png`
+shows the halal scraper and separate BRC checker alongside BIS, BRNS, and
+their shared cache and log. Add `--trace` to run
 BIS and capture a live session graph. The grouped flow shows
 BIS IO → AI → Logic → Data (JSON) → BRNS IO → AI → Logic → Data.
 
