@@ -176,12 +176,15 @@ BIS.main.run_search()
 ```
 
 `collect_search()` asks for **today's** location, travel mode, travel distance,
-cuisine, budget, optional saved or new other preferences, and a free-text
-description of the desired meal. These choices do not overwrite the saved
-profile. Dietary requirements and disliked cuisines are copied from that
-profile. A walking search offers the saved walking distance as the Enter
-default. Driving requires a fresh distance. Enter at the other-preferences
-prompt means none; `all` includes every saved item.
+cuisine, budget, and one optional special-request answer. Enter means no extra
+wish. Earlier requests can be selected by number or `all`; new English text
+is checked locally, then reviewed by BIS AI for English wording. Any proposed
+correction requires confirmation before the search interpretation call.
+Confirmed new special requests are added to the saved profile for the next
+search; the other today's choices do not overwrite the profile. Dietary
+requirements and disliked cuisines are copied from that profile. A walking
+search offers the saved walking distance as the Enter default. Driving
+requires a fresh distance.
 
 For a location, BIS accepts Singapore coordinates, a six-digit postal code,
 an address, or a landmark. It checks the shared geocode cache first. If an

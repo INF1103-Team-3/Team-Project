@@ -347,37 +347,61 @@ def ask_search_budget(profile):
         display_message("Enter a positive SGD amount, such as 12 or 12.50.")
 
 
-def ask_search_other(profile):
+def ask_search_wishes(profile, config):
+    """Select earlier wishes or collect one new request for today's search."""
     saved = profile[OTHER_PREFERENCES] or []
     if saved:
-        print("Saved other preferences:")
+        print("Previous special requests:")
         for number, item in enumerate(saved, 1):
             print(f"  {number}. {item}")
     while True:
         value = read_input(
-            "Other preferences today [Enter = none; all, numbers, "
-            "or new comma-separated items] (/cancel): "
+            "What are you looking for today? Describe any extra wishes "
+            "[Enter = none; all, saved numbers, or new text] (/cancel): "
         )
         if _cancelled(value):
             return None
         if not value or value.lower() == "none":
-            return []
+            return {"selected": [], "text": ""}
         if value.lower() == "all":
-            return list(saved)
+            return {"selected": list(saved), "text": ""}
         if re.fullmatch(r"\d+(?:\s*,\s*\d+)*", value):
             numbers = [int(part.strip()) for part in value.split(",")]
             if saved and all(1 <= number <= len(saved) for number in numbers):
-                return list(dict.fromkeys(saved[number - 1] for number in numbers))
-            display_message("Choose numbers shown in the saved list.")
+                selected = list(dict.fromkeys(
+                    saved[number - 1] for number in numbers))
+                return {"selected": selected, "text": ""}
+            display_message("Choose numbers shown in the previous requests list.")
             continue
         try:
-            return validate_value(OTHER_PREFERENCES, value.split(","))
+            text = logic_manager.validate_special_request_text(value)
+            if not config.get("ai_bypass"):
+                try:
+                    reviewed = ai_manager.review_special_request(text, config)
+                except RuntimeError:
+                    display_message(
+                        "Could not check the wording. Please try again, "
+                        "or press Enter for none.")
+                    continue
+                if reviewed is None:
+                    display_message(
+                        "I could not understand that request. Please rephrase it.")
+                    continue
+                logic_manager.validate_special_request_text(reviewed)
+                if reviewed != text:
+                    confirmed = ask_yes_no(f"Use '{reviewed}' instead?")
+                    if confirmed is None:
+                        return None
+                    if not confirmed:
+                        continue
+                    text = reviewed
+            return {"selected": [], "text": text}
         except ValueError as error:
             display_message(error)
 
 
-def ask_search_intent(config):
-    """Collect today's natural-language request for BIS AI interpretation."""
+def ask_search_clarification(config):
+    """Collect a new description when BIS AI conflicts with a confirmed choice."""
     while True:
         value = read_input(
             "What are you looking for today? Describe any extra wishes "
@@ -411,12 +435,12 @@ def collect_search(user, config):
     budget = ask_search_budget(profile)
     if budget is None:
         return None
-    other = ask_search_other(profile)
-    if other is None:
+    wishes = ask_search_wishes(profile, config)
+    if wishes is None:
         return None
-    today_request = ask_search_intent(config)
-    if today_request is None:
-        return None
+    other = wishes["selected"]
+    if config.get("ai_bypass") and wishes["text"]:
+        other = validate_value(OTHER_PREFERENCES, [wishes["text"]])
     request = {
         "origin": location, "mode": mode, "max_distance_km": distance,
         "cuisine": cuisine, "budget_per_person": budget,
@@ -424,7 +448,7 @@ def collect_search(user, config):
         "dietary_requirements": list(profile["dietary_requirements"] or []),
         "disliked_cuisines": list(profile["disliked_cuisines"] or []),
     }
-    return {"request": request, "today_request": today_request}
+    return {"request": request, "today_request": wishes["text"]}
 
 
 def display_search_summary(request):

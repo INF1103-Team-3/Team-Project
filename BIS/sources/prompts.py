@@ -153,10 +153,13 @@ It starts automatically once when a profile becomes complete, or on the next
 resume if it was already complete. Run /search again for new choices. You will
 confirm your current location,
 then choose walk/drive, maximum distance, one cuisine, today's budget, and
-other preferences. Describe what you want in your own words. BIS AI
-interprets that description; confirm its proposed search before BRNS runs.
-Today's choices do not change your saved profile. Live search needs BIS and
-BRNS AI; chatbot test mode skips both AI calls and BRNS.
+one optional special request. Press Enter for none, select a previous request
+by number or all, or describe a new request in English. BIS checks the input,
+uses AI to review new wording, and asks before applying a correction. BIS AI
+then interprets the request; confirm its proposed search before BRNS runs.
+Confirmed new special requests are saved for the next search; other today's
+choices do not change your saved profile. Live search needs BIS and BRNS AI;
+chatbot test mode skips both AI calls and BRNS.
 Example: /search""",
     "add-location": """/add-location — Add areas to your saved locations.
 Accepted values: No value after the command. When prompted, enter areas
