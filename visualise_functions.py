@@ -3,9 +3,11 @@ r"""Draw source call graphs, or trace a real BIS session with --trace.
 Run from the repository root with ``.venv/bin/python visualise_functions.py``
 on Linux/macOS. On Windows, use
 ``.\.venv\Scripts\python.exe visualise_functions.py``.
-PNGs are written to ``function_graphs/``. The default graphs are static: they
-include functions even when the chatbot or live APIs are not run. Calls through
-runtime values, callbacks, and dynamic imports cannot always be resolved.
+PNGs are written to ``function_graphs/``. The default function graphs are
+static: they include functions even when the chatbot or live APIs are not run.
+The project workflow image is a curated view of the current runtime paths.
+Calls through runtime values, callbacks, and dynamic imports cannot always
+be resolved by the static function graphs.
 """
 
 from __future__ import annotations
@@ -528,6 +530,149 @@ def draw_flow_overview(path, reached, edges):
     print(f"Created {path.relative_to(ROOT)} (grouped BIS → BRNS flow)")
 
 
+def draw_workflow_card(draw, box, title, details, fill):
+    """Draw one stage in the project-level workflow."""
+    x0, y0, x1, y1 = box
+    draw.rounded_rectangle(box, radius=17, fill=fill,
+                           outline="#75899a", width=2)
+    draw.text((x0 + 19, y0 + 14), title, font=font(25, True),
+              fill="#1a3043")
+    for index, detail in enumerate(details):
+        draw.text((x0 + 19, y0 + 53 + index * 30), detail,
+                  font=font(18), fill="#40566a")
+
+
+def draw_project_workflow(path):
+    """Show the live BIS → BRNS path and the separate halal/BRC path."""
+    image = Image.new("RGB", (2800, 2080), "#ffffff")
+    draw = ImageDraw.Draw(image)
+    title = font(42, True)
+    subtitle = font(21)
+    heading = font(29, True)
+    note = font(20)
+    draw.text((85, 39), "BiteFinder | complete current workflow",
+              font=title, fill="#153047")
+    draw.text((86, 100),
+              "Halal data and BRC are separate from the BIS → BRNS search; "
+              "the geocode cache and log are shared.",
+              font=subtitle, fill="#52677b")
+
+    lanes = (
+        ((75, 170, 2725, 690), "HALAL DATA + SEPARATE BRC CHECKER",
+         "#fffaf2", "#91622d"),
+        ((75, 730, 2725, 1190), "BIS | ACCOUNT, PROFILE, TODAY'S SEARCH",
+         "#f5faff", "#2b6691"),
+        ((75, 1230, 2725, 1710), "BRNS | RESTAURANT SEARCH + ROUTE",
+         "#f5fcf8", "#367452"),
+        ((75, 1750, 2725, 2040), "SHARED SUPPORT",
+         "#faf8ff", "#675696"),
+    )
+    for box, label, background, accent in lanes:
+        draw.rounded_rectangle(box, radius=24, fill=background,
+                               outline=accent, width=3)
+        draw.text((111, box[1] + 16), label, font=heading, fill=accent)
+
+    positions = [110, 650, 1190, 1730, 2270]
+    card_width = 410
+    orange = "#fff0d7"
+    blue = "#dceeff"
+    green = "#dbf5e6"
+
+    # The directory only enters BRC Logic. There is no directory-to-BRNS edge.
+    draw_workflow_card(draw, (110, 245, 520, 360),
+                       "HalalFreak scraper",
+                       ("Sitemap + area pages", "halal_data_scrape.py"), orange)
+    draw_workflow_card(draw, (700, 245, 1150, 360),
+                       "BRC halal directory",
+                       ("Generated JSON of listed places", "Postal code + name"),
+                       orange)
+    draw_arrow(draw, [(520, 302), (700, 302)], "#a97936", 5)
+
+    brc_cards = (
+        ("BRC main()", ("Separate CLI", "Own search request")),
+        ("BRC IO", ("Google Places + routes", "Candidate facts")),
+        ("BRC AI", ("Gemini enrichment", "Cuisine, price, allergens")),
+        ("BRC Logic", ("Halal directory match", "Accept / flag / reject")),
+        ("BRC Data", ("Save checked records", "BRC restaurant history")),
+    )
+    for x, (name, details) in zip(positions, brc_cards):
+        draw_workflow_card(draw, (x, 440, x + card_width, 580),
+                           name, details, orange)
+    for left, right in zip(positions, positions[1:]):
+        draw_arrow(draw, [(left + card_width, 510), (right, 510)],
+                   "#a97936", 5)
+    draw_arrow(draw, [(925, 360), (925, 405), (1935, 405), (1935, 440)],
+               "#a97936", 5)
+    draw.rounded_rectangle((750, 609, 2050, 668), radius=11,
+                           fill="#fff5f2", outline="#c65d50", width=2)
+    draw.text((782, 622),
+              "Current boundary: BRC halal directory does not feed BIS or BRNS",
+              font=note, fill="#9d443a")
+
+    bis_cards = (
+        ("BIS main()", ("Signup + saved profile", "Start /search")),
+        ("BIS IO", ("Today's choices + free text", "Confirm interpreted search")),
+        ("BIS AI", ("OpenRouter interprets", "Profile + every live search")),
+        ("BIS Logic", ("Validate exact fields", "Protect confirmed choices")),
+        ("BIS Data", ("Save profile + state", "Serialize search JSON")),
+    )
+    for x, (name, details) in zip(positions, bis_cards):
+        draw_workflow_card(draw, (x, 835, x + card_width, 995),
+                           name, details, blue)
+    for left, right in zip(positions, positions[1:]):
+        draw_arrow(draw, [(left + card_width, 915), (right, 915)],
+                   "#397eb0", 5)
+    draw.text((145, 1084),
+              "Saved: BIS/data/users.json + profile_state.json",
+              font=note, fill="#45647e")
+    draw_workflow_card(draw, (2180, 1052, 2680, 1158),
+                       "BIS → BRNS JSON",
+                       ("Exactly 8 validated fields",), "#e5f2ff")
+    draw_arrow(draw, [(2475, 995), (2475, 1052)], "#397eb0", 5)
+
+    brns_cards = (
+        ("BRNS main.search()", ("Receives BIS JSON", "Runs one search")),
+        ("BRNS IO", ("Validate + Google Places", "Catalog + route facts")),
+        ("BRNS AI", ("Gemini / OpenRouter", "Rank IDs + reason codes")),
+        ("BRNS Logic", ("Check claims against facts", "Matches + alternatives")),
+        ("BRNS Data", ("Save compact summary", "Search history JSON")),
+    )
+    for x, (name, details) in zip(positions, brns_cards):
+        draw_workflow_card(draw, (x, 1350, x + card_width, 1510),
+                           name, details, green)
+    for left, right in zip(positions, positions[1:]):
+        draw_arrow(draw, [(left + card_width, 1430), (right, 1430)],
+                   "#3e9568", 5)
+    draw_arrow(draw, [(2430, 1158), (2430, 1204),
+                      (315, 1204), (315, 1350)], "#c4584f", 6)
+    draw.text((1080, 1175), "Confirmed request handoff",
+              font=note, fill="#a0443e")
+    draw_workflow_card(draw, (2180, 1570, 2680, 1674),
+                       "Results → BIS user",
+                       ("BRNS IO display + optional route",), "#e6f7ed")
+    draw_arrow(draw, [(2475, 1510), (2475, 1570)], "#3e9568", 5)
+    draw.text((145, 1605),
+              "Halal is unofficial or unverified; official checker integration is pending.",
+              font=note, fill="#486959")
+
+    draw_workflow_card(draw, (320, 1840, 1250, 1970),
+                       "Shared geocode cache",
+                       ("BIS + BRC + BRNS use data/geocode_cache.json",
+                        "Validated coordinates and cross-platform locking"),
+                       "#eee5ff")
+    draw_workflow_card(draw, (1550, 1840, 2480, 1970),
+                       "Global BiteFinder log",
+                       ("BIS + BRC + BRNS write logs/bitefinder.log",
+                        "One trace ID connects BIS and BRNS search stages"),
+                       "#eee5ff")
+    draw.text((105, 2002),
+              "Current executable paths; project plans may describe later integrations.",
+              font=font(17), fill="#697786")
+
+    image.save(path, "PNG")
+    print(f"Created {path.relative_to(ROOT)} (complete project workflow)")
+
+
 def create_static_graphs():
     functions, edges = build_graph()
     OUTPUT_DIR.mkdir(exist_ok=True)
@@ -540,6 +685,7 @@ def create_static_graphs():
                   if source in flow_nodes and target in flow_nodes}
     reached, _ = reachable(ENTRY, edges)
     draw_flow_overview(OUTPUT_DIR / "bis_to_brns.png", reached, edges)
+    draw_project_workflow(OUTPUT_DIR / "project_workflow.png")
     draw_graph(OUTPUT_DIR / "bis_to_brns_functions.png",
                "BIS main() → BRNS functions (source)", flow_nodes,
                flow_edges, grouped_by_depth(flow_nodes, depth))
