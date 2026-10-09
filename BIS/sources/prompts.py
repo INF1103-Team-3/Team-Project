@@ -88,7 +88,7 @@ EDIT_ALIASES = {
 
 HELP_TEXT = """What would you like to do?
 /profile — View your saved profile.
-/search — Choose today's location, travel, cuisine, budget, and preferences.
+/search — Choose today's search options and describe what you want.
 /edit — See how to change an answer, such as your budget.
 /add-location — Add an area to your saved locations.
 /remove-location — Remove an area from your saved locations.
@@ -153,8 +153,10 @@ It starts automatically once when a profile becomes complete, or on the next
 resume if it was already complete. Run /search again for new choices. You will
 confirm your current location,
 then choose walk/drive, maximum distance, one cuisine, today's budget, and
-other preferences. Today's choices do not change your saved profile.
-BRNS shows restaurant results after your search choices are confirmed.
+other preferences. Describe what you want in your own words. BIS AI
+interprets that description; confirm its proposed search before BRNS runs.
+Today's choices do not change your saved profile. Live search needs BIS and
+BRNS AI; chatbot test mode skips both AI calls and BRNS.
 Example: /search""",
     "add-location": """/add-location — Add areas to your saved locations.
 Accepted values: No value after the command. When prompted, enter areas

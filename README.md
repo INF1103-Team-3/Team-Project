@@ -68,10 +68,11 @@ Choose **Sign up** to create an account with an email and username, or
 characters. BIS asks one preference question at a time and saves each account's
 answers locally. When a profile becomes complete, BIS starts `/search` once.
 An already complete profile starts it on the next resume if it has not run yet.
-The command collects today's search choices, asks BIS AI to prioritize the
-supplied free-text preferences, validates the AI output in BIS Logic, and
-serializes the request to JSON in BIS Data. BRNS receives that JSON for
-restaurant results. The AI cannot add or remove your confirmed preferences.
+The command collects today's location and search limits, then asks what you
+want in your own words. BIS AI proposes a search request. BIS Logic protects
+confirmed choices and validates the proposal; you confirm it before BIS Data
+serializes the request to JSON. BRNS receives that JSON for restaurant results.
+AI may add wishes from your description but cannot remove selected preferences.
 With `AI_BYPASS=true`, BIS shows the choices without calling AI or BRNS; this
 is the chatbot test mode.
 
@@ -82,7 +83,7 @@ is the chatbot test mode.
 | `/help` | Show available commands |
 | `/help [command]` | Explain a command, its accepted values, and examples |
 | `/profile` | Show the saved profile |
-| `/search` | Choose today's location, travel mode and distance, cuisine, budget, and other preferences |
+| `/search` | Choose today's location and limits, describe your wishes, then confirm the interpreted search |
 | `/edit` | Show how to change an answer |
 | `/add-location` | Add areas to saved locations |
 | `/remove-location` | Remove saved areas; at least one must remain |
@@ -106,13 +107,15 @@ questions. Enter a Singapore postal code, address, landmark, or latitude and
 longitude. Cached locations and coordinates work without a Maps key; uncached
 addresses need `GOOGLE_MAPS_API_KEY` in the root `.env`. Walking searches offer
 your saved walking distance as the default. Driving searches ask for a new
-distance. Search choices do not change your saved profile. Use `/help search`
-for the full sequence.
+distance. Live search also requires a free-text description and confirmation
+of the interpreted request. Search choices do not change your saved profile.
+Use `/help search` for the full sequence.
 
 ### BIS AI and email settings
 
 Signup uses fixed prompts and Python validation. AI can interpret preference
-answers, but saved updates must still pass validation. To enable AI, set these
+answers and is required for live `/search`; saved updates and search requests
+must still pass validation. To enable AI, set these
 values in the root `.env`:
 
 ```dotenv
@@ -142,11 +145,18 @@ after changing its settings.
 | `BIS/data/users.json` | Accounts keyed by user ID; username is outside preferences |
 | `BIS/data/profile_state.json` | Email verification and first-search state |
 | `data/geocode_cache.json` | Shared BIS, BRC, and BRNS geocode results, including successful /search lookups |
-| `BIS/logs/bitefinder.log` | Operational logs, created on the first logged event |
+| `logs/bitefinder.log` | Shared BIS, BRNS, and BRC operational log, created on the first logged event |
 
-Data and logs stay local. Use one BIS process per saved database. Set
-`DEBUG=true` in the root `.env` to also display logs in the terminal. Logs include
-travel distance and time; do not log API keys or verification codes.
+Data and logs stay local. Use one BIS process per saved database. Each search
+has a trace ID that connects its BIS and BRNS events in the shared log. Events
+show the manager function, stage outcome, provider attempt, and candidate
+counts without recording API keys, raw requests, addresses, or raw provider
+text. It records the AI ID and reason-code list. When BRNS drops an unsupported
+AI reason, the log includes the candidate ID
+and name, rejected reason code, and facts used for the check. A search error
+shows its trace ID so you can find the related lines. Set `DEBUG=true` in the
+root `.env` to mirror the log to the terminal; standalone BRNS mirrors it to
+stderr too.
 
 Profiles use the current BIS schema only. The local user registry was reset for
 this change, so sign up again to create a new profile. New users never import
@@ -158,12 +168,14 @@ writes so existing accounts are not overwritten.
 BIS sends BRNS the confirmed search request, including origin coordinates,
 travel mode and distance, cuisine, budget, and dietary preferences. BRNS IO
 validates it and gathers restaurant facts through Google Places. BRNS AI orders
-candidate IDs; Logic checks the candidates against the request and creates
-matches and alternatives; Data stores a validated search summary. If the AI
-providers are unavailable, Logic uses its deterministic ranking instead.
+all candidate IDs and supplies reason codes; Logic keeps only reasons supported
+by candidate facts, applies the requirements, and creates matches and
+alternatives; Data stores a validated search summary. A live search stops
+without a valid BRNS AI recommendation, and can be retried.
 For live Google restaurant and route data, set `GOOGLE_MAPS_API_KEY` and
 `USE_LIVE_GOOGLE=true` in the root `.env`. The existing
-`USE_LIVE_GOOGLE=false` catalog fallback remains available for local use.
+`USE_LIVE_GOOGLE=false` catalog fallback remains available for local use, but
+it still needs BRNS AI to produce a completed recommendation.
 
 BRNS ranks candidates and explains alternatives. Halal results are labeled
 unofficial until the restaurant checker is integrated. A route or map link
@@ -173,7 +185,8 @@ questionnaire.
 
 BRNS reads the root `.env` and keeps its data relative to `BRNS/`, regardless of
 the working directory. The bundled catalog is at `BRNS/data/restaurants.json`.
-Search history and API error logs are local runtime files ignored by Git.
+Search history and the shared operational log are local runtime files ignored
+by Git. Places and AI failures are recorded in that log.
 
 ## Code layout and development
 

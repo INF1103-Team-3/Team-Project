@@ -4,7 +4,7 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
-from support.debug_log import debug_log
+from shared.debug_log import debug_log
 from sources.profile_schema import normalize_email
 
 
@@ -56,9 +56,9 @@ def send_verification_email(email, code, config):
             if server.send_message(message):
                 raise RuntimeError("The verification email was refused.")
     except (OSError, RuntimeError) as error:
-        debug_log("Email delivery failed.", "ERROR", "email.send")
+        debug_log("Email delivery failed.", "ERROR", "BIS.email.send")
         raise RuntimeError(
             "Could not send verification email. Check SMTP settings "
             "and try again."
         ) from error
-    debug_log("Verification email sent.", "INFO", "email.send")
+    debug_log("Verification email sent.", "INFO", "BIS.email.send")

@@ -6,7 +6,6 @@ import re
 import secrets
 import time
 from copy import deepcopy
-from collections import Counter
 from difflib import SequenceMatcher
 
 from sources.profile_schema import (
@@ -28,8 +27,34 @@ SEARCH_FIELDS = {
 }
 
 
+class SearchClarificationNeeded(ValueError):
+    """The AI interpretation disagrees with a confirmed user choice."""
+
+
 def validate_search_request(request, ai_response=None):
-    """Validate the confirmed search before BIS sends JSON to BRNS."""
+    """Validate AI interpretation while protecting confirmed search choices."""
+    confirmed = _validate_search_fields(request)
+    if ai_response is None:
+        return confirmed
+    try:
+        proposed = _validate_search_fields(ai_response)
+    except ValueError as error:
+        raise ValueError(
+            "The AI returned an invalid search request. Please retry.") from error
+    protected = SEARCH_FIELDS - {OTHER_PREFERENCES}
+    if any(proposed[field] != confirmed[field] for field in protected):
+        raise SearchClarificationNeeded(
+            "The AI interpretation conflicts with a confirmed choice. "
+            "Please clarify what you want today.")
+    if not set(confirmed[OTHER_PREFERENCES]).issubset(
+            proposed[OTHER_PREFERENCES]):
+        raise SearchClarificationNeeded(
+            "The AI removed a selected preference. Please clarify your request.")
+    return proposed
+
+
+def _validate_search_fields(request):
+    """Normalize the exact eight-field BIS/BRNS search contract."""
     if not isinstance(request, dict) or set(request) != SEARCH_FIELDS:
         raise ValueError("Today's search has an invalid set of fields.")
     origin = request["origin"]
@@ -56,16 +81,6 @@ def validate_search_request(request, ai_response=None):
         raise ValueError("Today's search needs a distance and budget.")
     preferences = validate_value(
         OTHER_PREFERENCES, request[OTHER_PREFERENCES])
-    if ai_response is not None:
-        if (not isinstance(ai_response, dict)
-                or set(ai_response) != {OTHER_PREFERENCES}
-                or not isinstance(ai_response[OTHER_PREFERENCES], list)):
-            raise ValueError("The AI returned invalid search preferences.")
-        suggested = validate_value(
-            OTHER_PREFERENCES, ai_response[OTHER_PREFERENCES])
-        if Counter(suggested) != Counter(preferences):
-            raise ValueError("The AI changed your search preferences. Please retry.")
-        preferences = suggested
     return {
         "origin": {
             "query": clean_text(origin["query"], 200),

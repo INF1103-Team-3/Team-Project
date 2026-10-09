@@ -2,8 +2,10 @@
 
 import json
 import math
+import sys
 
 from BRNS import places_client
+from shared import debug_log as log
 from BIS.sources.profile_schema import (
     CUISINES, clean_text, validate_value,
 )
@@ -14,6 +16,11 @@ SEARCH_FIELDS = {
     "dietary_requirements", "disliked_cuisines",
 }
 ORIGIN_FIELDS = {"query", "label", "latitude", "longitude"}
+
+
+def display_debug(line):
+    """Mirror shared operational logs to stderr when DEBUG is enabled."""
+    print(line, file=sys.stderr)
 
 
 def accept_bis_json(payload):
@@ -75,12 +82,21 @@ def find_candidates(request):
     lookup = dict(request)
     lookup["free_text"] = " ".join(request["other_preferences"])
     catalog = places_client.load_catalog()
-    return places_client.build_candidates(origin, lookup, catalog)
+    log.debug_log(f"Catalog loaded with {len(catalog)} records.", "DEBUG",
+                  "BRNS.io_manager.find_candidates")
+    candidates = places_client.build_candidates(origin, lookup, catalog)
+    log.debug_log(f"Candidate builder returned {len(candidates)} records.",
+                  "DEBUG", "BRNS.io_manager.find_candidates")
+    return candidates
 
 
 def get_route(origin, destination, mode):
     """Fetch a route through the IO-owned external service client."""
-    return places_client.get_route(origin, destination, mode)
+    route = places_client.get_route(origin, destination, mode)
+    log.debug_log("Route available." if route else "Route unavailable.",
+                  "INFO" if route else "WARNING",
+                  "BRNS.io_manager.get_route")
+    return route
 
 
 def build_maps_link(origin, destination, mode):

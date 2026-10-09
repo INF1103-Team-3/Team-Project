@@ -5,7 +5,10 @@ import os
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from dotenv import load_dotenv
+from shared import debug_log
 
 import data_manager
 import io_manager
@@ -13,17 +16,11 @@ import logic_manager
 import places_client
 from ai_manager import AIManager
 
-LOG_PATH = Path(__file__).with_name("restaurant_finder.log")
 log = logging.getLogger("restaurant_finder")
 
 
 def configure_logging() -> None:
-    logging.basicConfig(
-        filename=LOG_PATH,
-        encoding="utf-8",
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    debug_log.configure_python_logging()
 
 
 def run_search(ai: AIManager, maps_key: str) -> bool:
@@ -107,7 +104,7 @@ def main() -> int:
             except Exception:  # keep the menu alive whatever goes wrong
                 log.exception("Unexpected error during %s", choice)
                 io_manager.show_error(
-                    f"Something went wrong. Details are in {LOG_PATH.name}."
+                    "Something went wrong. Details are in logs/bitefinder.log."
                 )
     except (KeyboardInterrupt, EOFError):
         io_manager.show_message("")
