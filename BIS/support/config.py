@@ -6,7 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 import ai_manager
-from support.debug_log import debug_log
+from shared.debug_log import debug_log
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 ENV_FILE = BASE_DIR / ".env"
@@ -49,7 +49,7 @@ def load_config():
         "smtp_from_email": os.getenv("SMTP_FROM_EMAIL", "").strip(),
     }
 
-    debug_log("Configuration loaded.")
+    debug_log("Configuration loaded.", "DEBUG", "BIS.config.load")
     return config
 
 
@@ -67,7 +67,8 @@ def validate_config(config):
     if not config.get("openrouter_model"):
         errors.append("Set OPENROUTER_MODEL in .env.")
 
-    debug_log(f"Configuration validated with {len(errors)} error(s).")
+    debug_log(f"Configuration validated with {len(errors)} error(s).",
+              "DEBUG", "BIS.config.validate")
     return errors
 
 

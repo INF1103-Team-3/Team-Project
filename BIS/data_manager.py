@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from shared import geocode_cache
 
 import logic_manager
-from support.debug_log import debug_log
+from shared.debug_log import debug_log
 from sources.profile_schema import (
     MINUTES_PER_KM, empty_preferences, normalize_email,
     normalize_username, validate_user, validate_preferences,
@@ -75,7 +75,7 @@ def load():
     except (ValueError, RuntimeError) as error:
         LAST_ERROR = str(error)
         debug_log("Registry read failed; writes blocked.",
-                  "ERROR", "data.load")
+                  "ERROR", "BIS.data.load")
         return []
     LAST_ERROR = None
     return records
@@ -119,7 +119,7 @@ def save(record):
         raise ValueError("This email is already registered.")
     users[record["userID"]] = record
     _atomic_write(USERS_FILE, users)
-    debug_log("User record saved.", "INFO", "data.save")
+    debug_log("User record saved.", "INFO", "BIS.data.save")
     return record
 
 
@@ -169,7 +169,7 @@ def save_preferences(user_id, preferences, config):
         f"max_distance_km={preferences['max_distance_km']}, "
         f"max_travel_time_minutes={preferences['max_travel_time_minutes']}; "
         f"conversion assumption={MINUTES_PER_KM} min/km.",
-        "INFO", "profile.travel",
+        "INFO", "BIS.profile.travel",
     )
     return result
 

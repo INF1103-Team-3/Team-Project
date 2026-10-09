@@ -1,5 +1,11 @@
 """Coordinate the five procedural chatbot managers."""
 
+import time
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import ai_manager
 import data_manager
 import io_manager
@@ -8,7 +14,7 @@ from BRNS import io_manager as brns_io
 from BRNS import main as brns_main
 from sources.profile_schema import empty_preferences
 from support import config as settings
-from support import debug_log
+from shared import debug_log
 
 
 def run_search(session, config, automatic=False):
@@ -16,6 +22,9 @@ def run_search(session, config, automatic=False):
         io_manager.display_message("Complete your profile before using /search.")
         return
     user_id = session["user"]["userID"]
+    trace_token = debug_log.start_trace()
+    started = time.monotonic()
+    debug_log.debug_log("Search started.", "INFO", "BIS.main.run_search")
     try:
         state = data_manager.get_state("search", user_id)
         if automatic and state and state.get("completed"):
@@ -24,21 +33,63 @@ def run_search(session, config, automatic=False):
             io_manager.display_message("Profile complete. Starting /search.")
         collected = io_manager.collect_search(session["user"], config)
         if collected is None:
+            debug_log.debug_log("Collection cancelled.", "INFO", "BIS.io.collect_search")
             io_manager.display_message("Search cancelled. Your profile is saved.")
             return
-        interpreted = None
-        if not config.get("ai_bypass"):
-            interpreted = ai_manager.interpret_search_request(collected, config)
-        request = logic_manager.validate_search_request(collected, interpreted)
-        payload = data_manager.serialize_search_request(request)
-        io_manager.display_search_summary(request)
+        debug_log.debug_log("Search choices collected.", "INFO",
+                            "BIS.io.collect_search")
+        confirmed = collected["request"]
+        today_request = collected["today_request"]
         if config.get("ai_bypass"):
+            request = logic_manager.validate_search_request(confirmed)
+        else:
+            while True:
+                interpreted = ai_manager.interpret_search_request(
+                    confirmed, today_request, config)
+                debug_log.debug_log("AI interpretation returned.", "INFO",
+                                    "BIS.ai.interpret_search_request")
+                if interpreted is None:
+                    raise RuntimeError(
+                        "BIS AI could not interpret today's request. Please retry.")
+                try:
+                    request = logic_manager.validate_search_request(
+                        confirmed, interpreted)
+                    debug_log.debug_log("AI proposal validated.", "INFO",
+                                        "BIS.logic.validate_search_request")
+                    break
+                except logic_manager.SearchClarificationNeeded as error:
+                    debug_log.debug_log("Clarification required.", "WARNING",
+                                        "BIS.logic.validate_search_request")
+                    io_manager.display_message(error)
+                    today_request = io_manager.ask_search_intent(config)
+                    if today_request is None:
+                        io_manager.display_message("Search cancelled. Your profile is saved.")
+                        return
+            if io_manager.confirm_search_request(request, config) is not True:
+                debug_log.debug_log("Interpretation declined.", "INFO",
+                                    "BIS.io.confirm_search_request")
+                io_manager.display_message("Search cancelled. Your profile is saved.")
+                return
+            debug_log.debug_log("Interpretation confirmed.", "INFO",
+                                "BIS.io.confirm_search_request")
+        payload = data_manager.serialize_search_request(request)
+        debug_log.debug_log("Validated request serialized to JSON.", "INFO",
+                            "BIS.data.serialize_search_request")
+        if config.get("ai_bypass"):
+            io_manager.display_search_summary(request)
             session["search"] = request
             data_manager.set_state("search", user_id, {"completed": True})
             io_manager.display_message(
                 "Chatbot test mode: restaurant search skipped.")
+            debug_log.debug_log("Chatbot test completed without BRNS.", "INFO",
+                                "BIS.main.run_search")
             return
+        io_manager.display_message("Searching restaurants...")
         results = brns_main.search(payload)
+        debug_log.debug_log(
+            f"BRNS returned {len(results['matches'])} matches and "
+            f"{len(results['alternatives'])} alternatives.", "INFO",
+            "BIS.main.run_search")
         session["search"] = request
         data_manager.set_state("search", user_id, {"completed": True})
         brns_io.show_results(results)
@@ -64,27 +115,50 @@ def run_search(session, config, automatic=False):
             io_manager.display_message(
                 f"Choose a result number from 1 to {len(options)}, or Enter.")
     except (ValueError, RuntimeError, OSError) as error:
-        io_manager.display_message(error)
+        debug_log.debug_log(
+            f"Search stopped: {type(error).__name__}.", "ERROR",
+            "BIS.main.run_search")
+        io_manager.display_message(
+            f"{error} Details: logs/bitefinder.log "
+            f"(trace {debug_log.current_trace_id()}).")
+    finally:
+        debug_log.debug_log(
+            f"Search flow finished in {time.monotonic() - started:.2f}s.",
+            "INFO", "BIS.main.run_search")
+        debug_log.end_trace(trace_token)
 
 
 def save_update(action, session, config, from_ai):
     """Save only a fully resolved update, then advance the session."""
-    user = session["user"]
-    was_incomplete = logic_manager.next_field(user["preferences"]) is not None
-    updates = io_manager.resolve_proposed_updates(
-        user["preferences"], action["updates"], from_ai,
-    )
-    operation = action.get("location_action", "add")
-    if session["field"] == "location":
-        operation = session["location_action"]
-    preferences = logic_manager.apply_updates(
-        user["preferences"], updates, operation,
-    )
-    saved = data_manager.save_preferences(user["userID"], preferences, config)
-    session.update(user=saved, field=None, location_action="add")
-    io_manager.display_message("Preferences saved.")
-    if was_incomplete and logic_manager.next_field(saved["preferences"]) is None:
-        run_search(session, config, automatic=True)
+    trace_token = debug_log.start_trace()
+    try:
+        user = session["user"]
+        was_incomplete = logic_manager.next_field(user["preferences"]) is not None
+        updates = io_manager.resolve_proposed_updates(
+            user["preferences"], action["updates"], from_ai,
+        )
+        debug_log.debug_log(
+            f"Resolved {len(updates)} preference fields.", "INFO",
+            "BIS.io.resolve_proposed_updates")
+        operation = action.get("location_action", "add")
+        if session["field"] == "location":
+            operation = session["location_action"]
+        preferences = logic_manager.apply_updates(
+            user["preferences"], updates, operation,
+        )
+        debug_log.debug_log("Profile update validated.", "INFO",
+                            "BIS.logic.apply_updates")
+        saved = data_manager.save_preferences(
+            user["userID"], preferences, config)
+        debug_log.debug_log("Preferences saved.", "INFO",
+                            "BIS.data.save_preferences")
+        session.update(user=saved, field=None, location_action="add")
+        io_manager.display_message("Preferences saved.")
+        if was_incomplete and logic_manager.next_field(
+                saved["preferences"]) is None:
+            run_search(session, config, automatic=True)
+    finally:
+        debug_log.end_trace(trace_token)
 
 
 def rename_user(session):
@@ -109,13 +183,15 @@ def end_session(intent, session, config):
     data_manager.save_preferences(user["userID"], user["preferences"], config)
     message = {"logout": "Logged out.", "exit": "Goodbye!"}[intent]
     io_manager.display_message("Profile saved. " + message)
-    debug_log.debug_log("Session ended.", "INFO", "session." + intent)
+    debug_log.debug_log("Session ended.", "INFO", "BIS.session." + intent)
     return intent
 
 
 def handle_action(action, session, config, from_ai=False):
     """Dispatch an action with guard clauses instead of nested branches."""
     intent = action["action"]
+    debug_log.debug_log(f"Dispatching {intent}.", "DEBUG",
+                        "BIS.main.handle_action")
     if intent in {"exit", "logout"}:
         return end_session(intent, session, config)
     if intent == "show_profile":

@@ -9,8 +9,11 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import urljoin
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import requests
 from bs4 import BeautifulSoup
+from shared import debug_log
 
 import data_manager
 import io_manager
@@ -22,7 +25,6 @@ SITEMAP_URL = "https://halalfreak.com/sitemap-priority.xml"
 HEADERS = {"User-Agent": "HalalNav/1.0 (personal project; contact@example.com)"}
 DELAY = 1.0
 TIMEOUT = 20
-LOG_PATH = Path(__file__).with_name("restaurant_finder.log")
 
 EST_RE = re.compile(
     r"^(?P<name>.+?)\s+Certified\s+"
@@ -123,17 +125,12 @@ def refresh(progress: Progress | None = None) -> int:
         # Never replace good data with an empty scrape (the site layout may have changed).
         raise ScrapeError("No establishments were found, so your existing data was kept.")
     if not data_manager.save_halal_directory(rows):
-        raise ScrapeError("Could not save the directory file (see restaurant_finder.log).")
+        raise ScrapeError("Could not save the directory file (see logs/bitefinder.log).")
     return len(rows)
 
 
 def main() -> int:
-    logging.basicConfig(
-        filename=LOG_PATH,
-        encoding="utf-8",
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    debug_log.configure_python_logging()
     try:
         count = refresh(progress=io_manager.show_message)
     except ScrapeError as exc:

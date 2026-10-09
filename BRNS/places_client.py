@@ -8,6 +8,7 @@ from pathlib import Path
 
 from BRNS import config
 from shared import geocode_cache
+from shared import debug_log as log
 
 
 def load_catalog(path=config.RESTAURANT_FILE):
@@ -20,11 +21,15 @@ def load_catalog(path=config.RESTAURANT_FILE):
 
 
 def _log_api_error(context, err):
-    try:
-        with open(config.API_ERROR_FILE, "a", encoding="utf-8") as file:
-            file.write(f"{context}: {type(err).__name__}: {err}\n")
-    except OSError:
-        pass
+    """Record only error type and HTTP status, never URL or response body."""
+    if isinstance(err, str):
+        kind = "invalid response"
+        status = None
+    else:
+        kind = type(err).__name__
+        status = getattr(getattr(err, "response", None), "status_code", None)
+    detail = f"{kind}; HTTP {status}" if status is not None else kind
+    log.debug_log(detail, "WARNING", f"BRNS.places_client.{context}")
 
 
 # ---------- price helpers ----------
@@ -80,7 +85,11 @@ def geocode_location(address_text):
         return None
     cached = geocode_cache.lookup(key)
     if cached:
+        log.debug_log("Geocode cache hit.", "DEBUG",
+                      "BRNS.places_client.geocode_location")
         return cached
+    log.debug_log("Geocoding request started.", "INFO",
+                  "BRNS.places_client.geocode_location")
     try:
         resp = requests.get(
             config.GEOCODE_URL,
@@ -93,8 +102,11 @@ def geocode_location(address_text):
             return None
         loc = results[0]["geometry"]["location"]
         geocode_cache.remember((key,), loc["lat"], loc["lng"])
+        log.debug_log("Geocoding result cached.", "INFO",
+                      "BRNS.places_client.geocode_location")
         return loc["lat"], loc["lng"]
-    except (requests.RequestException, KeyError, ValueError, RuntimeError):
+    except (requests.RequestException, KeyError, ValueError, RuntimeError) as err:
+        _log_api_error("geocode_location", err)
         return None
 
 
@@ -183,6 +195,8 @@ def _search_radius(req):
 
 def fetch_nearby_restaurants(origin, req, debug=False):
     """ONE Places request per search (up to 20 places). [] on failure."""
+    log.debug_log("Nearby Places request started.", "INFO",
+                  "BRNS.places_client.fetch_nearby_restaurants")
     lat, lng = origin
     headers = {
         "Content-Type": "application/json",
@@ -204,14 +218,16 @@ def fetch_nearby_restaurants(origin, req, debug=False):
     try:
         resp = requests.post(config.PLACES_URL, headers=headers, json=body, timeout=15)
         if debug:
-            print("DEBUG status:", resp.status_code)
-            print("DEBUG body:", resp.text[:500])
+            log.debug_log(f"Nearby Places HTTP {resp.status_code}.", "DEBUG",
+                          "BRNS.places_client.fetch_nearby_restaurants")
         resp.raise_for_status()
         places = []
         for p in resp.json().get("places", []):
             parsed = _parse_place(p)
             if parsed:
                 places.append(parsed)
+        log.debug_log(f"Nearby Places returned {len(places)} usable records.",
+                      "INFO", "BRNS.places_client.fetch_nearby_restaurants")
         return places
     except (requests.RequestException, KeyError, ValueError) as err:
         _log_api_error("places_search", err)
@@ -236,6 +252,8 @@ def fetch_by_profile_text(origin, req):
         terms.append(free_text)
     if not terms:
         return []
+    log.debug_log("Text Places request started.", "INFO",
+                  "BRNS.places_client.fetch_by_profile_text")
     query = " ".join(terms)
     if not any(w in query for w in _VENUE_WORDS):
         query += " food"          # 'halal chinese' -> 'halal chinese food'
@@ -266,6 +284,8 @@ def fetch_by_profile_text(origin, req):
             parsed = _parse_place(p)
             if parsed:
                 places.append(parsed)
+        log.debug_log(f"Text Places returned {len(places)} usable records.",
+                      "INFO", "BRNS.places_client.fetch_by_profile_text")
         return places
     except (requests.RequestException, KeyError, ValueError) as err:
         _log_api_error("places_profile_text", err)
@@ -366,6 +386,8 @@ def travel_times_matrix(origin, restaurants, mode):
     mode = 'walk' | 'drive'. NOTE: computeRouteMatrix returns a bare JSON ARRAY."""
     if not restaurants:
         return
+    log.debug_log(f"Route matrix requested for {len(restaurants)} candidates.",
+                  "INFO", "BRNS.places_client.travel_times_matrix")
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": config.GOOGLE_MAPS_API_KEY,
@@ -399,6 +421,9 @@ def travel_times_matrix(origin, restaurants, mode):
                 continue
     except (requests.RequestException, AttributeError, KeyError, ValueError) as err:
         _log_api_error(f"routes_matrix_{mode}", err)
+    routed = sum(r.get(f"{mode}_source") == "route" for r in restaurants)
+    log.debug_log(f"Route matrix supplied {routed} routes.", "INFO",
+                  "BRNS.places_client.travel_times_matrix")
 
 
 def _fill_travel_estimates(origin, restaurants):
@@ -413,6 +438,8 @@ def _fill_travel_estimates(origin, restaurants):
 
 def get_route(origin, destination, mode):
     """ONE on-demand call for the chosen restaurant. None on failure."""
+    log.debug_log("Directions request started.", "INFO",
+                  "BRNS.places_client.get_route")
     body = {
         "origin": {"location": {"latLng": {"latitude": origin[0], "longitude": origin[1]}}},
         "destination": {"location": {"latLng": {"latitude": destination[0], "longitude": destination[1]}}},
@@ -429,6 +456,8 @@ def get_route(origin, destination, mode):
         resp.raise_for_status()
         routes = resp.json().get("routes", [])
         if not routes:
+            log.debug_log("Directions returned no route.", "WARNING",
+                          "BRNS.places_client.get_route")
             return None
         route = routes[0]
         steps = []
@@ -437,10 +466,13 @@ def get_route(origin, destination, mode):
                 text = s.get("navigationInstruction", {}).get("instructions")
                 if text:
                     steps.append(text)
+        log.debug_log("Directions route returned.", "INFO",
+                      "BRNS.places_client.get_route")
         return {"duration_min": round(int(route["duration"].rstrip("s")) / 60),
                 "distance_m": route["distanceMeters"],
                 "steps": steps}
-    except (requests.RequestException, KeyError, ValueError):
+    except (requests.RequestException, KeyError, ValueError) as err:
+        _log_api_error("get_route", err)
         return None
 
 
@@ -457,6 +489,8 @@ def build_maps_link(origin, destination, mode):
 def build_candidates(origin, req, catalog):
     """Live Places search with catalog enrichment; retain the catalog fallback."""
     if not config.USE_LIVE_GOOGLE:
+        log.debug_log(f"Catalog fallback returned {len(catalog)} candidates.",
+                      "INFO", "BRNS.places_client.build_candidates")
         return [dict(r, source="offline catalog") for r in catalog]
     cuisine = (req.get("cuisine") or "any").lower()
     dietary = req.get("dietary_requirements") or []
@@ -466,13 +500,15 @@ def build_candidates(origin, req, catalog):
         places = fetch_by_profile_text(origin, req)
     from_dietary_search = bool(places and "halal" in dietary)
     if not places:                       # fallback: generic nearby search
+        log.debug_log("Text search empty; trying nearby Places.", "INFO",
+                      "BRNS.places_client.build_candidates")
         places = fetch_nearby_restaurants(origin, req)
     if not places:
         return []
     candidates, seen = [], set()
     for p in places:
         if not isinstance(p, dict) or "name" not in p:
-            _log_api_error("candidate_build", f"malformed place skipped: {p}")
+            _log_api_error("candidate_build", "malformed place skipped")
             continue
         c = enrich_place(p, catalog)
         if from_dietary_search:
@@ -483,4 +519,10 @@ def build_candidates(origin, req, catalog):
             candidates.append(c)
     travel_times_matrix(origin, candidates, req.get("mode", "walk"))
     _fill_travel_estimates(origin, candidates)
+    estimated = sum(c.get(f"{req.get('mode', 'walk')}_source") == "estimate"
+                    for c in candidates)
+    log.debug_log(
+        f"Built {len(candidates)} unique candidates; "
+        f"{estimated} travel estimates.", "INFO",
+        "BRNS.places_client.build_candidates")
     return candidates

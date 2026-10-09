@@ -13,7 +13,6 @@ import data_manager
 import ai_manager
 from support import email_delivery
 import logic_manager
-from support.debug_log import debug_log
 from sources.profile_schema import (
     CUISINES, CUISINE_FIELDS, OTHER_PREFERENCES, PREFERENCE_FIELDS,
     clean_text, normalize_email, normalize_username, validate_updates,
@@ -36,7 +35,7 @@ def read_input(prompt="You: "):
         return None
 
 
-def ask_yes_no(question):
+def ask_yes_no(question, config=None):
     """None cancels the pending update; an empty answer is never approval."""
     while True:
         value = read_input(question + " (yes/no): ")
@@ -46,6 +45,17 @@ def ask_yes_no(question):
             return True
         if value.lower() in {"no", "n"}:
             return False
+        if config and value and not value.startswith("/"):
+            suggested = ai_manager.interpret_search_choice(
+                value, ("yes", "no"), config)
+            if suggested:
+                answer = read_input(f"Did you mean {suggested}? (yes/no): ")
+                if _cancelled(answer):
+                    return None
+                if answer.lower() in {"yes", "y"}:
+                    return suggested == "yes"
+                if answer.lower() in {"no", "n"}:
+                    continue
         display_message("Please answer yes or no, or /cancel.")
 
 
@@ -240,14 +250,14 @@ def ask_search_location(config):
             f"Found: {location['label']} "
             f"({location['latitude']:.6f}, {location['longitude']:.6f})"
         )
-        confirmed = ask_yes_no("Is this your current location?")
+        confirmed = ask_yes_no("Is this your current location?", config)
         if confirmed is None:
             return None
         if confirmed:
             return location
 
 
-def ask_search_mode():
+def ask_search_mode(config=None):
     while True:
         value = read_input("Travel by walking or driving? (walk/drive, /cancel): ")
         if _cancelled(value):
@@ -257,6 +267,17 @@ def ask_search_mode():
             return "walk"
         if mode in {"drive", "driving"}:
             return "drive"
+        if config and value and not value.startswith("/"):
+            suggested = ai_manager.interpret_search_choice(
+                value, ("walk", "drive"), config)
+            if suggested:
+                answer = read_input(f"Did you mean {suggested}? (yes/no): ")
+                if _cancelled(answer):
+                    return None
+                if answer.lower() in {"yes", "y"}:
+                    return suggested
+                if answer.lower() in {"no", "n"}:
+                    continue
         display_message("Choose walk or drive.")
 
 
@@ -355,13 +376,30 @@ def ask_search_other(profile):
             display_message(error)
 
 
+def ask_search_intent(config):
+    """Collect today's natural-language request for BIS AI interpretation."""
+    while True:
+        value = read_input(
+            "What are you looking for today? Describe any extra wishes "
+            "(/cancel): "
+        )
+        if _cancelled(value):
+            return None
+        if not value and config.get("ai_bypass"):
+            return ""
+        try:
+            return clean_text(value, 500)
+        except ValueError:
+            display_message("Describe what you want today, or /cancel.")
+
+
 def collect_search(user, config):
     """Collect one search request without changing the saved user profile."""
     profile = user["preferences"]
     location = ask_search_location(config)
     if location is None:
         return None
-    mode = ask_search_mode()
+    mode = ask_search_mode(config)
     if mode is None:
         return None
     distance = ask_search_distance(profile, mode)
@@ -376,13 +414,17 @@ def collect_search(user, config):
     other = ask_search_other(profile)
     if other is None:
         return None
-    return {
+    today_request = ask_search_intent(config)
+    if today_request is None:
+        return None
+    request = {
         "origin": location, "mode": mode, "max_distance_km": distance,
         "cuisine": cuisine, "budget_per_person": budget,
         OTHER_PREFERENCES: other,
         "dietary_requirements": list(profile["dietary_requirements"] or []),
         "disliked_cuisines": list(profile["disliked_cuisines"] or []),
     }
+    return {"request": request, "today_request": today_request}
 
 
 def display_search_summary(request):
@@ -392,7 +434,12 @@ def display_search_summary(request):
     print(f"  Cuisine: {request['cuisine']}")
     print(f"  Budget: SGD {request['budget_per_person']}")
     print(f"  Other preferences: {', '.join(request[OTHER_PREFERENCES]) or 'none'}")
-    display_message("Searching restaurants...")
+
+
+def confirm_search_request(request, config=None):
+    """Require explicit approval of the interpreted live search."""
+    display_search_summary(request)
+    return ask_yes_no("Search with these choices?", config)
 
 
 def resolve_cuisine_token(token, field):

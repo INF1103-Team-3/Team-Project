@@ -479,21 +479,22 @@ def draw_flow_overview(path, reached, edges):
     brns_main_names = [name for name in ("search", "route_to")
                        if "BRNS.main." + name in reached]
     draw_main_card(draw, bis_main, "BIS.main", bis_main_names,
-                   "Collect → interpret → validate → JSON", "BIS")
+                   "Collect → AI intent → validate → confirm → JSON", "BIS")
     draw_main_card(draw, brns_main, "BRNS.main", brns_main_names,
-                   "Validate request → find and rank → optional route", "BRNS")
+                   "IO facts → AI reasons → Logic checks → Data stores", "BRNS")
 
     bis_details = (
-        ("1 · IO", "io_manager", ("select_user", "collect_action",
-                              "collect_search", "display_search_summary"),
-         "Collects today's search choices"),
+        ("1 · IO", "io_manager", ("collect_search", "ask_search_intent",
+                                  "confirm_search_request",
+                                  "display_search_summary"),
+         "Collects and confirms today's search"),
         ("2 · AI", "ai_manager", ("interpret_search_request", "process",
                                   "interpret_location", "_call_openrouter"),
-         "Prioritizes supplied preferences"),
+         "Interprets today's free-text wish"),
         ("3 · Logic", "logic_manager", ("validate_search_request",
                                         "apply_updates", "next_field",
                                         "parse_local_answer"),
-         "Validates the confirmed request"),
+         "Protects confirmed choices"),
         ("4 · Data", "data_manager", ("serialize_search_request",
                                       "save_preferences", "resolve_location",
                                       "get_state"),
@@ -506,11 +507,11 @@ def draw_flow_overview(path, reached, edges):
         ("2 · AI", "ai_manager", ("recommend_candidates",
                                   "_call_openrouter", "_call_gemini",
                                   "parse_json_reply"),
-         "Orders candidate IDs"),
+         "Orders IDs with reason codes"),
         ("3 · Logic", "logic_manager", ("rank_restaurants",
                                         "decide_outcome",
                                         "normalize_candidate"),
-         "Validates AI ordering and facts"),
+         "Verifies AI reasons and requirements"),
         ("4 · Data", "data_manager", ("save_search_results",
                                       "save_history", "load_history",
                                       "_save_json"),
