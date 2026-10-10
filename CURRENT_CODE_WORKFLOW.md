@@ -176,7 +176,8 @@ BIS.main.run_search()
 ```
 
 `collect_search()` asks for **today's** location, travel mode, travel distance,
-cuisine, budget, and one optional special-request answer. Enter means no extra
+cuisine (or `none` for any cuisine), budget, and one optional special-request
+answer. Enter means no extra
 wish. Earlier requests can be selected by number or `all`; new English text
 is checked locally, then reviewed by BIS AI for English wording. Any proposed
 correction requires confirmation before the search interpretation call.
@@ -185,6 +186,12 @@ search; the other today's choices do not overwrite the profile. Dietary
 requirements and disliked cuisines are copied from that profile. A walking
 search offers the saved walking distance as the Enter default. Driving
 requires a fresh distance.
+For a natural budget or distance answer, BIS AI extracts one number, BIS Logic
+validates its range, and BIS IO asks the user to confirm it.
+At every CLI prompt, `/help` displays help and returns to the same question.
+Free-text profile answers receive an AI wording review; proposed corrections
+require confirmation. BIS tries its configured model first, then its own
+Gemini and OpenRouter model chain when it needs a fallback.
 
 For a location, BIS accepts Singapore coordinates, a six-digit postal code,
 an address, or a landmark. It checks the shared geocode cache first. If an

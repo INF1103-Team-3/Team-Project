@@ -89,6 +89,7 @@ EDIT_ALIASES = {
 HELP_TEXT = """What would you like to do?
 /profile — View your saved profile.
 /search — Choose today's search options and describe what you want.
+/color off — Turn off terminal colors for your account. Use /color on to restore them.
 /edit — See how to change an answer, such as your budget.
 /add-location — Add an area to your saved locations.
 /remove-location — Remove an area from your saved locations.
@@ -143,6 +144,10 @@ other: Comma-separated preferences (each up to 100 characters), or none.
 """
 
 COMMAND_HELP = {
+    "color": """/color off — Disable terminal colors for your account.
+/color on — Enable terminal colors again.
+You can use either command at any prompt after signing in. The setting is
+saved for your next session and does not change your food preferences.""",
     "edit": EDIT_HELP,
     "profile": """/profile — View your saved profile.
 Accepted values: None; type the command on its own.
@@ -152,14 +157,18 @@ This only displays your profile; it does not change your answers.""",
 It starts automatically once when a profile becomes complete, or on the next
 resume if it was already complete. Run /search again for new choices. You will
 confirm your current location,
-then choose walk/drive, maximum distance, one cuisine, today's budget, and
+then choose walk/drive, maximum distance, one cuisine or none, today's budget, and
 one optional special request. Press Enter for none, select a previous request
 by number or all, or describe a new request in English. BIS checks the input,
 uses AI to review new wording, and asks before applying a correction. BIS AI
+can interpret natural budget and distance answers, such as "i think 12" or
+"about 500 metres"; confirm the proposed number before it is used. BIS AI
 then interprets the request; confirm its proposed search before BRNS runs.
 Confirmed new special requests are saved for the next search; other today's
 choices do not change your saved profile. Live search needs BIS and BRNS AI;
-chatbot test mode skips both AI calls and BRNS.
+chatbot test mode skips both AI calls and BRNS. The location prompt accepts a
+Singapore six-digit postal code, address, landmark, or latitude,longitude.
+Type /help at any prompt to see help and return to that prompt.
 Example: /search""",
     "add-location": """/add-location — Add areas to your saved locations.
 Accepted values: No value after the command. When prompted, enter areas
@@ -191,7 +200,7 @@ Example: /quit
 You can resume your saved account by email the next time you start.""",
     "help": """/help — Show commands or explain one command.
 Accepted values: No value for the overview, or one command name:
-profile, search, edit, add-location, remove-location, reset, logout, quit,
+profile, search, color, edit, add-location, remove-location, reset, logout, quit,
 exit, help.
 Example: /help edit explains editing options and accepted answers.
 Example: /help logout explains how to switch accounts.

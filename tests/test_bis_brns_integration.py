@@ -1,9 +1,11 @@
 """Regression checks for the BIS to BRNS request boundary."""
 
 import json
+import io
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -19,6 +21,8 @@ from BRNS import logic_manager as brns_logic
 from BRNS import main as brns_main
 from BRNS import places_client as brns_places
 from shared import debug_log as shared_log
+from shared import geocode_cache
+from shared import terminal_ui
 import main as bis_main
 from sources.profile_schema import empty_preferences
 
@@ -58,6 +62,152 @@ class IntegrationTests(unittest.TestCase):
         self.saved_preferences = saved_preferences.start()
         self.addCleanup(saved_preferences.stop)
 
+    def test_color_command_persists_per_user_and_works_inside_prompt(self):
+        from BIS.sources.prompts import HELP_TEXT
+
+        self.assertIn("/color off", HELP_TEXT)
+        profile = empty_preferences()
+        profile.update(location=["pasir ris"], max_distance_km=2,
+                       max_travel_time_minutes=40, budget_per_person=10,
+                       dietary_requirements=[], liked_cuisines=["malay"],
+                       disliked_cuisines=[], other_preferences=[])
+        user = {"userID": "test", "username": "John",
+                "preferences": profile}
+        display_state = {}
+
+        def get_state(section, user_id):
+            return display_state.get(user_id) if section == "display" else None
+
+        def set_state(section, user_id, value):
+            self.assertEqual(section, "display")
+            display_state[user_id] = value
+
+        with (
+            patch.object(bis_main.data_manager, "get_state",
+                         side_effect=get_state),
+            patch.object(bis_main.data_manager, "set_state",
+                         side_effect=set_state),
+            patch.object(bis_main, "run_search"),
+            patch("builtins.input", side_effect=["/color off", "/quit"]),
+        ):
+            self.assertEqual(bis_main.run_session(user, {"ai_bypass": True}),
+                             "exit")
+        self.assertEqual(display_state["test"], {"color_enabled": False})
+        self.assertTrue(terminal_ui.colors_enabled())
+
+        loaded = []
+        with (
+            patch.object(bis_main.data_manager, "get_state",
+                         side_effect=get_state),
+            patch.object(bis_main.data_manager, "set_state",
+                         side_effect=set_state),
+            patch.object(bis_main, "run_search"),
+            patch.object(bis_main.io_manager, "display_welcome",
+                         side_effect=lambda user: loaded.append(
+                             terminal_ui.colors_enabled())),
+            patch("builtins.input", side_effect=["/color on", "/quit"]),
+        ):
+            self.assertEqual(bis_main.run_session(user, {"ai_bypass": True}),
+                             "exit")
+        self.assertEqual(loaded, [False])
+        self.assertIsNone(display_state["test"])
+        self.assertTrue(terminal_ui.colors_enabled())
+
+    def test_alternatives_are_offered_before_display_and_route(self):
+        profile = empty_preferences()
+        profile.update(location=["pasir ris"], max_distance_km=2,
+                       max_travel_time_minutes=40, budget_per_person=10,
+                       dietary_requirements=[], liked_cuisines=["malay"],
+                       disliked_cuisines=[], other_preferences=[])
+        session = {"user": {"userID": "test", "preferences": profile}}
+        restaurant = {"name": "Nearby Cafe", "address": "Pasir Ris",
+                      "lat": 1.37, "lng": 103.95}
+        results = {"matches": [], "alternatives": [{
+            "restaurant": restaurant, "reasons": ["! exceeds budget"]}],
+            "mode": "walk", "requested_dietary": []}
+        with (
+            patch.object(bis_main.data_manager, "get_state", return_value=None),
+            patch.object(bis_main.data_manager, "set_state"),
+            patch.object(bis_main.io_manager, "collect_search",
+                         return_value={"request": request(), "today_request": ""}),
+            patch.object(bis_main.ai_manager, "interpret_search_request",
+                         return_value=request()),
+            patch.object(bis_main.io_manager, "confirm_search_request",
+                         return_value=True),
+            patch.object(bis_main.brns_main, "search", return_value=results),
+            patch.object(bis_main.io_manager, "display_message") as message,
+            patch.object(bis_main.io_manager, "ask_yes_no",
+                         side_effect=[False, True]) as ask,
+            patch.object(bis_main.brns_io, "show_results") as show,
+            patch.object(bis_main.io_manager, "read_input", return_value="1") as read,
+            patch.object(bis_main.brns_main, "route_to",
+                         return_value={"name": "Nearby Cafe", "route": None,
+                                       "link": "map", "mode": "walk"}) as route,
+            patch.object(bis_main.brns_io, "show_route"),
+        ):
+            bis_main.run_search(session, {"ai_bypass": False})
+            self.assertTrue(any("No restaurants matched" in str(call.args[0])
+                                for call in message.call_args_list))
+            ask.assert_called_once_with("Show 1 alternative?",
+                                        {"ai_bypass": False})
+            show.assert_not_called()
+            read.assert_not_called()
+            route.assert_not_called()
+
+            ask.reset_mock()
+            bis_main.run_search(session, {"ai_bypass": False})
+            show.assert_called_once_with(results, announce_no_matches=False)
+            route.assert_called_once_with(restaurant, request())
+
+    def test_result_cards_separate_matches_alternatives_and_cautions(self):
+        match = {"restaurant": {"name": "Rice House", "address": "Market",
+                                 "cuisines": ["chinese"], "avg_price": 8,
+                                 "walk_meters": 500},
+                 "reasons": ["matches selected cuisine"]}
+        alternative = {"restaurant": {"name": "Noodle House",
+                                       "address": "Main Road",
+                                       "cuisines": ["chinese"],
+                                       "price_start": 12,
+                                       "halal_status": "unofficial"},
+                       "reasons": ["! above your budget"]}
+        output = io.StringIO()
+        with redirect_stdout(output):
+            brns_io.show_results({"matches": [match],
+                                  "alternatives": [alternative],
+                                  "mode": "walk", "requested_dietary": ["halal"]})
+        shown = output.getvalue()
+        self.assertIn("Matches (1)", shown)
+        self.assertIn("Alternatives (1)", shown)
+        self.assertIn("  1. Rice House", shown)
+        self.assertIn("  2. Noodle House", shown)
+        self.assertIn("Why it fits: matches selected cuisine", shown)
+        self.assertIn("Check: above your budget", shown)
+        self.assertIn("Halal: Unofficial indication; not checked", shown)
+        self.assertNotIn("! above", shown)
+
+    def test_unofficial_halal_is_a_single_caution_not_a_positive_reason(self):
+        candidate = {"name": "R&J Cosy Corner", "cuisines": [],
+                     "halal_hint": True, "price_start": 10,
+                     "walk_meters": 3910, "walk_source": "route",
+                     "rating": 4.2}
+        wanted = dict(request(), max_distance_km=5,
+                      dietary_requirements=["halal", "vegetarian"])
+        result = brns_logic.rank_restaurants(
+            [candidate], wanted,
+            [{"id": 0, "reason_codes": ["well_rated", "halal_hint_unofficial"]}])
+        reasons = result["alternatives"][0]["reasons"]
+        self.assertEqual(reasons.count("! Halal (unofficial; not checked)"), 1)
+        self.assertNotIn("Halal (unofficial; not checked)", reasons)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            brns_io.show_results(result)
+        shown = output.getvalue()
+        self.assertEqual(shown.count("Halal:"), 1)
+        self.assertEqual(shown.count("cuisine unavailable"), 0)
+        self.assertIn("Cuisine: Unavailable", shown)
+        self.assertIn("Check: vegetarian options unverified", shown)
+        self.assertIn("Why it fits: rated at least 4 out of 5", shown)
+
     def test_search_menu_typo_requires_confirmation(self):
         from BIS import io_manager as bis_io
 
@@ -91,8 +241,11 @@ class IntegrationTests(unittest.TestCase):
         from BIS import ai_manager as bis_ai
 
         config = {"ai_bypass": False, "openrouter_model": "test-model"}
-        with patch.object(bis_ai, "_call_openrouter",
-                          return_value='{"choice":"fly"}'):
+        with (
+            patch.object(bis_ai, "_call_openrouter",
+                         return_value='{"choice":"fly"}'),
+            patch.object(bis_ai, "MODEL_CHAIN", []),
+        ):
             self.assertIsNone(bis_ai.interpret_search_choice(
                 "qalk", ("walk", "drive"), config))
         with patch.object(bis_ai, "_call_openrouter") as call:
@@ -114,12 +267,183 @@ class IntegrationTests(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 brns_io.accept_bis_json(dict(valid, **change))
 
+    def test_search_accepts_no_cuisine_without_cuisine_penalty(self):
+        from BIS import io_manager as bis_io
+        from BIS import logic_manager as bis_logic
+
+        with patch.object(bis_io, "read_input", return_value="none"):
+            self.assertEqual(bis_io.ask_search_cuisine(empty_preferences()),
+                             "none")
+        no_cuisine = dict(request(), cuisine="none")
+        self.assertEqual(bis_logic.validate_search_request(no_cuisine)[
+            "cuisine"], "none")
+        self.assertEqual(brns_io.accept_bis_json(no_cuisine)["cuisine"],
+                         "none")
+        candidate = {"cuisines": ["malay"], "dietary_requirements": [],
+                     "halal_status": "unverified", "avg_price": 8,
+                     "walk_meters": 500, "walk_source": "route"}
+        no_cuisine["dietary_requirements"] = []
+        outcome, _, reasons = brns_logic.decide_outcome(candidate, no_cuisine)
+        self.assertEqual(outcome, "match")
+        self.assertFalse(any("cuisine" in reason for reason in reasons))
+
+    def test_help_inside_a_prompt_preserves_the_prompt(self):
+        from BIS import io_manager as bis_io
+
+        with (
+            patch("builtins.input", side_effect=["/help search", "none"]),
+            patch.object(bis_io, "display_help") as help_message,
+        ):
+            self.assertEqual(bis_io.read_input("Cuisine: "), "none")
+        help_message.assert_called_once_with("search")
+
+    def test_search_location_accepts_postal_and_coordinates_directly(self):
+        from BIS import io_manager as bis_io
+
+        for raw, latitude, longitude in (
+                ("40197", 1.392471, 103.903706),
+                ("540197", 1.392471, 103.903706),
+                ("1.392471,103.903706", 1.392471, 103.903706)):
+            with (
+                self.subTest(raw=raw),
+                patch.object(bis_io, "read_input", return_value=raw),
+                patch.object(bis_io.data_manager, "lookup_cached_location",
+                             return_value=None),
+                patch.object(bis_io.ai_manager, "interpret_location") as ai,
+                patch.object(bis_io.data_manager, "resolve_location",
+                             return_value={"query": raw, "label": raw,
+                                           "latitude": latitude,
+                                           "longitude": longitude}) as resolve,
+                patch.object(bis_io.data_manager, "remember_location"),
+                patch.object(bis_io, "ask_yes_no", return_value=True),
+            ):
+                location = bis_io.ask_search_location({})
+            self.assertEqual(location["latitude"], latitude)
+            resolve.assert_called_once_with(raw, "")
+            ai.assert_not_called()
+
+    def test_locked_geocode_cache_does_not_abort_location_search(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cache_file = Path(directory) / "geocode_cache.json"
+            original = '{"existing": [1.39, 103.9]}\n'
+            cache_file.write_text(original, encoding="utf-8")
+            with (
+                patch.object(geocode_cache, "CACHE_FILE", cache_file),
+                patch.object(geocode_cache.os, "replace",
+                             side_effect=PermissionError(5, "Access denied")) as replace,
+                patch.object(geocode_cache.time, "sleep"),
+            ):
+                saved = geocode_cache.remember(
+                    ("530912",), 1.392471, 103.903706)
+            self.assertFalse(saved)
+            self.assertEqual(replace.call_count, 3)
+            self.assertEqual(cache_file.read_text(encoding="utf-8"), original)
+            self.assertEqual(list(Path(directory).glob(".geocode-*.tmp")), [])
+
+    def test_geocode_cache_retries_a_temporary_windows_lock(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cache_file = Path(directory) / "geocode_cache.json"
+            original_replace = geocode_cache.os.replace
+            attempts = []
+
+            def replace_after_unlock(source, target):
+                attempts.append((source, target))
+                if len(attempts) == 1:
+                    raise PermissionError(5, "Access denied")
+                return original_replace(source, target)
+
+            with (
+                patch.object(geocode_cache, "CACHE_FILE", cache_file),
+                patch.object(geocode_cache.os, "replace",
+                             side_effect=replace_after_unlock),
+                patch.object(geocode_cache.time, "sleep"),
+            ):
+                saved = geocode_cache.remember(
+                    ("530912",), 1.392471, 103.903706)
+            self.assertTrue(saved)
+            self.assertEqual(len(attempts), 2)
+            self.assertEqual(json.loads(cache_file.read_text(encoding="utf-8")),
+                             {"530912": [1.392471, 103.903706]})
+
+    def test_bis_uses_own_model_chain_after_primary_failure(self):
+        from BIS import ai_manager as bis_ai
+
+        with (
+            patch.object(bis_ai, "_call_openrouter",
+                         side_effect=RuntimeError("primary failed")),
+            patch.object(bis_ai, "MODEL_CHAIN", [
+                {"provider": "gemini", "model": "test-gemini"}]),
+            patch.object(brns_config, "MODEL_CHAIN", []),
+            patch.object(brns_ai, "_call_gemini",
+                         side_effect=AssertionError("BRNS must not be called")),
+            patch.object(bis_ai, "_call_gemini",
+                         return_value='{"choice":"walk"}') as backup,
+        ):
+            result = bis_ai.interpret_search_choice(
+                "qalk", ("walk", "drive"),
+                {"ai_bypass": False, "openrouter_model": "primary",
+                 "gemini_api_key": "test-key"})
+        self.assertEqual(result, "walk")
+        backup.assert_called_once()
+
+    def test_bis_gemini_transport_uses_bis_configuration(self):
+        from BIS import ai_manager as bis_ai
+        from unittest.mock import Mock
+
+        response = Mock(status_code=200)
+        response.json.return_value = {"candidates": [{"content": {
+            "parts": [{"text": '{"choice":"walk"}'}]}}]}
+        payload = {"messages": [
+            {"role": "system", "content": "Return JSON"},
+            {"role": "user", "content": "qalk"}], "temperature": 0}
+        with patch.object(bis_ai.requests, "post", return_value=response) as post:
+            result = bis_ai._call_gemini(
+                payload, "test-gemini", {"gemini_api_key": "bis-key"})
+        self.assertEqual(result, '{"choice":"walk"}')
+        self.assertEqual(post.call_args.kwargs["headers"]["x-goog-api-key"],
+                         "bis-key")
+
+    def test_bis_falls_back_after_invalid_model_choice(self):
+        from BIS import ai_manager as bis_ai
+
+        with (
+            patch.object(bis_ai, "_call_openrouter",
+                         return_value='{"choice":"fly"}'),
+            patch.object(bis_ai, "MODEL_CHAIN", [
+                {"provider": "gemini", "model": "test-gemini"}]),
+            patch.object(bis_ai, "_call_gemini",
+                         return_value='{"choice":"drive"}'),
+        ):
+            self.assertEqual(bis_ai.interpret_search_choice(
+                "driev", ("walk", "drive"),
+                {"ai_bypass": False, "openrouter_model": "primary",
+                 "gemini_api_key": "test-key"}),
+                "drive")
+
+    def test_profile_free_text_spellcheck_needs_confirmation(self):
+        from BIS import io_manager as bis_io
+
+        user = {"preferences": empty_preferences()}
+        with (
+            patch.object(bis_io, "read_input", return_value="spciy food"),
+            patch.object(bis_io.ai_manager, "review_prompt_text",
+                         return_value="spicy food") as review,
+            patch.object(bis_io, "ask_yes_no", return_value=True) as confirm,
+        ):
+            action = bis_io.collect_action(
+                user, {"ai_bypass": False}, field="other_preferences")
+        self.assertEqual(action["updates"]["other_preferences"],
+                         ["spicy food"])
+        review.assert_called_once()
+        confirm.assert_called_once()
+
     def test_search_collection_uses_one_optional_wish_question(self):
         from BIS import io_manager as bis_io
 
         profile = empty_preferences()
         profile.update(dietary_requirements=["halal"],
-                       disliked_cuisines=["western"])
+                       disliked_cuisines=["western"],
+                       liked_cuisines=["malay"])
         user = {"preferences": profile}
         with (
             patch.object(bis_io, "ask_search_location",
@@ -138,6 +462,117 @@ class IntegrationTests(unittest.TestCase):
         with patch.object(bis_io, "read_input", return_value=""):
             self.assertEqual(bis_io.ask_search_wishes(profile, {}),
                              {"selected": [], "text": ""})
+
+    def test_new_search_cuisine_can_be_saved_or_used_once(self):
+        from BIS import io_manager as bis_io
+
+        profile = empty_preferences()
+        profile.update(liked_cuisines=["chinese"],
+                       disliked_cuisines=["thai"], dietary_requirements=[])
+        user = {"preferences": profile}
+        with (
+            patch.object(bis_io, "ask_search_location",
+                         return_value=request()["origin"]),
+            patch.object(bis_io, "ask_search_mode", return_value="walk"),
+            patch.object(bis_io, "ask_search_distance", return_value=2),
+            patch.object(bis_io, "ask_search_cuisine", return_value="thai"),
+            patch.object(bis_io, "ask_search_budget", return_value=10),
+            patch.object(bis_io, "ask_search_wishes",
+                         return_value={"selected": [], "text": ""}),
+            patch.object(bis_io, "ask_yes_no", side_effect=[True, False]) as ask,
+        ):
+            saved = bis_io.collect_search(user, {})
+            once = bis_io.collect_search(user, {})
+        self.assertEqual(saved["save_cuisine"], "thai")
+        self.assertIsNone(once["save_cuisine"])
+        self.assertEqual(once["request"]["cuisine"], "thai")
+        self.assertEqual(once["request"]["disliked_cuisines"], [])
+        self.assertIn("remove it from disliked cuisines",
+                      ask.call_args_list[0].args[0])
+
+        session = {"user": {"userID": "test", "preferences": profile}}
+        bis_main.remember_search_cuisine(session, "thai", {})
+        self.assertEqual(session["user"]["preferences"]["liked_cuisines"],
+                         ["chinese", "thai"])
+        self.assertEqual(session["user"]["preferences"]["disliked_cuisines"],
+                         [])
+        self.saved_preferences.assert_called_with("test", session["user"][
+            "preferences"], {})
+
+    def test_search_saves_approved_new_cuisine_to_session(self):
+        profile = empty_preferences()
+        profile.update(location=["pasir ris"], max_distance_km=2,
+                       max_travel_time_minutes=40, budget_per_person=10,
+                       dietary_requirements=[], liked_cuisines=["chinese"],
+                       disliked_cuisines=[], other_preferences=[])
+        session = {"user": {"userID": "test", "preferences": profile}}
+        choice = dict(request(), cuisine="thai", dietary_requirements=[],
+                      other_preferences=[])
+        with (
+            patch.object(bis_main.data_manager, "get_state", return_value=None),
+            patch.object(bis_main.data_manager, "set_state"),
+            patch.object(bis_main.io_manager, "collect_search",
+                         return_value={"request": choice, "today_request": "",
+                                       "save_cuisine": "thai"}),
+            patch.object(bis_main.io_manager, "display_search_summary"),
+        ):
+            bis_main.run_search(session, {"ai_bypass": True})
+        self.assertEqual(session["user"]["preferences"]["liked_cuisines"],
+                         ["chinese", "thai"])
+
+    def test_search_budget_interprets_natural_amount_with_confirmation(self):
+        from BIS import io_manager as bis_io
+
+        profile = empty_preferences()
+        profile["budget_per_person"] = 10
+        with (
+            patch.object(bis_io, "read_input", return_value="i think 12"),
+            patch.object(bis_io.ai_manager, "interpret_search_number",
+                         return_value=12) as interpret,
+            patch.object(bis_io, "ask_yes_no", return_value=True) as confirm,
+        ):
+            self.assertEqual(bis_io.ask_search_budget(
+                profile, {"ai_bypass": False}), 12)
+        interpret.assert_called_once_with(
+            "i think 12", "budget_per_person", {"ai_bypass": False})
+        confirm.assert_called_once()
+
+        with (
+            patch.object(bis_io, "read_input",
+                         side_effect=["i think 12", "13"]),
+            patch.object(bis_io.ai_manager, "interpret_search_number",
+                         return_value=12),
+            patch.object(bis_io, "ask_yes_no", return_value=False),
+        ):
+            self.assertEqual(bis_io.ask_search_budget(
+                profile, {"ai_bypass": False}), 13)
+
+    def test_search_distance_interprets_natural_units_with_confirmation(self):
+        from BIS import io_manager as bis_io
+
+        with (
+            patch.object(bis_io, "read_input",
+                         return_value="about 500 metres"),
+            patch.object(bis_io.ai_manager, "interpret_search_number",
+                         return_value=0.5) as interpret,
+            patch.object(bis_io, "ask_yes_no", return_value=True),
+        ):
+            self.assertEqual(bis_io.ask_search_distance(
+                empty_preferences(), "drive", {"ai_bypass": False}), 0.5)
+        interpret.assert_called_once()
+
+    def test_search_number_ai_rejects_non_numeric_reply(self):
+        from BIS import ai_manager as bis_ai
+
+        with (
+            patch.object(bis_ai, "_call_openrouter",
+                         return_value='{"value":true}'),
+            patch.object(bis_ai, "MODEL_CHAIN", []),
+        ):
+            with self.assertRaises(RuntimeError):
+                bis_ai.interpret_search_number(
+                    "i think 12", "budget_per_person",
+                    {"openrouter_model": "test"})
 
     def test_special_request_validation_and_reuse(self):
         from BIS import io_manager as bis_io
@@ -189,9 +624,12 @@ class IntegrationTests(unittest.TestCase):
     def test_special_request_ai_review_rejects_changed_ok_response(self):
         from BIS import ai_manager as bis_ai
 
-        with patch.object(bis_ai, "_call_openrouter",
-                          return_value='{"status":"ok","text":"new wish"}'):
-            with self.assertRaisesRegex(RuntimeError, "Could not check"):
+        with (
+            patch.object(bis_ai, "_call_openrouter",
+                         return_value='{"status":"ok","text":"new wish"}'),
+            patch.object(bis_ai, "MODEL_CHAIN", []),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "models are unavailable"):
                 bis_ai.review_special_request(
                     "chicken rice", {"openrouter_model": "test"})
 

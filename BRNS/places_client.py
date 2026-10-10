@@ -246,7 +246,7 @@ def fetch_by_profile_text(origin, req):
     dietary = req.get("dietary_requirements") or []
     free_text = (req.get("free_text") or "").strip().lower()[:200]
     terms = list(dietary)
-    if cuisine not in ("any", ""):
+    if cuisine not in ("any", "none", ""):
         terms.append(cuisine)
     if free_text:
         terms.append(free_text)
@@ -496,7 +496,7 @@ def build_candidates(origin, req, catalog):
     dietary = req.get("dietary_requirements") or []
     free_text = (req.get("free_text") or "").strip()
     places = []
-    if cuisine not in ("any", "") or dietary or free_text:
+    if cuisine not in ("any", "none", "") or dietary or free_text:
         places = fetch_by_profile_text(origin, req)
     from_dietary_search = bool(places and "halal" in dietary)
     if not places:                       # fallback: generic nearby search

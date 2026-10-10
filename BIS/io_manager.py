@@ -13,15 +13,24 @@ import data_manager
 import ai_manager
 from support import email_delivery
 import logic_manager
+from shared import terminal_ui as ui
 from sources.profile_schema import (
     CUISINES, CUISINE_FIELDS, OTHER_PREFERENCES, PREFERENCE_FIELDS,
     clean_text, normalize_email, normalize_username, validate_updates,
     validate_value,
 )
 
+_color_handler = None
 
-def display_message(message):
-    print(f"BiteFinder: {message}")
+
+def set_color_handler(handler):
+    """Bind the current account's persisted color command to all prompts."""
+    global _color_handler
+    _color_handler = handler
+
+
+def display_message(message, role="body"):
+    ui.message(message, "error" if isinstance(message, Exception) else role)
 
 
 def display_debug(message):
@@ -29,10 +38,28 @@ def display_debug(message):
 
 
 def read_input(prompt="You: "):
-    try:
-        return input(prompt).strip()
-    except (EOFError, KeyboardInterrupt):
-        return None
+    while True:
+        try:
+            value = ui.read_input(prompt).strip()
+        except (EOFError, KeyboardInterrupt):
+            return None
+        lowered = " ".join(value.lower().split())
+        if lowered == "/help":
+            display_help()
+            continue
+        if lowered.startswith("/help "):
+            display_help(lowered[6:].lstrip("/"))
+            continue
+        if lowered in {"/color off", "/color on"}:
+            if _color_handler is None:
+                display_message("Sign in before changing your color setting.")
+            else:
+                _color_handler(lowered == "/color on")
+            continue
+        if lowered == "/color" or lowered.startswith("/color "):
+            display_help("color")
+            continue
+        return value
 
 
 def ask_yes_no(question, config=None):
@@ -85,25 +112,30 @@ def format_preference_value(field, value):
 
 
 def display_profile(user):
-    print(f"Username: {user['username'] or 'Not answered'}")
+    ui.section("Your profile")
+    ui.field("Username", user['username'] or 'Not answered', indent=0)
     for field in PREFERENCE_FIELDS:
         rendered = format_preference_value(field, user["preferences"][field])
-        print(f"{LABELS[field]}: {rendered}")
+        ui.field(LABELS[field], rendered, indent=0)
     if user["preferences"]["max_distance_km"] is not None:
-        print("Conversions are approximate: 1 km ≈ 20 minutes on foot.")
+        ui.line("Conversions are approximate: 1 km ≈ 20 minutes on foot.",
+                "muted")
 
 
 def display_help(topic=None):
     """Show brief command help or detailed editing instructions."""
     if topic is None:
-        print(HELP_TEXT)
+        ui.section("Help")
+        ui.line(HELP_TEXT, highlight_commands=True)
         return
     if topic == "edit_hint":
-        print(EDIT_HINT)
+        ui.section("Editing preferences")
+        ui.line(EDIT_HINT, highlight_commands=True)
         return
-    print(COMMAND_HELP.get(
+    ui.section(f"Help: {topic}")
+    ui.line(COMMAND_HELP.get(
         topic, "Unknown help topic. Type /help to see available commands.",
-    ))
+    ), highlight_commands=True)
 
 
 def display_welcome(user):
@@ -130,7 +162,8 @@ def request_verification(user, config):
 def verify_email_interactively(user, config):
     if user["email_verified"] or config.get("smtp_bypass"):
         if not user["email_verified"]:
-            display_message("SMTP verification bypass is enabled for testing.")
+            display_message("SMTP verification bypass is enabled for testing.",
+                            role="bypass")
         return user
     user_id = user["userID"]
     challenge = get_verification(user_id)
@@ -196,7 +229,10 @@ def complete_account(user, config):
 
 def select_user(config):
     while True:
-        print("\n1. Sign up\n2. Resume by email\n3. Quit")
+        ui.section("Welcome to BiteFinder")
+        ui.item(1, "Sign up")
+        ui.item(2, "Resume by email")
+        ui.item(3, "Quit")
         choice = read_input("Choose 1, 2, or 3: ")
         if choice is None or choice.lower() in {
             "3", "quit", "exit", "/quit", "/exit",
@@ -246,10 +282,10 @@ def ask_search_location(config):
         except (ValueError, RuntimeError, OSError) as error:
             display_message(error)
             continue
-        print(
+        ui.line(
             f"Found: {location['label']} "
-            f"({location['latitude']:.6f}, {location['longitude']:.6f})"
-        )
+            f"({location['latitude']:.6f}, {location['longitude']:.6f})",
+            "success")
         confirmed = ask_yes_no("Is this your current location?", config)
         if confirmed is None:
             return None
@@ -271,17 +307,16 @@ def ask_search_mode(config=None):
             suggested = ai_manager.interpret_search_choice(
                 value, ("walk", "drive"), config)
             if suggested:
-                answer = read_input(f"Did you mean {suggested}? (yes/no): ")
-                if _cancelled(answer):
+                confirmed = ask_yes_no(f"Did you mean {suggested}?", config)
+                if confirmed is None:
                     return None
-                if answer.lower() in {"yes", "y"}:
+                if confirmed:
                     return suggested
-                if answer.lower() in {"no", "n"}:
-                    continue
+                continue
         display_message("Choose walk or drive.")
 
 
-def ask_search_distance(profile, mode):
+def ask_search_distance(profile, mode, config=None):
     default = profile["max_distance_km"] if mode == "walk" else None
     while True:
         hint = f" [Enter = {default:g} km from profile]" if default else ""
@@ -297,37 +332,64 @@ def ask_search_distance(profile, mode):
             except ValueError as error:
                 display_message(error)
                 continue
+        if value and config and not config.get("ai_bypass"):
+            try:
+                suggested = ai_manager.interpret_search_number(
+                    value, "max_distance_km", config)
+                if suggested is not None:
+                    suggested = validate_value("max_distance_km", suggested)
+                    confirmed = ask_yes_no(
+                        f"Use {suggested:g} km as your maximum {mode} distance?",
+                        config)
+                    if confirmed is None:
+                        return None
+                    if confirmed:
+                        return suggested
+                    continue
+            except (RuntimeError, ValueError) as error:
+                display_message(error)
+                continue
         display_message("Enter a positive distance in km, such as 2 or 2.5 km.")
 
 
-def ask_search_cuisine(profile):
+def ask_search_cuisine(profile, config=None):
     liked = profile["liked_cuisines"] or []
     if liked:
-        print("Saved liked cuisines:")
+        ui.section("Saved liked cuisines")
         for number, cuisine in enumerate(liked, 1):
-            print(f"  {number}. {cuisine.title()}")
+            ui.item(number, cuisine.title())
     while True:
         value = read_input(
-            "Choose one number or enter a new cuisine (/cancel): "
+            "Choose one saved number, cuisine, or none (/cancel): "
         )
         if _cancelled(value):
             return None
         if value.isdigit() and 1 <= int(value) <= len(liked):
             return liked[int(value) - 1]
         cuisine = value.lower().strip()
+        if cuisine == "none":
+            return "none"
         if cuisine in CUISINES:
             return cuisine
-        suggestions = logic_manager.cuisine_suggestions(cuisine)
+        suggestions = []
+        if config and not config.get("ai_bypass"):
+            suggested = ai_manager.interpret_search_choice(
+                cuisine, (*CUISINES, "none"), config)
+            if suggested:
+                suggestions = [suggested]
+        if not suggestions:
+            suggestions = logic_manager.cuisine_suggestions(cuisine)
         if len(suggestions) == 1:
-            confirmed = ask_yes_no(f"Did you mean {suggestions[0].title()}?")
+            confirmed = ask_yes_no(
+                f"Did you mean {suggestions[0].title()}?", config)
             if confirmed is None:
                 return None
             if confirmed:
                 return suggestions[0]
-        display_message("Choose one saved number or one supported cuisine name.")
+        display_message("Choose a saved number, supported cuisine, or none.")
 
 
-def ask_search_budget(profile):
+def ask_search_budget(profile, config=None):
     default = profile["budget_per_person"]
     while True:
         value = read_input(
@@ -344,6 +406,22 @@ def ask_search_budget(profile):
             except ValueError as error:
                 display_message(error)
                 continue
+        if config and not config.get("ai_bypass"):
+            try:
+                suggested = ai_manager.interpret_search_number(
+                    value, "budget_per_person", config)
+                if suggested is not None:
+                    suggested = validate_value("budget_per_person", suggested)
+                    confirmed = ask_yes_no(
+                        f"Use SGD {suggested:g} as today's budget?", config)
+                    if confirmed is None:
+                        return None
+                    if confirmed:
+                        return suggested
+                    continue
+            except (RuntimeError, ValueError) as error:
+                display_message(error)
+                continue
         display_message("Enter a positive SGD amount, such as 12 or 12.50.")
 
 
@@ -351,9 +429,9 @@ def ask_search_wishes(profile, config):
     """Select earlier wishes or collect one new request for today's search."""
     saved = profile[OTHER_PREFERENCES] or []
     if saved:
-        print("Previous special requests:")
+        ui.section("Previous special requests")
         for number, item in enumerate(saved, 1):
-            print(f"  {number}. {item}")
+            ui.item(number, item)
     while True:
         value = read_input(
             "What are you looking for today? Describe any extra wishes "
@@ -389,7 +467,8 @@ def ask_search_wishes(profile, config):
                     continue
                 logic_manager.validate_special_request_text(reviewed)
                 if reviewed != text:
-                    confirmed = ask_yes_no(f"Use '{reviewed}' instead?")
+                    confirmed = ask_yes_no(
+                        f"Use '{reviewed}' instead?", config)
                     if confirmed is None:
                         return None
                     if not confirmed:
@@ -424,7 +503,8 @@ def ask_search_clarification(config):
                 continue
             logic_manager.validate_special_request_text(reviewed)
             if reviewed != text:
-                confirmed = ask_yes_no(f"Use '{reviewed}' instead?")
+                confirmed = ask_yes_no(
+                    f"Use '{reviewed}' instead?", config)
                 if confirmed is None:
                     return None
                 if not confirmed:
@@ -443,13 +523,22 @@ def collect_search(user, config):
     mode = ask_search_mode(config)
     if mode is None:
         return None
-    distance = ask_search_distance(profile, mode)
+    distance = ask_search_distance(profile, mode, config)
     if distance is None:
         return None
-    cuisine = ask_search_cuisine(profile)
+    cuisine = ask_search_cuisine(profile, config)
     if cuisine is None:
         return None
-    budget = ask_search_budget(profile)
+    save_cuisine = False
+    if cuisine != "none" and cuisine not in (profile["liked_cuisines"] or []):
+        disliked = cuisine in (profile["disliked_cuisines"] or [])
+        question = (f"Add {cuisine.title()} to your saved liked cuisines"
+                    + (" and remove it from disliked cuisines?" if disliked
+                       else "?"))
+        save_cuisine = ask_yes_no(question, config)
+        if save_cuisine is None:
+            return None
+    budget = ask_search_budget(profile, config)
     if budget is None:
         return None
     wishes = ask_search_wishes(profile, config)
@@ -463,18 +552,22 @@ def collect_search(user, config):
         "cuisine": cuisine, "budget_per_person": budget,
         OTHER_PREFERENCES: other,
         "dietary_requirements": list(profile["dietary_requirements"] or []),
-        "disliked_cuisines": list(profile["disliked_cuisines"] or []),
+        "disliked_cuisines": [item for item in
+                              (profile["disliked_cuisines"] or [])
+                              if item != cuisine],
     }
-    return {"request": request, "today_request": wishes["text"]}
+    return {"request": request, "today_request": wishes["text"],
+            "save_cuisine": cuisine if save_cuisine else None}
 
 
 def display_search_summary(request):
-    display_message("Today's search is ready:")
-    print(f"  From: {request['origin']['label']}")
-    print(f"  Travel: {request['mode']} up to {request['max_distance_km']} km")
-    print(f"  Cuisine: {request['cuisine']}")
-    print(f"  Budget: SGD {request['budget_per_person']}")
-    print(f"  Other preferences: {', '.join(request[OTHER_PREFERENCES]) or 'none'}")
+    ui.section("Today's search")
+    ui.field("From", request['origin']['label'])
+    ui.field("Travel", f"{request['mode']} up to {request['max_distance_km']} km")
+    ui.field("Cuisine", request['cuisine'])
+    ui.field("Budget", f"SGD {request['budget_per_person']}")
+    ui.field("Other preferences",
+             ', '.join(request[OTHER_PREFERENCES]) or 'none')
 
 
 def confirm_search_request(request, config=None):
@@ -483,18 +576,19 @@ def confirm_search_request(request, config=None):
     return ask_yes_no("Search with these choices?", config)
 
 
-def resolve_cuisine_token(token, field):
+def resolve_cuisine_token(token, field, config=None):
     """Return a confirmed cuisine or explicitly accepted extra preference."""
     if token in CUISINES:
         return token, None
     candidates = logic_manager.cuisine_suggestions(token)
     if len(candidates) == 1:
-        confirmed = ask_yes_no(f"Did you mean {candidates[0].title()}?")
+        confirmed = ask_yes_no(
+            f"Did you mean {candidates[0].title()}?", config)
         if confirmed is not True:
             raise ValueError("No changes saved. Please clarify the cuisine.")
         return candidates[0], None
     if candidates:
-        print("Possible matches: " + ", ".join(candidates))
+        ui.message("Possible matches: " + ", ".join(candidates), "warning")
         selected = read_input("Choose a cuisine by name, or /cancel: ")
         if selected is None or selected.lower() not in candidates:
             raise ValueError("No changes saved. Please clarify the cuisine.")
@@ -503,7 +597,8 @@ def resolve_cuisine_token(token, field):
         raise ValueError(
             "Unrecognized cuisine. Choose from: " + ", ".join(CUISINES))
     display_message(f"{token.title()} is outside the supported cuisine list.")
-    confirmed = ask_yes_no("Include it in your other preferences instead?")
+    confirmed = ask_yes_no(
+        "Include it in your other preferences instead?", config)
     if confirmed is not True:
         raise ValueError("Choose another cuisine, or none.")
     prefix = {"liked_cuisines": "Likes ",
@@ -511,13 +606,13 @@ def resolve_cuisine_token(token, field):
     return None, prefix + token
 
 
-def resolve_cuisines(text, field, preferences):
+def resolve_cuisines(text, field, preferences, config=None):
     """Resolve the whole answer before returning any proposed update."""
     tokens = logic_manager.cuisine_tokens(text, field)
     resolved = []
     extras = []
     for token in tokens:
-        cuisine, extra = resolve_cuisine_token(token, field)
+        cuisine, extra = resolve_cuisine_token(token, field, config)
         if cuisine is not None:
             resolved.append(cuisine)
         if extra is not None:
@@ -607,7 +702,7 @@ def interpretation_action(preferences, field, text):
 
 
 def collect_action(user, config, field=None, location_action="add"):
-    """Collect a typed action; never persist or call the AI API."""
+    """Collect and review a typed action without persisting it."""
     preferences = user["preferences"]
     field = field or logic_manager.next_field(preferences)
     if field is not None:
@@ -619,12 +714,24 @@ def collect_action(user, config, field=None, location_action="add"):
     if command is not None:
         return command
     text = clean_text(text, 1000)
+    if (field is not None and field not in {
+            "max_distance_km", "max_travel_time_minutes", "budget_per_person"}
+            and text.lower() not in {"none", "both"}
+            and not config.get("ai_bypass")):
+        reviewed = ai_manager.review_prompt_text(
+            text, config, QUESTIONS[field], 1000)
+        if reviewed is None:
+            raise ValueError("Please rephrase your answer in English.")
+        if reviewed != text:
+            if ask_yes_no(f"Use '{reviewed}' instead?", config) is not True:
+                raise ValueError("No changes saved. Please re-enter your answer.")
+            text = reviewed
     if field in CUISINE_FIELDS:
         if not config.get("ai_bypass") and (
             logic_manager.needs_cuisine_interpretation(text, field)
         ):
             return interpretation_action(preferences, field, text)
-        updates = resolve_cuisines(text, field, preferences)
+        updates = resolve_cuisines(text, field, preferences, config)
         return {"action": "profile_update", "updates": updates,
                 "location_action": location_action}
     if field == OTHER_PREFERENCES:

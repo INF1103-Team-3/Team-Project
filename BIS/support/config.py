@@ -33,6 +33,7 @@ def load_config():
             os.getenv("OPENROUTER_TIMEOUT_SECONDS", "30"),
             default=30,
         ),
+        "gemini_api_key": os.getenv("GEMINI_API_KEY", "").strip(),
         "google_maps_api_key": os.getenv("GOOGLE_MAPS_API_KEY", "").strip(),
         "smtp_host": os.getenv("SMTP_HOST", "").strip(),
         "smtp_bypass": (
@@ -58,13 +59,16 @@ def validate_config(config):
     errors = []
     if config.get("ai_bypass") is True:
         return errors
-    if not config.get("openrouter_api_keys"):
+    if (not config.get("openrouter_api_keys")
+            and not ai_manager.has_fallback_provider(config)):
         errors.append(
-            "Set OPENROUTER_API_KEYS, OPENROUTER_API_KEYS_FILE, or "
-            "OPENROUTER_API_KEY in .env."
+            "Set OPENROUTER_API_KEYS, OPENROUTER_API_KEY, or "
+            "GEMINI_API_KEY for BIS in .env."
         )
 
-    if not config.get("openrouter_model"):
+    if (config.get("openrouter_api_keys")
+            and not config.get("openrouter_model")
+            and not ai_manager.has_fallback_provider(config)):
         errors.append("Set OPENROUTER_MODEL in .env.")
 
     debug_log(f"Configuration validated with {len(errors)} error(s).",
