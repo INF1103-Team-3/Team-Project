@@ -438,10 +438,11 @@ It is not a source of restaurant or certification truth.
 | `requirements.txt` | Core BIS/BRNS Python packages (`python-dotenv`, `requests`). |
 | `requirements-dev.txt` | Core packages plus style, call-graph, and Pillow tooling. |
 | `tests/test_bis_brns_integration.py` | Automated regression checks for request shape, manager order, AI validation, evidence-based reasons, logging, routes, cancellation, test mode, and the BIS → BRNS handoff. |
-| `visualise_functions.py` | Generates static call-graph PNGs and `project_workflow.png`, a diagram of the separate halal/BRC and BIS → BRNS paths; has an optional live BIS trace mode. |
-| `function_graphs/*.png` | Generated visualizations, not runtime inputs. |
+| `project_overview/visualise_functions.py` | Generates static call-graph PNGs and `project_workflow.png`, a diagram of the separate halal/BRC and BIS → BRNS paths; has an optional live BIS trace mode. |
+| `project_overview/visualise_live_functions.py` | Traces an interactive BIS session and saves function call graphs for the programs it invokes. |
+| `project_overview/function_graphs/*.png` | Generated visualizations, not runtime inputs. |
 | `README.md` | Setup, CLI commands, settings, and high-level usage. |
-| `ProjectFlow.md`, `ProjectInitialDetails.md`, `BIS/docs/ProjectInitialDetails.md`, `BIS/docs/Team Project Framework Brief.pdf` | Project briefs/design references. Their desired behavior may be broader than today's running code. |
+| `project_overview/ProjectFlow.md`, `project_overview/ProjectInitialDetails.md`, `BIS/docs/ProjectInitialDetails.md`, `BIS/docs/Team Project Framework Brief.pdf` | Project briefs/design references. Their desired behavior may be broader than today's running code. |
 | `AI_REQUIRED_SEARCH_PLAN.md`, `CLI_OUTPUT_CLEANUP_PLAN.md` | Local planning notes. They are not imported or executed and are not part of the runtime flow. |
 
 ## 8. One concrete trace to remember

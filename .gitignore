@@ -13,7 +13,7 @@ data/geocode_cache.lock
 BIS/data/*.bak
 BRNS/data/search_history.json
 logs/*.log
-function_graphs/
+project_overview/function_graphs/
 
 # Local project documentation
 BIS/docs/
