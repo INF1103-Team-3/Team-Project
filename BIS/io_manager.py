@@ -301,10 +301,11 @@ def ask_search_mode(config=None):
         display_message("Choose walk or drive.")
 
 
-def ask_search_distance(profile, mode, config=None):
+def ask_search_distance(profile, mode, config=None, default_source="profile"):
     default = profile["max_distance_km"] if mode == "walk" else None
     while True:
-        hint = f" [Enter = {default:g} km from profile]" if default else ""
+        hint = (f" [Enter = {default:g} km from {default_source}]"
+                if default else "")
         value = read_input(f"Maximum {mode} distance in km{hint} (/cancel): ")
         if _cancelled(value):
             return None
@@ -337,18 +338,21 @@ def ask_search_distance(profile, mode, config=None):
         display_message("Enter a positive distance in km, such as 2 or 2.5 km.")
 
 
-def ask_search_cuisine(profile, config=None):
+def ask_search_cuisine(profile, config=None, current_cuisine=None):
     liked = profile["liked_cuisines"] or []
     if liked:
         ui.section("Saved liked cuisines")
         for number, cuisine in enumerate(liked, 1):
             ui.item(number, cuisine.title())
     while True:
+        hint = (f" [Enter = {current_cuisine}]"
+                if current_cuisine else "")
         value = read_input(
-            "Choose one saved number, cuisine, or none (/cancel): "
-        )
+            f"Choose one saved number, cuisine, or none{hint} (/cancel): ")
         if _cancelled(value):
             return None
+        if not value and current_cuisine:
+            return current_cuisine
         if value.isdigit() and 1 <= int(value) <= len(liked):
             return liked[int(value) - 1]
         cuisine = value.lower().strip()
@@ -374,11 +378,12 @@ def ask_search_cuisine(profile, config=None):
         display_message("Choose a saved number, supported cuisine, or none.")
 
 
-def ask_search_budget(profile, config=None):
+def ask_search_budget(profile, config=None, default_source="profile"):
     default = profile["budget_per_person"]
     while True:
         value = read_input(
-            f"Budget today in SGD [Enter = {default:g} from profile] "
+            f"Budget today in SGD [Enter = {default:g} "
+            f"from {default_source}] "
             "(/cancel): "
         )
         if _cancelled(value):
@@ -545,14 +550,110 @@ def collect_search(user, config):
             "save_cuisine": cuisine if save_cuisine else None}
 
 
+def choose_results_action(result_count, alternatives_hidden=False):
+    """Let the user keep exploring or adjust today's search."""
+    actions = []
+    if alternatives_hidden:
+        actions.append(("alternatives", "Show other restaurants"))
+    if result_count:
+        actions.extend((("route", "Show a route"),
+                        ("more", "Show full restaurant details")))
+    actions.extend((("again", "Change distance, budget, or cuisine"),
+                    ("done", "Finish and return to commands")))
+    while True:
+        ui.section("What would you like to do?")
+        for number, (_, label) in enumerate(actions, 1):
+            ui.item(number, label)
+        ui.line("  Press Enter without typing to finish.")
+        answer = read_input("Choose a number, or press Enter to finish: ")
+        if answer is None or not answer.strip():
+            return "done"
+        answer = answer.lower().strip()
+        if answer in {"/cancel", "/quit", "/exit", "enter"}:
+            return "done"
+        if answer.isdigit() and 1 <= int(answer) <= len(actions):
+            return actions[int(answer) - 1][0]
+        if answer in {name for name, _ in actions}:
+            return answer
+        display_message("Choose one of the numbers shown, or press Enter.")
+
+
+def choose_route_result(result_count):
+    """Ask which numbered restaurant to route to."""
+    while True:
+        answer = read_input(
+            f"Result number (1–{result_count}), or press Enter to go back: ")
+        if answer is None or not answer.strip():
+            return None
+        answer = answer.strip().lower()
+        if answer in {"/cancel", "/quit", "/exit"}:
+            return None
+        if answer.isdigit() and 1 <= int(answer) <= result_count:
+            return int(answer)
+        display_message(f"Choose a result number from 1 to {result_count}.")
+
+
+def refine_search_request(request, profile, config):
+    """Change one confirmed search choice without repeating every prompt."""
+    while True:
+        choice = read_input(
+            "Change distance, budget, or cuisine [Enter = results]: ")
+        if _cancelled(choice) or not choice:
+            return None
+        choice = choice.lower().strip()
+        defaults = dict(profile)
+        defaults["max_distance_km"] = request["max_distance_km"]
+        defaults["budget_per_person"] = request["budget_per_person"]
+        if choice == "distance":
+            value = ask_search_distance(
+                defaults, request["mode"], config,
+                default_source="current search")
+            field = "max_distance_km"
+        elif choice == "budget":
+            value = ask_search_budget(
+                defaults, config, default_source="current search")
+            field = "budget_per_person"
+        elif choice == "cuisine":
+            value = ask_search_cuisine(
+                profile, config, current_cuisine=request["cuisine"])
+            field = "cuisine"
+        else:
+            display_message("Choose distance, budget, or cuisine.")
+            continue
+        if value is None:
+            return None
+        refined = dict(request, **{field: value})
+        if field == "cuisine":
+            refined["disliked_cuisines"] = [
+                item for item in request["disliked_cuisines"]
+                if item != value]
+        return refined
+
+
+def _capitalize_display_text(value):
+    """Capitalize display text without changing saved search values."""
+    return value[:1].upper() + value[1:]
+
+
 def display_search_summary(request):
     ui.section("Today's search")
-    ui.field("From", request['origin']['label'])
-    ui.field("Travel", f"{request['mode']} up to {request['max_distance_km']} km")
-    ui.field("Cuisine", request['cuisine'])
+    ui.field("From", _capitalize_display_text(request['origin']['label']))
+    ui.field("Travel", f"{_capitalize_display_text(request['mode'])} "
+             f"up to {request['max_distance_km']} km")
+    ui.field("Specific cuisine today",
+             _capitalize_display_text(request['cuisine']))
     ui.field("Budget", f"SGD {request['budget_per_person']}")
+    dietary = request["dietary_requirements"]
+    restrictions = [label for key, label in (
+        ("halal", "Halal"), ("vegetarian", "Vegetarian"))
+        if key in dietary]
+    ui.field("Dietary Restrictions", ", ".join(restrictions) or "None")
+    ui.field("Disliked cuisines",
+             ", ".join(_capitalize_display_text(item)
+                       for item in request["disliked_cuisines"]) or "None")
     ui.field("Other preferences",
-             ', '.join(request[OTHER_PREFERENCES]) or 'none')
+             ", ".join(_capitalize_display_text(item)
+                       for item in request[OTHER_PREFERENCES]) or "None")
 
 
 def confirm_search_request(request, config=None):
