@@ -152,11 +152,13 @@ resolves from `BIS/`. The key list takes priority over the file, then the shared
 both can use `GEMINI_API_KEY` from `.env`.
 
 To send verification codes, set `SMTP_BYPASS=false` and fill in the SMTP
-settings in [`.env.example`](.env.example). Codes expire after ten
-minutes and allow five attempts. SMTP bypass does not mark an email as
-verified. Email format checks cannot prove that an inbox exists. Resuming an
-already verified account uses email selection, not a password. Restart BIS
-after changing its settings.
+settings in [`.env.example`](.env.example). Codes expire after ten minutes;
+five incorrect attempts within ten minutes of the first code block further
+guesses and resends until that window ends. Resends are at least 60 seconds
+apart and do not reset the failed-attempt count. Signup and every account
+resume require an emailed code. SMTP bypass is for local testing and does not
+mark an email as verified. Email format checks cannot prove that an inbox
+exists. Restart BIS after changing its settings.
 
 ### BIS saved files
 

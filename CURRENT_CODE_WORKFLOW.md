@@ -118,10 +118,12 @@ these calls.
 
 On signup, BIS normalizes the email and username, creates a UUID user ID,
 and saves a record with empty preferences. Unless `SMTP_BYPASS=true`, BIS IO
-requests a verification challenge, `BIS/support/email_delivery.py` sends the
-code, BIS Logic checks expiry/attempt rules and the submitted code, and BIS
-Data persists the verified account and temporary verification state. The
-verification code itself is never written to the operational log.
+prompts for a code, `BIS/support/email_verification/service.py` coordinates
+the local challenge state, and `email_delivery.py` sends the code.
+`challenge.py` checks expiry and failed attempts across resends. BIS Data
+persists the verified account and temporary verification state. Each account
+resume also requires a code. The verification code itself is never written
+to the operational log.
 
 The profile fields, in collection order, are defined in
 `BIS/sources/profile_schema.py`:
@@ -375,12 +377,14 @@ It is not a source of restaurant or certification truth.
 | `BIS/main.py` | Program entry and coordinator. `main` loads settings; `run_accounts` selects an account; `run_session` dispatches commands; `save_update` validates/saves profile changes; `run_search` performs the BIS → BRNS handoff and optional route. |
 | `BIS/io_manager.py` | All BIS terminal prompts and displays. Handles account selection, email verification interaction, profile answer collection, search location/mode/distance/cuisine/budget/other wishes, clarification and confirmation, result selection, and command parsing. It does not save records. |
 | `BIS/ai_manager.py` | OpenRouter adapter, API-key rotation, response parsing/schema checking, profile answer interpretation, location extraction, short search-choice typo suggestions, and interpretation of every live search. It does not decide whether a proposed update is allowed. |
-| `BIS/logic_manager.py` | Pure profile/search decisions: travel conversion, preference updates and conflicts, local answer parsing, email challenge policy, Singapore coordinate checks, and the protected eight-field search validation. |
+| `BIS/logic_manager.py` | Pure profile/search decisions: travel conversion, preference updates and conflicts, local answer parsing, Singapore coordinate checks, and the protected eight-field search validation. |
 | `BIS/data_manager.py` | Validated account and state persistence with atomic writes; email lookup/registration; shared geocode lookup and Google Geocoding; successful location caching; exact JSON serialization for BRNS. |
-| `BIS/sources/profile_schema.py` | Canonical account and preference keys, cuisine/dietary vocabulary, numeric ranges, normalization, exact-schema validation, and verification constants. BRNS imports the supported cuisine list from here. |
+| `BIS/sources/profile_schema.py` | Canonical account and preference keys, cuisine/dietary vocabulary, numeric ranges, normalization, and exact-schema validation. BRNS imports the supported cuisine list from here. |
 | `BIS/sources/prompts.py` | Profile questions, labels, command/help text, AI system prompt, and command/intent tables. |
 | `BIS/support/config.py` | Loads root `.env`, OpenRouter, Maps, SMTP, debug, and bypass settings; validates the required BIS AI configuration. |
-| `BIS/support/email_delivery.py` | Validates SMTP settings and sends email verification codes over TLS. |
+| `BIS/support/email_verification/challenge.py` | Creates and checks hashed six-digit codes, expiry, resend cooldown, and the failed-attempt window. Reads legacy pending challenges. |
+| `BIS/support/email_verification/email_delivery.py` | Validates SMTP settings and sends email verification codes over TLS. |
+| `BIS/support/email_verification/service.py` | Coordinates local challenge state, email delivery, and the verified account update. |
 | `BIS/sources/__init__.py`, `BIS/support/__init__.py` | Package markers; no runtime decision logic. |
 | `BIS/data/users.json` | Local saved accounts and preferences. Runtime data; do not use as a source of code behavior. |
 | `BIS/data/profile_state.json` | Verification and automatic-search state per user. Runtime data. |

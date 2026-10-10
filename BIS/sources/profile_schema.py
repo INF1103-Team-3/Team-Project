@@ -158,13 +158,7 @@ def validate_user(user):
     }
 
 
-# Verification policy and recognition-only unsupported cuisine names.
-VERIFICATION_TTL_SECONDS = 600
-
-VERIFICATION_RESEND_SECONDS = 60
-
-VERIFICATION_MAX_ATTEMPTS = 5
-
+# Recognition-only unsupported cuisine names.
 UNSUPPORTED_CUISINES = {
     "spanish", "greek", "brazilian", "ethiopian", "german",
     "british", "pakistani", "bangladeshi", "nepalese", "sri lankan",
