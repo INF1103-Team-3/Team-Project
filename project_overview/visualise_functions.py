@@ -1,10 +1,12 @@
 r"""Draw source call graphs, or trace a real BIS session with --trace.
 
-Run from the repository root with ``.venv/bin/python visualise_functions.py``
+Run from the repository root with
+``.venv/bin/python project_overview/visualise_functions.py``
 on Linux/macOS. On Windows, use
-``.\.venv\Scripts\python.exe visualise_functions.py``.
-PNGs are written to ``function_graphs/``. The default function graphs are
-static: they include functions even when the chatbot or live APIs are not run.
+``.\.venv\Scripts\python.exe project_overview\visualise_functions.py``.
+PNGs are written to ``project_overview/function_graphs/``. The default
+function graphs are static: they include functions even when the chatbot or
+live APIs are not run.
 The project workflow image is a curated view of the current runtime paths.
 Calls through runtime values, callbacks, and dynamic imports cannot always
 be resolved by the static function graphs.
@@ -23,7 +25,8 @@ import sys
 from typing import Optional, Union
 
 
-ROOT = Path(__file__).resolve().parent
+OVERVIEW_DIR = Path(__file__).resolve().parent
+ROOT = OVERVIEW_DIR.parent
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -39,7 +42,7 @@ except ModuleNotFoundError as error:
     ) from error
 
 SOURCE_DIRS = ("BIS", "BRNS", "BRC", "shared")
-OUTPUT_DIR = ROOT / "function_graphs"
+OUTPUT_DIR = OVERVIEW_DIR / "function_graphs"
 ENTRY = "BIS.main.main"
 NODE_WIDTH = 290
 NODE_HEIGHT = 48
@@ -256,25 +259,33 @@ def label_for(node):
     return package + ": " + rest
 
 
-def draw_graph(path, title, nodes, edges, groups):
+def draw_graph(path, title, nodes, edges, groups, node_kind="functions",
+               sort_nodes=True, labels=None, route_cross_package=False):
     if not nodes:
         raise ValueError("Cannot draw an empty call graph")
     if all(str(name).startswith("Step ") for name in groups):
         columns = sorted(groups, key=lambda name: int(str(name).split()[1]))
     else:
         columns = sorted(groups)
-    ordered = {column: sorted(groups[column]) for column in columns}
+    ordered = {
+        column: (sorted(groups[column]) if sort_nodes
+                 else list(groups[column]))
+        for column in columns
+    }
     max_rows = max(len(items) for items in ordered.values())
     width = (2 * MARGIN + 80 + len(columns) * NODE_WIDTH
              + (len(columns) - 1) * COL_GAP)
-    height = TOP + max_rows * (NODE_HEIGHT + ROW_GAP) + MARGIN
+    cross_edges = sorted((source, target) for source, target in edges
+                         if source.split(".")[0] != target.split(".")[0])
+    extra = (40 + 24 * len(cross_edges)) if route_cross_package else 0
+    height = TOP + max_rows * (NODE_HEIGHT + ROW_GAP) + MARGIN + extra
     image = Image.new("RGB", (width, height), "#ffffff")
     draw = ImageDraw.Draw(image)
     title_font = font(23, True)
     heading_font = font(16, True)
     text_font = font(12)
     draw.text((MARGIN, 24), title, font=title_font, fill="#15283a")
-    caption = f"{len(nodes)} functions  •  {len(edges)} resolved calls"
+    caption = f"{len(nodes)} {node_kind}  •  {len(edges)} resolved calls"
     draw.text((MARGIN, 58), caption, font=text_font, fill="#536477")
     positions = {}
     for col, name in enumerate(columns):
@@ -292,6 +303,27 @@ def draw_graph(path, title, nodes, edges, groups):
         tx, ty = positions[target]
         cross_package = source.split(".")[0] != target.split(".")[0]
         color = "#cc624d" if cross_package else "#b9c8d5"
+        if cross_package and route_cross_package:
+            lane = (TOP + max_rows * (NODE_HEIGHT + ROW_GAP)
+                    + 20 + cross_edges.index((source, target)) * 24)
+            if tx > sx:
+                start = (sx + NODE_WIDTH, sy + NODE_HEIGHT // 2)
+                end = (tx, ty + NODE_HEIGHT // 2)
+                source_gap = sx + NODE_WIDTH + 22
+                target_gap = tx - 22
+                direction = 1
+            else:
+                start = (sx, sy + NODE_HEIGHT // 2)
+                end = (tx + NODE_WIDTH, ty + NODE_HEIGHT // 2)
+                source_gap = sx - 22
+                target_gap = tx + NODE_WIDTH + 22
+                direction = -1
+            draw.line((start, (source_gap, start[1]),
+                       (source_gap, lane), (target_gap, lane),
+                       (target_gap, end[1]), end), fill=color, width=2)
+            draw.polygon((end, (end[0] - direction * 8, end[1] - 4),
+                          (end[0] - direction * 8, end[1] + 4)), fill=color)
+            continue
         if tx > sx:
             start = (sx + NODE_WIDTH, sy + NODE_HEIGHT // 2)
             end = (tx, ty + NODE_HEIGHT // 2)
@@ -315,12 +347,12 @@ def draw_graph(path, title, nodes, edges, groups):
         fill = COLORS.get(package, "#e9edf2")
         draw.rounded_rectangle((x, y, x + NODE_WIDTH, y + NODE_HEIGHT),
                                radius=8, fill=fill, outline="#7b8da0", width=1)
-        label = label_for(node)
+        label = labels.get(node, label_for(node)) if labels else label_for(node)
         if len(label) > 39:
             label = label[:36] + "..."
         draw.text((x + 10, y + 15), label, font=text_font, fill="#1a2b3c")
     image.save(path, "PNG")
-    print(f"Created {path.relative_to(ROOT)} ({len(nodes)} functions)")
+    print(f"Created {path.relative_to(ROOT)} ({len(nodes)} {node_kind})")
 
 
 def grouped_by_package(nodes):

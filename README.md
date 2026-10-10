@@ -10,7 +10,7 @@ folder reserved for future work:
 | **BRC** — BiteFinder Restaurant Checker | Reserved for team members to add restaurant checking functionality | No command yet |
 
 BIS sends today's confirmed search as JSON to BRNS. The
-[original project scope](ProjectInitialDetails.md) describes the intended
+[original project scope](project_overview/ProjectInitialDetails.md) describes the intended
 combined system, including allergy handling. The current CLIs do not implement
 every feature in that scope.
 
@@ -41,18 +41,28 @@ repository root in PowerShell or Command Prompt:
 ```text
 py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python.exe visualise_functions.py
+.\.venv\Scripts\python.exe project_overview\visualise_functions.py
 ```
 
 Use the same Python executable for the install and the script. Pillow is
 installed as `Pillow` but imported as `PIL`. The PNGs appear in
-`function_graphs/`: `bis_to_brns.png` is the grouped manager flow,
+`project_overview/function_graphs/`: `bis_to_brns.png` is the grouped manager flow,
 `bis_to_brns_functions.png` shows the reachable function calls, and
 `all_functions.png` covers every application function. `project_workflow.png`
 shows the halal scraper and separate BRC checker alongside BIS, BRNS, and
 their shared cache and log. Add `--trace` to run
 BIS and capture a live session graph. The grouped flow shows
 BIS IO → AI → Logic → Data (JSON) → BRNS IO → AI → Logic → Data.
+For an interactive trace on Windows, run
+`.\.venv\Scripts\python.exe project_overview\visualise_live_functions.py`.
+`project_overview/visualise_live_functions.py` starts BIS and records
+the calls made until you quit. Complete a `/search` to include BRNS calls.
+It creates an overview PNG, a function PNG for
+each program called, and `calls.json` with exact call counts in a new
+`project_overview/function_graphs/live_sessions/` folder. The function PNGs group calls by
+`main.py`, IO, AI, Logic, Data, and other files. BRC appears as inactive in
+the overview unless that BIS session actually calls it. On Linux or macOS,
+run `.venv/bin/python project_overview/visualise_live_functions.py`.
 
 Both applications read the same `.env` file at the repository root. If you do
 not have one yet, copy `.env.example` to `.env` and edit the settings you need:
