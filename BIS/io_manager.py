@@ -175,7 +175,7 @@ def verify_email_interactively(user, config):
                 display_message("A new verification code was emailed to you.")
                 continue
             was_verified = user["email_verified"]
-            user = email_service.verify_code(user, code)
+            user = email_service.verify_code(user, code, config)
             display_message(
                 "Email confirmed. Welcome back." if was_verified
                 else "Email verified.")

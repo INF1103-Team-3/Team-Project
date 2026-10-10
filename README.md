@@ -153,8 +153,10 @@ both can use `GEMINI_API_KEY` from `.env`.
 
 To send verification codes, set `SMTP_BYPASS=false` and fill in the SMTP
 settings in [`.env.example`](.env.example). Codes expire after ten minutes;
-five incorrect attempts within ten minutes of the first code block further
-guesses and resends until that window ends. Resends are at least 60 seconds
+five incorrect attempts within the configured attempt window block further
+guesses and resends until that window ends. Set
+`VERIFICATION_ATTEMPT_RESET_MINUTES=1` for a one-minute window (default: 10).
+Resends are at least 60 seconds
 apart and do not reset the failed-attempt count. Signup and every account
 resume require an emailed code. SMTP bypass is for local testing and does not
 mark an email as verified. Email format checks cannot prove that an inbox
