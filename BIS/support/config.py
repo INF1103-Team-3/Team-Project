@@ -48,6 +48,10 @@ def load_config():
         "smtp_username": os.getenv("SMTP_USERNAME", "").strip(),
         "smtp_password": os.getenv("SMTP_PASSWORD", ""),
         "smtp_from_email": os.getenv("SMTP_FROM_EMAIL", "").strip(),
+        "verification_attempt_reset_seconds": 60 * _read_positive_int(
+            os.getenv("VERIFICATION_ATTEMPT_RESET_MINUTES", "10"),
+            default=10,
+        ),
     }
 
     debug_log("Configuration loaded.", "DEBUG", "BIS.config.load")

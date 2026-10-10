@@ -47,23 +47,26 @@ def validate_challenge(challenge):
     return normalized
 
 
-def _limit_message(challenge, now):
+def _limit_message(challenge, now, attempt_reset_seconds):
     remaining = max(1, math.ceil(
         (challenge["attempt_window_started_at"]
-         + VERIFICATION_TTL_SECONDS - now) / 60))
+         + attempt_reset_seconds - now) / 60))
     unit = "minute" if remaining == 1 else "minutes"
     return ("Too many incorrect attempts. "
             f"Wait {remaining} {unit} before requesting another code.")
 
 
-def new_challenge(previous=None, now=None):
+def new_challenge(previous=None, now=None, *, attempt_reset_seconds):
     """Make a new code, carrying the failed-attempt count across resends."""
+    if type(attempt_reset_seconds) is not int or attempt_reset_seconds <= 0:
+        raise ValueError("Verification attempt reset must be positive.")
     now = time.time() if now is None else now
     previous = validate_challenge(previous) if previous else None
     if previous and now < (previous["attempt_window_started_at"]
-                           + VERIFICATION_TTL_SECONDS):
+                           + attempt_reset_seconds):
         if previous["attempts"] >= VERIFICATION_MAX_ATTEMPTS:
-            raise ValueError(_limit_message(previous, now))
+            raise ValueError(_limit_message(
+                previous, now, attempt_reset_seconds))
         attempts = previous["attempts"]
         window_start = previous["attempt_window_started_at"]
     else:
@@ -80,19 +83,21 @@ def new_challenge(previous=None, now=None):
     }
 
 
-def check_challenge(challenge, code, now=None):
+def check_challenge(challenge, code, now=None, *, attempt_reset_seconds):
     """Return updated state and an error, consuming one attempt if invalid."""
+    if type(attempt_reset_seconds) is not int or attempt_reset_seconds <= 0:
+        raise ValueError("Verification attempt reset must be positive.")
     now = time.time() if now is None else now
     if not challenge:
         return None, "Request a verification code first."
     updated = validate_challenge(challenge)
     if now >= updated["expires_at"]:
         return updated, "Verification code expired. Use /resend."
-    if now >= updated["attempt_window_started_at"] + VERIFICATION_TTL_SECONDS:
+    if now >= updated["attempt_window_started_at"] + attempt_reset_seconds:
         updated["attempt_window_started_at"] = now
         updated["attempts"] = 0
     if updated["attempts"] >= VERIFICATION_MAX_ATTEMPTS:
-        return updated, _limit_message(updated, now)
+        return updated, _limit_message(updated, now, attempt_reset_seconds)
     valid = isinstance(code, str) and re.fullmatch(r"[0-9]{6}", code.strip())
     if valid:
         valid = secrets.compare_digest(
@@ -103,5 +108,5 @@ def check_challenge(challenge, code, now=None):
         return updated, None
     updated["attempts"] += 1
     if updated["attempts"] >= VERIFICATION_MAX_ATTEMPTS:
-        return updated, _limit_message(updated, now)
+        return updated, _limit_message(updated, now, attempt_reset_seconds)
     return updated, "Incorrect verification code."
