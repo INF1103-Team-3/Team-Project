@@ -95,51 +95,94 @@ def run_search(session, config, automatic=False):
             debug_log.debug_log("Chatbot test completed without BRNS.", "INFO",
                                 "BIS.main.run_search")
             return
-        io_manager.display_message("Searching restaurants...")
-        results = brns_main.search(payload)
-        debug_log.debug_log(
-            f"BRNS returned {len(results['matches'])} matches and "
-            f"{len(results['alternatives'])} alternatives.", "INFO",
-            "BIS.main.run_search")
-        session["search"] = request
-        data_manager.set_state("search", user_id, {"completed": True})
-        matches = results["matches"]
-        alternatives = results["alternatives"]
-        if not matches:
-            io_manager.display_message(
-                "No restaurants matched all your search choices.",
-                role="warning")
-            if not alternatives:
-                io_manager.display_message(
-                    "No alternatives found either. Try /search with different choices.",
-                    role="warning")
-                return
-            if io_manager.ask_yes_no(
-                    f"Show {len(alternatives)} alternative"
-                    f"{'s' if len(alternatives) != 1 else ''}?", config) is not True:
-                return
-        brns_io.show_results(results, announce_no_matches=bool(matches))
-        options = matches + alternatives
-        if not any(item["restaurant"].get("lat") is not None
-                   and item["restaurant"].get("lng") is not None
-                   for item in options):
-            return
         while True:
-            answer = io_manager.read_input(
-                "Show a route? Enter a result number, or Enter to skip: ")
-            if answer is None or not answer or answer.lower() == "/cancel":
-                return
-            if answer.isdigit() and 1 <= int(answer) <= len(options):
-                chosen = options[int(answer) - 1]["restaurant"]
-                if chosen.get("lat") is None or chosen.get("lng") is None:
-                    io_manager.display_message(
-                        "No route is available for that restaurant.")
-                    continue
-                route = brns_main.route_to(chosen, request)
-                brns_io.show_route(**route)
-                return
+            io_manager.display_message("Searching restaurants...")
+            results = brns_main.search(payload)
+            matches = results["matches"]
+            alternatives = results["alternatives"]
+            debug_log.debug_log(
+                f"BRNS returned {len(matches)} matches and "
+                f"{len(alternatives)} alternatives.", "INFO",
+                "BIS.main.run_search")
+            session["search"] = request
+            data_manager.set_state("search", user_id, {"completed": True})
             io_manager.display_message(
-                f"Choose a result number from 1 to {len(options)}, or Enter.")
+                f"Found {len(matches)} match{'es' if len(matches) != 1 else ''} "
+                f"and {len(alternatives)} alternative"
+                f"{'s' if len(alternatives) != 1 else ''}.")
+            if matches:
+                io_manager.display_message(
+                    f"Top match: {matches[0]['restaurant']['name']}.")
+            if not matches:
+                brns_io.show_no_matches(results)
+            visible = bool(matches)
+            if visible:
+                brns_io.show_result_list(results)
+            options = matches + alternatives
+            while True:
+                action = io_manager.choose_results_action(
+                    len(options) if visible else 0,
+                    alternatives_hidden=bool(alternatives) and not visible)
+                if action == "done":
+                    io_manager.display_message(
+                        "Search finished. Use /search to try again.")
+                    return
+                if action == "alternatives" and alternatives and not visible:
+                    brns_io.show_result_list(results)
+                    visible = True
+                    continue
+                if action == "more" and visible:
+                    brns_io.show_results(
+                        results, announce_no_matches=False)
+                    continue
+                if action == "again":
+                    refined = io_manager.refine_search_request(
+                        request, session["user"]["preferences"], config)
+                    if refined is None:
+                        continue
+                    try:
+                        if config.get("ai_bypass"):
+                            validated = logic_manager.validate_search_request(
+                                refined)
+                        else:
+                            interpreted = ai_manager.interpret_search_request(
+                                refined, "", config)
+                            if interpreted is None:
+                                io_manager.display_message(
+                                    "Could not interpret that change. "
+                                    "Try again.")
+                                continue
+                            validated = logic_manager.validate_search_request(
+                                refined, interpreted)
+                    except (ValueError, RuntimeError) as error:
+                        io_manager.display_message(error)
+                        continue
+                    if not config.get("ai_bypass"):
+                        if io_manager.confirm_search_request(
+                                validated, config) is not True:
+                            io_manager.display_message(
+                                "Search change cancelled; previous "
+                                "results remain.")
+                            continue
+                    request = validated
+                    payload = data_manager.serialize_search_request(request)
+                    debug_log.debug_log(
+                        "Refined request serialized to JSON.", "INFO",
+                        "BIS.data.serialize_search_request")
+                    break
+                if action == "route" and visible:
+                    result_number = io_manager.choose_route_result(len(options))
+                    if result_number is None:
+                        continue
+                    chosen = options[result_number - 1]["restaurant"]
+                    if chosen.get("lat") is None or chosen.get("lng") is None:
+                        io_manager.display_message(
+                            "No route is available for that restaurant.")
+                        continue
+                    route = brns_main.route_to(chosen, request)
+                    brns_io.show_route(**route)
+                    continue
+                io_manager.display_message("Choose one of the actions shown.")
     except (ValueError, RuntimeError, OSError) as error:
         debug_log.debug_log(
             f"Search stopped: {type(error).__name__}.", "ERROR",

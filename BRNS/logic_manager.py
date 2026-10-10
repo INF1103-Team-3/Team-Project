@@ -78,18 +78,21 @@ def decide_outcome(restaurant, request):
     budget = request["budget_per_person"]
     price = restaurant.get("avg_price")
     minimum_price = restaurant.get("price_start")
+    maximum_price = restaurant.get("price_end")
     if price is not None:
         if price > budget:
             problems.append(
                 f"average price SGD {price:g} exceeds your SGD {budget:g} budget")
         else:
             reasons.append("average price is within your budget")
+    elif minimum_price is not None and minimum_price > budget:
+        problems.append(
+            f"prices start at SGD {minimum_price:g}, over your budget")
+    elif (maximum_price is not None and maximum_price <= budget
+          and (minimum_price is None or minimum_price <= maximum_price)):
+        reasons.append("listed price range is within your budget")
     elif minimum_price is not None:
-        if minimum_price > budget:
-            problems.append(
-                f"prices start at SGD {minimum_price:g}, over your budget")
-        else:
-            unverified.append("some prices may fit; full budget unverified")
+        unverified.append("some prices may fit; full budget unverified")
     else:
         unverified.append("price unavailable")
 
@@ -99,7 +102,9 @@ def decide_outcome(restaurant, request):
     if source != "route" or meters is None:
         unverified.append("travel distance estimated or unavailable")
     elif meters > request["max_distance_km"] * 1000:
-        problems.append("route exceeds your distance limit")
+        problems.append(
+            f"route is {meters / 1000:.2f} km, over your "
+            f"{request['max_distance_km']:g} km limit")
     else:
         reasons.append("within your route distance limit")
 
@@ -116,15 +121,24 @@ def _grounded_ai_reasons(restaurant, request, codes, candidate_id=None):
     """Translate only AI reason codes proven by candidate facts."""
     mode = request["mode"]
     budget = request["budget_per_person"]
+    average = restaurant.get("avg_price")
+    range_end = restaurant.get("price_end")
+    range_start = restaurant.get("price_start")
+    average_within_budget = (
+        type(average) in (int, float) and 0 <= average <= budget)
+    range_within_budget = (
+        average is None and type(range_end) in (int, float)
+        and 0 <= range_end <= budget
+        and (range_start is None or 0 <= range_start <= range_end))
     checks = {
         "cuisine_match": (
             request["cuisine"] != "none"
             and request["cuisine"] in restaurant["cuisines"],
             "matches your selected cuisine"),
         "within_budget": (
-            type(restaurant.get("avg_price")) in (int, float)
-            and 0 <= restaurant["avg_price"] <= budget,
-            "average price is within your budget"),
+            average_within_budget or range_within_budget,
+            "average price is within your budget" if average_within_budget
+            else "listed price range is within your budget"),
         "within_route": (
             restaurant.get(f"{mode}_source") == "route"
             and type(restaurant.get(f"{mode}_meters")) in (int, float)
@@ -162,7 +176,9 @@ def _grounded_ai_reasons(restaurant, request, codes, candidate_id=None):
             "candidate_cuisines": restaurant["cuisines"]},
         "within_budget": {
             "budget_sgd": budget,
-            "candidate_avg_price_sgd": restaurant.get("avg_price")},
+            "candidate_avg_price_sgd": average,
+            "candidate_price_start_sgd": range_start,
+            "candidate_price_end_sgd": range_end},
         "within_route": {
             "mode": mode,
             "limit_m": request["max_distance_km"] * 1000,

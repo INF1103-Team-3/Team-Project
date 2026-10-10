@@ -125,6 +125,7 @@ class IntegrationTests(unittest.TestCase):
         results = {"matches": [], "alternatives": [{
             "restaurant": restaurant, "reasons": ["! exceeds budget"]}],
             "mode": "walk", "requested_dietary": []}
+        actions = ["done", "alternatives", "more", "route", "done"]
         with (
             patch.object(bis_main.data_manager, "get_state", return_value=None),
             patch.object(bis_main.data_manager, "set_state"),
@@ -136,34 +137,150 @@ class IntegrationTests(unittest.TestCase):
                          return_value=True),
             patch.object(bis_main.brns_main, "search", return_value=results),
             patch.object(bis_main.io_manager, "display_message") as message,
-            patch.object(bis_main.io_manager, "ask_yes_no",
-                         side_effect=[False, True]) as ask,
+            patch.object(bis_main.io_manager, "choose_results_action",
+                         side_effect=actions) as choose,
+            patch.object(bis_main.brns_io, "show_no_matches") as no_matches,
+            patch.object(bis_main.io_manager, "choose_route_result",
+                         return_value=1),
             patch.object(bis_main.brns_io, "show_results") as show,
-            patch.object(bis_main.io_manager, "read_input", return_value="1") as read,
+            patch.object(bis_main.brns_io, "show_result_list") as listed,
             patch.object(bis_main.brns_main, "route_to",
                          return_value={"name": "Nearby Cafe", "route": None,
                                        "link": "map", "mode": "walk"}) as route,
             patch.object(bis_main.brns_io, "show_route"),
         ):
             bis_main.run_search(session, {"ai_bypass": False})
-            self.assertTrue(any("No restaurants matched" in str(call.args[0])
-                                for call in message.call_args_list))
-            ask.assert_called_once_with("Show 1 alternative?",
-                                        {"ai_bypass": False})
+            no_matches.assert_called_once_with(results)
+            choose.assert_called_once_with(0, alternatives_hidden=True)
             show.assert_not_called()
-            read.assert_not_called()
+            listed.assert_not_called()
             route.assert_not_called()
 
-            ask.reset_mock()
+            choose.reset_mock()
             bis_main.run_search(session, {"ai_bypass": False})
-            show.assert_called_once_with(results, announce_no_matches=False)
+            self.assertEqual(no_matches.call_count, 2)
+            listed.assert_called_once_with(results)
+            show.assert_called_once_with(
+                results, announce_no_matches=False)
             route.assert_called_once_with(restaurant, request())
+
+    def test_no_match_can_refine_budget_then_view_multiple_routes(self):
+        profile = empty_preferences()
+        profile.update(location=["pasir ris"], max_distance_km=2,
+                       max_travel_time_minutes=40, budget_per_person=10,
+                       dietary_requirements=[], liked_cuisines=["malay"],
+                       disliked_cuisines=[], other_preferences=[])
+        session = {"user": {"userID": "test", "preferences": profile}}
+        restaurant = {"name": "Nearby Cafe", "lat": 1.37, "lng": 103.95,
+                      "walk_meters": 850}
+        empty = {"matches": [], "alternatives": [], "mode": "walk"}
+        found = {"matches": [{"restaurant": restaurant, "reasons": []}],
+                 "alternatives": [], "mode": "walk"}
+        refined = dict(request(), budget_per_person=20.0)
+        with (
+            patch.object(bis_main.data_manager, "get_state", return_value=None),
+            patch.object(bis_main.data_manager, "set_state"),
+            patch.object(bis_main.io_manager, "collect_search",
+                         return_value={"request": request(),
+                                       "today_request": ""}),
+            patch.object(bis_main.io_manager, "confirm_search_request",
+                         return_value=True),
+            patch.object(bis_main.io_manager, "choose_results_action",
+                         side_effect=["again", "route", "route", "done"]),
+            patch.object(bis_main.io_manager, "choose_route_result",
+                         side_effect=[1, 1]),
+            patch.object(bis_main.io_manager, "read_input",
+                         side_effect=["budget", "20"]),
+            patch.object(bis_main.ai_manager, "interpret_search_request",
+                         side_effect=[request(), refined]) as interpret,
+            patch.object(bis_main.brns_main, "search",
+                         side_effect=[empty, found]) as search,
+            patch.object(bis_main.brns_main, "route_to",
+                         return_value={"name": "Nearby Cafe", "route": None,
+                                       "link": "map", "mode": "walk"}) as route,
+            patch.object(bis_main.brns_io, "show_result_list") as listed,
+            patch.object(bis_main.brns_io, "show_route") as shown_route,
+        ):
+            bis_main.run_search(session, {"ai_bypass": False})
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(json.loads(search.call_args.args[0])[
+            "budget_per_person"], 20.0)
+        self.assertEqual(interpret.call_count, 2)
+        self.assertEqual(listed.call_count, 1)
+        self.assertEqual(route.call_count, 2)
+        self.assertEqual(shown_route.call_count, 2)
+
+    def test_numbered_results_actions_and_blank_enter(self):
+        from BIS import io_manager as bis_io
+
+        with (
+            patch.object(bis_io, "read_input",
+                         side_effect=["1", "2", "3", "1", "2", "3", "4",
+                                      "", "2"]),
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(bis_io.choose_results_action(
+                0, alternatives_hidden=True), "alternatives")
+            self.assertEqual(bis_io.choose_results_action(
+                0, alternatives_hidden=True), "again")
+            self.assertEqual(bis_io.choose_results_action(
+                0, alternatives_hidden=True), "done")
+            self.assertEqual(bis_io.choose_results_action(2), "route")
+            self.assertEqual(bis_io.choose_results_action(2), "more")
+            self.assertEqual(bis_io.choose_results_action(2), "again")
+            self.assertEqual(bis_io.choose_results_action(2), "done")
+            self.assertEqual(bis_io.choose_results_action(2), "done")
+            self.assertEqual(bis_io.choose_route_result(2), 2)
+
+    def test_search_summary_shows_dietary_and_disliked_cuisines(self):
+        from BIS import io_manager as bis_io
+
+        cases = (
+            ([], "None"),
+            (["halal"], "Halal"),
+            (["vegetarian"], "Vegetarian"),
+            (["halal", "vegetarian"], "Halal, Vegetarian"),
+        )
+        for choices, expected in cases:
+            with self.subTest(choices=choices):
+                wanted = dict(request(), dietary_requirements=choices,
+                              disliked_cuisines=["chinese"])
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    bis_io.display_search_summary(wanted)
+                shown = output.getvalue()
+                self.assertIn("Specific cuisine today: Malay", shown)
+                self.assertIn(f"Dietary Restrictions: {expected}", shown)
+                self.assertIn("Disliked cuisines: Chinese", shown)
+
+    def test_search_summary_capitalizes_values_without_changing_request(self):
+        from BIS import io_manager as bis_io
+
+        wanted = dict(request(), origin=dict(request()["origin"],
+                                              label="punggol"),
+                      cuisine="none", dietary_requirements=[],
+                      disliked_cuisines=["mexican", "thai"],
+                      other_preferences=["spicy food"])
+        output = io.StringIO()
+        with redirect_stdout(output):
+            bis_io.display_search_summary(wanted)
+        shown = output.getvalue()
+        self.assertIn("From: Punggol", shown)
+        self.assertIn("Travel: Walk up to", shown)
+        self.assertIn("Specific cuisine today: None", shown)
+        self.assertIn("Dietary Restrictions: None", shown)
+        self.assertIn("Disliked cuisines: Mexican, Thai", shown)
+        self.assertIn("Other preferences: Spicy food", shown)
+        self.assertEqual(wanted["origin"]["label"], "punggol")
+        self.assertEqual(wanted["cuisine"], "none")
 
     def test_result_cards_separate_matches_alternatives_and_cautions(self):
         match = {"restaurant": {"name": "Rice House", "address": "Market",
                                  "cuisines": ["chinese"], "avg_price": 8,
                                  "walk_meters": 500},
-                 "reasons": ["matches selected cuisine"]}
+                 "reasons": ["matches selected cuisine",
+                             "average price is within your budget",
+                             "rated at least 4 out of 5"]}
         alternative = {"restaurant": {"name": "Noodle House",
                                        "address": "Main Road",
                                        "cuisines": ["chinese"],
@@ -180,10 +297,35 @@ class IntegrationTests(unittest.TestCase):
         self.assertIn("Alternatives (1)", shown)
         self.assertIn("  1. Rice House", shown)
         self.assertIn("  2. Noodle House", shown)
-        self.assertIn("Why it fits: matches selected cuisine", shown)
-        self.assertIn("Check: above your budget", shown)
+        self.assertIn("Highlights:\n       • Matches selected cuisine", shown)
+        self.assertIn("• Average price is within your budget", shown)
+        self.assertIn("• Rated at least 4 out of 5", shown)
+        self.assertIn("Things to check:\n       • Above your budget", shown)
+        self.assertEqual(shown.count("Highlights:"), 1)
+        self.assertEqual(shown.count("Things to check:"), 1)
         self.assertIn("Halal: Unofficial indication; not checked", shown)
         self.assertNotIn("! above", shown)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            brns_io.show_result_list({
+                "matches": [match], "alternatives": [alternative],
+                "mode": "walk"})
+        compact = output.getvalue()
+        self.assertIn("1. Rice House · 0.50 km by walk", compact)
+        self.assertIn("2. Noodle House · distance unavailable", compact)
+
+    def test_no_match_message_explains_top_alternative(self):
+        results = {"matches": [], "alternatives": [{
+            "restaurant": {"name": "Far Cafe"},
+            "reasons": ["! route exceeds your distance limit",
+                        "! some prices may fit; full budget unverified"]}]}
+        output = io.StringIO()
+        with redirect_stdout(output):
+            brns_io.show_no_matches(results)
+        shown = output.getvalue()
+        self.assertIn("No fully verified matches", shown)
+        self.assertIn("route exceeds your distance limit", shown)
+        self.assertIn("full budget unverified", shown)
 
     def test_unofficial_halal_is_a_single_caution_not_a_positive_reason(self):
         candidate = {"name": "R&J Cosy Corner", "cuisines": [],
@@ -205,8 +347,8 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(shown.count("Halal:"), 1)
         self.assertEqual(shown.count("cuisine unavailable"), 0)
         self.assertIn("Cuisine: Unavailable", shown)
-        self.assertIn("Check: vegetarian options unverified", shown)
-        self.assertIn("Why it fits: rated at least 4 out of 5", shown)
+        self.assertIn("• Vegetarian options unverified", shown)
+        self.assertIn("• Rated at least 4 out of 5", shown)
 
     def test_search_menu_typo_requires_confirmation(self):
         from BIS import io_manager as bis_io
@@ -761,6 +903,33 @@ class IntegrationTests(unittest.TestCase):
             [{"id": 0, "reason_codes": ["within_budget"]}])
         self.assertNotIn("average price is within your budget",
                          results["alternatives"][0]["reasons"])
+
+    def test_full_price_range_can_confirm_budget(self):
+        candidate = {"name": "Budget Cafe", "cuisines": ["malay"],
+                     "avg_price": None, "price_start": 5,
+                     "price_end": 9, "walk_meters": 800,
+                     "walk_source": "route"}
+        wanted = dict(request(), dietary_requirements=[])
+        results = brns_logic.rank_restaurants(
+            [candidate], wanted,
+            [{"id": 0, "reason_codes": ["within_budget"]}])
+        self.assertEqual(len(results["matches"]), 1)
+        self.assertIn("listed price range is within your budget",
+                      results["matches"][0]["reasons"])
+        candidate["price_end"] = 15
+        results = brns_logic.rank_restaurants([candidate], wanted)
+        self.assertEqual(len(results["alternatives"]), 1)
+        self.assertIn("! some prices may fit; full budget unverified",
+                      results["alternatives"][0]["reasons"])
+
+    def test_over_limit_route_explains_distance(self):
+        candidate = {"name": "Far Cafe", "cuisines": [], "avg_price": 8,
+                     "walk_meters": 13040, "walk_source": "route"}
+        wanted = dict(request(), cuisine="none", max_distance_km=10,
+                      dietary_requirements=[])
+        results = brns_logic.rank_restaurants([candidate], wanted)
+        self.assertIn("! route is 13.04 km, over your 10 km limit",
+                      results["alternatives"][0]["reasons"])
 
     def test_shared_log_omits_provider_body_and_request_details(self):
         with (

@@ -125,6 +125,41 @@ def show_results(results, announce_no_matches=True):
                          "match" if heading == "Matches" else "alternative")
 
 
+def show_result_list(results):
+    """Show a compact numbered list before optional details or routing."""
+    number = 0
+    for heading, items in (("Matches", results["matches"]),
+                           ("Alternatives", results["alternatives"])):
+        if not items:
+            continue
+        role = "match" if heading == "Matches" else "alternative"
+        ui.section(f"{heading} ({len(items)})", role)
+        for item in items:
+            number += 1
+            restaurant = item["restaurant"]
+            mode = results["mode"]
+            meters = restaurant.get(f"{mode}_meters")
+            distance = (f"{meters / 1000:.2f} km by {mode}"
+                        if meters is not None else "distance unavailable")
+            ui.item(number, f"{restaurant['name']} · {distance}", role=role)
+
+
+def show_no_matches(results):
+    """Explain why the leading alternative is not a verified match."""
+    ui.message("No fully verified matches for these search choices.",
+               "warning")
+    alternatives = results["alternatives"]
+    if not alternatives:
+        ui.message("No alternatives found. Try changing today's search.",
+                   "warning")
+        return
+    cautions = [reason[2:] for reason in alternatives[0]["reasons"]
+                if reason.startswith("! ")]
+    if cautions:
+        ui.message("Why the top alternative is not a match: "
+                   + "; ".join(cautions[:3]) + ".", "warning")
+
+
 def _show_result(number, item, results, role):
     """Print one restaurant card with the evidence behind its ranking."""
     restaurant = item["restaurant"]
@@ -157,6 +192,8 @@ def _show_result(number, item, results, role):
                  indent=5, role="warning")
     elif halal == "unverified" and "halal" in results["requested_dietary"]:
         ui.field("Halal", "Unverified", indent=5, role="warning")
+    highlights = []
+    checks = []
     for reason in item["reasons"]:
         if (reason == "! cuisine unavailable" and not restaurant.get("cuisines")):
             continue
@@ -166,9 +203,16 @@ def _show_result(number, item, results, role):
         if reason == "! halal status unverified" and halal == "unverified":
             continue
         caution = reason.startswith("! ")
-        ui.field("Check" if caution else "Why it fits",
-                 reason[2:] if caution else reason, indent=5,
-                 role="warning" if caution else "success")
+        (checks if caution else highlights).append(
+            reason[2:] if caution else reason)
+    if highlights:
+        ui.line("     Highlights:", "success")
+        for reason in highlights:
+            ui.line(f"       • {reason[:1].upper()}{reason[1:]}", "success")
+    if checks:
+        ui.line("     Things to check:", "warning")
+        for reason in checks:
+            ui.line(f"       • {reason[:1].upper()}{reason[1:]}", "warning")
     ui.line()
 
 
