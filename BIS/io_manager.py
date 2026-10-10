@@ -11,7 +11,8 @@ from sources.prompts import (
 
 import data_manager
 import ai_manager
-from support import email_delivery
+from support.email_verification import challenge as email_challenge
+from support.email_verification import service as email_service
 import logic_manager
 from shared import terminal_ui as ui
 from sources.profile_schema import (
@@ -144,56 +145,40 @@ def display_welcome(user):
     display_message("Type /help for commands.")
 
 
-def get_verification(user_id):
-    challenge = data_manager.get_state("verification", user_id)
-    if challenge:
-        logic_manager.validate_challenge(challenge)
-    return challenge
-
-
-def request_verification(user, config):
-    code, challenge = logic_manager.new_challenge(
-        get_verification(user["userID"]))
-    email_delivery.send_verification_email(user["email"], code, config)
-    data_manager.set_state("verification", user["userID"], challenge)
-    display_message("A verification code was emailed to you.")
-
-
 def verify_email_interactively(user, config):
-    if user["email_verified"] or config.get("smtp_bypass"):
+    if config.get("smtp_bypass"):
         if not user["email_verified"]:
             display_message("SMTP verification bypass is enabled for testing.",
                             role="bypass")
         return user
-    user_id = user["userID"]
-    challenge = get_verification(user_id)
+    pending = email_service.get_challenge(user["userID"])
     needs_code = (
-        not challenge or time.time() >= challenge["expires_at"]
-        or challenge["attempts"] >= logic_manager.VERIFICATION_MAX_ATTEMPTS
+        not pending or time.time() >= pending["expires_at"]
+        or pending["attempts"] >= email_challenge.VERIFICATION_MAX_ATTEMPTS
     )
     if needs_code:
         try:
-            request_verification(user, config)
+            email_service.request_code(user, config)
+            display_message("A verification code was emailed to you.")
         except (ValueError, RuntimeError) as error:
             display_message(error)
+    else:
+        display_message(
+            "Enter the code recently emailed to you, or use /resend.")
     while True:
         code = read_input("Verification code (/resend or /quit): ")
         if code is None or code.lower() in {"/quit", "/exit"}:
             return None
         try:
             if code.lower() == "/resend":
-                request_verification(user, config)
+                email_service.request_code(user, config)
+                display_message("A new verification code was emailed to you.")
                 continue
-            updated, error = logic_manager.check_challenge(
-                get_verification(user_id), code)
-            if updated:
-                data_manager.set_state("verification", user_id, updated)
-            if error:
-                raise ValueError(error)
-            user["email_verified"] = True
-            user = data_manager.save(user)
-            data_manager.set_state("verification", user_id, None)
-            display_message("Email verified.")
+            was_verified = user["email_verified"]
+            user = email_service.verify_code(user, code)
+            display_message(
+                "Email confirmed. Welcome back." if was_verified
+                else "Email verified.")
             return user
         except (ValueError, RuntimeError) as error:
             display_message(error)

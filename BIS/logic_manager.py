@@ -1,17 +1,13 @@
-"""Procedural profile decisions, conversions, and verification."""
+"""Procedural profile and search decisions and conversions."""
 
-import hashlib
 import math
 import re
-import secrets
-import time
 from copy import deepcopy
 from difflib import SequenceMatcher
 
 from sources.profile_schema import (
     CUISINES, CUISINE_FIELDS, MINUTES_PER_KM, OTHER_PREFERENCES,
-    UNSUPPORTED_CUISINES, VERIFICATION_MAX_ATTEMPTS,
-    VERIFICATION_RESEND_SECONDS, VERIFICATION_TTL_SECONDS,
+    UNSUPPORTED_CUISINES,
     PREFERENCE_FIELDS, clean_text, validate_preferences, validate_updates,
     validate_value,
 )
@@ -280,69 +276,3 @@ def next_field(preferences):
         if preferences[field] is None:
             return field
     return None
-
-
-def hash_verification_code(code, salt):
-    return hashlib.pbkdf2_hmac(
-        "sha256", code.encode(), salt.encode("ascii"), 100_000,
-    ).hex()
-
-
-def new_challenge(previous=None, now=None):
-    now = time.time() if now is None else now
-    if previous:
-        validate_challenge(previous)
-    if previous and now < previous["sent_at"] + VERIFICATION_RESEND_SECONDS:
-        raise ValueError("Wait 60 seconds between verification emails.")
-    code = f"{secrets.randbelow(1_000_000):06d}"
-    salt = secrets.token_hex(16)
-    return code, {
-        "salt": salt, "code_hash": hash_verification_code(code, salt),
-        "sent_at": now, "expires_at": now + VERIFICATION_TTL_SECONDS,
-        "attempts": 0,
-    }
-
-
-def check_challenge(challenge, code, now=None):
-    """Return attempt state and any error for the caller to persist."""
-    now = time.time() if now is None else now
-    if not challenge:
-        return None, "Request a verification code first."
-    validate_challenge(challenge)
-    updated = dict(challenge)
-    if now >= updated["expires_at"]:
-        return updated, "Verification code expired. Use /resend."
-    if updated["attempts"] >= VERIFICATION_MAX_ATTEMPTS:
-        return updated, "Too many incorrect attempts. Use /resend."
-    updated["attempts"] += 1
-    valid = isinstance(code, str) and re.fullmatch(r"[0-9]{6}", code.strip())
-    if valid:
-        valid = secrets.compare_digest(
-            hash_verification_code(code.strip(), updated["salt"]),
-            updated["code_hash"],
-        )
-    return updated, None if valid else "Incorrect verification code."
-
-
-def validate_challenge(challenge):
-    """Reject corrupt verification state before using timestamps or hashes."""
-    import math
-
-    if not isinstance(challenge, dict) or set(challenge) != {
-        "salt", "code_hash", "sent_at", "expires_at", "attempts",
-    }:
-        raise ValueError("Invalid verification state. Restore the state file.")
-    if not isinstance(challenge["salt"], str) or not re.fullmatch(
-        r"[0-9a-f]{32}", challenge["salt"],
-    ):
-        raise ValueError("Invalid verification state.")
-    if not isinstance(challenge["code_hash"], str) or not re.fullmatch(
-        r"[0-9a-f]{64}", challenge["code_hash"],
-    ):
-        raise ValueError("Invalid verification state.")
-    if type(challenge["attempts"]) is not int or challenge["attempts"] < 0:
-        raise ValueError("Invalid verification state.")
-    for field in ("sent_at", "expires_at"):
-        value = challenge[field]
-        if type(value) not in (int, float) or not math.isfinite(value):
-            raise ValueError("Invalid verification state.")
