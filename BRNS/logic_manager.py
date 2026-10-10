@@ -56,7 +56,9 @@ def decide_outcome(restaurant, request):
     if set(cuisines) & set(request["disliked_cuisines"]):
         return "reject", 0, ["contains a disliked cuisine"]
     wanted = request["cuisine"]
-    if wanted in cuisines:
+    if wanted == "none":
+        pass
+    elif wanted in cuisines:
         reasons.append("matches your selected cuisine")
     elif cuisines:
         problems.append("does not match your selected cuisine")
@@ -116,7 +118,8 @@ def _grounded_ai_reasons(restaurant, request, codes, candidate_id=None):
     budget = request["budget_per_person"]
     checks = {
         "cuisine_match": (
-            request["cuisine"] in restaurant["cuisines"],
+            request["cuisine"] != "none"
+            and request["cuisine"] in restaurant["cuisines"],
             "matches your selected cuisine"),
         "within_budget": (
             type(restaurant.get("avg_price")) in (int, float)
@@ -230,7 +233,7 @@ def rank_restaurants(restaurants, request, recommendations=None):
             raw, offline=raw.get("source") == "offline catalog")
         status, score, reasons = decide_outcome(restaurant, request)
         for reason in ai_reasons.get(index, []):
-            if reason not in reasons:
+            if reason not in reasons and f"! {reason}" not in reasons:
                 reasons.append(reason)
         item = {"restaurant": restaurant, "score": score, "reasons": reasons}
         if status == "match":

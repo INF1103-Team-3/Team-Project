@@ -83,8 +83,8 @@ def _validate_search_fields(request):
         raise ValueError("Today's search location must be in Singapore.")
     if request["mode"] not in ("walk", "drive"):
         raise ValueError("Choose walk or drive for today's search.")
-    if request["cuisine"] not in CUISINES:
-        raise ValueError("Choose a supported cuisine for today's search.")
+    if request["cuisine"] not in (*CUISINES, "none"):
+        raise ValueError("Choose a supported cuisine or none for today's search.")
     for field in (OTHER_PREFERENCES, "dietary_requirements",
                   "disliked_cuisines"):
         if not isinstance(request[field], list):
@@ -130,7 +130,7 @@ def parse_coordinates(text):
 
 def is_direct_location_input(text):
     return parse_coordinates(text) is not None or bool(
-        re.fullmatch(r"\d{6}", text)
+        re.fullmatch(r"\d{5,6}", text)
     )
 
 

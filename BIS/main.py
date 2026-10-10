@@ -14,7 +14,7 @@ from BRNS import io_manager as brns_io
 from BRNS import main as brns_main
 from sources.profile_schema import OTHER_PREFERENCES, empty_preferences
 from support import config as settings
-from shared import debug_log
+from shared import debug_log, terminal_ui
 
 
 def run_search(session, config, automatic=False):
@@ -40,6 +40,8 @@ def run_search(session, config, automatic=False):
                             "BIS.io.collect_search")
         confirmed = collected["request"]
         today_request = collected["today_request"]
+        if collected.get("save_cuisine"):
+            remember_search_cuisine(session, collected["save_cuisine"], config)
         if config.get("ai_bypass"):
             request = logic_manager.validate_search_request(confirmed)
         else:
@@ -88,7 +90,8 @@ def run_search(session, config, automatic=False):
             session["search"] = request
             data_manager.set_state("search", user_id, {"completed": True})
             io_manager.display_message(
-                "Chatbot test mode: restaurant search skipped.")
+                "Chatbot test mode: restaurant search skipped.",
+                role="bypass")
             debug_log.debug_log("Chatbot test completed without BRNS.", "INFO",
                                 "BIS.main.run_search")
             return
@@ -100,8 +103,23 @@ def run_search(session, config, automatic=False):
             "BIS.main.run_search")
         session["search"] = request
         data_manager.set_state("search", user_id, {"completed": True})
-        brns_io.show_results(results)
-        options = results["matches"] + results["alternatives"]
+        matches = results["matches"]
+        alternatives = results["alternatives"]
+        if not matches:
+            io_manager.display_message(
+                "No restaurants matched all your search choices.",
+                role="warning")
+            if not alternatives:
+                io_manager.display_message(
+                    "No alternatives found either. Try /search with different choices.",
+                    role="warning")
+                return
+            if io_manager.ask_yes_no(
+                    f"Show {len(alternatives)} alternative"
+                    f"{'s' if len(alternatives) != 1 else ''}?", config) is not True:
+                return
+        brns_io.show_results(results, announce_no_matches=bool(matches))
+        options = matches + alternatives
         if not any(item["restaurant"].get("lat") is not None
                    and item["restaurant"].get("lng") is not None
                    for item in options):
@@ -128,7 +146,7 @@ def run_search(session, config, automatic=False):
             "BIS.main.run_search")
         io_manager.display_message(
             f"{error} Details: logs/bitefinder.log "
-            f"(trace {debug_log.current_trace_id()}).")
+            f"(trace {debug_log.current_trace_id()}).", role="error")
     finally:
         debug_log.debug_log(
             f"Search flow finished in {time.monotonic() - started:.2f}s.",
@@ -152,6 +170,21 @@ def remember_search_wishes(session, today_request, config):
     debug_log.debug_log(
         "Saved one confirmed special request for later searches.",
         "INFO", "BIS.data.save_preferences")
+
+
+def remember_search_cuisine(session, cuisine, config):
+    """Save an explicitly approved search cuisine to the user's likes."""
+    user = session["user"]
+    preferences = dict(user["preferences"])
+    preferences["liked_cuisines"] = list(dict.fromkeys(
+        (preferences["liked_cuisines"] or []) + [cuisine]))
+    preferences["disliked_cuisines"] = [
+        item for item in preferences["disliked_cuisines"] or []
+        if item != cuisine]
+    session["user"] = data_manager.save_preferences(
+        user["userID"], preferences, config)
+    debug_log.debug_log("Saved one approved liked cuisine.", "INFO",
+                        "BIS.data.save_preferences")
 
 
 def save_update(action, session, config, from_ai):
@@ -250,36 +283,52 @@ def handle_action(action, session, config, from_ai=False):
 
 def run_session(user, config):
     """Retain the saved state if collection, confirmation, or saving fails."""
-    io_manager.display_welcome(user)
-    session = {"user": user, "field": None, "location_action": "add"}
-    if logic_manager.next_field(user["preferences"]) is None:
-        run_search(session, config, automatic=True)
-    while True:
-        action = {}
-        try:
-            action = io_manager.collect_action(
-                session["user"], config, session["field"],
-                session["location_action"],
-            )
-            from_ai = action["action"] == "interpret"
-            if from_ai:
-                action = ai_manager.process(action["record"], config)
-            result = handle_action(action, session, config, from_ai)
-            if result is not None:
-                return result
-        except (ValueError, RuntimeError, OSError) as error:
-            io_manager.display_message(error)
-            io_manager.display_message(
-                "No preference update was applied. Please retry."
-            )
-            if action.get("action") in {"exit", "logout"}:
-                return "exit"
+    display = data_manager.get_state("display", user["userID"]) or {}
+    terminal_ui.set_color_enabled(display.get("color_enabled") is not False)
+
+    def change_color(enabled):
+        data_manager.set_state("display", user["userID"],
+                               None if enabled else {"color_enabled": False})
+        terminal_ui.set_color_enabled(enabled)
+        io_manager.display_message(
+            "Colors enabled for your account." if enabled
+            else "Colors disabled for your account.")
+
+    io_manager.set_color_handler(change_color)
+    try:
+        io_manager.display_welcome(user)
+        session = {"user": user, "field": None, "location_action": "add"}
+        if logic_manager.next_field(user["preferences"]) is None:
+            run_search(session, config, automatic=True)
+        while True:
+            action = {}
+            try:
+                action = io_manager.collect_action(
+                    session["user"], config, session["field"],
+                    session["location_action"],
+                )
+                from_ai = action["action"] == "interpret"
+                if from_ai:
+                    action = ai_manager.process(action["record"], config)
+                result = handle_action(action, session, config, from_ai)
+                if result is not None:
+                    return result
+            except (ValueError, RuntimeError, OSError) as error:
+                io_manager.display_message(error)
+                io_manager.display_message(
+                    "No preference update was applied. Please retry."
+                )
+                if action.get("action") in {"exit", "logout"}:
+                    return "exit"
+    finally:
+        io_manager.set_color_handler(None)
+        terminal_ui.set_color_enabled(True)
 
 
 def run_accounts(config):
     data_manager.load()
     if data_manager.LAST_ERROR:
-        io_manager.display_message(data_manager.LAST_ERROR)
+        io_manager.display_message(data_manager.LAST_ERROR, role="error")
     while True:
         user = io_manager.select_user(config)
         if user is None:
@@ -299,7 +348,7 @@ def main():
         errors = settings.validate_config(config)
         if errors:
             for error in errors:
-                io_manager.display_message(error)
+                io_manager.display_message(error, role="error")
             return
         run_accounts(config)
     except (ValueError, RuntimeError, OSError) as error:

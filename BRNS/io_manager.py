@@ -6,6 +6,7 @@ import sys
 
 from BRNS import places_client
 from shared import debug_log as log
+from shared import terminal_ui as ui
 from BIS.sources.profile_schema import (
     CUISINES, clean_text, validate_value,
 )
@@ -53,8 +54,8 @@ def accept_bis_json(payload):
     )):
         raise ValueError("Search preferences and dietary requirements must be lists.")
     cuisine = payload["cuisine"]
-    if not isinstance(cuisine, str) or cuisine not in CUISINES:
-        raise ValueError("Choose one supported cuisine for the search.")
+    if not isinstance(cuisine, str) or cuisine not in (*CUISINES, "none"):
+        raise ValueError("Choose a supported cuisine or none for the search.")
     return {
         "origin": {
             "query": query, "label": label,
@@ -103,50 +104,81 @@ def build_maps_link(origin, destination, mode):
     return places_client.build_maps_link(origin, destination, mode)
 
 
-def show_results(results):
+def show_results(results, announce_no_matches=True):
     """Display ranked restaurants without collecting any input."""
-    items = results["matches"] + results["alternatives"]
-    if not items:
-        print("BiteFinder: No restaurants found for this search.")
+    matches = results["matches"]
+    alternatives = results["alternatives"]
+    if not matches and announce_no_matches:
+        ui.message("No restaurants matched all your search choices.", "warning")
+    if not matches and not alternatives:
+        ui.message("No alternatives found either.", "warning")
         return
-    print("BiteFinder: Restaurant results:")
-    for number, item in enumerate(items, 1):
-        restaurant = item["restaurant"]
-        kind = "Match" if item in results["matches"] else "Alternative"
-        cuisine = ", ".join(restaurant.get("cuisines") or []) or "unknown cuisine"
-        dietary = ", ".join(
-            item for item in restaurant.get("dietary_requirements") or []
-            if item != "halal") or "dietary evidence unavailable"
-        halal = restaurant.get("halal_status")
-        if halal == "unofficial":
-            dietary += " | Halal (unofficial; not checked)"
-        elif halal == "unverified" and "halal" in results["requested_dietary"]:
-            dietary += " | Halal unverified"
-        mode = results["mode"]
-        meters = restaurant.get(f"{mode}_meters")
-        source = restaurant.get(f"{mode}_source")
-        travel = (f"{meters / 1000:.2f} km {mode}"
-                  if meters is not None else "travel distance unavailable")
-        if source == "estimate":
-            travel += " (estimate; unverified)"
-        price = restaurant.get("avg_price")
-        if price is None:
-            price = restaurant.get("price_start")
-        budget = (f"from SGD {price:.2f}" if price is not None
-                  else "price unverified")
-        print(f"  {number}. {restaurant['name']} [{kind}]")
-        print(f"     {restaurant.get('address') or 'address unavailable'}")
-        print(f"     {cuisine} | {budget} | {travel} | {dietary}")
-        for reason in item["reasons"]:
-            print(f"     {reason}")
+    number = 0
+    for heading, items in (("Matches", matches), ("Alternatives", alternatives)):
+        if not items:
+            continue
+        ui.section(f"{heading} ({len(items)})",
+                   "match" if heading == "Matches" else "alternative")
+        for item in items:
+            number += 1
+            _show_result(number, item, results,
+                         "match" if heading == "Matches" else "alternative")
+
+
+def _show_result(number, item, results, role):
+    """Print one restaurant card with the evidence behind its ranking."""
+    restaurant = item["restaurant"]
+    cuisine = ", ".join(restaurant.get("cuisines") or []) or "Unavailable"
+    dietary = ", ".join(
+        item for item in restaurant.get("dietary_requirements") or []
+        if item != "halal")
+    halal = restaurant.get("halal_status")
+    mode = results["mode"]
+    meters = restaurant.get(f"{mode}_meters")
+    source = restaurant.get(f"{mode}_source")
+    travel = (f"{meters / 1000:.2f} km by {mode}"
+              if meters is not None else "distance unavailable")
+    if source == "estimate":
+        travel += " (estimate, unverified)"
+    average = restaurant.get("avg_price")
+    starting = restaurant.get("price_start")
+    price = (f"Average SGD {average:.2f}" if average is not None
+             else f"From SGD {starting:.2f}" if starting is not None
+             else "Unverified")
+    ui.item(number, restaurant['name'], role=role)
+    ui.line(f"     {restaurant.get('address') or 'Address unavailable'}", "muted")
+    ui.field("Cuisine", cuisine, indent=5)
+    ui.field("Price", price, indent=5)
+    ui.field("Travel", travel, indent=5)
+    if dietary:
+        ui.field("Dietary", dietary, indent=5)
+    if halal == "unofficial":
+        ui.field("Halal", "Unofficial indication; not checked",
+                 indent=5, role="warning")
+    elif halal == "unverified" and "halal" in results["requested_dietary"]:
+        ui.field("Halal", "Unverified", indent=5, role="warning")
+    for reason in item["reasons"]:
+        if (reason == "! cuisine unavailable" and not restaurant.get("cuisines")):
+            continue
+        if (reason in ("! Halal (unofficial; not checked)",
+                      "Halal (unofficial; not checked)") and halal == "unofficial"):
+            continue
+        if reason == "! halal status unverified" and halal == "unverified":
+            continue
+        caution = reason.startswith("! ")
+        ui.field("Check" if caution else "Why it fits",
+                 reason[2:] if caution else reason, indent=5,
+                 role="warning" if caution else "success")
+    ui.line()
 
 
 def show_route(name, route, link, mode):
-    print(f"BiteFinder: {mode.title()} route to {name}:")
+    ui.section(f"{mode.title()} route to {name}")
     if route is not None:
-        print(f"  {route['distance_m']} m, {route['duration_min']} min")
+        ui.field("Journey", f"{route['distance_m']} m · "
+                 f"{route['duration_min']} min")
         for step in route["steps"]:
-            print(f"  {step}")
+            ui.line(f"  {step}")
     else:
-        print("  Detailed route unavailable; use this map link:")
-    print(f"  {link}")
+        ui.line("  Detailed route unavailable; use this map link:", "warning")
+    ui.field("Map", link)

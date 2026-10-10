@@ -28,6 +28,13 @@ On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` instead.
 The root `requirements.txt` covers both applications. The optional
 `requirements-dev.txt` adds `pycodestyle` and the function graph tools.
 
+BIS and BRNS use the same terminal theme for prompts, profile details,
+restaurant results, and directions. Interactive terminals show color;
+redirected output remains plain text. Set `NO_COLOR=1` to disable color in a
+terminal. After signing in, `/color off` saves a color-free display for that
+account; `/color on` restores the default. Both work at any prompt. The
+wording and warning labels remain visible without color.
+
 To generate the function call PNGs on Windows, run these commands from the
 repository root in PowerShell or Command Prompt:
 
@@ -78,6 +85,13 @@ correction. BIS AI then proposes a search request. BIS Logic protects
 confirmed choices and validates the proposal; you confirm it before BIS Data
 serializes the request to JSON. Confirmed new special requests are saved for
 future searches. BRNS receives that JSON for restaurant results.
+The search location accepts a six-digit Singapore postal code or
+`latitude,longitude` as well as an address or landmark. Cuisine can be `none`
+when you want any cuisine. Type `/help` at any prompt to see help and return
+to the same question. AI reviews free-text wording and asks before using a
+correction; BIS owns a model chain copied from BRNS's provider order.
+Budget and distance prompts also accept natural wording such as `i think 12`
+and `about 500 metres`; BIS confirms the interpreted number before using it.
 AI may add wishes from your description but cannot remove selected preferences.
 With `AI_BYPASS=true`, BIS shows the choices without calling AI or BRNS; this
 is the chatbot test mode.
@@ -134,8 +148,8 @@ Keys rotate in order, including failed requests, and rotation resets on
 launch. Alternatively, use `OPENROUTER_API_KEYS_FILE=secrets/openrouter_keys.json`
 with a JSON list or comma/newline-separated key file. That relative path still
 resolves from `BIS/`. The key list takes priority over the file, then the shared
-`OPENROUTER_API_KEY` setting. BRNS uses `OPENROUTER_API_KEY` or
-`GEMINI_API_KEY` according to its configured model chain.
+`OPENROUTER_API_KEY` setting. BIS and BRNS each manage their own model chains;
+both can use `GEMINI_API_KEY` from `.env`.
 
 To send verification codes, set `SMTP_BYPASS=false` and fill in the SMTP
 settings in [`.env.example`](.env.example). Codes expire after ten

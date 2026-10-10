@@ -4,8 +4,11 @@ import json
 import math
 import os
 import tempfile
+import time
 from contextlib import contextmanager
 from pathlib import Path
+
+from shared.debug_log import debug_log
 
 CACHE_FILE = Path(__file__).resolve().parent.parent / "data" / "geocode_cache.json"
 
@@ -73,7 +76,7 @@ def _cache_lock(path):
 
 
 def remember(queries, latitude, longitude):
-    """Atomically save successful lookups under every supplied query."""
+    """Best-effort atomic cache write; geocoding must survive a locked file."""
     point = _point([latitude, longitude])
     if point is None:
         raise ValueError("Invalid geocode coordinates.")
@@ -81,14 +84,14 @@ def remember(queries, latitude, longitude):
     keys.discard("")
     if not keys:
         return
-    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = CACHE_FILE.with_suffix(".lock")
-    with _cache_lock(lock_path):
-        data = _read()
-        for key in keys:
-            data[key] = list(point)
-        temporary = None
-        try:
+    temporary = None
+    try:
+        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = CACHE_FILE.with_suffix(".lock")
+        with _cache_lock(lock_path):
+            data = _read()
+            for key in keys:
+                data[key] = list(point)
             with tempfile.NamedTemporaryFile(
                 "w", encoding="utf-8", dir=CACHE_FILE.parent,
                 prefix=".geocode-", suffix=".tmp", delete=False,
@@ -98,7 +101,23 @@ def remember(queries, latitude, longitude):
                 file.write("\n")
                 file.flush()
                 os.fsync(file.fileno())
-            os.replace(temporary, CACHE_FILE)
-        finally:
-            if temporary is not None:
+            for attempt in range(3):
+                try:
+                    os.replace(temporary, CACHE_FILE)
+                    return True
+                except PermissionError:
+                    if attempt == 2:
+                        break
+                    time.sleep(0.05 * (attempt + 1))
+    except OSError:
+        pass
+    finally:
+        if temporary is not None:
+            try:
                 temporary.unlink(missing_ok=True)
+            except OSError:
+                debug_log("Temporary geocode cache file could not be removed.",
+                          "WARNING", "shared.geocode_cache.remember")
+    debug_log("Geocode cache write unavailable; using resolved location.",
+              "WARNING", "shared.geocode_cache.remember")
+    return False

@@ -10,6 +10,7 @@ if __package__ in (None, ""):
 
 from BRNS import ai_manager, config, data_manager, io_manager, logic_manager
 from shared import debug_log as log
+from shared import terminal_ui as ui
 
 
 def search(bis_json):
@@ -91,7 +92,7 @@ def main():
     try:
         results = search(json.load(sys.stdin))
     except (ValueError, RuntimeError, OSError, json.JSONDecodeError) as error:
-        print(f"BiteFinder: {error}")
+        ui.message(error, "error")
         return
     io_manager.show_results(results)
 

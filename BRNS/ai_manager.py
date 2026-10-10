@@ -223,6 +223,7 @@ Use vegetarian_options only when vegetarian is requested and listed in the
 candidate dietary_requirements. Use halal_hint_unofficial only when halal is
 requested and the candidate has halal_hint_unofficial true.
 Use cuisine_match only when the requested cuisine is in candidate cuisines.
+When the requested cuisine is none, never use cuisine_match.
 Use within_route only for route distances within the user's limit.
 Do not invent restaurant facts or claim official halal certification.
 The next layer will verify every reason and enforce hard requirements."""
