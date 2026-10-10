@@ -409,12 +409,29 @@ def ask_search_clarification(config):
         )
         if _cancelled(value):
             return None
-        if not value and config.get("ai_bypass"):
-            return ""
         try:
-            return clean_text(value, 500)
-        except ValueError:
-            display_message("Describe what you want today, or /cancel.")
+            text = logic_manager.validate_special_request_text(value)
+            try:
+                reviewed = ai_manager.review_special_request(text, config)
+            except RuntimeError:
+                display_message(
+                    "Could not check the wording. Please try again, "
+                    "or enter /cancel.")
+                continue
+            if reviewed is None:
+                display_message(
+                    "I could not understand that request. Please rephrase it.")
+                continue
+            logic_manager.validate_special_request_text(reviewed)
+            if reviewed != text:
+                confirmed = ask_yes_no(f"Use '{reviewed}' instead?")
+                if confirmed is None:
+                    return None
+                if not confirmed:
+                    continue
+            return reviewed
+        except ValueError as error:
+            display_message(error)
 
 
 def collect_search(user, config):
@@ -440,7 +457,7 @@ def collect_search(user, config):
         return None
     other = wishes["selected"]
     if config.get("ai_bypass") and wishes["text"]:
-        other = validate_value(OTHER_PREFERENCES, [wishes["text"]])
+        other = validate_value(OTHER_PREFERENCES, other + [wishes["text"]])
     request = {
         "origin": location, "mode": mode, "max_distance_km": distance,
         "cuisine": cuisine, "budget_per_person": budget,

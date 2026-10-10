@@ -54,6 +54,13 @@ def run_search(session, config, automatic=False):
                 try:
                     request = logic_manager.validate_search_request(
                         confirmed, interpreted)
+                    if (today_request and not confirmed[OTHER_PREFERENCES]
+                            and request[OTHER_PREFERENCES]
+                            == confirmed[OTHER_PREFERENCES]):
+                        request = dict(request)
+                        request[OTHER_PREFERENCES] = (
+                            confirmed[OTHER_PREFERENCES] + [today_request])
+                        request = logic_manager.validate_search_request(request)
                     debug_log.debug_log("AI proposal validated.", "INFO",
                                         "BIS.logic.validate_search_request")
                     break
@@ -75,7 +82,7 @@ def run_search(session, config, automatic=False):
         payload = data_manager.serialize_search_request(request)
         debug_log.debug_log("Validated request serialized to JSON.", "INFO",
                             "BIS.data.serialize_search_request")
-        remember_search_wishes(session, request, config)
+        remember_search_wishes(session, today_request, config)
         if config.get("ai_bypass"):
             io_manager.display_search_summary(request)
             session["search"] = request
@@ -129,20 +136,21 @@ def run_search(session, config, automatic=False):
         debug_log.end_trace(trace_token)
 
 
-def remember_search_wishes(session, request, config):
-    """Keep confirmed new wishes in the profile for later searches."""
+def remember_search_wishes(session, today_request, config):
+    """Keep the user's confirmed wording in the profile for later searches."""
+    if not today_request:
+        return
     user = session["user"]
     saved = user["preferences"][OTHER_PREFERENCES] or []
-    additions = [item for item in request[OTHER_PREFERENCES]
-                 if item not in saved]
-    if not additions:
+    wish = today_request.lower()
+    if wish in saved:
         return
     preferences = dict(user["preferences"])
-    preferences[OTHER_PREFERENCES] = saved + additions
+    preferences[OTHER_PREFERENCES] = saved + [wish]
     session["user"] = data_manager.save_preferences(
         user["userID"], preferences, config)
     debug_log.debug_log(
-        f"Saved {len(additions)} new special requests for later searches.",
+        "Saved one confirmed special request for later searches.",
         "INFO", "BIS.data.save_preferences")
 
 

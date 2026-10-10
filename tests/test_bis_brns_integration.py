@@ -133,6 +133,7 @@ class IntegrationTests(unittest.TestCase):
         ):
             result = bis_io.collect_search(user, {"ai_bypass": False})
         self.assertEqual(result["today_request"], "quiet place")
+        self.assertEqual(result["request"]["other_preferences"], [])
         self.assertEqual(result["request"]["dietary_requirements"], ["halal"])
         with patch.object(bis_io, "read_input", return_value=""):
             self.assertEqual(bis_io.ask_search_wishes(profile, {}),
@@ -209,6 +210,20 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(wishes, {"selected": [], "text": ""})
         self.assertIn("Could not check the wording", message.call_args.args[0])
 
+    def test_search_clarification_confirms_ai_wording_correction(self):
+        from BIS import io_manager as bis_io
+
+        with (
+            patch.object(bis_io, "read_input", return_value="chikcen rice"),
+            patch.object(bis_io.ai_manager, "review_special_request",
+                         return_value="chicken rice") as review,
+            patch.object(bis_io, "ask_yes_no", return_value=True) as confirm,
+        ):
+            result = bis_io.ask_search_clarification({"ai_bypass": False})
+        self.assertEqual(result, "chicken rice")
+        review.assert_called_once()
+        confirm.assert_called_once()
+
     def test_confirmed_new_request_is_saved_for_next_search(self):
         from BIS import io_manager as bis_io
 
@@ -216,8 +231,7 @@ class IntegrationTests(unittest.TestCase):
         profile["other_preferences"] = ["spicy food"]
         session = {"user": {"userID": "test", "preferences": profile}}
         bis_main.remember_search_wishes(
-            session, dict(request(), other_preferences=[
-                "spicy food", "chicken rice"]), {})
+            session, "Chicken rice", {})
         self.saved_preferences.assert_called_once()
         self.assertEqual(session["user"]["preferences"]["other_preferences"],
                          ["spicy food", "chicken rice"])
@@ -225,6 +239,37 @@ class IntegrationTests(unittest.TestCase):
             self.assertEqual(bis_io.ask_search_wishes(
                 session["user"]["preferences"], {"ai_bypass": True}),
                 {"selected": ["chicken rice"], "text": ""})
+
+    def test_new_request_reaches_brns_when_search_ai_omits_it(self):
+        profile = empty_preferences()
+        profile.update(location=["pasir ris"], max_distance_km=2,
+                       max_travel_time_minutes=40, budget_per_person=10,
+                       dietary_requirements=[], liked_cuisines=["malay"],
+                       disliked_cuisines=[], other_preferences=[])
+        session = {"user": {"userID": "test", "preferences": profile}}
+        choices = dict(request(), other_preferences=[])
+        with (
+            patch.object(bis_main.data_manager, "get_state", return_value=None),
+            patch.object(bis_main.data_manager, "set_state"),
+            patch.object(bis_main.io_manager, "collect_search",
+                         return_value={"request": choices,
+                                       "today_request": "chicken rice"}),
+            patch.object(bis_main.io_manager, "confirm_search_request",
+                         return_value=True),
+            patch.object(bis_main.io_manager, "display_message") as message,
+            patch.object(bis_main.ai_manager, "interpret_search_request",
+                         return_value=choices),
+            patch.object(bis_main.brns_io, "show_results"),
+            patch.object(bis_main.brns_main, "search",
+                         return_value={"matches": [], "alternatives": [],
+                                       "hidden": 0}) as search,
+        ):
+            bis_main.run_search(session, {"ai_bypass": False})
+        self.assertIsNotNone(search.call_args, message.call_args_list)
+        self.assertEqual(json.loads(search.call_args.args[0])[
+            "other_preferences"], ["chicken rice"])
+        self.assertEqual(session["user"]["preferences"][
+            "other_preferences"], ["chicken rice"])
 
     def test_brns_requires_ai_before_places_and_does_not_save_on_ai_failure(self):
         with (
