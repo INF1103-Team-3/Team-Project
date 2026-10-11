@@ -34,6 +34,7 @@ def request():
             "latitude": 1.372, "longitude": 103.95,
         },
         "mode": "walk", "max_distance_km": 2.0,
+        "max_travel_minutes": None, "traffic_aware": False,
         "cuisine": "malay", "budget_per_person": 10.0,
         "other_preferences": ["spicy food"],
         "dietary_requirements": ["halal"],
@@ -61,6 +62,32 @@ class IntegrationTests(unittest.TestCase):
                 "userID": user_id, "preferences": preferences})
         self.saved_preferences = saved_preferences.start()
         self.addCleanup(saved_preferences.stop)
+
+    def test_exit_message_only_mentions_profile_during_setup(self):
+        complete = empty_preferences()
+        complete.update(location=["pasir ris"], max_distance_km=2,
+                        max_travel_time_minutes=40, budget_per_person=10,
+                        dietary_requirements=[], liked_cuisines=[],
+                        disliked_cuisines=[], other_preferences=[])
+        with patch.object(bis_main.io_manager, "display_message") as display:
+            for intent, profile, expected in (
+                ("exit", complete, "Goodbye!"),
+                ("logout", complete, "Logged out."),
+                ("exit", empty_preferences(), "Profile saved. Goodbye!"),
+            ):
+                bis_main.end_session(
+                    intent, {"user": {"userID": "test",
+                                     "preferences": profile}}, {})
+                self.assertEqual(display.call_args.args[0], expected)
+        self.assertEqual(self.saved_preferences.call_count, 3)
+
+    def test_ctrl_c_exits_instead_of_cancelling_search_prompt(self):
+        from BIS import io_manager as bis_io
+
+        with patch.object(bis_io.ui, "read_input",
+                          side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                bis_io.read_input("Budget today: ")
 
     def test_color_command_persists_per_user_and_works_inside_prompt(self):
         from BIS.sources.prompts import HELP_TEXT
@@ -127,7 +154,8 @@ class IntegrationTests(unittest.TestCase):
             "mode": "walk", "requested_dietary": []}
         actions = ["done", "alternatives", "more", "route", "done"]
         with (
-            patch.object(bis_main.data_manager, "get_state", return_value=None),
+            patch.object(bis_main.data_manager, "get_state",
+                         return_value=None),
             patch.object(bis_main.data_manager, "set_state"),
             patch.object(bis_main.io_manager, "collect_search",
                          return_value={"request": request(), "today_request": ""}),
@@ -215,8 +243,8 @@ class IntegrationTests(unittest.TestCase):
 
         with (
             patch.object(bis_io, "read_input",
-                         side_effect=["1", "2", "3", "1", "2", "3", "4",
-                                      "", "2"]),
+                         side_effect=["1", "2", "3", "4", "1", "2", "3",
+                                      "4", "5", "6", "", "2"]),
             redirect_stdout(io.StringIO()),
         ):
             self.assertEqual(bis_io.choose_results_action(
@@ -224,13 +252,97 @@ class IntegrationTests(unittest.TestCase):
             self.assertEqual(bis_io.choose_results_action(
                 0, alternatives_hidden=True), "again")
             self.assertEqual(bis_io.choose_results_action(
+                0, alternatives_hidden=True), "repeat")
+            self.assertEqual(bis_io.choose_results_action(
                 0, alternatives_hidden=True), "done")
             self.assertEqual(bis_io.choose_results_action(2), "route")
+            self.assertEqual(bis_io.choose_results_action(2), "email")
             self.assertEqual(bis_io.choose_results_action(2), "more")
             self.assertEqual(bis_io.choose_results_action(2), "again")
+            self.assertEqual(bis_io.choose_results_action(2), "repeat")
             self.assertEqual(bis_io.choose_results_action(2), "done")
             self.assertEqual(bis_io.choose_results_action(2), "done")
             self.assertEqual(bis_io.choose_route_result(2), 2)
+
+    def test_enter_confirms_search_summary_only(self):
+        from BIS import io_manager as bis_io
+
+        with patch.object(bis_io, "read_input", return_value=""):
+            self.assertTrue(bis_io.confirm_search_request(request()))
+        with patch.object(bis_io, "read_input", side_effect=["", "no"]):
+            self.assertFalse(bis_io.ask_yes_no("Save a profile change?"))
+
+    def test_repeat_prefers_unseen_verified_match_without_changing_requirements(self):
+        wanted = dict(request(), cuisine="none", dietary_requirements=[],
+                      other_preferences=[])
+        candidates = [
+            {"name": "First Cafe", "address": "1 Test Road",
+             "cuisines": [], "dietary_requirements": [], "avg_price": 8,
+             "walk_meters": 500, "walk_source": "route"},
+            {"name": "Second Cafe", "address": "2 Test Road",
+             "cuisines": [], "dietary_requirements": [], "avg_price": 8,
+             "walk_meters": 800, "walk_source": "route"},
+        ]
+        order = recommendation(0, 1)
+        first = brns_logic.rank_restaurants(candidates, wanted, order)
+        repeated = brns_logic.rank_restaurants(
+            candidates, wanted, order,
+            previous_restaurants=[first["matches"][0]["restaurant"]])
+        self.assertEqual(first["matches"][0]["restaurant"]["name"], "First Cafe")
+        self.assertEqual(repeated["matches"][0]["restaurant"]["name"],
+                         "Second Cafe")
+        self.assertEqual(repeated["new_count"], 1)
+        self.assertEqual(wanted, dict(request(), cuisine="none",
+                                      dietary_requirements=[],
+                                      other_preferences=[]))
+
+    def test_email_selected_result_maps_link_to_verified_account(self):
+        profile = empty_preferences()
+        profile.update(location=["pasir ris"], max_distance_km=2,
+                       max_travel_time_minutes=40, budget_per_person=10,
+                       dietary_requirements=[], liked_cuisines=["malay"],
+                       disliked_cuisines=[], other_preferences=[])
+        user = {"userID": "test", "email": "test@example.com",
+                "email_verified": True, "preferences": profile}
+        session = {"user": user}
+        first = {"name": "First Cafe", "lat": 1.37, "lng": 103.94}
+        second = {"name": "Second Cafe", "lat": 1.38, "lng": 103.96}
+        results = {"matches": [
+            {"restaurant": first, "reasons": []},
+            {"restaurant": second, "reasons": []}],
+            "alternatives": [], "mode": "walk"}
+        config = {"ai_bypass": False}
+        with (
+            patch.object(bis_main.data_manager, "get_state",
+                         return_value=None),
+            patch.object(bis_main.data_manager, "set_state"),
+            patch.object(bis_main.io_manager, "collect_search",
+                         return_value={"request": request(),
+                                       "today_request": ""}),
+            patch.object(bis_main.ai_manager, "interpret_search_request",
+                         return_value=request()),
+            patch.object(bis_main.io_manager, "confirm_search_request",
+                         return_value=True),
+            patch.object(bis_main.brns_main, "search", return_value=results),
+            patch.object(bis_main.brns_main, "route_to") as route,
+            patch.object(bis_main.brns_io, "show_result_list"),
+            patch.object(bis_main.brns_io, "build_maps_link",
+                         return_value="https://www.google.com/maps/dir/?api=1"
+                         ) as build_link,
+            patch.object(bis_main.io_manager, "choose_results_action",
+                         side_effect=["email", "done"]),
+            patch.object(bis_main.io_manager, "choose_route_result",
+                         return_value=2),
+            patch.object(bis_main.email_delivery, "send_maps_link_email"
+                         ) as send_email,
+        ):
+            bis_main.run_search(session, config)
+        build_link.assert_called_once_with(
+            (1.372, 103.95), (1.38, 103.96), "walk")
+        send_email.assert_called_once_with(
+            "test@example.com", "Second Cafe",
+            "https://www.google.com/maps/dir/?api=1", config)
+        route.assert_not_called()
 
     def test_search_summary_shows_dietary_and_disliked_cuisines(self):
         from BIS import io_manager as bis_io
@@ -408,6 +520,300 @@ class IntegrationTests(unittest.TestCase):
         ):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 brns_io.accept_bis_json(dict(valid, **change))
+
+    def test_transit_search_contract_uses_minutes_instead_of_distance(self):
+        from BIS import logic_manager as bis_logic
+
+        transit = dict(request(), mode="transit", max_distance_km=None,
+                       max_travel_minutes=45)
+        self.assertEqual(bis_logic.validate_search_request(transit), transit)
+        self.assertEqual(brns_io.accept_bis_json(transit), transit)
+        for change in (
+            {"max_travel_minutes": None}, {"max_travel_minutes": 0},
+            {"max_travel_minutes": 241}, {"max_travel_minutes": True},
+            {"max_distance_km": 5},
+        ):
+            with self.subTest(change=change):
+                invalid = dict(transit, **change)
+                with self.assertRaises(ValueError):
+                    bis_logic.validate_search_request(invalid)
+                with self.assertRaises(ValueError):
+                    brns_io.accept_bis_json(invalid)
+        with self.assertRaises(ValueError):
+            brns_io.accept_bis_json(dict(request(), max_travel_minutes=45))
+
+    def test_walk_and_drive_time_limits_and_traffic_contract(self):
+        from BIS import logic_manager as bis_logic
+
+        for mode in ("walk", "drive"):
+            search = dict(request(), mode=mode, max_distance_km=None,
+                          max_travel_minutes=20)
+            self.assertEqual(bis_logic.validate_search_request(search), search)
+            self.assertEqual(brns_io.accept_bis_json(search), search)
+        driving = dict(request(), mode="drive", max_distance_km=None,
+                       max_travel_minutes=20, traffic_aware=True)
+        self.assertEqual(brns_io.accept_bis_json(driving), driving)
+        for invalid in (
+            dict(driving, mode="walk"),
+            dict(driving, max_travel_minutes=None),
+            dict(driving, max_distance_km=3),
+            dict(driving, traffic_aware="yes"),
+            dict(request(), mode="transit", max_distance_km=None,
+                 max_travel_minutes=20, traffic_aware=True),
+        ):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    bis_logic.validate_search_request(invalid)
+                with self.assertRaises(ValueError):
+                    brns_io.accept_bis_json(invalid)
+
+    def test_driving_time_prompt_defaults_to_no_traffic(self):
+        from BIS import io_manager as bis_io
+
+        profile = empty_preferences()
+        with patch.object(bis_io, "read_input", side_effect=["2", "20 min"]):
+            self.assertEqual(bis_io.ask_search_limit(profile, "drive"),
+                             (None, 20))
+        with patch.object(bis_io, "read_input", return_value=""):
+            self.assertIs(bis_io.ask_drive_traffic(), False)
+        with patch.object(bis_io, "read_input", return_value="2"):
+            self.assertIs(bis_io.ask_drive_traffic(), True)
+
+    def test_drive_time_collection_passes_traffic_choice_to_brns(self):
+        from BIS import io_manager as bis_io
+        from BIS import logic_manager as bis_logic
+
+        profile = empty_preferences()
+        profile.update(liked_cuisines=["malay"])
+        with (
+            patch.object(bis_io, "ask_search_location",
+                         return_value=request()["origin"]),
+            patch.object(bis_io, "ask_search_mode", return_value="drive"),
+            patch.object(bis_io, "ask_search_limit", return_value=(None, 25)),
+            patch.object(bis_io, "ask_drive_traffic", return_value=True) as traffic,
+            patch.object(bis_io, "ask_search_cuisine", return_value="malay"),
+            patch.object(bis_io, "ask_search_budget", return_value=10),
+            patch.object(bis_io, "ask_search_wishes",
+                         return_value={"selected": [], "text": ""}),
+        ):
+            collected = bis_io.collect_search(
+                {"preferences": profile}, {"ai_bypass": False})
+        traffic.assert_called_once()
+        validated = bis_logic.validate_search_request(collected["request"])
+        self.assertEqual(brns_io.accept_bis_json(validated), validated)
+        self.assertTrue(validated["traffic_aware"])
+        self.assertEqual(validated["max_travel_minutes"], 25)
+
+    def test_drive_time_ranking_and_google_traffic_requests(self):
+        driving = dict(request(), mode="drive", max_distance_km=None,
+                       max_travel_minutes=20, traffic_aware=True,
+                       dietary_requirements=[])
+        candidate = {"name": "Cafe", "lat": 1.38, "lng": 103.96,
+                     "cuisines": ["malay"], "dietary_requirements": [],
+                     "avg_price": 8}
+        matrix = [{"destinationIndex": 0, "condition": "ROUTE_EXISTS",
+                   "duration": "1200s", "distanceMeters": 9000}]
+        with patch.object(brns_places.requests, "post") as post:
+            post.return_value.json.return_value = matrix
+            brns_places.travel_times_matrix(
+                (1.372, 103.95), [candidate], "drive", True)
+            self.assertEqual(post.call_args.kwargs["json"]["routingPreference"],
+                             "TRAFFIC_AWARE")
+            brns_places.travel_times_matrix(
+                (1.372, 103.95), [candidate], "drive", False)
+            self.assertNotIn("routingPreference", post.call_args.kwargs["json"])
+        result = brns_logic.rank_restaurants(
+            [candidate], driving,
+            [{"id": 0, "reason_codes": ["within_route"]}])
+        self.assertEqual(len(result["matches"]), 1)
+        over_limit = dict(candidate, drive_minutes=20.5)
+        over = brns_logic.rank_restaurants(
+            [over_limit], driving,
+            [{"id": 0, "reason_codes": []}])
+        self.assertEqual(len(over["matches"]), 0)
+        self.assertEqual(len(over["alternatives"]), 1)
+        with redirect_stdout(io.StringIO()) as output:
+            brns_io.show_result_list(result)
+        self.assertIn("20 min by drive (live traffic)", output.getvalue())
+        with patch.object(brns_places.requests, "post") as post:
+            post.return_value.json.return_value = {"routes": [{
+                "duration": "1200s", "distanceMeters": 9000, "legs": []}]}
+            brns_places.get_route((1.372, 103.95), (1.38, 103.96),
+                                  "drive", True)
+            self.assertEqual(post.call_args.kwargs["json"]["routingPreference"],
+                             "TRAFFIC_AWARE")
+            brns_places.get_route((1.372, 103.95), (1.38, 103.96),
+                                  "drive", False)
+            self.assertNotIn("routingPreference", post.call_args.kwargs["json"])
+
+    def test_transit_form_collects_time_without_walking_default(self):
+        from BIS import io_manager as bis_io
+
+        profile = empty_preferences()
+        profile.update(max_distance_km=10, liked_cuisines=[])
+        user = {"preferences": profile}
+        with (
+            patch.object(bis_io, "ask_search_location",
+                         return_value=request()["origin"]),
+            patch.object(bis_io, "ask_search_mode", return_value="transit"),
+            patch.object(bis_io, "ask_search_travel_minutes",
+                         return_value=40) as ask_time,
+            patch.object(bis_io, "ask_search_distance") as ask_distance,
+            patch.object(bis_io, "ask_search_cuisine", return_value="none"),
+            patch.object(bis_io, "ask_search_budget", return_value=10),
+            patch.object(bis_io, "ask_search_wishes",
+                         return_value={"selected": [], "text": ""}),
+        ):
+            collected = bis_io.collect_search(user, {"ai_bypass": False})
+        self.assertEqual(collected["request"]["max_travel_minutes"], 40)
+        self.assertIsNone(collected["request"]["max_distance_km"])
+        ask_time.assert_called_once()
+        ask_distance.assert_not_called()
+
+    def test_transit_time_uses_valid_profile_default(self):
+        from BIS import io_manager as bis_io
+
+        with patch.object(bis_io, "read_input", return_value="") as prompt:
+            self.assertEqual(bis_io.ask_search_limit(
+                {"max_travel_time_minutes": 40}, "transit"), (None, 40))
+        self.assertIn("[Enter = 40 min from profile]", prompt.call_args.args[0])
+
+        with patch.object(bis_io, "read_input", side_effect=["", "45"]) as prompt:
+            self.assertEqual(bis_io.ask_search_limit(
+                {"max_travel_time_minutes": 300}, "transit"), (None, 45))
+        self.assertNotIn("Enter =", prompt.call_args_list[0].args[0])
+
+    def test_walk_and_drive_limits_use_selected_profile_default(self):
+        from BIS import io_manager as bis_io
+
+        profile = {"max_distance_km": 2, "max_travel_time_minutes": 40}
+        for mode in ("walk", "drive"):
+            with self.subTest(mode=mode, limit="distance"):
+                with patch.object(bis_io, "read_input",
+                                  side_effect=["1", ""]) as prompt:
+                    self.assertEqual(
+                        bis_io.ask_search_limit(profile, mode), (2, None))
+                self.assertIn("[Enter = 2 km from profile]",
+                              prompt.call_args_list[1].args[0])
+            with self.subTest(mode=mode, limit="time"):
+                with patch.object(bis_io, "read_input",
+                                  side_effect=["2", ""]) as prompt:
+                    self.assertEqual(
+                        bis_io.ask_search_limit(profile, mode), (None, 40))
+                self.assertIn("[Enter = 40 min from profile]",
+                              prompt.call_args_list[1].args[0])
+
+    def test_transit_time_prompt_and_refinement_keep_confirmed_mode(self):
+        from BIS import io_manager as bis_io
+        from BIS import logic_manager as bis_logic
+        from BIS import ai_manager as bis_ai
+
+        with patch.object(bis_io, "read_input", return_value="45 min"):
+            self.assertEqual(bis_io.ask_search_travel_minutes("transit"), 45)
+        with patch.object(bis_ai, "_call_json_with_fallback",
+                          return_value={"value": 45}) as model:
+            self.assertEqual(bis_ai.interpret_search_number(
+                "around three quarters of an hour", "max_travel_minutes",
+                {"ai_bypass": False}), 45)
+        self.assertIn("maximum journey time in minutes",
+                      model.call_args.args[0]["messages"][0]["content"])
+        transit = dict(request(), mode="transit", max_distance_km=None,
+                       max_travel_minutes=45)
+        with (
+            patch.object(bis_io, "read_input", return_value="time"),
+            patch.object(bis_io, "ask_search_travel_minutes",
+                         return_value=35) as ask_time,
+        ):
+            refined = bis_io.refine_search_request(
+                transit, empty_preferences(), {"ai_bypass": False})
+        self.assertEqual(refined["max_travel_minutes"], 35)
+        self.assertEqual(refined["mode"], "transit")
+        ask_time.assert_called_once_with(
+            "transit", {"ai_bypass": False}, default=45)
+        with self.assertRaises(bis_logic.SearchClarificationNeeded):
+            bis_logic.validate_search_request(
+                transit, dict(transit, max_travel_minutes=30))
+
+    def test_transit_matrix_and_ranking_use_verified_journey_time(self):
+        transit = dict(request(), mode="transit", max_distance_km=None,
+                       max_travel_minutes=45, dietary_requirements=[])
+        candidates = [
+            {"name": "Near Cafe", "lat": 1.38, "lng": 103.96,
+             "cuisines": ["malay"], "dietary_requirements": [],
+             "avg_price": 8},
+            {"name": "Far Cafe", "lat": 1.39, "lng": 103.97,
+             "cuisines": ["malay"], "dietary_requirements": [],
+             "avg_price": 8},
+        ]
+        matrix = [
+            {"destinationIndex": 0, "condition": "ROUTE_EXISTS",
+             "duration": "1800s", "distanceMeters": 7200},
+            {"destinationIndex": 1, "condition": "ROUTE_EXISTS",
+             "duration": "3600s", "distanceMeters": 9000},
+        ]
+        with patch.object(brns_places.requests, "post") as post:
+            post.return_value.json.return_value = matrix
+            brns_places.travel_times_matrix(
+                (1.372, 103.95), candidates, "transit")
+        self.assertEqual(post.call_args.kwargs["json"]["travelMode"],
+                         "TRANSIT")
+        self.assertEqual(candidates[0]["transit_minutes"], 30)
+        results = brns_logic.rank_restaurants(
+            candidates, transit,
+            [{"id": 0, "reason_codes": ["within_route"]},
+             {"id": 1, "reason_codes": []}])
+        self.assertEqual(results["matches"][0]["restaurant"]["name"],
+                         "Near Cafe")
+        self.assertEqual(results["alternatives"][0]["restaurant"]["name"],
+                         "Far Cafe")
+        self.assertIn("within your transit time limit",
+                      results["matches"][0]["reasons"])
+        with redirect_stdout(io.StringIO()) as output:
+            brns_io.show_result_list(results)
+        self.assertIn("30 min by transit", output.getvalue())
+
+    def test_missing_transit_route_has_no_invented_speed_estimate(self):
+        transit = dict(request(), mode="transit", max_distance_km=None,
+                       max_travel_minutes=45, dietary_requirements=[])
+        candidate = {"name": "No Route Cafe", "lat": 1.38,
+                     "lng": 103.96, "cuisines": ["malay"],
+                     "dietary_requirements": [], "avg_price": 8}
+        brns_places._fill_travel_estimates((1.372, 103.95), [candidate])
+        self.assertNotIn("transit_minutes", candidate)
+        status, _, reasons = brns_logic.decide_outcome(candidate, transit)
+        self.assertEqual(status, "alternative")
+        self.assertIn("! transit journey time unavailable", reasons)
+
+    def test_selected_transit_route_and_maps_link_show_transit_details(self):
+        response = {"routes": [{
+            "duration": "2100s", "distanceMeters": 8000,
+            "legs": [{"steps": [
+                {"travelMode": "WALK", "navigationInstruction": {
+                    "instructions": "Walk to the station"}},
+                {"travelMode": "TRANSIT", "transitDetails": {
+                    "transitLine": {"nameShort": "NE Line"},
+                    "headsign": "HarbourFront", "stopCount": 3,
+                    "stopDetails": {
+                        "departureStop": {"name": "Sengkang"},
+                        "arrivalStop": {"name": "Serangoon"}}}},
+            ]}]}]}
+        with patch.object(brns_places.requests, "post") as post:
+            post.return_value.json.return_value = response
+            route = brns_places.get_route(
+                (1.39, 103.89), (1.35, 103.87), "transit")
+        self.assertEqual(post.call_args.kwargs["json"]["travelMode"],
+                         "TRANSIT")
+        self.assertIn("transitDetails",
+                      post.call_args.kwargs["headers"]["X-Goog-FieldMask"])
+        self.assertEqual(route["duration_min"], 35)
+        self.assertIn("NE Line toward HarbourFront from Sengkang "
+                      "to Serangoon", route["steps"][1])
+        link = brns_places.build_maps_link(
+            (1.39, 103.89), (1.35, 103.87), "transit")
+        self.assertIn("travelmode=transit", link)
+        with redirect_stdout(io.StringIO()) as output:
+            brns_io.show_route("Cafe", route, link, "transit")
+        self.assertIn("35 min by transit", output.getvalue())
 
     def test_search_accepts_no_cuisine_without_cuisine_penalty(self):
         from BIS import io_manager as bis_io
@@ -591,7 +997,7 @@ class IntegrationTests(unittest.TestCase):
             patch.object(bis_io, "ask_search_location",
                          return_value=request()["origin"]),
             patch.object(bis_io, "ask_search_mode", return_value="walk"),
-            patch.object(bis_io, "ask_search_distance", return_value=2),
+            patch.object(bis_io, "ask_search_limit", return_value=(2, None)),
             patch.object(bis_io, "ask_search_cuisine", return_value="malay"),
             patch.object(bis_io, "ask_search_budget", return_value=10),
             patch.object(bis_io, "ask_search_wishes",
@@ -616,7 +1022,7 @@ class IntegrationTests(unittest.TestCase):
             patch.object(bis_io, "ask_search_location",
                          return_value=request()["origin"]),
             patch.object(bis_io, "ask_search_mode", return_value="walk"),
-            patch.object(bis_io, "ask_search_distance", return_value=2),
+            patch.object(bis_io, "ask_search_limit", return_value=(2, None)),
             patch.object(bis_io, "ask_search_cuisine", return_value="thai"),
             patch.object(bis_io, "ask_search_budget", return_value=10),
             patch.object(bis_io, "ask_search_wishes",
@@ -1109,8 +1515,8 @@ class IntegrationTests(unittest.TestCase):
         ):
             result = brns_main.route_to(restaurant, request())
         self.assertEqual(get_route.call_args.args,
-                         ((1.372, 103.95), (1.373, 103.951), "walk"))
-        self.assertEqual(link.call_args.args, get_route.call_args.args)
+                         ((1.372, 103.95), (1.373, 103.951), "walk", False))
+        self.assertEqual(link.call_args.args, get_route.call_args.args[:3])
         self.assertEqual(result["route"], route_data)
 
     def test_estimated_travel_and_both_dietary_are_unverified(self):
@@ -1343,7 +1749,8 @@ class IntegrationTests(unittest.TestCase):
         ):
             bis_main.run_search(session, {"ai_bypass": False})
         search.assert_not_called()
-        self.assertIn("walk or drive", str(message.call_args.args[0]))
+        self.assertIn("walk, drive, or transit",
+                      str(message.call_args.args[0]))
 
     def test_bis_ai_can_add_wishes_but_cannot_change_confirmed_choices(self):
         from BIS import logic_manager as bis_logic

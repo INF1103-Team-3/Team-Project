@@ -217,6 +217,8 @@ reason codes when supported by the supplied facts: cuisine_match,
 within_budget, within_route, well_rated, vegetarian_options,
 halal_hint_unofficial, spicy_options. Use [] if no code is supported.
 Consider cuisine, budget, dietary needs, travel, and other preferences.
+When previous_restaurants is supplied, prefer suitable candidates not named
+there over similarly suitable candidates already returned. Include every ID.
 Use within_budget only when avg_price is a number no greater than the user's
 budget. price_start alone does not prove a meal fits the budget.
 Use vegetarian_options only when vegetarian is requested and listed in the
@@ -224,7 +226,8 @@ candidate dietary_requirements. Use halal_hint_unofficial only when halal is
 requested and the candidate has halal_hint_unofficial true.
 Use cuisine_match only when the requested cuisine is in candidate cuisines.
 When the requested cuisine is none, never use cuisine_match.
-Use within_route only for route distances within the user's limit.
+Use within_route only for a verified route within the chosen distance or
+journey-time limit. Check the selected limit field, not the other route metric.
 Do not invent restaurant facts or claim official halal certification.
 The next layer will verify every reason and enforce hard requirements."""
 
@@ -240,7 +243,7 @@ def has_configured_provider():
     )
 
 
-def recommend_candidates(request, candidates):
+def recommend_candidates(request, candidates, previous_restaurants=()):
     """Return a complete AI recommendation, or None if every model fails."""
     if not candidates:
         return None
@@ -260,6 +263,7 @@ def recommend_candidates(request, candidates):
             "rating": candidate.get("rating"),
             "spicy_options": candidate.get("spicy_options"),
             "travel_meters": candidate.get(f"{mode}_meters"),
+            "travel_minutes": candidate.get(f"{mode}_minutes"),
             "travel_source": candidate.get(f"{mode}_source"),
         })
     _log_ai_event(
@@ -267,7 +271,12 @@ def recommend_candidates(request, candidates):
         "Candidate facts sent to model: "
         + json.dumps(facts, ensure_ascii=False, separators=(",", ":")),
         "DEBUG")
-    user_text = json.dumps({"request": request, "candidates": facts},
+    prior_names = list(dict.fromkeys(
+        restaurant.get("name") for restaurant in previous_restaurants
+        if isinstance(restaurant, dict)
+        and isinstance(restaurant.get("name"), str)))
+    user_text = json.dumps({"request": request, "candidates": facts,
+                            "previous_restaurants": prior_names},
                            separators=(",", ":"))
     for entry in config.MODEL_CHAIN:
         provider, model = entry["provider"], entry["model"]

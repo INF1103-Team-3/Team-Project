@@ -13,7 +13,7 @@ from shared import debug_log as log
 from shared import terminal_ui as ui
 
 
-def search(bis_json):
+def search(bis_json, previous_restaurants=()):
     """Run IO → AI → Logic → Data for one validated BIS search."""
     trace_token = log.start_trace()
     started = time.monotonic()
@@ -33,15 +33,24 @@ def search(bis_json):
         if not candidates:
             raise RuntimeError(
                 "No restaurants found, or restaurant search is unavailable.")
-        recommendations = ai_manager.recommend_candidates(request, candidates)
+        recommendations = (
+            ai_manager.recommend_candidates(
+                request, candidates, previous_restaurants=previous_restaurants)
+            if previous_restaurants else
+            ai_manager.recommend_candidates(request, candidates))
         if recommendations is None:
             raise RuntimeError(
                 "BRNS AI could not recommend restaurants. Please retry.")
         log.debug_log(
             f"AI ordered {len(recommendations)} candidate IDs.", "INFO",
             "BRNS.ai_manager.recommend_candidates")
-        results = logic_manager.rank_restaurants(
-            candidates, request, recommendations)
+        results = (
+            logic_manager.rank_restaurants(
+                candidates, request, recommendations,
+                previous_restaurants=previous_restaurants)
+            if previous_restaurants else
+            logic_manager.rank_restaurants(candidates, request,
+                                           recommendations))
         log.debug_log(
             f"Validated {len(results['matches'])} matches, "
             f"{len(results['alternatives'])} alternatives, "
@@ -75,9 +84,11 @@ def route_to(restaurant, request):
     mode = request["mode"]
     result = {
         "name": restaurant["name"],
-        "route": io_manager.get_route(origin, destination, mode),
+        "route": io_manager.get_route(origin, destination, mode,
+                                      request.get("traffic_aware", False)),
         "link": io_manager.build_maps_link(origin, destination, mode),
         "mode": mode,
+        "traffic_aware": request.get("traffic_aware", False),
     }
     log.debug_log(
         "Route response prepared with directions."
@@ -91,7 +102,10 @@ def main():
     log.configure(io_manager.display_debug if config.DEBUG else None)
     try:
         results = search(json.load(sys.stdin))
-    except (ValueError, RuntimeError, OSError, json.JSONDecodeError) as error:
+    except json.JSONDecodeError:
+        ui.message("BRNS requires valid BIS search JSON.", "error")
+        return
+    except (ValueError, RuntimeError, OSError) as error:
         ui.message(error, "error")
         return
     io_manager.show_results(results)

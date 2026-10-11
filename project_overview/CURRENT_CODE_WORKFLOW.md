@@ -23,7 +23,7 @@ BIS/main.py
   -> BIS IO collects account, profile, and today's choices
   -> BIS AI interprets profile answers and each live search
   -> BIS Logic validates and protects confirmed choices
-  -> BIS Data saves the profile and serializes one eight-field JSON request
+  -> BIS Data saves the profile and serializes one ten-field JSON request
   -> BRNS/main.py search(json)
        -> BRNS IO validates JSON and gathers Places/catalog candidates
        -> BRNS AI orders every candidate and suggests reason codes
@@ -177,7 +177,7 @@ BIS.main.run_search()
   -> BRNS.main.search(json)
 ```
 
-`collect_search()` asks for **today's** location, travel mode, travel distance,
+`collect_search()` asks for **today's** location, travel mode, travel limit,
 cuisine (or `none` for any cuisine), budget, and one optional special-request
 answer. Enter means no extra
 wish. Earlier requests can be selected by number or `all`; new English text
@@ -186,8 +186,9 @@ correction requires confirmation before the search interpretation call.
 Confirmed new special requests are added to the saved profile for the next
 search; the other today's choices do not overwrite the profile. Dietary
 requirements and disliked cuisines are copied from that profile. A walking
-search offers the saved walking distance as the Enter default. Driving
-requires a fresh distance.
+search offers the saved walking distance as the Enter default. Walking and
+driving can use km or minutes; driving requires a fresh limit. For driving
+minutes, BIS asks whether to use live traffic, defaulting to no.
 For a natural budget or distance answer, BIS AI extracts one number, BIS Logic
 validates its range, and BIS IO asks the user to confirm it.
 At every CLI prompt, `/help` displays help and returns to the same question.
@@ -202,21 +203,25 @@ query; the original text is used if that AI call is unavailable. BIS Data
 resolves coordinates directly, from the cache, or through Google Geocoding,
 rejects coordinates outside the supported Singapore bounds, and remembers
 successful aliases in the shared cache. BIS IO prints the found label and
-coordinates and asks the user to confirm. Short invalid yes/no or walk/drive
+coordinates and asks the user to confirm. Short invalid yes/no or travel-mode
 answers can be sent to BIS AI for a typo suggestion, which is itself
 confirmed by the user before use.
 
 For every live `/search`, BIS AI interprets the free-text request even when
 the other choices came from menus. For example, `chicken rice` can be added
 to `other_preferences`. BIS Logic validates the complete proposed request.
-It protects the already confirmed origin, travel mode, distance, cuisine,
+It protects the already confirmed origin, travel mode, distance or transit
+time, cuisine,
 budget, dietary requirements, and disliked cuisines. AI may add explicitly
 mentioned other wishes but cannot remove a selected one. If it conflicts
 with a protected choice, BIS asks for clarification and retries
 interpretation. The full interpreted request is displayed for the user's
-final yes/no confirmation before any BRNS search.
+final yes/no confirmation before any BRNS search; Enter confirms it. After
+results, BIS can send the same confirmed JSON to BRNS again with previously
+returned restaurants as ranking context. BRNS asks AI again and prefers unseen
+verified matches when available.
 
-The BIS → BRNS JSON contract has **exactly eight top-level fields**:
+The BIS → BRNS JSON contract has **exactly ten top-level fields**:
 
 ```json
 {
@@ -228,6 +233,8 @@ The BIS → BRNS JSON contract has **exactly eight top-level fields**:
   },
   "mode": "walk",
   "max_distance_km": 10.0,
+  "max_travel_minutes": null,
+  "traffic_aware": false,
   "cuisine": "chinese",
   "budget_per_person": 10.0,
   "other_preferences": ["chicken rice"],
@@ -244,6 +251,13 @@ validated object with no NaN values. `BRNS/io_manager.accept_bis_json()`
 validates the exact key sets again on receipt, including the origin object,
 Singapore coordinate bounds, mode, supported cuisine, numeric limits, and
 list fields.
+
+Exactly one travel limit is set: `max_distance_km` or `max_travel_minutes`.
+Transit requires minutes; walking and driving accept either. Minutes range
+from 1 to 240. `traffic_aware` may be true only for a driving time search.
+BRNS ranks verified Google route facts against the selected limit. If no
+transit route is available, the travel time remains unverified; BRNS does not
+estimate it from straight-line distance.
 
 `AI_BYPASS=true` is the BIS chatbot test mode: BIS parses/validates locally,
 shows the choices, marks that test search complete, and skips BRNS entirely.
@@ -275,7 +289,7 @@ when both normalized name **and** address match. Missing cuisine, price,
 dietary, or spice data remain unknown; a Google starting price is kept as
 `price_start`, not treated as a known average price. The client de-duplicates
 names, asks Google Routes for a travel matrix for the selected mode, and
-labels any missing route distance as an estimate. In catalog fallback mode,
+labels any missing walking or driving route as an estimate. In catalog fallback mode,
 it returns catalog rows without pretending that old catalog walking times
 are routes from today's origin.
 
@@ -312,7 +326,7 @@ are logged with the candidate ID and evidence, then dropped. Malformed
 reason-code lists or invalid candidate IDs still stop the search.
 
 `decide_outcome()` independently checks selected and disliked cuisines,
-dietary evidence, budget, and route distance. A disliked cuisine rejects a
+dietary evidence, budget, and the selected route distance or duration. A disliked cuisine rejects a
 candidate. A known mismatch, unknown fact, unverified dietary status,
 unverified budget, or estimated/unavailable route creates an alternative
 with explanatory reasons. A candidate with all required facts verified
@@ -377,7 +391,7 @@ It is not a source of restaurant or certification truth.
 | `BIS/main.py` | Program entry and coordinator. `main` loads settings; `run_accounts` selects an account; `run_session` dispatches commands; `save_update` validates/saves profile changes; `run_search` performs the BIS → BRNS handoff and optional route. |
 | `BIS/io_manager.py` | All BIS terminal prompts and displays. Handles account selection, email verification interaction, profile answer collection, search location/mode/distance/cuisine/budget/other wishes, clarification and confirmation, result selection, and command parsing. It does not save records. |
 | `BIS/ai_manager.py` | OpenRouter adapter, API-key rotation, response parsing/schema checking, profile answer interpretation, location extraction, short search-choice typo suggestions, and interpretation of every live search. It does not decide whether a proposed update is allowed. |
-| `BIS/logic_manager.py` | Pure profile/search decisions: travel conversion, preference updates and conflicts, local answer parsing, Singapore coordinate checks, and the protected eight-field search validation. |
+| `BIS/logic_manager.py` | Pure profile/search decisions: travel conversion, preference updates and conflicts, local answer parsing, Singapore coordinate checks, and the protected ten-field search validation. |
 | `BIS/data_manager.py` | Validated account and state persistence with atomic writes; email lookup/registration; shared geocode lookup and Google Geocoding; successful location caching; exact JSON serialization for BRNS. |
 | `BIS/sources/profile_schema.py` | Canonical account and preference keys, cuisine/dietary vocabulary, numeric ranges, normalization, and exact-schema validation. BRNS imports the supported cuisine list from here. |
 | `BIS/sources/prompts.py` | Profile questions, labels, command/help text, AI system prompt, and command/intent tables. |
@@ -453,7 +467,7 @@ For a user seeking chicken rice near Sengkang, the decisive sequence is:
    `chinese`, a budget, today's optional preferences, and `chicken rice`.
 2. BIS AI proposes the structured search, usually adding `chicken rice` to
    `other_preferences`. BIS Logic checks that confirmed choices stayed fixed.
-3. The user confirms the summary. BIS Data serializes the eight-field JSON.
+3. The user confirms the summary. BIS Data serializes the ten-field JSON.
 4. BRNS IO validates it, asks Google Places for candidates, enriches with
    catalog facts, and gets route distances.
 5. BRNS AI orders every candidate and proposes reason codes. BRNS Logic

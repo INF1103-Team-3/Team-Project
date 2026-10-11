@@ -28,12 +28,52 @@ On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` instead.
 The root `requirements.txt` covers both applications. The optional
 `requirements-dev.txt` adds `pycodestyle` and the function graph tools.
 
+## Automated checks
+
+Run all process-level checks with the readable color report:
+
+```bash
+python3 -m tests.blackbox_support
+```
+
+Run one area with `python3 tests/test_blackbox_bis.py`,
+`python3 tests/test_blackbox_brns.py`, or
+`python3 tests/test_blackbox_bis_to_brns.py`. Colors appear in an interactive
+terminal; set `BITEFINDER_TEST_COLOR=always` to force them in redirected output,
+or `BITEFINDER_TEST_COLOR=never` to turn them off.
+
+They launch the real entry points in temporary copies of the application and
+send fixed AI and Maps responses from a local HTTP server. The cases check
+valid and invalid answers, visible retries, saved data, results, and routes.
+Each result shows the input scenario, expected output, lines observed from the
+application, and actual calls in order.
+Run the email verification checks with the same report using
+`python3 tests/test_email_verification.py`. SMTP calls in these tests are mocked;
+no verification email is sent.
+No live API key or email account is needed. Run every test with
+`python3 -m unittest discover -s tests -v`.
+
 BIS and BRNS use the same terminal theme for prompts, profile details,
 restaurant results, and directions. Interactive terminals show color;
 redirected output remains plain text. Set `NO_COLOR=1` to disable color in a
 terminal. After signing in, `/color off` saves a color-free display for that
 account; `/color on` restores the default. Both work at any prompt. The
 wording and warning labels remain visible without color.
+
+After a search, choose a restaurant from the results menu to email its Google
+Maps directions link to your verified account email. This uses the same SMTP
+settings as email verification.
+At the search summary, pressing Enter confirms the displayed choices. After
+results, choose **Search again with the same choices** to rerun BRNS and AI;
+previously returned restaurants are placed after unseen verified matches.
+If the available candidates are exhausted, the results may repeat.
+
+Search travel modes are walking, driving, and transit. Walking and driving
+offer a maximum route distance in km or journey time from 1 to 240 minutes;
+transit uses journey time. After a driving time choice, select 1 for regular
+route times or 2 for live traffic. Press Enter to choose regular route times.
+Results use verified Google Routes durations or distances for the chosen limit.
+Transit routes show available stop and line details.
 
 To generate the function call PNGs on Windows, run these commands from the
 repository root in PowerShell or Command Prompt:
@@ -127,17 +167,23 @@ an answer; `/add-location` keeps existing areas.
 
 Dietary requirements are halal, vegetarian, both, or none. Cuisine answers use the
 accepted list in [`BIS/sources/profile_schema.py`](BIS/sources/profile_schema.py);
-spelling suggestions require confirmation. Travel accepts distance or time,
+you can describe several cuisines without commas, and AI proposals and spelling
+corrections require confirmation. A travel amount without a unit, including
+written numbers such as `ten`, asks you to choose km or minutes. Press Enter
+at the profile's other-preferences prompt for none.
+Travel accepts distance or time,
 using **1 km ≈ 20 minutes of walking**. Both values are saved as an estimate,
 not a calculated route. Other preferences are stored as a list; enter items
 separated by commas, or `none` for an empty list.
+For profile locations, BIS shows the areas it extracted and asks you to confirm
+the list before saving it, including when you add or remove areas later.
 
 For `/search`, BIS confirms your current location before asking the other
 questions. Enter a Singapore postal code, address, landmark, or latitude and
 longitude. Cached locations and coordinates work without a Maps key; uncached
 addresses need `GOOGLE_MAPS_API_KEY` in the root `.env`. Walking searches offer
 your saved walking distance as the default. Driving searches ask for a new
-distance. Live search also requires a free-text description and confirmation
+distance or time limit. Live search also requires a free-text description and confirmation
 of the interpreted request. Search choices do not change your saved profile.
 Use `/help search` for the full sequence.
 
@@ -200,7 +246,7 @@ writes so existing accounts are not overwritten.
 ## BRNS: restaurant search and routes
 
 BIS sends BRNS the confirmed search request, including origin coordinates,
-travel mode and distance, cuisine, budget, and dietary preferences. BRNS IO
+travel mode and distance or time limit, cuisine, budget, and dietary preferences. BRNS IO
 validates it and gathers restaurant facts through Google Places. BRNS AI orders
 all candidate IDs and supplies reason codes; Logic keeps only reasons supported
 by candidate facts, applies the requirements, and creates matches and
