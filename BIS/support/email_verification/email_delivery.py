@@ -37,6 +37,26 @@ def send_verification_email(email, code, config):
         "This code expires in 10 minutes. If you did not request it, "
         "you can ignore this email.\n"
     )
+    _send_message(message, config, "verification email")
+    debug_log("Verification email sent.", "INFO", "BIS.email.send")
+
+
+def send_maps_link_email(email, restaurant_name, link, config):
+    """Send one selected restaurant's Google Maps directions link."""
+    validate_email_config(config)
+    message = EmailMessage()
+    message["Subject"] = "Your BiteFinder Google Maps link"
+    message["From"] = normalize_email(config["smtp_from_email"])
+    message["To"] = normalize_email(email)
+    message.set_content(
+        f"Google Maps directions to {restaurant_name}:\n{link}\n"
+    )
+    _send_message(message, config, "Maps link email")
+    debug_log("Maps link email sent.", "INFO", "BIS.email.send")
+
+
+def _send_message(message, config, kind):
+    """Deliver an SMTP message without logging its contents or credentials."""
     context = ssl.create_default_context()
     try:
         if config["smtp_security"] == "ssl":
@@ -58,7 +78,5 @@ def send_verification_email(email, code, config):
     except (OSError, RuntimeError) as error:
         debug_log("Email delivery failed.", "ERROR", "BIS.email.send")
         raise RuntimeError(
-            "Could not send verification email. Check SMTP settings "
-            "and try again."
+            f"Could not send {kind}. Check SMTP settings and try again."
         ) from error
-    debug_log("Verification email sent.", "INFO", "BIS.email.send")

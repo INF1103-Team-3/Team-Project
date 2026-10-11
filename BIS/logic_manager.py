@@ -9,7 +9,7 @@ from sources.profile_schema import (
     CUISINES, CUISINE_FIELDS, MINUTES_PER_KM, OTHER_PREFERENCES,
     UNSUPPORTED_CUISINES,
     PREFERENCE_FIELDS, clean_text, validate_preferences, validate_updates,
-    validate_value,
+    validate_value, validate_travel_minutes,
 )
 
 COORDINATES = re.compile(
@@ -17,7 +17,7 @@ COORDINATES = re.compile(
 )
 
 SEARCH_FIELDS = {
-    "origin", "mode", "max_distance_km", "cuisine",
+    "origin", "mode", "max_distance_km", "max_travel_minutes", "traffic_aware", "cuisine",
     "budget_per_person", OTHER_PREFERENCES,
     "dietary_requirements", "disliked_cuisines",
 }
@@ -64,7 +64,7 @@ def validate_search_request(request, ai_response=None):
 
 
 def _validate_search_fields(request):
-    """Normalize the exact eight-field BIS/BRNS search contract."""
+    """Normalize the exact ten-field BIS/BRNS search contract."""
     if not isinstance(request, dict) or set(request) != SEARCH_FIELDS:
         raise ValueError("Today's search has an invalid set of fields.")
     origin = request["origin"]
@@ -77,18 +77,30 @@ def _validate_search_fields(request):
             or type(longitude) not in (int, float)
             or not in_singapore(latitude, longitude)):
         raise ValueError("Today's search location must be in Singapore.")
-    if request["mode"] not in ("walk", "drive"):
-        raise ValueError("Choose walk or drive for today's search.")
+    if request["mode"] not in ("walk", "drive", "transit"):
+        raise ValueError("Choose walk, drive, or transit for today's search.")
     if request["cuisine"] not in (*CUISINES, "none"):
         raise ValueError("Choose a supported cuisine or none for today's search.")
     for field in (OTHER_PREFERENCES, "dietary_requirements",
                   "disliked_cuisines"):
         if not isinstance(request[field], list):
             raise ValueError(f"{field} must be a list.")
-    distance = validate_value("max_distance_km", request["max_distance_km"])
+    distance = request["max_distance_km"]
+    minutes = request["max_travel_minutes"]
+    if (distance is None) == (minutes is None):
+        raise ValueError("Choose exactly one travel limit: distance or time.")
+    if request["mode"] == "transit" and distance is not None:
+        raise ValueError("Transit searches use a time limit.")
+    distance = (validate_value("max_distance_km", distance)
+                if distance is not None else None)
+    minutes = validate_travel_minutes(minutes) if minutes is not None else None
+    traffic_aware = request["traffic_aware"]
+    if type(traffic_aware) is not bool or (traffic_aware and
+            (request["mode"] != "drive" or minutes is None)):
+        raise ValueError("Live traffic is available only for driving time searches.")
     budget = validate_value("budget_per_person", request["budget_per_person"])
-    if distance is None or budget is None:
-        raise ValueError("Today's search needs a distance and budget.")
+    if budget is None:
+        raise ValueError("Today's search needs a travel limit and budget.")
     preferences = validate_value(
         OTHER_PREFERENCES, request[OTHER_PREFERENCES])
     return {
@@ -98,6 +110,7 @@ def _validate_search_fields(request):
             "latitude": latitude, "longitude": longitude,
         },
         "mode": request["mode"], "max_distance_km": distance,
+        "max_travel_minutes": minutes, "traffic_aware": traffic_aware,
         "cuisine": request["cuisine"], "budget_per_person": budget,
         OTHER_PREFERENCES: preferences,
         "dietary_requirements": validate_value(
@@ -190,13 +203,33 @@ def cuisine_tokens(text, field):
     )
     parts = re.split(r"\s*(?:,|\band\b|&)\s*", text)
     tokens = []
+    names = sorted(CUISINES + tuple(UNSUPPORTED_CUISINES),
+                   key=len, reverse=True)
+    name_pattern = re.compile("|".join(re.escape(name) for name in names))
     for part in parts:
         part = re.sub(r"\s+(?:food|cuisines?|dishes)$", "", part).strip()
         if not part or not re.fullmatch(r"[a-z]+(?:[ -][a-z]+)*", part):
             raise ValueError(
-                "Enter cuisine names separated by commas, or none.")
-        if part not in tokens:
-            tokens.append(part)
+                "Describe cuisines you like or avoid, or enter none.")
+        if part in names:
+            found = [part]
+        else:
+            found = []
+            remaining = part
+            while remaining:
+                match = name_pattern.match(remaining)
+                if not match:
+                    found = [part]
+                    break
+                found.append(match.group())
+                remaining = remaining[match.end():]
+                if remaining and not remaining.startswith(" "):
+                    found = [part]
+                    break
+                remaining = remaining.strip()
+        for token in found:
+            if token not in tokens:
+                tokens.append(token)
     return tokens
 
 

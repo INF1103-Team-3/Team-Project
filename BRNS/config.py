@@ -11,8 +11,10 @@ DEBUG = os.getenv("DEBUG", "false").strip().lower() == "true"
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")   # from aistudio.google.com — free, no card
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+OPENROUTER_URL = os.getenv("BITEFINDER_OPENROUTER_URL",
+                            "https://openrouter.ai/api/v1/chat/completions")
+GEMINI_URL = os.getenv("BITEFINDER_GEMINI_URL",
+                        "https://generativelanguage.googleapis.com/v1beta/models")
 
 # Try the responsive direct provider first; retain OpenRouter as fallback.
 MODEL_CHAIN = [
@@ -23,11 +25,16 @@ MODEL_CHAIN = [
 
 # --- IO layer: Google Maps Platform ---
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
-GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
-TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
-PLACES_URL = "https://places.googleapis.com/v1/places:searchNearby"
-MATRIX_URL = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
-ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
+GEOCODE_URL = os.getenv("BITEFINDER_GEOCODE_URL",
+                        "https://maps.googleapis.com/maps/api/geocode/json")
+TEXT_SEARCH_URL = os.getenv("BITEFINDER_TEXT_SEARCH_URL",
+                            "https://places.googleapis.com/v1/places:searchText")
+PLACES_URL = os.getenv("BITEFINDER_PLACES_URL",
+                        "https://places.googleapis.com/v1/places:searchNearby")
+MATRIX_URL = os.getenv("BITEFINDER_MATRIX_URL",
+                        "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix")
+ROUTES_URL = os.getenv("BITEFINDER_ROUTES_URL",
+                        "https://routes.googleapis.com/directions/v2:computeRoutes")
 
 # --- Display limits (tunable without touching logic) ---
 MAX_MATCHES_SHOWN = 5

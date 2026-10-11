@@ -182,8 +182,10 @@ def _parse_place(p):
     }
 
 def _search_radius(req):
-    """Search extent from travel input. Walk: ~100 m/min. Drive: km -> meters,
-    scaled by ~0.8 (roads are longer than straight lines), clamped to 50 km."""
+    """Choose a Places discovery radius; Routes decides actual eligibility."""
+    if req.get("max_travel_minutes") is not None:
+        speed = {"walk": 100, "drive": 650, "transit": 650}[req["mode"]]
+        return max(500, min(int(req["max_travel_minutes"] * speed), 50000))
     if req.get("mode") == "drive" and req.get("max_drive_km"):
         return max(1000, min(int(req["max_drive_km"] * 1000 * 0.8), 50000))
     distance = req.get("max_distance_km")
@@ -338,6 +340,7 @@ def enrich_place(place, catalog):
             "certification": entry.get("certification", "unknown"),
             "walk_minutes": None, "walk_meters": None,
             "drive_minutes": None, "drive_meters": None,
+            "transit_minutes": None, "transit_meters": None,
             "source": "catalog + google places",
         }
     return {
@@ -359,6 +362,7 @@ def enrich_place(place, catalog):
         "certification": "unknown",
         "walk_minutes": None, "walk_meters": None,
         "drive_minutes": None, "drive_meters": None,
+        "transit_minutes": None, "transit_meters": None,
         "source": "google places",
     }
 
@@ -375,15 +379,18 @@ def _haversine_km(a, b):
 def _estimate_travel_minutes(origin, r, mode):
     """Straight-line distance / speed, +20% street factor. Labeled estimate.
     Walk: 80 m/min. Drive: ~500 m/min (~30 km/h urban SG average)."""
+    if mode not in {"walk", "drive"}:
+        raise ValueError("Transit journey times require a real route.")
     speed = 80 if mode == "walk" else 500
     meters = _haversine_km(origin, (r["lat"], r["lng"])) * 1000 * 1.2
     return max(1, round(meters / speed))
 
 
-def travel_times_matrix(origin, restaurants, mode):
+def travel_times_matrix(origin, restaurants, mode, traffic_aware=False):
     """ONE request for ALL restaurants, for ONE mode.
     Writes r[f'{mode}_minutes'] and r[f'{mode}_meters'].
-    mode = 'walk' | 'drive'. NOTE: computeRouteMatrix returns a bare JSON ARRAY."""
+    mode = 'walk' | 'drive' | 'transit'. Transit has no speed estimate.
+    NOTE: computeRouteMatrix returns a bare JSON ARRAY."""
     if not restaurants:
         return
     log.debug_log(f"Route matrix requested for {len(restaurants)} candidates.",
@@ -399,8 +406,11 @@ def travel_times_matrix(origin, restaurants, mode):
             "latitude": origin[0], "longitude": origin[1]}}}}],
         "destinations": [{"waypoint": {"location": {"latLng": {
             "latitude": r["lat"], "longitude": r["lng"]}}}} for r in restaurants],
-        "travelMode": "WALK" if mode == "walk" else "DRIVE",
+        "travelMode": {"walk": "WALK", "drive": "DRIVE",
+                       "transit": "TRANSIT"}[mode],
     }
+    if traffic_aware and mode == "drive":
+        body["routingPreference"] = "TRAFFIC_AWARE"
     try:
         resp = requests.post(config.MATRIX_URL, headers=headers, json=body, timeout=20)
         resp.raise_for_status()
@@ -414,7 +424,7 @@ def travel_times_matrix(origin, restaurants, mode):
                 status_code = (el.get("status") or {}).get("code", 0)
                 if status_code not in (0, None):
                     continue
-                restaurants[idx][f"{mode}_minutes"] = round(int(el["duration"].rstrip("s")) / 60)
+                restaurants[idx][f"{mode}_minutes"] = int(el["duration"].rstrip("s")) / 60
                 restaurants[idx][f"{mode}_meters"] = int(el["distanceMeters"])
                 restaurants[idx][f"{mode}_source"] = "route"
             except (KeyError, ValueError, TypeError):
@@ -436,20 +446,51 @@ def _fill_travel_estimates(origin, restaurants):
                 r[f"{mode}_source"] = "estimate"
 
 
-def get_route(origin, destination, mode):
+def format_transit_step(step):
+    """Summarize a Google transit step without inventing missing stop facts."""
+    details = step.get("transitDetails") or {}
+    if not details:
+        return step.get("navigationInstruction", {}).get("instructions")
+    line = details.get("transitLine") or {}
+    vehicle = (line.get("vehicle") or {}).get("name") or {}
+    service = (line.get("nameShort") or line.get("name")
+               or vehicle.get("text") or "Transit")
+    text = f"Take {service}"
+    if details.get("headsign"):
+        text += f" toward {details['headsign']}"
+    stops = details.get("stopDetails") or {}
+    departure = (stops.get("departureStop") or {}).get("name")
+    arrival = (stops.get("arrivalStop") or {}).get("name")
+    if departure:
+        text += f" from {departure}"
+    if arrival:
+        text += f" to {arrival}"
+    if details.get("stopCount"):
+        text += f" ({details['stopCount']} stops)"
+    return text
+
+
+def get_route(origin, destination, mode, traffic_aware=False):
     """ONE on-demand call for the chosen restaurant. None on failure."""
     log.debug_log("Directions request started.", "INFO",
                   "BRNS.places_client.get_route")
     body = {
         "origin": {"location": {"latLng": {"latitude": origin[0], "longitude": origin[1]}}},
         "destination": {"location": {"latLng": {"latitude": destination[0], "longitude": destination[1]}}},
-        "travelMode": "WALK" if mode == "walk" else "DRIVE",
+        "travelMode": {"walk": "WALK", "drive": "DRIVE",
+                       "transit": "TRANSIT"}[mode],
     }
+    if traffic_aware and mode == "drive":
+        body["routingPreference"] = "TRAFFIC_AWARE"
+    field_mask = ("routes.duration,routes.distanceMeters,"
+                  "routes.legs.steps.navigationInstruction")
+    if mode == "transit":
+        field_mask += (",routes.legs.steps.travelMode,"
+                       "routes.legs.steps.transitDetails")
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": config.GOOGLE_MAPS_API_KEY,
-        "X-Goog-FieldMask": ("routes.duration,routes.distanceMeters,"
-                             "routes.legs.steps.navigationInstruction"),
+        "X-Goog-FieldMask": field_mask,
     }
     try:
         resp = requests.post(config.ROUTES_URL, headers=headers, json=body, timeout=15)
@@ -463,7 +504,9 @@ def get_route(origin, destination, mode):
         steps = []
         for leg in route.get("legs", []):
             for s in leg.get("steps", []):
-                text = s.get("navigationInstruction", {}).get("instructions")
+                text = (format_transit_step(s) if mode == "transit"
+                        else s.get("navigationInstruction", {}).get(
+                            "instructions"))
                 if text:
                     steps.append(text)
         log.debug_log("Directions route returned.", "INFO",
@@ -478,7 +521,8 @@ def get_route(origin, destination, mode):
 
 def build_maps_link(origin, destination, mode):
     """Free, no API call — opens the route in Google Maps (mode-aware)."""
-    travelmode = "walking" if mode == "walk" else "driving"
+    travelmode = {"walk": "walking", "drive": "driving",
+                  "transit": "transit"}[mode]
     return (f"https://www.google.com/maps/dir/?api=1"
             f"&origin={origin[0]},{origin[1]}"
             f"&destination={destination[0]},{destination[1]}&travelmode={travelmode}")
@@ -517,7 +561,8 @@ def build_candidates(origin, req, catalog):
         if key not in seen:
             seen.add(key)
             candidates.append(c)
-    travel_times_matrix(origin, candidates, req.get("mode", "walk"))
+    travel_times_matrix(origin, candidates, req.get("mode", "walk"),
+                        req.get("traffic_aware", False))
     _fill_travel_estimates(origin, candidates)
     estimated = sum(c.get(f"{req.get('mode', 'walk')}_source") == "estimate"
                     for c in candidates)

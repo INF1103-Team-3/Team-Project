@@ -22,7 +22,10 @@ from sources.profile_schema import (
 DATA_DIR = Path(__file__).resolve().parent / "data"
 USERS_FILE = DATA_DIR / "users.json"
 STATE_FILE = DATA_DIR / "profile_state.json"
-GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
+GEOCODE_URL = os.getenv(
+    "BITEFINDER_GEOCODE_URL",
+    "https://maps.googleapis.com/maps/api/geocode/json",
+)
 LAST_ERROR = None
 
 

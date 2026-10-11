@@ -9,24 +9,20 @@ from sources.profile_schema import (
 QUESTIONS = {
     "location": (
         "Which locations would you like to search around? "
-        "(comma-separated areas)"
+        "(describe one or more areas)"
     ),
-    "max_distance_km": "How far are you willing to walk? (in km or mins)",
-    "max_travel_time_minutes": "How long are you willing to walk? (in mins)",
+    "max_distance_km": "How far are you willing to travel? (km or minutes)",
+    "max_travel_time_minutes": "How long are you willing to travel? (minutes)",
     "budget_per_person": "What is your budget per person? (in SGD)",
     "dietary_requirements": (
         "Do you require halal or vegetarian options? "
         "(halal, vegetarian, both, or none)"
     ),
-    "liked_cuisines": (
-        "Which cuisines do you like? (describe/list cuisines, or none)"
-    ),
-    "disliked_cuisines": (
-        "Which cuisines do you avoid? (describe/list cuisines, or none)"
-    ),
+    "liked_cuisines": "Which cuisines do you like? (describe them, or none)",
+    "disliked_cuisines": "Which cuisines do you avoid? (describe them, or none)",
     OTHER_PREFERENCES: (
         "Any other preferences? List them with commas "
-        "(spicy food, quiet cafes; or none)"
+        "(spicy food, quiet cafes; Enter = none)"
     ),
 }
 
@@ -58,12 +54,20 @@ SYSTEM_PROMPT = (
     + json.dumps(list(PREFERENCE_FIELDS)) + ". "
     "Never output account fields, name, username, allergies, "
     "spice_preference, or dining_preferences. "
-    "location is a list of areas. location_action is add by default, "
+    "location is a list of distinct areas. For space-separated known place "
+    "names such as 'punggol sengkang nex', return ['punggol', 'sengkang', "
+    "'nex']. Keep one multiword place such as 'Pasir Ris Mall' together. "
+    "Never merge distinct named places into one list item or invent areas. "
+    "The user will confirm the complete area list before it is saved. "
+    "location_action is add by default, "
     "replace only for an explicit replacement, remove only for removal. "
     "dietary_requirements is a list containing halal and/or vegetarian; "
     "[] means explicitly no restrictions. Unknown restrictions such as "
     "dkdk must not be mapped to a known category or to none. "
     "Cuisine lists contain only: " + ", ".join(CUISINES) + ". "
+    "Extract every cuisine named in natural wording, including lists without "
+    "commas. Correct an obvious cuisine typo only when the intended supported "
+    "cuisine is clear. The user will confirm your proposed cuisine list. "
     "Only extract user-supported facts. Null means unmentioned/unclear. "
     "Numbers must be numeric, budget in SGD (0.01–1000), walking distance "
     "in km (0.01–100), walking time in minutes (0.1–2000). "
@@ -132,7 +136,7 @@ EDIT_HELP += """
 
 Accepted values when answering:
 username: 1–50 characters after trimming spaces.
-location: Comma-separated areas; each 1–100 characters with a letter.
+location: Describe one or more areas; each 1–100 characters with a letter.
           At least one area is required.
 budget: 0.01–1000 SGD, entered as a number (up to two decimal places).
 travel: 0.01–100 km walking or 0.1–2000 mins walking (up to two decimal places).
@@ -157,13 +161,19 @@ This only displays your profile; it does not change your answers.""",
 It starts automatically once when a profile becomes complete, or on the next
 resume if it was already complete. Run /search again for new choices. You will
 confirm your current location,
-then choose walk/drive, maximum distance, one cuisine or none, today's budget, and
-one optional special request. Press Enter for none, select a previous request
-by number or all, or describe a new request in English. BIS checks the input,
+then choose walk, drive, or transit. Walking and driving let you choose a
+maximum distance in km or journey time in minutes. Transit uses time only.
+Driving time searches then offer live traffic (1 = no, 2 = yes; Enter = no).
+Choose one cuisine
+or none, today's budget, and one optional special request. Press Enter for
+none, select a previous request by number or all, or describe a new request
+in English. BIS checks the input,
 uses AI to review new wording, and asks before applying a correction. BIS AI
-can interpret natural budget and distance answers, such as "i think 12" or
-"about 500 metres"; confirm the proposed number before it is used. BIS AI
-then interprets the request; confirm its proposed search before BRNS runs.
+can interpret natural budget, distance, and journey-time answers, such as
+"i think 12" or "about 500 metres"; confirm the proposed number before use.
+BIS AI then interprets the request; press Enter to confirm its proposed
+search, or answer no to cancel. After results, choose "Search again with the
+same choices" to request fresh recommendations without repeating the form.
 Confirmed new special requests are saved for the next search; other today's
 choices do not change your saved profile. Live search needs BIS and BRNS AI;
 chatbot test mode skips both AI calls and BRNS. The location prompt accepts a

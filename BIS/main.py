@@ -14,6 +14,7 @@ from BRNS import io_manager as brns_io
 from BRNS import main as brns_main
 from sources.profile_schema import OTHER_PREFERENCES, empty_preferences
 from support import config as settings
+from support.email_verification import email_delivery
 from shared import debug_log, terminal_ui
 
 
@@ -34,7 +35,7 @@ def run_search(session, config, automatic=False):
         collected = io_manager.collect_search(session["user"], config)
         if collected is None:
             debug_log.debug_log("Collection cancelled.", "INFO", "BIS.io.collect_search")
-            io_manager.display_message("Search cancelled. Your profile is saved.")
+            io_manager.display_message("Search cancelled.")
             return
         debug_log.debug_log("Search choices collected.", "INFO",
                             "BIS.io.collect_search")
@@ -72,12 +73,12 @@ def run_search(session, config, automatic=False):
                     io_manager.display_message(error)
                     today_request = io_manager.ask_search_clarification(config)
                     if today_request is None:
-                        io_manager.display_message("Search cancelled. Your profile is saved.")
+                        io_manager.display_message("Search cancelled.")
                         return
             if io_manager.confirm_search_request(request, config) is not True:
                 debug_log.debug_log("Interpretation declined.", "INFO",
                                     "BIS.io.confirm_search_request")
-                io_manager.display_message("Search cancelled. Your profile is saved.")
+                io_manager.display_message("Search cancelled.")
                 return
             debug_log.debug_log("Interpretation confirmed.", "INFO",
                                 "BIS.io.confirm_search_request")
@@ -95,9 +96,14 @@ def run_search(session, config, automatic=False):
             debug_log.debug_log("Chatbot test completed without BRNS.", "INFO",
                                 "BIS.main.run_search")
             return
+        previous_restaurants = []
         while True:
             io_manager.display_message("Searching restaurants...")
-            results = brns_main.search(payload)
+            if previous_restaurants:
+                results = brns_main.search(
+                    payload, previous_restaurants=previous_restaurants)
+            else:
+                results = brns_main.search(payload)
             matches = results["matches"]
             alternatives = results["alternatives"]
             debug_log.debug_log(
@@ -110,6 +116,10 @@ def run_search(session, config, automatic=False):
                 f"Found {len(matches)} match{'es' if len(matches) != 1 else ''} "
                 f"and {len(alternatives)} alternative"
                 f"{'s' if len(alternatives) != 1 else ''}.")
+            if previous_restaurants and results.get("new_count") == 0:
+                io_manager.display_message(
+                    "No new restaurants found for these choices; "
+                    "showing available results again.")
             if matches:
                 io_manager.display_message(
                     f"Top match: {matches[0]['restaurant']['name']}.")
@@ -119,6 +129,7 @@ def run_search(session, config, automatic=False):
             if visible:
                 brns_io.show_result_list(results)
             options = matches + alternatives
+            previous_restaurants.extend(item["restaurant"] for item in options)
             while True:
                 action = io_manager.choose_results_action(
                     len(options) if visible else 0,
@@ -127,6 +138,11 @@ def run_search(session, config, automatic=False):
                     io_manager.display_message(
                         "Search finished. Use /search to try again.")
                     return
+                if action == "repeat":
+                    debug_log.debug_log(
+                        "Repeating search with the same confirmed request.",
+                        "INFO", "BIS.main.run_search")
+                    break
                 if action == "alternatives" and alternatives and not visible:
                     brns_io.show_result_list(results)
                     visible = True
@@ -166,6 +182,7 @@ def run_search(session, config, automatic=False):
                             continue
                     request = validated
                     payload = data_manager.serialize_search_request(request)
+                    previous_restaurants = []
                     debug_log.debug_log(
                         "Refined request serialized to JSON.", "INFO",
                         "BIS.data.serialize_search_request")
@@ -181,6 +198,35 @@ def run_search(session, config, automatic=False):
                         continue
                     route = brns_main.route_to(chosen, request)
                     brns_io.show_route(**route)
+                    continue
+                if action == "email" and visible:
+                    user = session["user"]
+                    if not user.get("email_verified"):
+                        io_manager.display_message(
+                            "Verify your email before sending a Maps link.")
+                        continue
+                    result_number = io_manager.choose_route_result(
+                        len(options))
+                    if result_number is None:
+                        continue
+                    chosen = options[result_number - 1]["restaurant"]
+                    if chosen.get("lat") is None or chosen.get("lng") is None:
+                        io_manager.display_message(
+                            "No Maps link is available for that restaurant.")
+                        continue
+                    origin = (request["origin"]["latitude"],
+                              request["origin"]["longitude"])
+                    destination = (chosen["lat"], chosen["lng"])
+                    link = brns_io.build_maps_link(
+                        origin, destination, request["mode"])
+                    try:
+                        email_delivery.send_maps_link_email(
+                            user["email"], chosen["name"], link, config)
+                    except (ValueError, RuntimeError, OSError) as error:
+                        io_manager.display_message(error)
+                        continue
+                    io_manager.display_message(
+                        f"Google Maps link sent to {user['email']}.")
                     continue
                 io_manager.display_message("Choose one of the actions shown.")
     except (ValueError, RuntimeError, OSError) as error:
@@ -236,15 +282,16 @@ def save_update(action, session, config, from_ai):
     try:
         user = session["user"]
         was_incomplete = logic_manager.next_field(user["preferences"]) is not None
+        operation = action.get("location_action", "add")
+        if session["field"] == "location":
+            operation = session["location_action"]
         updates = io_manager.resolve_proposed_updates(
             user["preferences"], action["updates"], from_ai,
+            location_action=operation,
         )
         debug_log.debug_log(
             f"Resolved {len(updates)} preference fields.", "INFO",
             "BIS.io.resolve_proposed_updates")
-        operation = action.get("location_action", "add")
-        if session["field"] == "location":
-            operation = session["location_action"]
         preferences = logic_manager.apply_updates(
             user["preferences"], updates, operation,
         )
@@ -284,7 +331,9 @@ def end_session(intent, session, config):
     user = session["user"]
     data_manager.save_preferences(user["userID"], user["preferences"], config)
     message = {"logout": "Logged out.", "exit": "Goodbye!"}[intent]
-    io_manager.display_message("Profile saved. " + message)
+    if intent == "exit" and logic_manager.next_field(user["preferences"]) is not None:
+        message = "Profile saved. " + message
+    io_manager.display_message(message)
     debug_log.debug_log("Session ended.", "INFO", "BIS.session." + intent)
     return intent
 

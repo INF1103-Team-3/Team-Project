@@ -8,11 +8,11 @@ from BRNS import places_client
 from shared import debug_log as log
 from shared import terminal_ui as ui
 from BIS.sources.profile_schema import (
-    CUISINES, clean_text, validate_value,
+    CUISINES, clean_text, validate_travel_minutes, validate_value,
 )
 
 SEARCH_FIELDS = {
-    "origin", "mode", "max_distance_km", "cuisine",
+    "origin", "mode", "max_distance_km", "max_travel_minutes", "traffic_aware", "cuisine",
     "budget_per_person", "other_preferences",
     "dietary_requirements", "disliked_cuisines",
 }
@@ -32,7 +32,7 @@ def accept_bis_json(payload):
         except ValueError as error:
             raise ValueError("BRNS requires valid BIS search JSON.") from error
     if not isinstance(payload, dict) or set(payload) != SEARCH_FIELDS:
-        raise ValueError("BRNS requires the eight BIS search fields only.")
+        raise ValueError("BRNS requires the ten BIS search fields only.")
     origin = payload["origin"]
     if not isinstance(origin, dict) or set(origin) != ORIGIN_FIELDS:
         raise ValueError("BRNS requires a confirmed origin object.")
@@ -45,10 +45,23 @@ def accept_bis_json(payload):
             or not 1.15 <= latitude <= 1.48
             or not 103.60 <= longitude <= 104.10):
         raise ValueError("The search origin must be within Singapore.")
-    if payload["mode"] not in ("walk", "drive"):
-        raise ValueError("Choose walk or drive for the search.")
-    if payload["max_distance_km"] is None or payload["budget_per_person"] is None:
-        raise ValueError("Search distance and budget are required.")
+    if payload["mode"] not in ("walk", "drive", "transit"):
+        raise ValueError("Choose walk, drive, or transit for the search.")
+    distance = payload["max_distance_km"]
+    minutes = payload["max_travel_minutes"]
+    if (distance is None) == (minutes is None):
+        raise ValueError("BRNS requires exactly one travel limit.")
+    if payload["mode"] == "transit" and distance is not None:
+        raise ValueError("Transit searches require a time limit.")
+    distance = (validate_value("max_distance_km", distance)
+                if distance is not None else None)
+    minutes = validate_travel_minutes(minutes) if minutes is not None else None
+    traffic_aware = payload["traffic_aware"]
+    if type(traffic_aware) is not bool or (traffic_aware and
+            (payload["mode"] != "drive" or minutes is None)):
+        raise ValueError("Live traffic is available only for driving time searches.")
+    if payload["budget_per_person"] is None:
+        raise ValueError("Search budget is required.")
     if any(not isinstance(payload[field], list) for field in (
         "other_preferences", "dietary_requirements", "disliked_cuisines",
     )):
@@ -62,8 +75,8 @@ def accept_bis_json(payload):
             "latitude": latitude, "longitude": longitude,
         },
         "mode": payload["mode"],
-        "max_distance_km": validate_value(
-            "max_distance_km", payload["max_distance_km"]),
+        "max_distance_km": distance,
+        "max_travel_minutes": minutes, "traffic_aware": traffic_aware,
         "cuisine": cuisine,
         "budget_per_person": validate_value(
             "budget_per_person", payload["budget_per_person"]),
@@ -91,9 +104,9 @@ def find_candidates(request):
     return candidates
 
 
-def get_route(origin, destination, mode):
+def get_route(origin, destination, mode, traffic_aware=False):
     """Fetch a route through the IO-owned external service client."""
-    route = places_client.get_route(origin, destination, mode)
+    route = places_client.get_route(origin, destination, mode, traffic_aware)
     log.debug_log("Route available." if route else "Route unavailable.",
                   "INFO" if route else "WARNING",
                   "BRNS.io_manager.get_route")
@@ -138,9 +151,16 @@ def show_result_list(results):
             number += 1
             restaurant = item["restaurant"]
             mode = results["mode"]
-            meters = restaurant.get(f"{mode}_meters")
-            distance = (f"{meters / 1000:.2f} km by {mode}"
-                        if meters is not None else "distance unavailable")
+            if results.get("limit_unit") == "minutes":
+                minutes = restaurant.get(f"{mode}_minutes")
+                distance = (f"{minutes:g} min by {mode}"
+                            if minutes is not None else "travel time unavailable")
+                if results.get("traffic_aware"):
+                    distance += " (live traffic)"
+            else:
+                meters = restaurant.get(f"{mode}_meters")
+                distance = (f"{meters / 1000:.2f} km by {mode}"
+                            if meters is not None else "distance unavailable")
             ui.item(number, f"{restaurant['name']} · {distance}", role=role)
 
 
@@ -169,12 +189,21 @@ def _show_result(number, item, results, role):
         if item != "halal")
     halal = restaurant.get("halal_status")
     mode = results["mode"]
-    meters = restaurant.get(f"{mode}_meters")
     source = restaurant.get(f"{mode}_source")
-    travel = (f"{meters / 1000:.2f} km by {mode}"
-              if meters is not None else "distance unavailable")
-    if source == "estimate":
-        travel += " (estimate, unverified)"
+    if results.get("limit_unit") == "minutes":
+        minutes = restaurant.get(f"{mode}_minutes")
+        travel = (f"{minutes:g} min by {mode}"
+                  if minutes is not None else "travel time unavailable")
+        if results.get("traffic_aware"):
+            travel += " (live traffic)"
+        if source == "estimate":
+            travel += " (estimate, unverified)"
+    else:
+        meters = restaurant.get(f"{mode}_meters")
+        travel = (f"{meters / 1000:.2f} km by {mode}"
+                  if meters is not None else "distance unavailable")
+        if source == "estimate":
+            travel += " (estimate, unverified)"
     average = restaurant.get("avg_price")
     starting = restaurant.get("price_start")
     price = (f"Average SGD {average:.2f}" if average is not None
@@ -216,11 +245,16 @@ def _show_result(number, item, results, role):
     ui.line()
 
 
-def show_route(name, route, link, mode):
+def show_route(name, route, link, mode, traffic_aware=False):
     ui.section(f"{mode.title()} route to {name}")
+    if traffic_aware:
+        ui.line("Travel time uses live traffic.", "muted")
     if route is not None:
-        ui.field("Journey", f"{route['distance_m']} m · "
-                 f"{route['duration_min']} min")
+        if mode == "transit":
+            ui.field("Journey", f"{route['duration_min']} min by transit")
+        else:
+            ui.field("Journey", f"{route['distance_m']} m · "
+                     f"{route['duration_min']} min")
         for step in route["steps"]:
             ui.line(f"  {step}")
     else:

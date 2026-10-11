@@ -37,8 +37,11 @@ def normalize_candidate(record, *, offline=False):
         candidate["walk_meters"] = None
         candidate["drive_minutes"] = None
         candidate["drive_meters"] = None
+        candidate["transit_minutes"] = None
+        candidate["transit_meters"] = None
         candidate["walk_source"] = None
         candidate["drive_source"] = None
+        candidate["transit_source"] = None
         candidate["source"] = "offline catalog"
     return candidate
 
@@ -97,16 +100,27 @@ def decide_outcome(restaurant, request):
         unverified.append("price unavailable")
 
     mode = request["mode"]
-    meters = restaurant.get(f"{mode}_meters")
     source = restaurant.get(f"{mode}_source")
-    if source != "route" or meters is None:
-        unverified.append("travel distance estimated or unavailable")
-    elif meters > request["max_distance_km"] * 1000:
-        problems.append(
-            f"route is {meters / 1000:.2f} km, over your "
-            f"{request['max_distance_km']:g} km limit")
+    if request["max_travel_minutes"] is not None:
+        minutes = restaurant.get(f"{mode}_minutes")
+        if source != "route" or minutes is None:
+            unverified.append(f"{mode} journey time unavailable")
+        elif minutes > request["max_travel_minutes"]:
+            problems.append(
+                f"{mode} journey is {minutes:g} min, over your "
+                f"{request['max_travel_minutes']:g} min limit")
+        else:
+            reasons.append(f"within your {mode} time limit")
     else:
-        reasons.append("within your route distance limit")
+        meters = restaurant.get(f"{mode}_meters")
+        if source != "route" or meters is None:
+            unverified.append("travel distance estimated or unavailable")
+        elif meters > request["max_distance_km"] * 1000:
+            problems.append(
+                f"route is {meters / 1000:.2f} km, over your "
+                f"{request['max_distance_km']:g} km limit")
+        else:
+            reasons.append("within your route distance limit")
 
     if "spicy" in " ".join(request["other_preferences"]):
         if restaurant.get("spicy_options") is True:
@@ -130,6 +144,20 @@ def _grounded_ai_reasons(restaurant, request, codes, candidate_id=None):
         average is None and type(range_end) in (int, float)
         and 0 <= range_end <= budget
         and (range_start is None or 0 <= range_start <= range_end))
+    if request["max_travel_minutes"] is not None:
+        travel_within_limit = (
+            restaurant.get(f"{mode}_source") == "route"
+            and type(restaurant.get(f"{mode}_minutes")) in (int, float)
+            and 0 <= restaurant[f"{mode}_minutes"]
+            <= request["max_travel_minutes"])
+        travel_reason = f"within your {mode} time limit"
+    else:
+        travel_within_limit = (
+            restaurant.get(f"{mode}_source") == "route"
+            and type(restaurant.get(f"{mode}_meters")) in (int, float)
+            and 0 <= restaurant[f"{mode}_meters"]
+            <= request["max_distance_km"] * 1000)
+        travel_reason = "within your route distance limit"
     checks = {
         "cuisine_match": (
             request["cuisine"] != "none"
@@ -140,11 +168,7 @@ def _grounded_ai_reasons(restaurant, request, codes, candidate_id=None):
             "average price is within your budget" if average_within_budget
             else "listed price range is within your budget"),
         "within_route": (
-            restaurant.get(f"{mode}_source") == "route"
-            and type(restaurant.get(f"{mode}_meters")) in (int, float)
-            and 0 <= restaurant[f"{mode}_meters"]
-            <= request["max_distance_km"] * 1000,
-            "within your route distance limit"),
+            travel_within_limit, travel_reason),
         "well_rated": (
             type(restaurant.get("rating")) in (int, float)
             and 4 <= restaurant["rating"] <= 5,
@@ -181,8 +205,11 @@ def _grounded_ai_reasons(restaurant, request, codes, candidate_id=None):
             "candidate_price_end_sgd": range_end},
         "within_route": {
             "mode": mode,
-            "limit_m": request["max_distance_km"] * 1000,
+            "limit_m": (request["max_distance_km"] * 1000
+                        if request["max_distance_km"] is not None else None),
+            "limit_minutes": request["max_travel_minutes"],
             "travel_m": restaurant.get(f"{mode}_meters"),
+            "travel_minutes": restaurant.get(f"{mode}_minutes"),
             "travel_source": restaurant.get(f"{mode}_source")},
         "well_rated": {"candidate_rating": restaurant.get("rating")},
         "vegetarian_options": {
@@ -218,7 +245,8 @@ def _grounded_ai_reasons(restaurant, request, codes, candidate_id=None):
     return grounded
 
 
-def rank_restaurants(restaurants, request, recommendations=None):
+def rank_restaurants(restaurants, request, recommendations=None,
+                     previous_restaurants=()):
     """Verify AI IDs and reasons, then enforce requirements on every candidate."""
     if recommendations is None:
         # Kept for direct Logic tests; BRNS.main requires AI recommendations.
@@ -260,10 +288,29 @@ def rank_restaurants(restaurants, request, recommendations=None):
             hidden += 1
     if recommendations is None:
         matches.sort(key=lambda item: item["score"], reverse=True)
+    previous_keys = {
+        (str(item.get("name", "")).casefold().strip(),
+         str(item.get("address", "")).casefold().strip())
+        for item in previous_restaurants if isinstance(item, dict)
+    }
+
+    def was_returned(item):
+        restaurant = item["restaurant"]
+        return (str(restaurant.get("name", "")).casefold().strip(),
+                str(restaurant.get("address", "")).casefold().strip()) in previous_keys
+
+    matches.sort(key=was_returned)
+    alternatives.sort(key=was_returned)
+    visible_matches = matches[:config.MAX_MATCHES_SHOWN]
+    visible_alternatives = alternatives[:config.MAX_ALTERNATIVES_SHOWN]
     return {
-        "matches": matches[:config.MAX_MATCHES_SHOWN],
-        "alternatives": alternatives[:config.MAX_ALTERNATIVES_SHOWN],
+        "matches": visible_matches,
+        "alternatives": visible_alternatives,
+        "new_count": sum(not was_returned(item) for item in
+                         visible_matches + visible_alternatives),
         "hidden": hidden,
         "mode": request["mode"],
+        "limit_unit": "minutes" if request["max_travel_minutes"] is not None else "km",
+        "traffic_aware": request["traffic_aware"],
         "requested_dietary": request["dietary_requirements"],
     }
