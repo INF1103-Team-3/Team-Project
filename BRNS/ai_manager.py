@@ -2,9 +2,11 @@
 Multi-provider chain (OpenRouter + direct Gemini) with automatic fallback.
 Zero domain logic here. Never crashes: returns (ok, result_or_error, model_used_or_None)."""
 import json
+import re
 import time
 import requests
-import config
+from BRNS import config
+from shared import debug_log as log
 
 SYSTEM_PROMPT = """You convert a user's food request into strict JSON.
 
@@ -92,13 +94,21 @@ def validate_ai_output(data):
     return True, data
 
 
-def _log_ai_event(context, detail):
-    """Spec: handle API failure gracefully — log and continue, never crash."""
-    try:
-        with open(config.API_ERROR_FILE, "a", encoding="utf-8") as f:
-            f.write(f"ai_manager: {context}: {detail}\n")
-    except OSError:
-        pass
+def _safe_failure(detail):
+    """Keep provider response bodies and URLs out of operational logs."""
+    if isinstance(detail, str):
+        status = re.match(r"HTTP (\d{3})", detail)
+        if status:
+            return f"HTTP {status.group(1)}"
+        if "rate limited" in detail.lower():
+            return "rate limited"
+        if detail.startswith("network error"):
+            return "network error"
+    return "request failed"
+
+
+def _log_ai_event(context, detail, level="WARNING"):
+    log.debug_log(detail, level, f"BRNS.ai_manager.{context}")
 
 
 def _call_openrouter(model_id, system_prompt, user_text):
@@ -112,7 +122,9 @@ def _call_openrouter(model_id, system_prompt, user_text):
         if use_json_mode:
             payload["response_format"] = {"type": "json_object"}
         try:
-            resp = requests.post(config.OPENROUTER_URL, headers=headers, json=payload, timeout=30)
+            resp = requests.post(
+                config.OPENROUTER_URL, headers=headers, json=payload,
+                timeout=(3, 12))
         except requests.RequestException as err:
             return False, f"network error: {err}"
         if resp.status_code == 429:
@@ -142,7 +154,8 @@ def _call_gemini(model_name, system_prompt, user_text):
         if not use_json:
             body.pop("generationConfig", None)
         try:
-            resp = requests.post(url, headers=headers, json=body, timeout=30)
+            resp = requests.post(url, headers=headers, json=body,
+                                 timeout=(3, 12))
         except requests.RequestException as err:
             return False, f"network error: {err}"
         if resp.status_code == 429:
@@ -177,7 +190,7 @@ def call_ai(user_record):
                 parsed = parse_json_reply(content)
             except ValueError as err:
                 errors.append(f"{provider}/{model}: unparseable")
-                _log_ai_event("fallback", f"{provider}/{model} unparseable: {err}")
+                _log_ai_event("fallback", f"{provider}/{model}: invalid JSON")
                 continue
             is_valid, result = validate_ai_output(parsed)
             if is_valid:
@@ -185,7 +198,137 @@ def call_ai(user_record):
             errors.append(f"{provider}/{model}: schema invalid ({result})")
             _log_ai_event("fallback", f"{provider}/{model} schema: {result}")
             continue
-        errors.append(f"{provider}/{model}: {content}")
-        _log_ai_event("fallback", f"{provider}/{model} -> {content}")
+        errors.append(f"{provider}/{model}: {_safe_failure(content)}")
+        _log_ai_event("fallback", f"{provider}/{model}: {_safe_failure(content)}")
         time.sleep(1)
     return False, "; ".join(errors), None
+
+
+REASON_CODES = {
+    "cuisine_match", "within_budget", "within_route", "well_rated",
+    "vegetarian_options", "halal_hint_unofficial", "spicy_options",
+}
+
+RECOMMEND_SYSTEM_PROMPT = """Rank every supplied restaurant candidate for the
+validated search request. Return only JSON in this exact shape:
+{"recommendations":[{"id":0,"reason_codes":["cuisine_match"]}]}.
+Include every candidate ID exactly once, most suitable first. Use only these
+reason codes when supported by the supplied facts: cuisine_match,
+within_budget, within_route, well_rated, vegetarian_options,
+halal_hint_unofficial, spicy_options. Use [] if no code is supported.
+Consider cuisine, budget, dietary needs, travel, and other preferences.
+When previous_restaurants is supplied, prefer suitable candidates not named
+there over similarly suitable candidates already returned. Include every ID.
+Use within_budget only when avg_price is a number no greater than the user's
+budget. price_start alone does not prove a meal fits the budget.
+Use vegetarian_options only when vegetarian is requested and listed in the
+candidate dietary_requirements. Use halal_hint_unofficial only when halal is
+requested and the candidate has halal_hint_unofficial true.
+Use cuisine_match only when the requested cuisine is in candidate cuisines.
+When the requested cuisine is none, never use cuisine_match.
+Use within_route only for a verified route within the chosen distance or
+journey-time limit. Check the selected limit field, not the other route metric.
+Do not invent restaurant facts or claim official halal certification.
+The next layer will verify every reason and enforce hard requirements."""
+
+
+def has_configured_provider():
+    """Check credentials before BRNS spends a Places request."""
+    return any(
+        (entry.get("provider") == "openrouter" and config.OPENROUTER_API_KEY
+         or entry.get("provider") == "gemini" and config.GEMINI_API_KEY)
+        and entry.get("model") and not any(
+            char in entry["model"] for char in "<> ")
+        for entry in config.MODEL_CHAIN
+    )
+
+
+def recommend_candidates(request, candidates, previous_restaurants=()):
+    """Return a complete AI recommendation, or None if every model fails."""
+    if not candidates:
+        return None
+    _log_ai_event("recommend_candidates",
+                  f"Preparing {len(candidates)} candidate summaries.", "INFO")
+    mode = request["mode"]
+    facts = []
+    for index, candidate in enumerate(candidates):
+        facts.append({
+            "id": index,
+            "name": candidate.get("name"),
+            "cuisines": candidate.get("cuisines"),
+            "dietary_requirements": candidate.get("dietary_requirements"),
+            "halal_hint_unofficial": bool(candidate.get("halal_hint")),
+            "avg_price": candidate.get("avg_price"),
+            "price_start": candidate.get("price_start"),
+            "rating": candidate.get("rating"),
+            "spicy_options": candidate.get("spicy_options"),
+            "travel_meters": candidate.get(f"{mode}_meters"),
+            "travel_minutes": candidate.get(f"{mode}_minutes"),
+            "travel_source": candidate.get(f"{mode}_source"),
+        })
+    _log_ai_event(
+        "recommend_candidates",
+        "Candidate facts sent to model: "
+        + json.dumps(facts, ensure_ascii=False, separators=(",", ":")),
+        "DEBUG")
+    prior_names = list(dict.fromkeys(
+        restaurant.get("name") for restaurant in previous_restaurants
+        if isinstance(restaurant, dict)
+        and isinstance(restaurant.get("name"), str)))
+    user_text = json.dumps({"request": request, "candidates": facts,
+                            "previous_restaurants": prior_names},
+                           separators=(",", ":"))
+    for entry in config.MODEL_CHAIN:
+        provider, model = entry["provider"], entry["model"]
+        if provider == "openrouter" and config.OPENROUTER_API_KEY:
+            _log_ai_event("recommend_candidates",
+                          f"Trying {provider}/{model}.", "INFO")
+            ok, content = _call_openrouter(
+                model, RECOMMEND_SYSTEM_PROMPT, user_text)
+        elif provider == "gemini" and config.GEMINI_API_KEY:
+            _log_ai_event("recommend_candidates",
+                          f"Trying {provider}/{model}.", "INFO")
+            ok, content = _call_gemini(
+                model, RECOMMEND_SYSTEM_PROMPT, user_text)
+        else:
+            continue
+        if not ok:
+            _log_ai_event("recommendation",
+                          f"{provider}/{model}: {_safe_failure(content)}")
+            continue
+        try:
+            reply = parse_json_reply(content)
+        except (ValueError, TypeError, AttributeError):
+            _log_ai_event("recommendation", f"{provider}/{model}: invalid JSON")
+            continue
+        if not isinstance(reply, dict) or set(reply) != {"recommendations"}:
+            _log_ai_event("recommendation", f"{provider}/{model}: wrong keys")
+            continue
+        recommendations = reply["recommendations"]
+        if (not isinstance(recommendations, list)
+                or len(recommendations) != len(candidates)
+                or any(not isinstance(item, dict)
+                       or set(item) != {"id", "reason_codes"}
+                       or type(item["id"]) is not int
+                       or item["id"] < 0 or item["id"] >= len(candidates)
+                       or not isinstance(item["reason_codes"], list)
+                       or len(item["reason_codes"]) > 4
+                       or any(not isinstance(code, str)
+                              or code not in REASON_CODES
+                              for code in item["reason_codes"])
+                       or len(item["reason_codes"]) != len(
+                           set(item["reason_codes"]))
+                       for item in recommendations)
+                or len({item["id"] for item in recommendations})
+                != len(candidates)):
+            _log_ai_event("recommendation", f"{provider}/{model}: invalid schema")
+            continue
+        _log_ai_event("recommend_candidates",
+                      f"Accepted {provider}/{model} response.", "INFO")
+        _log_ai_event(
+            "recommend_candidates",
+            "AI recommendation: " + json.dumps(
+                recommendations, separators=(",", ":")), "DEBUG")
+        return recommendations
+    _log_ai_event("recommend_candidates", "No model returned a valid order.")
+    return None

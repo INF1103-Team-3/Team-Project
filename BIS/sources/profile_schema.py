@@ -24,6 +24,7 @@ NUMBER_LIMITS = {
     "budget_per_person": (0.01, 1000),
 }
 MINUTES_PER_KM = 20
+TRANSIT_MINUTES_RANGE = (1, 240)
 EMAIL_PATTERN = re.compile(
     r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
     r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
@@ -112,6 +113,15 @@ def validate_value(field, value):
     return clean_text(value, 1000, allow_empty=True)
 
 
+def validate_travel_minutes(value):
+    """Validate a search-only maximum journey time in minutes."""
+    low, high = TRANSIT_MINUTES_RANGE
+    if (type(value) not in (int, float) or not math.isfinite(value)
+            or not low <= value <= high):
+        raise ValueError(f"Travel time must be between {low} and {high} minutes.")
+    return round(value, 2)
+
+
 def validate_updates(updates):
     """Reject obsolete keys even if null; null updates never erase answers."""
     if not isinstance(updates, dict):
@@ -158,13 +168,7 @@ def validate_user(user):
     }
 
 
-# Verification policy and recognition-only unsupported cuisine names.
-VERIFICATION_TTL_SECONDS = 600
-
-VERIFICATION_RESEND_SECONDS = 60
-
-VERIFICATION_MAX_ATTEMPTS = 5
-
+# Recognition-only unsupported cuisine names.
 UNSUPPORTED_CUISINES = {
     "spanish", "greek", "brazilian", "ethiopian", "german",
     "british", "pakistani", "bangladeshi", "nepalese", "sri lankan",

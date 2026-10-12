@@ -8,11 +8,13 @@ __pycache__/
 .env
 BIS/data/users.json
 BIS/data/profile_state.json
-BIS/data/geocode_cache.json
+data/geocode_cache.json
+data/geocode_cache.lock
+data/restaurants.json
 BIS/data/*.bak
-BIS/logs/*.log
 BRNS/data/search_history.json
-BRNS/data/api_errors.log
+logs/*.log
+project_overview/function_graphs/
 
 # Local project documentation
 BIS/docs/

@@ -1,23 +1,123 @@
-"""Procedural profile decisions, conversions, and verification."""
+"""Procedural profile and search decisions and conversions."""
 
-import hashlib
 import math
 import re
-import secrets
-import time
 from copy import deepcopy
 from difflib import SequenceMatcher
 
 from sources.profile_schema import (
     CUISINES, CUISINE_FIELDS, MINUTES_PER_KM, OTHER_PREFERENCES,
-    UNSUPPORTED_CUISINES, VERIFICATION_MAX_ATTEMPTS,
-    VERIFICATION_RESEND_SECONDS, VERIFICATION_TTL_SECONDS,
-    PREFERENCE_FIELDS, validate_preferences, validate_updates,
+    UNSUPPORTED_CUISINES,
+    PREFERENCE_FIELDS, clean_text, validate_preferences, validate_updates,
+    validate_value, validate_travel_minutes,
 )
 
 COORDINATES = re.compile(
     r"\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)\s*"
 )
+
+SEARCH_FIELDS = {
+    "origin", "mode", "max_distance_km", "max_travel_minutes", "traffic_aware", "cuisine",
+    "budget_per_person", OTHER_PREFERENCES,
+    "dietary_requirements", "disliked_cuisines",
+}
+
+
+class SearchClarificationNeeded(ValueError):
+    """The AI interpretation disagrees with a confirmed user choice."""
+
+
+def validate_special_request_text(text):
+    """Check a short English request before BIS sends it for interpretation."""
+    text = clean_text(text, 100)
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()\-]*", text):
+        raise ValueError(
+            "Write your special request in English letters and words, "
+            "such as chicken rice or a quiet cafe.")
+    words = re.findall(r"[A-Za-z]+", text)
+    if not words or not any(len(word) > 1 for word in words):
+        raise ValueError(
+            "Describe your request in English words, or press Enter for none.")
+    return text
+
+
+def validate_search_request(request, ai_response=None):
+    """Validate AI interpretation while protecting confirmed search choices."""
+    confirmed = _validate_search_fields(request)
+    if ai_response is None:
+        return confirmed
+    try:
+        proposed = _validate_search_fields(ai_response)
+    except ValueError as error:
+        raise ValueError(
+            "The AI returned an invalid search request. Please retry.") from error
+    protected = SEARCH_FIELDS - {OTHER_PREFERENCES}
+    if any(proposed[field] != confirmed[field] for field in protected):
+        raise SearchClarificationNeeded(
+            "The AI interpretation conflicts with a confirmed choice. "
+            "Please clarify what you want today.")
+    if not set(confirmed[OTHER_PREFERENCES]).issubset(
+            proposed[OTHER_PREFERENCES]):
+        raise SearchClarificationNeeded(
+            "The AI removed a selected preference. Please clarify your request.")
+    return proposed
+
+
+def _validate_search_fields(request):
+    """Normalize the exact ten-field BIS/BRNS search contract."""
+    if not isinstance(request, dict) or set(request) != SEARCH_FIELDS:
+        raise ValueError("Today's search has an invalid set of fields.")
+    origin = request["origin"]
+    if not isinstance(origin, dict) or set(origin) != {
+        "query", "label", "latitude", "longitude"
+    }:
+        raise ValueError("Today's search needs a confirmed location.")
+    latitude, longitude = origin["latitude"], origin["longitude"]
+    if (type(latitude) not in (int, float)
+            or type(longitude) not in (int, float)
+            or not in_singapore(latitude, longitude)):
+        raise ValueError("Today's search location must be in Singapore.")
+    if request["mode"] not in ("walk", "drive", "transit"):
+        raise ValueError("Choose walk, drive, or transit for today's search.")
+    if request["cuisine"] not in (*CUISINES, "none"):
+        raise ValueError("Choose a supported cuisine or none for today's search.")
+    for field in (OTHER_PREFERENCES, "dietary_requirements",
+                  "disliked_cuisines"):
+        if not isinstance(request[field], list):
+            raise ValueError(f"{field} must be a list.")
+    distance = request["max_distance_km"]
+    minutes = request["max_travel_minutes"]
+    if (distance is None) == (minutes is None):
+        raise ValueError("Choose exactly one travel limit: distance or time.")
+    if request["mode"] == "transit" and distance is not None:
+        raise ValueError("Transit searches use a time limit.")
+    distance = (validate_value("max_distance_km", distance)
+                if distance is not None else None)
+    minutes = validate_travel_minutes(minutes) if minutes is not None else None
+    traffic_aware = request["traffic_aware"]
+    if type(traffic_aware) is not bool or (traffic_aware and
+            (request["mode"] != "drive" or minutes is None)):
+        raise ValueError("Live traffic is available only for driving time searches.")
+    budget = validate_value("budget_per_person", request["budget_per_person"])
+    if budget is None:
+        raise ValueError("Today's search needs a travel limit and budget.")
+    preferences = validate_value(
+        OTHER_PREFERENCES, request[OTHER_PREFERENCES])
+    return {
+        "origin": {
+            "query": clean_text(origin["query"], 200),
+            "label": clean_text(origin["label"], 500),
+            "latitude": latitude, "longitude": longitude,
+        },
+        "mode": request["mode"], "max_distance_km": distance,
+        "max_travel_minutes": minutes, "traffic_aware": traffic_aware,
+        "cuisine": request["cuisine"], "budget_per_person": budget,
+        OTHER_PREFERENCES: preferences,
+        "dietary_requirements": validate_value(
+            "dietary_requirements", request["dietary_requirements"]),
+        "disliked_cuisines": validate_value(
+            "disliked_cuisines", request["disliked_cuisines"]),
+    }
 
 
 def in_singapore(latitude, longitude):
@@ -39,7 +139,7 @@ def parse_coordinates(text):
 
 def is_direct_location_input(text):
     return parse_coordinates(text) is not None or bool(
-        re.fullmatch(r"\d{6}", text)
+        re.fullmatch(r"\d{5,6}", text)
     )
 
 
@@ -103,13 +203,33 @@ def cuisine_tokens(text, field):
     )
     parts = re.split(r"\s*(?:,|\band\b|&)\s*", text)
     tokens = []
+    names = sorted(CUISINES + tuple(UNSUPPORTED_CUISINES),
+                   key=len, reverse=True)
+    name_pattern = re.compile("|".join(re.escape(name) for name in names))
     for part in parts:
         part = re.sub(r"\s+(?:food|cuisines?|dishes)$", "", part).strip()
         if not part or not re.fullmatch(r"[a-z]+(?:[ -][a-z]+)*", part):
             raise ValueError(
-                "Enter cuisine names separated by commas, or none.")
-        if part not in tokens:
-            tokens.append(part)
+                "Describe cuisines you like or avoid, or enter none.")
+        if part in names:
+            found = [part]
+        else:
+            found = []
+            remaining = part
+            while remaining:
+                match = name_pattern.match(remaining)
+                if not match:
+                    found = [part]
+                    break
+                found.append(match.group())
+                remaining = remaining[match.end():]
+                if remaining and not remaining.startswith(" "):
+                    found = [part]
+                    break
+                remaining = remaining.strip()
+        for token in found:
+            if token not in tokens:
+                tokens.append(token)
     return tokens
 
 
@@ -189,69 +309,3 @@ def next_field(preferences):
         if preferences[field] is None:
             return field
     return None
-
-
-def hash_verification_code(code, salt):
-    return hashlib.pbkdf2_hmac(
-        "sha256", code.encode(), salt.encode("ascii"), 100_000,
-    ).hex()
-
-
-def new_challenge(previous=None, now=None):
-    now = time.time() if now is None else now
-    if previous:
-        validate_challenge(previous)
-    if previous and now < previous["sent_at"] + VERIFICATION_RESEND_SECONDS:
-        raise ValueError("Wait 60 seconds between verification emails.")
-    code = f"{secrets.randbelow(1_000_000):06d}"
-    salt = secrets.token_hex(16)
-    return code, {
-        "salt": salt, "code_hash": hash_verification_code(code, salt),
-        "sent_at": now, "expires_at": now + VERIFICATION_TTL_SECONDS,
-        "attempts": 0,
-    }
-
-
-def check_challenge(challenge, code, now=None):
-    """Return attempt state and any error for the caller to persist."""
-    now = time.time() if now is None else now
-    if not challenge:
-        return None, "Request a verification code first."
-    validate_challenge(challenge)
-    updated = dict(challenge)
-    if now >= updated["expires_at"]:
-        return updated, "Verification code expired. Use /resend."
-    if updated["attempts"] >= VERIFICATION_MAX_ATTEMPTS:
-        return updated, "Too many incorrect attempts. Use /resend."
-    updated["attempts"] += 1
-    valid = isinstance(code, str) and re.fullmatch(r"[0-9]{6}", code.strip())
-    if valid:
-        valid = secrets.compare_digest(
-            hash_verification_code(code.strip(), updated["salt"]),
-            updated["code_hash"],
-        )
-    return updated, None if valid else "Incorrect verification code."
-
-
-def validate_challenge(challenge):
-    """Reject corrupt verification state before using timestamps or hashes."""
-    import math
-
-    if not isinstance(challenge, dict) or set(challenge) != {
-        "salt", "code_hash", "sent_at", "expires_at", "attempts",
-    }:
-        raise ValueError("Invalid verification state. Restore the state file.")
-    if not isinstance(challenge["salt"], str) or not re.fullmatch(
-        r"[0-9a-f]{32}", challenge["salt"],
-    ):
-        raise ValueError("Invalid verification state.")
-    if not isinstance(challenge["code_hash"], str) or not re.fullmatch(
-        r"[0-9a-f]{64}", challenge["code_hash"],
-    ):
-        raise ValueError("Invalid verification state.")
-    if type(challenge["attempts"]) is not int or challenge["attempts"] < 0:
-        raise ValueError("Invalid verification state.")
-    for field in ("sent_at", "expires_at"):
-        value = challenge[field]
-        if type(value) not in (int, float) or not math.isfinite(value):
-            raise ValueError("Invalid verification state.")

@@ -1,91 +1,121 @@
-"""Wires the four managers together. User -> io -> ai -> logic -> data."""
-import config
-import io_manager
-import ai_manager
-import logic_manager
-import data_manager
+"""Run a BRNS search from one BIS JSON request, without user prompts."""
 
-QUIT_WORDS = ("q", "quit", "exit")
+import json
+import sys
+import time
+from pathlib import Path
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from BRNS import ai_manager, config, data_manager, io_manager, logic_manager
+from shared import debug_log as log
+from shared import terminal_ui as ui
 
 
-def run_bitefinder():
-    io_manager.print_welcome()
-
-    problems = ai_manager.validate_chain()
-    if problems:
-        io_manager.print_error("MODEL_CHAIN has placeholder/broken entries: "
-                               + "; ".join(problems))
-        return
-
-    catalog = data_manager.load_restaurants()
-    if not catalog:
-        io_manager.print_error(f"No catalog data found at {config.RESTAURANT_FILE}")
-        return
-
-    while True:
-        choice = input("\n1 = new search, q = quit :> ").strip().lower()
-        if choice in QUIT_WORDS:
-            print("Goodbye!")
-            break
-        if choice != "1":
-            continue
-
-        record = io_manager.get_user_requirements()          # 1. INPUT LAYER
-
-        ok, req, ai_model = ai_manager.call_ai(record)       # 2. AI LAYER
-        if not ok:
-            io_manager.print_error(req)
-            continue
-
-        # Structured form fields are authoritative: the AI schema does not
-        # carry them, so restore from the raw record. The AI's job is
-        # interpretation (cuisine, free-text budget, notes) — not transport.
-        for key in ("mode", "max_walk_minutes", "max_drive_km", "eat_day"):
-            req[key] = record.get(key)
-
-        io_manager.print_parsed(req)
-        io_manager.print_ai_model(ai_model)
-
-        origin = data_manager.geocode_location(record["location"])   # 4a. DATA
-        if origin is None:
-            io_manager.print_error("Could not find that location — try a Singapore "
-                                   "postal code or a landmark name.")
-            continue
-
-        candidates = data_manager.build_candidates(origin, req, catalog)  # 4b. DATA
+def search(bis_json, previous_restaurants=()):
+    """Run IO → AI → Logic → Data for one validated BIS search."""
+    trace_token = log.start_trace()
+    started = time.monotonic()
+    log.debug_log("Search started.", "INFO", "BRNS.main.search")
+    try:
+        request = io_manager.accept_bis_json(bis_json)
+        log.debug_log("BIS JSON validated.", "INFO",
+                      "BRNS.io_manager.accept_bis_json")
+        if not ai_manager.has_configured_provider():
+            raise RuntimeError(
+                "BRNS needs a configured AI provider to complete this search.")
+        if config.USE_LIVE_GOOGLE and not config.GOOGLE_MAPS_API_KEY:
+            raise RuntimeError("Set GOOGLE_MAPS_API_KEY for live restaurant search.")
+        candidates = io_manager.find_candidates(request)
+        log.debug_log(f"Gathered {len(candidates)} candidates.", "INFO",
+                      "BRNS.io_manager.find_candidates")
         if not candidates:
-            io_manager.print_error(f"No restaurants found near {origin} — try another location.")
-            continue
+            raise RuntimeError(
+                "No restaurants found, or restaurant search is unavailable.")
+        recommendations = (
+            ai_manager.recommend_candidates(
+                request, candidates, previous_restaurants=previous_restaurants)
+            if previous_restaurants else
+            ai_manager.recommend_candidates(request, candidates))
+        if recommendations is None:
+            raise RuntimeError(
+                "BRNS AI could not recommend restaurants. Please retry.")
+        log.debug_log(
+            f"AI ordered {len(recommendations)} candidate IDs.", "INFO",
+            "BRNS.ai_manager.recommend_candidates")
+        results = (
+            logic_manager.rank_restaurants(
+                candidates, request, recommendations,
+                previous_restaurants=previous_restaurants)
+            if previous_restaurants else
+            logic_manager.rank_restaurants(candidates, request,
+                                           recommendations))
+        log.debug_log(
+            f"Validated {len(results['matches'])} matches, "
+            f"{len(results['alternatives'])} alternatives, "
+            f"{results['hidden']} hidden.", "INFO",
+            "BRNS.logic_manager.rank_restaurants")
+        source = "live-google" if config.USE_LIVE_GOOGLE else "offline-restaurants"
+        stored_count = data_manager.save_restaurants(candidates)
+        log.debug_log(
+            f"Saved {stored_count} restaurant records."
+            if stored_count is not None else "Restaurant records could not be saved.",
+            "INFO" if stored_count is not None else "WARNING",
+            "BRNS.data_manager.save_restaurants")
+        saved = data_manager.save_search_results(request, results, source)
+        log.debug_log(
+            "Search summary saved." if saved else "Search summary could not be saved.",
+            "INFO" if saved else "WARNING", "BRNS.data_manager.save_search_results")
+        return results
+    except (ValueError, RuntimeError, OSError) as error:
+        log.debug_log(f"Search stopped: {type(error).__name__}.", "ERROR",
+                      "BRNS.main.search")
+        raise
+    finally:
+        log.debug_log(
+            f"Search flow finished in {time.monotonic() - started:.2f}s.",
+            "INFO", "BRNS.main.search")
+        log.end_trace(trace_token)
 
-        results = logic_manager.rank_restaurants(candidates, req)    # 3. LOGIC LAYER
-        io_manager.print_results(results)
 
-        chosen = io_manager.choose_restaurant(results)               # on-demand route
-        route_link = None
-        if chosen is not None:
-            if chosen.get("lat") is None:
-                io_manager.print_error("No coordinates stored for that restaurant "
-                                       "— add lat/lng in the catalog.")
-            else:
-                dest = (chosen["lat"], chosen["lng"])
-                route = data_manager.get_route(origin, dest, record["mode"])
-                route_link = data_manager.build_maps_link(origin, dest, record["mode"])
-                io_manager.print_route(chosen["name"], route, route_link, record["mode"])
+def route_to(restaurant, request):
+    """Return an optional route for a BIS-selected result."""
+    log.debug_log("Route requested.", "INFO", "BRNS.main.route_to")
+    origin = (request["origin"]["latitude"], request["origin"]["longitude"])
+    latitude, longitude = restaurant.get("lat"), restaurant.get("lng")
+    if latitude is None or longitude is None:
+        raise ValueError("No verified coordinates are available for that restaurant.")
+    destination = (latitude, longitude)
+    mode = request["mode"]
+    result = {
+        "name": restaurant["name"],
+        "route": io_manager.get_route(origin, destination, mode,
+                                      request.get("traffic_aware", False)),
+        "link": io_manager.build_maps_link(origin, destination, mode),
+        "mode": mode,
+        "traffic_aware": request.get("traffic_aware", False),
+    }
+    log.debug_log(
+        "Route response prepared with directions."
+        if result["route"] else "Route response prepared with map link.",
+        "INFO", "BRNS.main.route_to")
+    return result
 
-        data_manager.save_history({                          # 4c. DATA: persist
-            "input": record,
-            "parsed": req,
-            "mode": "live-google" if config.USE_LIVE_GOOGLE else "offline-catalog",
-            "travel_mode": record["mode"],
-            "origin": list(origin),
-            "ai_model": ai_model,
-            "top_matches": [m["restaurant"]["name"] for m in results["matches"]],
-            "route_link": route_link,
-        })
+
+def main():
+    """Standalone BRNS accepts one BIS JSON object on standard input."""
+    log.configure(io_manager.display_debug if config.DEBUG else None)
+    try:
+        results = search(json.load(sys.stdin))
+    except json.JSONDecodeError:
+        ui.message("BRNS requires valid BIS search JSON.", "error")
+        return
+    except (ValueError, RuntimeError, OSError) as error:
+        ui.message(error, "error")
+        return
+    io_manager.show_results(results)
 
 
 if __name__ == "__main__":
-    try:
-        run_bitefinder()
-    except KeyboardInterrupt:
-        print("\nGoodbye!")   # clean exit on Ctrl+C instead of a traceback
+    main()

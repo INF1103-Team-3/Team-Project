@@ -6,7 +6,7 @@ Repo Link: [https://github.com/INF1103-Team-3/Team-Project](https://github.com/I
 
 What real-world problem does your application aim to solve?
 
-Finding suitable food becomes difficult when users must satisfy several conditions at once, such as Halal, vegan or vegetarian requirements, food allergies, a limited budget, a preferred food or cuisine, and a maximum walking time. Existing maps, food-discovery and dietary services often separate this information, so users must manually compare menus, prices, certification details and walking routes. BiteFinder combines these constraints into one recommendation process and returns suitable options with a clear explanation of why they match.
+Finding suitable food becomes difficult when users must satisfy several conditions at once, such as Halal or vegetarian requirements, food allergies, a limited budget, a preferred food or cuisine, and a maximum walking time. Existing maps, food-discovery and dietary services often separate this information, so users must manually compare menus, prices, certification details and walking routes. BiteFinder combines these constraints into one recommendation process and returns suitable options with a clear explanation of why they match.
 
 Who are the intended users of the application?
 
@@ -20,7 +20,7 @@ BiteFinder will collect only the information needed to generate relevant recomme
 - Location - current device location with permission, or a manually entered postal code, address, landmark, latitude or longitude
 - Maximum walking time - the longest time the user is willing to walk
 - Budget - the maximum amount the user wants to spend
-- Dietary requirement - for example Halal, vegan or vegetarian
+- Dietary requirement - for example Halal or vegetarian
 - Food allergies - allergens the user needs to avoid, such as peanuts or shellfish
 - Food or meal preference - preferred dish, cuisine or meal type, such as chicken rice, Japanese food, rice or noodles
 - Time requirement - for example, open now or open at a specified time
