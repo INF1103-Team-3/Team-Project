@@ -1,198 +1,177 @@
-"""BRC MUIS snapshot and JSON-checking contract tests."""
-
-import io
-import json
-import os
-import tempfile
-import unittest
-from datetime import datetime, timezone
+"""Contracts for the rebuilt BRC workflows."""
+import io, json, tempfile, unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
+from BRC import ai_manager, data_manager, io_manager, logic_manager, main, scraper
 
-from BRC import ai_manager, data_manager, logic_manager, main, muis_data_scraper
-
-
-def restaurant(name="Encik Tan (Waterway Point)", unit="B2-03", **extra):
-    row = {
-        "google_place_id": "place-1", "name": name,
-        "postal_code": "828761",
-        "address": f"83 Punggol Central, {unit} Waterway Point, Singapore 828761",
-        "dietary": ["halal"], "halal_certification": "unofficial",
-        "g_rating": "3.4", "custom_field": "preserve me",
-    }
-    row.update(extra)
-    return row
-
-
-def listing(unit="B2-03", number="EERN22010013410"):
-    return {
-        "listing_id": "brand-id", "certificate_number": number,
-        "name": "Encik Tan",
-        "address": f"83 Punggol Central #{unit} Waterway Point 828761",
-        "postal_code": "828761", "scheme": "Eating Establishment",
-        "sub_scheme": "Restaurant",
-        "source_url": muis_data_scraper.PORTAL_URL,
-    }
-
-
-def snapshot(*listings):
-    return {
-        "source_url": muis_data_scraper.PORTAL_URL,
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
-        "complete": True, "covered_names": ["encik tan"],
-        "listing_count": len(listings), "listings": list(listings),
-    }
-
+def raw_row(name="Encik Tan", unit="B2-03"):
+    return {"listing_id":"id-1","certificate_number":"cert-1","name":name,
+            "address":f"83 Punggol Central #{unit}, Singapore 828761",
+            "postal_code":"828761","scheme":"Eating Establishment",
+            "category":"Restaurant","status":"listed","valid_until":None,
+            "source_url":data_manager.SOURCE_URL,"latitude":1.4,"longitude":103.9}
+def snapshot(rows=None):
+    rows=rows or [raw_row()]
+    return {"source_url":data_manager.SOURCE_URL,
+      "fetched_at":datetime.now(timezone.utc).isoformat(),"complete":True,
+      "coverage":"all_eating_establishments","postal_prefixes":list("0123456789"),
+      "listing_count":len(rows),"listings":rows}
+def restaurant(unit="B2-03"):
+    return {"name":"Encik Tan (Waterway Point)","postal_code":"828761",
+            "address":f"83 Punggol Central #{unit}, Singapore 828761",
+            "dietary":[],"halal_certification":"unofficial","custom":"kept"}
 
 class FakeAI:
-    def __init__(self, *proposals):
-        self.proposals = list(proposals)
+    def process(self,context):
+        if context["scenario"]=="build_database":
+            return {"cuisines":[["malay"] for _ in context["raw_snapshot"]["listings"]]}
+        return {"matches":["cert-1" for _ in context["records"]]}
 
-    def propose_muis_matches(self, records, source):
-        return self.proposals
+class BRCTests(unittest.TestCase):
+    def test_interactive_menu_accepts_pasted_single_restaurant(self):
+        pasted = json.dumps(restaurant())
+        with patch("builtins.input", side_effect=["4", pasted]):
+            value = io_manager.collect_interactive_input()
+        self.assertIsInstance(value, dict)
+        self.assertEqual(value["name"], "Encik Tan (Waterway Point)")
 
-
-class FakeResponse:
-    def __init__(self, data=None, text="", status=200):
-        self.data, self.text, self.status_code = data, text, status
-
-    def raise_for_status(self):
-        if self.status_code >= 400:
-            raise ValueError(f"HTTP {self.status_code}")
-
-    def json(self):
-        return self.data
-
-
-class FakeSession:
-    def __init__(self, rows, total=None):
-        self.rows = rows
-        self.total = len(rows) if total is None else total
-        self.queries = []
-
-    def get(self, url, timeout):
-        return FakeResponse(text=(
-            '<input name="__RequestVerificationToken" value="test-token">'))
-
-    def post(self, url, json, headers, timeout):
-        self.queries.append(json["text"])
-        assert headers["X-CSRF-TOKEN"] == "test-token"
-        return FakeResponse(data={"totalRecords": self.total,
-                                  "data": self.rows})
-
-
-class BRCCheckerTests(unittest.TestCase):
-    def test_scraper_saves_complete_targeted_snapshot(self):
-        raw = dict(id="brand-id", number="EERN22010013410",
-                   name="Encik Tan", address="83 Punggol Central #B2-03 828761",
-                   postal="828761", schemeText="Eating Establishment",
-                   subSchemeText="Restaurant")
-        session = FakeSession([raw])
+    def test_interactive_single_file_rejects_an_array(self):
         with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "muis.json"
-            result = muis_data_scraper.refresh(
-                ["Encik Tan (Waterway Point)"], path,
-                session=session, delay=0)
-            self.assertEqual(session.queries, ["Encik Tan"])
-            self.assertEqual(result["covered_names"], ["encik tan"])
-            self.assertEqual(result["listing_count"], 1)
-            self.assertEqual(data_manager.load_muis_snapshot(path), result)
+            path = Path(folder) / "one.json"
+            path.write_text(json.dumps([restaurant()]), encoding="utf-8")
+            with (patch("builtins.input", side_effect=["5", str(path)]),
+                  self.assertRaisesRegex(ValueError, "one restaurant object")):
+                io_manager.collect_interactive_input()
 
-    def test_incomplete_refresh_keeps_last_good_snapshot(self):
-        session = FakeSession([dict(name="Encik Tan")], total=2)
+    def test_main_without_arguments_is_verbose_and_uses_menu(self):
+        errors = io.StringIO()
+        with (patch.object(io_manager, "collect_interactive_input",
+                           return_value=io_manager.NO_INPUT),
+              patch.object(main, "run", return_value=[restaurant()]) as execute,
+              patch("sys.stderr", errors), patch("sys.stdout", io.StringIO())):
+            self.assertEqual(main.main([]), 0)
+        self.assertTrue(execute.call_args.kwargs["verbose"])
+        self.assertIsNotNone(execute.call_args.kwargs["scrape_progress"])
+
+    def test_standalone_progress_names_stage_and_current_restaurant(self):
+        output = io.StringIO()
+        display = scraper._ConsoleProgress(output, width=10)
+        display("retrieve", 3, 10, "Encik Tan (Waterway Point)")
+        display("geocode", 1, 2, "Example Restaurant (828761)")
+        text = output.getvalue()
+        self.assertIn("30.0% MUIS: 3/10", text)
+        self.assertIn("Encik Tan", text)
+        self.assertIn("50.0% OneMap: 1/2", text)
+        self.assertIn("Example Restaurant", text)
+
+    def test_no_input_builds_clean_database_through_managers(self):
         with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "muis.json"
-            path.write_text('{"last_good": true}', encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "truncated"):
-                muis_data_scraper.refresh(
-                    ["Encik Tan"], path, session=session, delay=0)
-            self.assertEqual(json.loads(path.read_text()), {"last_good": True})
-            capped = FakeSession([{}] * 200)
-            with self.assertRaisesRegex(ValueError, "truncated"):
-                muis_data_scraper.refresh(
-                    ["Encik Tan"], path, session=capped, delay=0)
-            self.assertEqual(json.loads(path.read_text()), {"last_good": True})
+            root=Path(folder); raw=root/"raw.json"; clean=root/"clean.json"
+            data_manager.save_raw_snapshot(snapshot(),raw)
+            result=main.run(ai=FakeAI(),raw_path=raw,clean_path=clean)
+            self.assertEqual(result[0]["cuisine"],["malay"])
+            self.assertEqual(result[0]["halal_certification"],"official")
+            self.assertEqual(data_manager.load_clean_database(clean),result)
 
-    def test_full_array_and_single_object_preserve_fields_and_verify_outlet(self):
-        source = snapshot(listing())
-        first = restaurant()
-        second = restaurant(name="Encik Tan (Other Unit)", unit="B1-23",
-                            google_place_id="place-2")
-        checked = main.check_json(
-            [first, second], source,
-            FakeAI("EERN22010013410", "EERN22010013410"))
-        self.assertEqual(len(checked), 2)
-        self.assertEqual(checked[0]["halal_certification"], "official")
-        self.assertEqual(checked[0]["muis_check"]["certificate_number"],
-                         "EERN22010013410")
-        self.assertEqual(checked[0]["custom_field"], "preserve me")
-        self.assertEqual(checked[1]["halal_certification"], "unofficial")
-        self.assertEqual(checked[1]["muis_check"]["status"], "not_verified")
-        self.assertEqual(first["halal_certification"], "unofficial")
-        single = main.check_json(first, source, FakeAI("EERN22010013410"))
-        self.assertIsInstance(single, dict)
-        self.assertEqual(single["halal_certification"], "official")
-
-    def test_missing_coverage_fails_and_previous_official_is_withheld(self):
-        source = snapshot(listing())
-        with self.assertRaisesRegex(ValueError, "does not cover"):
-            main.check_json(restaurant(name="Other Restaurant"), source,
-                            FakeAI(None))
-        old = restaurant(halal_certification="official", dietary=["halal"],
-                         muis_check={"prior_certification": "none",
-                                     "added_halal": True})
-        checked = main.check_json(old, source, FakeAI(None))
-        self.assertEqual(checked["halal_certification"], "none")
-        self.assertEqual(checked["dietary"], [])
-
-    def test_expired_or_wrong_branch_listing_cannot_become_official(self):
-        expired = dict(listing(), valid_until="2020-01-01")
-        checked = main.check_json(
-            restaurant(), snapshot(expired), FakeAI("EERN22010013410"))
-        self.assertEqual(checked["halal_certification"], "unofficial")
-        other_unit = listing(unit="B1-23")
-        checked = main.check_json(
-            restaurant(), snapshot(other_unit), FakeAI("EERN22010013410"))
-        self.assertEqual(checked["halal_certification"], "unofficial")
-
-    def test_ai_only_sees_same_postal_candidates_and_validates_ids(self):
-        source = snapshot(listing(), dict(listing(number="other"),
-                                          postal_code="123456"))
-        ai = ai_manager.AIManager("test-key", "test-model")
-        with patch.object(ai, "_call_api", return_value=json.dumps([
-            {"index": 0, "certificate_number": "EERN22010013410"}])) as call:
-            self.assertEqual(ai.propose_muis_matches([restaurant()], source),
-                             ["EERN22010013410"])
-        prompt = call.call_args.args[0]
-        self.assertIn("EERN22010013410", prompt)
-        self.assertNotIn('"other"', prompt)
-        with patch.object(ai, "_call_api", return_value=json.dumps([
-            {"index": 0, "certificate_number": "fabricated"}])):
-            with self.assertRaisesRegex(ValueError, "invalid MUIS"):
-                ai.propose_muis_matches([restaurant()], source)
-
-    def test_stdout_is_one_json_object_and_missing_snapshot_fails(self):
+    def test_missing_clean_database_is_built_before_single_check(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            input_path, snapshot_path = root / "input.json", root / "muis.json"
-            input_path.write_text(json.dumps(restaurant()), encoding="utf-8")
-            data_manager.save_muis_snapshot(snapshot(listing()), snapshot_path)
-            output, errors = io.StringIO(), io.StringIO()
-            with (patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}),
-                  patch.object(main.ai_manager.AIManager,
-                               "propose_muis_matches",
-                               return_value=["EERN22010013410"]),
-                  patch("sys.stdout", output), patch("sys.stderr", errors)):
-                code = main.main(["check", "--input", str(input_path),
-                                  "--snapshot", str(snapshot_path), "--stdout"])
-            self.assertEqual(code, 0, errors.getvalue())
-            self.assertEqual(json.loads(output.getvalue())["halal_certification"],
-                             "official")
-            with patch("sys.stderr", errors):
-                code = main.main(["check", "--input", str(input_path),
-                                  "--snapshot", str(root / "missing.json")])
-            self.assertEqual(code, 1)
+            root=Path(folder); raw=root/"raw.json"; clean=root/"clean.json"
+            data_manager.save_raw_snapshot(snapshot(),raw)
+            with patch.object(data_manager,"save_checked_result",
+                              side_effect=lambda value,**_:value):
+                result=main.run(restaurant(),ai=FakeAI(),raw_path=raw,clean_path=clean)
+            self.assertEqual(result["halal_certification"],"official")
+            self.assertEqual(result["cuisine"],"malay")
+            self.assertEqual(result["custom"],"kept")
 
+    def test_wrong_branch_unit_cannot_be_certified(self):
+        database=logic_manager.build_database(snapshot(),[["malay"]])
+        checked=logic_manager.check_restaurants(
+            [restaurant("B1-23")],database,["cert-1"])[0]
+        self.assertEqual(checked["halal_certification"],"unofficial")
+        self.assertEqual(checked["muis_check"]["status"],"not_verified")
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_array_shape_and_no_candidate_are_preserved(self):
+        database=logic_manager.build_database(snapshot(),[["malay"]])
+        records=[restaurant(),dict(restaurant(),name="Elsewhere",postal_code="123456")]
+        context={"scenario":"check_restaurants","records":records,"single":False,
+                 "database":database,
+                 "candidates":io_manager.candidate_sets(records,database)}
+        class MatchAI:
+            def _call(self,prompt): return '{"certificate_number":"cert-1"}'
+        manager=ai_manager.AIManager("key","model"); manager._call=MatchAI()._call
+        output=logic_manager.process(context,manager.process(context))
+        self.assertEqual(len(output),2)
+        self.assertEqual(output[0]["halal_certification"],"official")
+        self.assertEqual(output[1]["muis_check"]["status"],"not_verified")
+
+    def test_generic_restaurant_label_does_not_invent_cuisine(self):
+        manager=ai_manager.AIManager("key","model")
+        manager._call=lambda _: '[{"index":0,"cuisines":[]}]'
+        tags=manager._tag_cuisines([raw_row(name="Example Restaurant")])
+        self.assertEqual(tags,[[]])
+
+    def test_unsupported_ai_cuisine_labels_are_filtered(self):
+        manager=ai_manager.AIManager("key","model")
+        manager._call=lambda _: (
+            '[{"index":0,"cuisines":["Singaporean"," CHINESE ","Cafe"]}]')
+        tags=manager._tag_cuisines([raw_row(name="Example Restaurant")])
+        self.assertEqual(tags,[["chinese"]])
+
+    def test_compact_opening_hours_and_cache_replacement(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder); cache=root/"cache.json"
+            first=dict(restaurant(),google_place_id="x",opening_hours={"monday":["0000","2359"]})
+            second=dict(first,g_rating="4.5")
+            data_manager.update_checked_cache([first],cache)
+            data_manager.update_checked_cache([second],cache)
+            text=cache.read_text()
+            self.assertIn('"monday": ["0000", "2359"]',text)
+            self.assertEqual(json.loads(text)["restaurant_count"],1)
+
+    def test_atomic_json_write_retries_windows_access_denied(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "progress.json"
+            real_replace = data_manager.os.replace
+            attempts = []
+
+            def temporarily_locked(source, destination):
+                attempts.append(destination)
+                if len(attempts) < 3:
+                    raise PermissionError(5, "Access is denied")
+                return real_replace(source, destination)
+
+            with (patch.object(data_manager.os, "replace",
+                               side_effect=temporarily_locked),
+                  patch.object(data_manager.time, "sleep")):
+                data_manager.write_json_atomic({"pending": ["519"]}, path)
+            self.assertEqual(len(attempts), 3)
+            self.assertEqual(json.loads(path.read_text()), {"pending": ["519"]})
+
+    def test_scraper_splits_capped_prefix_and_preserves_target_on_failure(self):
+        class Session:
+            def get(self,*_,**__):
+                return type("R",(),{"text":'<input name="__RequestVerificationToken" value="t">',
+                                    "raise_for_status":lambda self:None})()
+            def post(self,url,json,headers,timeout):
+                query=json["text"]
+                rows=[{}]*200 if query=="0" else []
+                return type("R",(),{"raise_for_status":lambda self:None,
+                    "json":lambda self:{"totalRecords":len(rows),"data":rows}})()
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder); target=root/"raw.json"; progress=root/"progress.json"
+            target.write_text('{"last_good":true}')
+            with self.assertRaisesRegex(ValueError,"no eating"):
+                scraper.scrape_all(target,session=Session(),delay=0,geocode=False,
+                                   progress_path=progress)
+            self.assertEqual(json.loads(target.read_text()),{"last_good":True})
+            state=json.loads(progress.read_text())
+            self.assertIn("00",state["completed_prefixes"])
+
+    def test_expired_listing_is_removed(self):
+        row=raw_row(); row["valid_until"]=(datetime.now()-timedelta(days=1)).strftime("%Y-%m-%d")
+        with self.assertRaisesRegex(ValueError,"No current"):
+            logic_manager.build_database(snapshot([row]),[["malay"]])
+
+if __name__=="__main__": unittest.main(verbosity=2)
