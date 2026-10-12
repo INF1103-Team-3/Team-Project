@@ -1,5 +1,5 @@
 """Input layer — all user boundaries. Every input() and print() lives here.
-Generic filters mirror Google Maps search filters; dietary/allergy/certification
+Generic filters mirror Google Maps search filters; dietary/certification
 are BiteFinder's own. Travel is dual-mode (walk + drive)."""
 from datetime import datetime, timedelta
 
@@ -156,27 +156,25 @@ def get_user_requirements():
     location = ""
     while not location:
         location = input("Location (SG postal code / address / landmark): ").strip()
-    allergies_raw = input("Allergies to avoid (comma separated): ").strip()
-    travel = ask_travel_mode()
-    band, bmin, bmax = ask_budget("Budget")
-    eat = ask_eat_time("Eat time (Enter=now / 19:30 / sat 19:30): ")
-    return {
-        "location": location,
-        "mode": travel["mode"],
-        "max_walk_minutes": travel["max_walk_minutes"],
-        "max_drive_km": travel["max_drive_km"],
-        "budget_band": band,
-        "budget_min": bmin,
-        "budget_max": bmax,
-        "dietary": ask_choice("Dietary (none/halal/vegetarian/vegan): ",
-                              ["none", "halal", "vegetarian", "vegan"]),
-        "allergies": [a.strip() for a in allergies_raw.split(",") if a.strip()],
-        "food_preference": input("Food/cuisine preference: ").strip(),
-        "min_rating": ask_rating("Min rating"),
-        "eat_time": eat["eat_time"],
-        "eat_day": eat["eat_day"],
-        "free_text": input("Search text (e.g. 'spicy', 'cafe', 'hawker centre'; Enter = skip): ").strip(),
-    }
+        travel = ask_travel_mode()
+        band, bmin, bmax = ask_budget("Budget")
+        eat = ask_eat_time("Eat time (Enter=now / 19:30 / sat 19:30): ")
+        return {
+            "location": location,
+            "mode": travel["mode"],
+            "max_walk_minutes": travel["max_walk_minutes"],
+            "max_drive_km": travel["max_drive_km"],
+            "budget_band": band,
+            "budget_min": bmin,
+            "budget_max": bmax,
+            "dietary": ask_choice("Dietary (none/halal/vegetarian): ",
+                                  ["none", "halal", "vegetarian"]),
+            "food_preference": input("Food/cuisine preference: ").strip(),
+            "min_rating": ask_rating("Min rating"),
+            "eat_time": eat["eat_time"],
+            "eat_day": eat["eat_day"],
+            "free_text": input("Search text (e.g. 'spicy', 'cafe', 'hawker centre'; Enter = skip): ").strip(),
+        }
 
 
 def print_parsed(req):
@@ -196,7 +194,7 @@ def print_parsed(req):
     print("\n[BiteFinder understood your request as]")
     print(f"  cuisine: {req.get('cuisine')} | dietary: {req.get('dietary')} | "
           f"budget: {budget_txt} | rating: {rating_txt} | {travel_txt} | "
-          f"allergies: {req.get('allergies')} | time: {day_txt} {req.get('eat_time')}")
+          f"time: {day_txt} {req.get('eat_time')}")
 
 
 def print_ai_model(model_id):
@@ -263,14 +261,14 @@ def print_results(results):
     if not matches and not alternatives:
         if results.get("hidden"):
             print(f"\n({results['hidden']} place(s) hidden by your hard filters: "
-                  f"dietary, allergies, minimum rating)")
+                  f"dietary, minimum rating)")
         print("\nNo options found. Try lowering your minimum rating, or relaxing "
               "budget and travel distance, or another location.")
         return
 
     if results.get("hidden"):
         print(f"\n({results['hidden']} place(s) hidden by your hard filters: "
-              f"dietary, allergies, minimum rating)")
+              f"dietary, minimum rating)")
 
     number = 1
     if matches:
@@ -298,7 +296,7 @@ def print_results(results):
             number += 1
     else:
         print("\nNo exact match, but here are the closest alternatives")
-        print("(your dietary and allergy rules were NOT relaxed):")
+        print("(your dietary rules were NOT relaxed):")
 
     if alternatives:
         if matches:

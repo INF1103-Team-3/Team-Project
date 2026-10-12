@@ -32,7 +32,7 @@ def _save_json(path, data):
 def _log_api_error(context, err):
     """Spec requirement: handle API failure gracefully - log and continue, never crash."""
     try:
-        with open("data/api_errors.log", "a", encoding="utf-8") as f:
+        with open(config.API_ERROR_FILE, "a", encoding="utf-8") as f:
             f.write(f"{context}: {type(err).__name__}: {err}\n")
     except OSError:
         pass
@@ -329,7 +329,6 @@ def enrich_place(place, catalog):
             "lat": place["lat"], "lng": place["lng"],
             "cuisine": entry.get("cuisine") or _cuisine_from_types(place["types"]),
             "dietary": entry.get("dietary", "unknown"),
-            "allergens": entry.get("allergens"),
             "avg_price": avg_price,
             "price_band": band,
             "price_start": place.get("price_start"),
@@ -350,7 +349,6 @@ def enrich_place(place, catalog):
         "lat": place["lat"], "lng": place["lng"],
         "cuisine": _cuisine_from_types(place["types"]),
         "dietary": "unknown",
-        "allergens": None,
         "avg_price": None,
         "price_band": (place.get("price_level")
                        or _band_from_range(place.get("price_start"), place.get("price_end"))),

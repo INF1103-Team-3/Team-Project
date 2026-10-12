@@ -1,7 +1,10 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()  # reads .env
+BASE_DIR = Path(__file__).resolve().parent
+ENV_FILE = BASE_DIR.parent / ".env"
+load_dotenv(ENV_FILE)
 
 # --- AI layer: OpenRouter + direct Gemini (separate quota pools) ---
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
@@ -33,6 +36,8 @@ MAX_ALTERNATIVES_SHOWN = 5
 USE_LIVE_GOOGLE = os.getenv("USE_LIVE_GOOGLE", "true").lower() == "true"
 
 # --- Files ---
-RESTAURANT_FILE = "data/restaurants.json"
-HISTORY_FILE = "data/search_history.json"
-GEOCODE_CACHE_FILE = "data/geocode_cache.json"
+RESTAURANT_FILE = BASE_DIR / "data" / "restaurants.json"
+HISTORY_FILE = BASE_DIR / "data" / "search_history.json"
+GEOCODE_CACHE_FILE = BASE_DIR / "data" / "geocode_cache.json"
+
+API_ERROR_FILE = BASE_DIR / "data" / "api_errors.log"

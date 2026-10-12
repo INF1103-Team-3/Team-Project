@@ -1,0 +1,5 @@
+.env
+.venv/
+__pycache__/
+data/search_history.json
+data/api_errors.log

@@ -1,0 +1,29 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Runtime data
+logs/*.log
+data/user_profile.json
+data/users.json
+data/.users-*.tmp
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# API key files
+secrets/
+openrouter_keys.json
+openrouter_keys.txt
+
+# Private migration backups and internal verification/review state
+data/*.bak
+data/profile_state.json
+data/.profile-*.tmp
