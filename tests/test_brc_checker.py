@@ -119,6 +119,38 @@ class BRCTests(unittest.TestCase):
         tags=manager._tag_cuisines([raw_row(name="Example Restaurant")])
         self.assertEqual(tags,[["chinese"]])
 
+    def test_exact_outlet_match_does_not_spend_an_ai_request(self):
+        database=logic_manager.build_database(snapshot(),[["malay"]])
+        manager=ai_manager.AIManager("key","model")
+        manager._call=lambda _: (_ for _ in ()).throw(
+            AssertionError("AI should not be called for one exact outlet"))
+        matches=manager._match(
+            [restaurant()],
+            [io_manager.candidate_sets([restaurant()],database)[0]])
+        self.assertEqual(matches,["cert-1"])
+
+    def test_gemini_rate_limit_waits_and_retries(self):
+        class RateLimited(Exception):
+            code=429
+        class Models:
+            def __init__(self): self.calls=0
+            def generate_content(self,**_):
+                self.calls+=1
+                if self.calls==1:
+                    raise RateLimited("retry in 5.5s")
+                return type("Response",(),{"text":"[]"})()
+        models=Models()
+        manager=ai_manager.AIManager("key","model")
+        manager._client=type("Client",(),{"models":models})()
+        manager._request_interval=0
+        messages=[]
+        manager._report=messages.append
+        with patch.object(ai_manager.time,"sleep") as sleep:
+            self.assertEqual(manager._call("prompt"),"[]")
+        self.assertEqual(models.calls,2)
+        sleep.assert_called_once_with(5.5)
+        self.assertIn("rate limit reached",messages[0])
+
     def test_compact_opening_hours_and_cache_replacement(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder); cache=root/"cache.json"
