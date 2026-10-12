@@ -13,6 +13,7 @@ data/geocode_cache.lock
 data/restaurants.json
 BIS/data/*.bak
 BRNS/data/search_history.json
+BRC/data/
 logs/*.log
 project_overview/function_graphs/
 

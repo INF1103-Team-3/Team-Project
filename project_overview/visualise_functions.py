@@ -575,7 +575,7 @@ def draw_workflow_card(draw, box, title, details, fill):
 
 
 def draw_project_workflow(path):
-    """Show the live BIS → BRNS path and the separate halal/BRC path."""
+    """Show the live BIS → BRNS path and separate MUIS/BRC checking path."""
     image = Image.new("RGB", (2800, 2080), "#ffffff")
     draw = ImageDraw.Draw(image)
     title = font(42, True)
@@ -585,12 +585,12 @@ def draw_project_workflow(path):
     draw.text((85, 39), "BiteFinder | complete current workflow",
               font=title, fill="#153047")
     draw.text((86, 100),
-              "Halal data and BRC are separate from the BIS → BRNS search; "
-              "the geocode cache and log are shared.",
+              "MUIS data and BRC are separate from the BIS → BRNS search; "
+              "the log is shared.",
               font=subtitle, fill="#52677b")
 
     lanes = (
-        ((75, 170, 2725, 690), "HALAL DATA + SEPARATE BRC CHECKER",
+        ((75, 170, 2725, 690), "MUIS DATA + SEPARATE BRC CHECKER",
          "#fffaf2", "#91622d"),
         ((75, 730, 2725, 1190), "BIS | ACCOUNT, PROFILE, TODAY'S SEARCH",
          "#f5faff", "#2b6691"),
@@ -610,22 +610,22 @@ def draw_project_workflow(path):
     blue = "#dceeff"
     green = "#dbf5e6"
 
-    # The directory only enters BRC Logic. There is no directory-to-BRNS edge.
+    # The standalone MUIS scraper saves a snapshot read by BRC IO.
     draw_workflow_card(draw, (110, 245, 520, 360),
-                       "HalalFreak scraper",
-                       ("Sitemap + area pages", "halal_data_scrape.py"), orange)
+                       "MUIS scraper",
+                       ("Targeted official search", "muis_data_scraper.py"), orange)
     draw_workflow_card(draw, (700, 245, 1150, 360),
-                       "BRC halal directory",
-                       ("Generated JSON of listed places", "Postal code + name"),
+                       "MUIS snapshot",
+                       ("Saved MUIS outlet listings", "Name coverage + retrieval time"),
                        orange)
     draw_arrow(draw, [(520, 302), (700, 302)], "#a97936", 5)
 
     brc_cards = (
-        ("BRC main()", ("Separate CLI", "Own search request")),
-        ("BRC IO", ("Google Places + routes", "Candidate facts")),
-        ("BRC AI", ("Gemini enrichment", "Cuisine, price, allergens")),
-        ("BRC Logic", ("Halal directory match", "Accept / flag / reject")),
-        ("BRC Data", ("Save checked records", "BRC restaurant history")),
+        ("BRC main()", ("JSON checker command", "One outlet or an array")),
+        ("BRC IO", ("Validate restaurant JSON", "Load MUIS snapshot")),
+        ("BRC AI", ("Gemini proposes outlet", "Certificate number or null")),
+        ("BRC Logic", ("Verify MUIS outlet facts", "Decide official status")),
+        ("BRC Data", ("Save complete checked JSON", "Preserve original fields")),
     )
     for x, (name, details) in zip(positions, brc_cards):
         draw_workflow_card(draw, (x, 440, x + card_width, 580),
@@ -633,12 +633,11 @@ def draw_project_workflow(path):
     for left, right in zip(positions, positions[1:]):
         draw_arrow(draw, [(left + card_width, 510), (right, 510)],
                    "#a97936", 5)
-    draw_arrow(draw, [(925, 360), (925, 405), (1935, 405), (1935, 440)],
-               "#a97936", 5)
+    draw_arrow(draw, [(925, 360), (925, 440)], "#a97936", 5)
     draw.rounded_rectangle((750, 609, 2050, 668), radius=11,
                            fill="#fff5f2", outline="#c65d50", width=2)
     draw.text((782, 622),
-              "Current boundary: BRC halal directory does not feed BIS or BRNS",
+              "Current boundary: checked BRC JSON does not feed BIS or BRNS",
               font=note, fill="#9d443a")
 
     bis_cards = (
@@ -689,7 +688,7 @@ def draw_project_workflow(path):
 
     draw_workflow_card(draw, (320, 1840, 1250, 1970),
                        "Shared geocode cache",
-                       ("BIS + BRC + BRNS use data/geocode_cache.json",
+                       ("BIS + BRNS use data/geocode_cache.json",
                         "Validated coordinates and cross-platform locking"),
                        "#eee5ff")
     draw_workflow_card(draw, (1550, 1840, 2480, 1970),

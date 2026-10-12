@@ -1,13 +1,13 @@
 # BiteFinder
 
 BiteFinder contains two connected Python command-line applications and a
-folder reserved for future work:
+separate restaurant certification checker:
 
 | Application | Purpose | Run from the repository root |
 | --- | --- | --- |
 | **BIS** — BiteFinder Interaction System | Sign up or resume an account and save food preferences | `python3 main.py` |
 | **BRNS** — BiteFinder Recommendation & Navigation System | Find, rank, and route to restaurants | `python3 BRNS/main.py` |
-| **BRC** — BiteFinder Restaurant Checker | Reserved for team members to add restaurant checking functionality | No command yet |
+| **BRC** — BiteFinder Restaurant Checker | Refresh a MUIS snapshot and check restaurant JSON | `python3 -m BRC.muis_data_scraper` and `python3 -m BRC.main check` |
 
 BIS sends today's confirmed search as JSON to BRNS. The
 [original project scope](project_overview/ProjectInitialDetails.md) describes the intended
@@ -16,7 +16,7 @@ every feature in that scope.
 
 ## Install
 
-Use Python 3.9 or newer. From the repository root:
+Use Python 3.10 or newer. From the repository root:
 
 ```bash
 python3 -m venv .venv
@@ -25,7 +25,7 @@ python3 -m pip install -r requirements.txt
 ```
 
 On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` instead.
-The root `requirements.txt` covers both applications. The optional
+The root `requirements.txt` covers all three applications. The optional
 `requirements-dev.txt` adds `pycodestyle` and the function graph tools.
 
 ## Automated checks
@@ -89,7 +89,7 @@ installed as `Pillow` but imported as `PIL`. The PNGs appear in
 `project_overview/function_graphs/`: `bis_to_brns.png` is the grouped manager flow,
 `bis_to_brns_functions.png` shows the reachable function calls, and
 `all_functions.png` covers every application function. `project_workflow.png`
-shows the halal scraper and separate BRC checker alongside BIS, BRNS, and
+shows the MUIS scraper and separate BRC checker alongside BIS, BRNS, and
 their shared cache and log. Add `--trace` to run
 BIS and capture a live session graph. The grouped flow shows
 BIS IO → AI → Logic → Data (JSON) → BRNS IO → AI → Logic → Data.
@@ -224,7 +224,7 @@ exists. Restart BIS after changing its settings.
 | --- | --- |
 | `BIS/data/users.json` | Accounts keyed by user ID; username is outside preferences |
 | `BIS/data/profile_state.json` | Email verification and first-search state |
-| `data/geocode_cache.json` | Shared BIS, BRC, and BRNS geocode results, including successful /search lookups |
+| `data/geocode_cache.json` | Shared BIS and BRNS geocode results, including successful /search lookups |
 | `logs/bitefinder.log` | Shared BIS, BRNS, and BRC operational log, created on the first logged event |
 
 Data and logs stay local. Use one BIS process per saved database. Each search
@@ -273,9 +273,43 @@ response. Discovered restaurant details, including regular weekly opening
 hours and access information when available, are saved in
 `BRNS/data/restaurants.json`. This is the only BRNS restaurant data file.
 
+## BRC: MUIS certification check
+
+BRC has two separate commands. Refresh its local MUIS snapshot for the names
+in a restaurant JSON file, then check that file against the saved snapshot:
+
+```bash
+python3 -m BRC.muis_data_scraper --input BRNS/data/restaurants.json
+python3 -m BRC.main check --input BRNS/data/restaurants.json --output BRC/data/checked_restaurants.json
+```
+
+The refresh command searches the official MUIS establishment portal for each
+restaurant name and saves the returned eating-establishment listings in
+`BRC/data/muis_establishments.json`. The portal search caps broad results, so
+the scraper refuses a potentially truncated query. The checker does not make
+MUIS network requests. Its snapshot must cover each input restaurant name and
+must be no more than seven days old. Both generated files stay local.
+
+The checker accepts either an array of restaurant objects or one restaurant
+object. It preserves the input shape, order, and existing fields, adding
+`muis_check` evidence and setting `halal_certification` to `official` only for
+an outlet that matches the original MUIS listing. Gemini proposes matches;
+BRC Logic verifies the postal code, name, address, unit, and any supplied
+certificate validity details. Set `GEMINI_API_KEY` in `.env`; optionally set
+`BRC_GEMINI_MODEL`. To pass JSON between containers, use standard input and
+standard output:
+
+```bash
+cat restaurants.json | python3 -m BRC.main check --stdin --stdout > checked_restaurants.json
+```
+
+Errors and status messages go to standard error. BRC does not currently run
+inside BIS or BRNS searches; the checked JSON is an explicit output for the
+future container integration.
+
 ## Code layout and development
 
-Both applications have a `main.py` and separate `io_manager.py`,
+All three applications have a `main.py` and separate `io_manager.py`,
 `ai_manager.py`, `logic_manager.py`, and `data_manager.py` modules. BIS also has
 `sources/` for its profile schema and prompts, and `support/` for configuration,
 email delivery, and logging. BRNS's `io_manager.py` handles Google Places,

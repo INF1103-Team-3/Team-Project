@@ -1,10 +1,42 @@
 """Rank BRNS candidates against a validated BIS search request."""
 
 import json
+import re
 from datetime import datetime, timedelta, timezone
 
 from BRNS import config
 from shared import debug_log as log
+
+
+_RATING_FLOOR = re.compile(
+    r"\b(?:minimum|min\.?|at least|no less than|above|over)\s*"
+    r"(?:rating\s*(?:of\s*)?|rated\s*)?"
+    r"(\d+(?:\.\d+)?)\s*(?:stars?|/\s*5|rating)\b"
+    r"|\b(\d+(?:\.\d+)?)\s*(?:stars?|/\s*5)\s*"
+    r"(?:or higher|or above|and up|minimum|\+)(?!\w)"
+    r"|\b(\d+(?:\.\d+)?)\s*\+\s*(?:stars?|/\s*5)\b",
+    re.IGNORECASE,
+)
+
+
+def minimum_rating(preferences):
+    """Read explicit Google star floors from today's free-text wishes."""
+    ratings = []
+    for preference in preferences:
+        for match in _RATING_FLOOR.finditer(preference):
+            rating = float(next(group for group in match.groups() if group))
+            if not 1 <= rating <= 5:
+                raise ValueError("Minimum Google rating must be between 1 and 5 stars.")
+            ratings.append(rating)
+    return max(ratings, default=None)
+
+
+def confidence_adjusted_rating(rating, review_count):
+    """Shrink small review samples toward 4/5 for ranking comparisons."""
+    if (type(rating) not in (int, float) or not 1 <= rating <= 5
+            or type(review_count) is not int or review_count < 0):
+        return None
+    return round((rating * review_count + 4 * 100) / (review_count + 100), 3)
 
 
 def normalize_candidate(record, *, offline=False):
@@ -102,6 +134,18 @@ def decide_outcome(restaurant, request):
         unverified.append("some prices may fit; full budget unverified")
     else:
         unverified.append("price unavailable")
+
+    rating_floor = minimum_rating(request["other_preferences"])
+    if rating_floor is not None:
+        rating = restaurant.get("rating")
+        if type(rating) not in (int, float) or not 1 <= rating <= 5:
+            unverified.append(
+                f"Google rating unavailable; requested at least {rating_floor:g}/5")
+        elif rating < rating_floor:
+            problems.append(
+                f"Google rating {rating:g}/5 is below your {rating_floor:g}/5 minimum")
+        else:
+            reasons.append(f"Google rating meets your {rating_floor:g}/5 minimum")
 
     mode = request["mode"]
     source = restaurant.get(f"{mode}_source")

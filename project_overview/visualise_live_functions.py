@@ -89,7 +89,7 @@ def stage(module):
     """Group each manager under its owning program."""
     package, _, rest = module.partition(".")
     filename = rest.rsplit(".", 1)[-1]
-    if filename in {"main", "restaurant_finder"}:
+    if filename == "main":
         return "Main"
     if filename in MANAGERS:
         return filename.removesuffix("_manager").upper()

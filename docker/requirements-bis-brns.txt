@@ -1,0 +1,4 @@
+# Packages for the BIS + BRNS container (BRC has its own: BRC/requirements.txt).
+python-dotenv>=1.0,<2.0
+requests>=2.31,<3.0
+rich>=13.7,<15
