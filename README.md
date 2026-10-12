@@ -5,7 +5,7 @@ folder reserved for future work:
 
 | Application | Purpose | Run from the repository root |
 | --- | --- | --- |
-| **BIS** — BiteFinder Interaction System | Sign up or resume an account and save food preferences | `python3 BIS/main.py` |
+| **BIS** — BiteFinder Interaction System | Sign up or resume an account and save food preferences | `python3 main.py` |
 | **BRNS** — BiteFinder Recommendation & Navigation System | Find, rank, and route to restaurants | `python3 BRNS/main.py` |
 | **BRC** — BiteFinder Restaurant Checker | Reserved for team members to add restaurant checking functionality | No command yet |
 
@@ -254,7 +254,7 @@ alternatives; Data stores a validated search summary. A live search stops
 without a valid BRNS AI recommendation, and can be retried.
 For live Google restaurant and route data, set `GOOGLE_MAPS_API_KEY` and
 `USE_LIVE_GOOGLE=true` in the root `.env`. The existing
-`USE_LIVE_GOOGLE=false` catalog fallback remains available for local use, but
+`USE_LIVE_GOOGLE=false` saved restaurant fallback remains available for local use, but
 it still needs BRNS AI to produce a completed recommendation.
 
 BRNS ranks candidates and explains alternatives. Halal results are labeled
@@ -264,17 +264,22 @@ search JSON object on standard input instead of opening an interactive
 questionnaire.
 
 BRNS reads the root `.env` and keeps its data relative to `BRNS/`, regardless of
-the working directory. The bundled catalog is at `BRNS/data/restaurants.json`.
+the working directory. Offline fallback reads `BRNS/data/restaurants.json`.
 Search history and the shared operational log are local runtime files ignored
 by Git. Places and AI failures are recorded in that log.
+Live search cards display Google's rating, review count, and today's opening
+hours when available. BRNS only recommends places confirmed open by the live
+response. Discovered restaurant details, including regular weekly opening
+hours and access information when available, are saved in
+`BRNS/data/restaurants.json`. This is the only BRNS restaurant data file.
 
 ## Code layout and development
 
 Both applications have a `main.py` and separate `io_manager.py`,
 `ai_manager.py`, `logic_manager.py`, and `data_manager.py` modules. BIS also has
 `sources/` for its profile schema and prompts, and `support/` for configuration,
-email delivery, and logging. BRNS has its own `config.py` and an IO-owned
-`places_client.py` for Google Places, geocoding, and routing.
+email delivery, and logging. BRNS's `io_manager.py` handles Google Places,
+geocoding, and routing; its `logic_manager.py` evaluates opening hours.
 
 To install the optional formatting checker and run it on BIS:
 

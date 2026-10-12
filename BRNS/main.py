@@ -56,7 +56,13 @@ def search(bis_json, previous_restaurants=()):
             f"{len(results['alternatives'])} alternatives, "
             f"{results['hidden']} hidden.", "INFO",
             "BRNS.logic_manager.rank_restaurants")
-        source = "live-google" if config.USE_LIVE_GOOGLE else "offline-catalog"
+        source = "live-google" if config.USE_LIVE_GOOGLE else "offline-restaurants"
+        stored_count = data_manager.save_restaurants(candidates)
+        log.debug_log(
+            f"Saved {stored_count} restaurant records."
+            if stored_count is not None else "Restaurant records could not be saved.",
+            "INFO" if stored_count is not None else "WARNING",
+            "BRNS.data_manager.save_restaurants")
         saved = data_manager.save_search_results(request, results, source)
         log.debug_log(
             "Search summary saved." if saved else "Search summary could not be saved.",

@@ -26,7 +26,23 @@ class BRNSBlackBoxTests(BlackBoxFixture):
         self.assertEqual(self.fixture.paths(),
                          ["/nearby", "/matrix", "/chat/completions"])
         self.assertEqual(len(self.history()), 1)
-        self.assertEqual(self.history()[0]["top_matches"], [PLACE_NAMES[0]])
+        self.assertEqual(self.history()[0]["top_match_place_ids"], ["test-place-1"])
+        restaurant_text = (self.root / "BRNS/data/restaurants.json").read_text()
+        self.assertIn('"monday": ["0000", "2359"]', restaurant_text)
+        discovered = json.loads(restaurant_text)
+        self.assertEqual(len(discovered), 2)
+        self.assertEqual(discovered[0]["name"], PLACE_NAMES[0])
+        self.assertEqual(discovered[0]["g_rating"], "4.2")
+        self.assertEqual(discovered[0]["g_no_reviews"], "125")
+        self.assertEqual(discovered[0]["postal_code"], "123401")
+        self.assertEqual(discovered[0]["number"], "61234001")
+        self.assertEqual(discovered[0]["avg_price_low_sgd"], 5.0)
+        self.assertEqual(discovered[0]["avg_price_high_sgd"], 8.0)
+        self.assertEqual(discovered[0]["dietary"], [])
+        self.assertEqual(discovered[0]["opening_hours"]["monday"], ["0000", "2359"])
+        self.assertTrue(discovered[0]["wheelchair_accessible"])
+        self.assertEqual(discovered[1]["dietary"], ["vegetarian"])
+        self.assertFalse(discovered[1]["wheelchair_accessible"])
 
     def test_brns_invalid_json_never_calls_places_or_saves_history(self):
         """BRNS rejects invalid search JSON at its input boundary.
