@@ -9,8 +9,109 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from BRNS import ai_manager, config, data_manager, io_manager, logic_manager
+from BRC import main as brc_main
 from shared import debug_log as log
 from shared import terminal_ui as ui
+
+
+def _brc_restaurant(candidate):
+    """Shape one BRNS candidate for BRC's single restaurant workflow."""
+    record = dict(candidate)
+    dietary = [
+        item for item in candidate.get("dietary_requirements") or []
+        if item in ("halal", "vegetarian")
+    ]
+    record["dietary"] = dietary
+    record["halal_certification"] = (
+        "unofficial" if candidate.get("halal_hint") or "halal" in dietary
+        else "none")
+    return record
+
+
+def verify_halal_candidates(candidates, request, recommendations):
+    """Run each AI-returned halal candidate through BRC and fail closed."""
+    if "halal" not in request["dietary_requirements"]:
+        return candidates, None
+    order = logic_manager.recommendation_order(candidates, recommendations)
+    database_missing = not brc_main.data_manager.CLEAN_DATABASE_PATH.exists()
+    summary = {
+        "candidates": len(order), "checked": 0, "verified": 0,
+        "not_verified": 0, "errors": 0, "error_type": None,
+        "database_missing": database_missing, "google_fallback": 0,
+        "excluded": 0,
+    }
+    checked_candidates = []
+    for original in candidates:
+        candidate = dict(original)
+        google_halal = (
+            original.get("halal_hint") is True
+            or "halal" in (original.get("dietary_requirements") or []))
+        candidate["muis_check"] = {"status": "not_verified"}
+        candidate["halal_certification"] = (
+            "unofficial" if google_halal else "none")
+        candidate["halal_hint"] = google_halal
+        candidate["dietary_requirements"] = [
+            item for item in candidate.get("dietary_requirements") or []
+            if item != "halal"
+        ]
+        if google_halal:
+            candidate["dietary_requirements"].append("halal")
+        checked_candidates.append(candidate)
+    io_manager.show_halal_verification_start(len(order), database_missing)
+    for position, index in enumerate(order):
+        candidate = checked_candidates[index]
+        try:
+            checked = brc_main.run(_brc_restaurant(candidates[index]))
+        except Exception as error:
+            log.debug_log(
+                f"BRC check failed for candidate {index}: "
+                f"{type(error).__name__}.", "ERROR",
+                "BRNS.main.verify_halal_candidates")
+            summary["errors"] = len(order) - position
+            summary["error_type"] = type(error).__name__
+            break
+        summary["checked"] += 1
+        muis_check = checked.get("muis_check")
+        verified = (
+            checked.get("halal_certification") == "official"
+            and isinstance(muis_check, dict)
+            and muis_check.get("status") == "verified"
+        )
+        candidate["muis_check"] = (
+            muis_check if isinstance(muis_check, dict)
+            else {"status": "not_verified"})
+        candidate["halal_certification"] = (
+            "official" if verified else candidate["halal_certification"])
+        candidate["halal_hint"] = (
+            False if verified else candidate["halal_hint"])
+        dietary = [
+            item for item in candidate.get("dietary_requirements") or []
+            if item != "halal"
+        ]
+        if verified:
+            summary["verified"] += 1
+            dietary.append("halal")
+            cuisines = checked.get("cuisines")
+            if isinstance(cuisines, list):
+                candidate["cuisines"] = cuisines
+        else:
+            summary["not_verified"] += 1
+            if candidate["halal_hint"]:
+                dietary.append("halal")
+        candidate["dietary_requirements"] = list(dict.fromkeys(dietary))
+        log.debug_log(
+            f"BRC {'verified' if verified else 'did not verify'} candidate "
+            f"{index}.",
+            "INFO" if verified else "WARNING",
+            "BRNS.main.verify_halal_candidates")
+    summary["google_fallback"] = sum(
+        candidate.get("halal_certification") == "unofficial"
+        for candidate in checked_candidates)
+    summary["excluded"] = (
+        summary["candidates"] - summary["verified"]
+        - summary["google_fallback"])
+    io_manager.show_halal_verification_summary(summary)
+    return checked_candidates, summary
 
 
 def search(bis_json, previous_restaurants=()):
@@ -44,6 +145,8 @@ def search(bis_json, previous_restaurants=()):
         log.debug_log(
             f"AI ordered {len(recommendations)} candidate IDs.", "INFO",
             "BRNS.ai_manager.recommend_candidates")
+        candidates, halal_verification = verify_halal_candidates(
+            candidates, request, recommendations)
         results = (
             logic_manager.rank_restaurants(
                 candidates, request, recommendations,
@@ -56,6 +159,8 @@ def search(bis_json, previous_restaurants=()):
             f"{len(results['alternatives'])} alternatives, "
             f"{results['hidden']} hidden.", "INFO",
             "BRNS.logic_manager.rank_restaurants")
+        if halal_verification is not None:
+            results["halal_verification"] = halal_verification
         source = "live-google" if config.USE_LIVE_GOOGLE else "offline-restaurants"
         stored_count = data_manager.save_restaurants(candidates)
         log.debug_log(
@@ -101,6 +206,14 @@ def route_to(restaurant, request):
         if result["route"] else "Route response prepared with map link.",
         "INFO", "BRNS.main.route_to")
     return result
+
+
+def sort_results(results, sort_by):
+    """Reorder an existing result set without running another search."""
+    sorted_results = logic_manager.sort_results(results, sort_by)
+    log.debug_log(f"Results sorted by {sort_by}.", "INFO",
+                  "BRNS.logic_manager.sort_results")
+    return sorted_results
 
 
 def main():

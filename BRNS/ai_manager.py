@@ -172,6 +172,35 @@ def _call_gemini(model_name, system_prompt, user_text):
     return False, "request rejected"
 
 
+def _call_groq(model_id, system_prompt, user_text):
+    """One Groq attempt. Returns (True, reply_text) or (False, error)."""
+    headers = {"Authorization": f"Bearer {config.GROQ_API_KEY}",
+               "Content-Type": "application/json"}
+    messages = [{"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_text}]
+    for use_json_mode in (True, False):
+        payload = {"model": model_id, "messages": messages, "temperature": 0.2}
+        if use_json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        try:
+            resp = requests.post(
+                config.GROQ_URL, headers=headers, json=payload,
+                timeout=(3, 12))
+        except requests.RequestException as err:
+            return False, f"network error: {err}"
+        if resp.status_code == 429:
+            return False, "429 rate limited"
+        if resp.status_code == 400 and use_json_mode:
+            continue                        # retry same model without json mode
+        if resp.status_code != 200:
+            return False, f"HTTP {resp.status_code}: {resp.text[:300]}"
+        try:
+            return True, resp.json()["choices"][0]["message"]["content"]
+        except (KeyError, ValueError) as err:
+            return False, f"unexpected response shape: {err}"
+    return False, "request rejected"
+
+
 def call_ai(user_record):
     """Walk MODEL_CHAIN across providers until one returns schema-valid JSON.
     Returns (True, parsed_dict, model_used) or (False, error_summary, None)."""
@@ -183,6 +212,8 @@ def call_ai(user_record):
             ok, content = _call_openrouter(model, SYSTEM_PROMPT, user_text)
         elif provider == "gemini":
             ok, content = _call_gemini(model, SYSTEM_PROMPT, user_text)
+        elif provider == "groq":
+            ok, content = _call_groq(model, SYSTEM_PROMPT, user_text)
         else:
             ok, content = False, f"unknown provider '{provider}'"
         if ok:
@@ -216,7 +247,14 @@ Include every candidate ID exactly once, most suitable first. Use only these
 reason codes when supported by the supplied facts: cuisine_match,
 within_budget, within_route, well_rated, vegetarian_options,
 halal_hint_unofficial, spicy_options. Use [] if no code is supported.
-Consider cuisine, budget, dietary needs, travel, and other preferences.
+Treat other_preferences as the strongest part of the search. Google text
+search already uses their complete wording, so use that wording when ordering
+candidates. google_search_rank preserves Google's text-query relevance for
+free-text wishes such as spicy food; prefer that evidence for requests not
+covered by another candidate fact. Words such as only, must, exclusively, minimum, and at least mark
+hard constraints. A bare rating such as "4.5 stars" is a soft preference.
+When hard_preferences is true, prioritize the hard request ahead of budget
+and travel because those two limits are relaxed by Logic.
 minimum_rating is a hard minimum Google star rating extracted from the user's
 other preferences. Put candidates below it or without a rating after those
 that meet it. The next layer will enforce the minimum.
@@ -245,7 +283,8 @@ def has_configured_provider():
     """Check credentials before BRNS spends a Places request."""
     return any(
         (entry.get("provider") == "openrouter" and config.OPENROUTER_API_KEY
-         or entry.get("provider") == "gemini" and config.GEMINI_API_KEY)
+         or entry.get("provider") == "gemini" and config.GEMINI_API_KEY
+         or entry.get("provider") == "groq" and config.GROQ_API_KEY)
         and entry.get("model") and not any(
             char in entry["model"] for char in "<> ")
         for entry in config.MODEL_CHAIN
@@ -260,6 +299,12 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
                   f"Preparing {len(candidates)} candidate summaries.", "INFO")
     mode = request["mode"]
     rating_floor = logic_manager.minimum_rating(request["other_preferences"])
+    rating_preference = logic_manager.preferred_rating(
+        request["other_preferences"])
+    hard_cuisines = logic_manager.hard_required_cuisines(
+        request["other_preferences"])
+    hard_preferences = logic_manager.has_hard_preferences(
+        request["other_preferences"])
     facts = []
     for index, candidate in enumerate(candidates):
         facts.append({
@@ -274,6 +319,7 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
             "review_count": candidate.get("rating_count"),
             "confidence_adjusted_rating": logic_manager.confidence_adjusted_rating(
                 candidate.get("rating"), candidate.get("rating_count")),
+            "google_search_rank": candidate.get("google_search_rank"),
             "spicy_options": candidate.get("spicy_options"),
             "travel_meters": candidate.get(f"{mode}_meters"),
             "travel_minutes": candidate.get(f"{mode}_minutes"),
@@ -289,6 +335,9 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
         if isinstance(restaurant, dict)
         and isinstance(restaurant.get("name"), str)))
     user_text = json.dumps({"request": request, "minimum_rating": rating_floor,
+                            "preferred_rating": rating_preference,
+                            "hard_cuisines": hard_cuisines,
+                            "hard_preferences": hard_preferences,
                             "candidates": facts,
                             "previous_restaurants": prior_names},
                            separators=(",", ":"))
@@ -303,6 +352,11 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
             _log_ai_event("recommend_candidates",
                           f"Trying {provider}/{model}.", "INFO")
             ok, content = _call_gemini(
+                model, RECOMMEND_SYSTEM_PROMPT, user_text)
+        elif provider == "groq" and config.GROQ_API_KEY:
+            _log_ai_event("recommend_candidates",
+                          f"Trying {provider}/{model}.", "INFO")
+            ok, content = _call_groq(
                 model, RECOMMEND_SYSTEM_PROMPT, user_text)
         else:
             continue

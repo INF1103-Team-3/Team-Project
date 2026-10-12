@@ -29,6 +29,73 @@ class FakeAI:
         return {"matches":["cert-1" for _ in context["records"]]}
 
 class BRCTests(unittest.TestCase):
+    def test_cuisine_cache_resumes_after_a_failed_ai_batch(self):
+        first = raw_row(name="Generic Alpha")
+        second = dict(raw_row(name="Generic Beta"),
+                      listing_id="id-2", certificate_number="cert-2")
+        rows = [first, second]
+        with tempfile.TemporaryDirectory() as folder:
+            cache_path = Path(folder) / "cuisine_tags_cache.json"
+            cache = {}
+            manager = ai_manager.AIManager("test-key", "test-model")
+            responses = iter([
+                json.dumps([{"index": 0, "cuisines": ["western"]}]),
+                RuntimeError("simulated rate limit"),
+            ])
+
+            def fail_on_second_batch(_prompt):
+                response = next(responses)
+                if isinstance(response, Exception):
+                    raise response
+                return response
+
+            manager._call = fail_on_second_batch
+            with (patch.dict(ai_manager.os.environ,
+                             {"BRC_AI_BATCH_SIZE": "1"}),
+                  self.assertRaisesRegex(RuntimeError, "rate limit")):
+                manager._tag_cuisines(
+                    rows, cache=cache,
+                    save_cache=lambda tags: data_manager.save_cuisine_cache(
+                        tags, cache_path))
+
+            persisted = data_manager.load_cuisine_cache(cache_path)
+            self.assertEqual(
+                persisted[data_manager.cuisine_cache_key(first)], ["western"])
+            self.assertNotIn(data_manager.cuisine_cache_key(second), persisted)
+
+            resumed = ai_manager.AIManager("test-key", "test-model")
+            calls = []
+
+            def finish_remaining(prompt):
+                calls.append(prompt)
+                return json.dumps([{"index": 1, "cuisines": ["italian"]}])
+
+            resumed._call = finish_remaining
+            with patch.dict(ai_manager.os.environ,
+                            {"BRC_AI_BATCH_SIZE": "1"}):
+                result = resumed._tag_cuisines(
+                    rows, cache=persisted,
+                    save_cache=lambda tags: data_manager.save_cuisine_cache(
+                        tags, cache_path))
+
+            self.assertEqual(result, [["western"], ["italian"]])
+            self.assertEqual(len(calls), 1)
+
+    def test_existing_clean_database_bootstraps_missing_cuisine_cache(self):
+        with tempfile.TemporaryDirectory() as folder:
+            clean = Path(folder) / "halal_restaurants.json"
+            raw = snapshot()
+            database = logic_manager.build_database(raw, [["malay"]])
+            data_manager.save_clean_database(database, raw, clean)
+            cache = {"already-saved": ["western"]}
+
+            added = data_manager.bootstrap_cuisine_cache(raw, clean, cache)
+
+            self.assertEqual(added, 1)
+            self.assertEqual(
+                cache[data_manager.cuisine_cache_key(raw_row())], ["malay"])
+            self.assertEqual(cache["already-saved"], ["western"])
+
     def test_interactive_menu_accepts_pasted_single_restaurant(self):
         pasted = json.dumps(restaurant())
         with patch("builtins.input", side_effect=["4", pasted]):
@@ -118,6 +185,38 @@ class BRCTests(unittest.TestCase):
             '[{"index":0,"cuisines":["Singaporean"," CHINESE ","Cafe"]}]')
         tags=manager._tag_cuisines([raw_row(name="Example Restaurant")])
         self.assertEqual(tags,[["chinese"]])
+
+    def test_exact_outlet_match_does_not_spend_an_ai_request(self):
+        database=logic_manager.build_database(snapshot(),[["malay"]])
+        manager=ai_manager.AIManager("key","model")
+        manager._call=lambda _: (_ for _ in ()).throw(
+            AssertionError("AI should not be called for one exact outlet"))
+        matches=manager._match(
+            [restaurant()],
+            [io_manager.candidate_sets([restaurant()],database)[0]])
+        self.assertEqual(matches,["cert-1"])
+
+    def test_gemini_rate_limit_waits_and_retries(self):
+        class RateLimited(Exception):
+            code=429
+        class Models:
+            def __init__(self): self.calls=0
+            def generate_content(self,**_):
+                self.calls+=1
+                if self.calls==1:
+                    raise RateLimited("retry in 5.5s")
+                return type("Response",(),{"text":"[]"})()
+        models=Models()
+        manager=ai_manager.AIManager("key","model")
+        manager._client=type("Client",(),{"models":models})()
+        manager._request_interval=0
+        messages=[]
+        manager._report=messages.append
+        with patch.object(ai_manager.time,"sleep") as sleep:
+            self.assertEqual(manager._call("prompt"),"[]")
+        self.assertEqual(models.calls,2)
+        sleep.assert_called_once_with(5.5)
+        self.assertIn("rate limit reached",messages[0])
 
     def test_compact_opening_hours_and_cache_replacement(self):
         with tempfile.TemporaryDirectory() as folder:
