@@ -21,6 +21,10 @@ GEMINI_URL = os.getenv(
     "BITEFINDER_GEMINI_URL",
     "https://generativelanguage.googleapis.com/v1beta/models",
 )
+GROQ_URL = os.getenv(
+    "BITEFINDER_GROQ_URL",
+    "https://api.groq.com/openai/v1/chat/completions",
+)
 
 # BIS owns this fallback order. Keep it independent of BRNS's model chain.
 MODEL_CHAIN = [
@@ -28,6 +32,21 @@ MODEL_CHAIN = [
     {"provider": "gemini", "model": "gemini-3.6-flash"},
     {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
 ]
+
+
+def _extend_bis_chain_with_groq():
+    """Fetch Groq chat models at startup and append them to MODEL_CHAIN."""
+    from dotenv import load_dotenv
+    load_dotenv(BASE_DIR.parent / ".env")
+    api_key = os.getenv("GROQ_API_KEY", "").strip()
+    if not api_key:
+        return
+    from shared.groq_models import fetch_chat_models
+    for model_id in fetch_chat_models(api_key):
+        MODEL_CHAIN.append({"provider": "groq", "model": model_id})
+
+
+_extend_bis_chain_with_groq()
 
 
 def load_api_keys():
@@ -180,6 +199,41 @@ def _call_gemini(payload, model, config):
     raise RuntimeError("Gemini rejected the request.")
 
 
+def _call_groq(payload, model, config):
+    """Call Groq's chat-completions endpoint for a BIS JSON response."""
+    api_key = config.get("groq_api_key")
+    if not api_key:
+        raise RuntimeError("No Groq API key is configured for BIS.")
+    headers = {"Authorization": f"Bearer {api_key}",
+               "Content-Type": "application/json"}
+    groq_payload = dict(payload, model=model)
+    for use_json_mode in (True, False):
+        if use_json_mode:
+            groq_payload["response_format"] = {"type": "json_object"}
+        else:
+            groq_payload.pop("response_format", None)
+        try:
+            response = requests.post(
+                GROQ_URL, headers=headers, json=groq_payload,
+                timeout=(3, 12))
+        except requests.RequestException as error:
+            raise RuntimeError("Groq request failed. Please retry.") from error
+        if response.status_code == 400 and use_json_mode:
+            continue
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"Groq request failed: HTTP {response.status_code}.")
+        try:
+            content = response.json()["choices"][0]["message"]["content"]
+        except (ValueError, KeyError, IndexError, TypeError) as error:
+            raise RuntimeError(
+                "Groq returned an unexpected response.") from error
+        if not isinstance(content, str) or not content.strip():
+            raise RuntimeError("Groq returned an empty response.")
+        return content.strip()
+    raise RuntimeError("Groq rejected the request.")
+
+
 def _parse_json_response(content):
     """Parse a JSON object from the model response."""
     cleaned = content.strip()
@@ -224,6 +278,8 @@ def _call_json_with_fallback(payload, config, validator=None):
                 and (config.get("openrouter_api_keys")
                      or config.get("openrouter_api_key"))):
             continue
+        if provider == "groq" and not config.get("groq_api_key"):
+            continue
         if provider == "gemini" and not config.get("gemini_api_key"):
             continue
         if provider == "openrouter" and not (
@@ -235,6 +291,8 @@ def _call_json_with_fallback(payload, config, validator=None):
                 content = _call_gemini(payload, model, config)
             elif provider == "openrouter":
                 content = _call_openrouter(dict(payload, model=model), config)
+            elif provider == "groq":
+                content = _call_groq(payload, model, config)
             else:
                 continue
         except RuntimeError:
@@ -265,7 +323,9 @@ def has_fallback_provider(config):
              and config.get("gemini_api_key")
              or entry.get("provider") == "openrouter"
              and (config.get("openrouter_api_keys")
-                  or config.get("openrouter_api_key")))
+                  or config.get("openrouter_api_key"))
+             or entry.get("provider") == "groq"
+             and config.get("groq_api_key"))
         for entry in MODEL_CHAIN)
 
 
