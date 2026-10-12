@@ -566,6 +566,8 @@ def interpret_search_request(request, today_request, config):
                 "other preference. Do not duplicate a selected preference "
                 "with equivalent wording. Add to other_preferences only "
                 "wishes explicitly stated in today_request; use short strings. "
+                "Preserve any stated minimum Google star rating exactly as a "
+                "numeric star threshold (for example, 'minimum 4.5 stars'). "
                 "If today_request conflicts with a confirmed choice, reflect "
                 "the conflicting choice so the next layer can ask the user. "
                 "Do not invent locations, restrictions, or restaurant facts. "

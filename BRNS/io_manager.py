@@ -73,6 +73,9 @@ def accept_bis_json(payload):
     cuisine = payload["cuisine"]
     if not isinstance(cuisine, str) or cuisine not in (*CUISINES, "none"):
         raise ValueError("Choose a supported cuisine or none for the search.")
+    other_preferences = validate_value(
+        "other_preferences", payload["other_preferences"])
+    logic_manager.minimum_rating(other_preferences)
     return {
         "origin": {
             "query": query, "label": label,
@@ -84,8 +87,7 @@ def accept_bis_json(payload):
         "cuisine": cuisine,
         "budget_per_person": validate_value(
             "budget_per_person", payload["budget_per_person"]),
-        "other_preferences": validate_value(
-            "other_preferences", payload["other_preferences"]),
+        "other_preferences": other_preferences,
         "dietary_requirements": validate_value(
             "dietary_requirements", payload["dietary_requirements"]),
         "disliked_cuisines": validate_value(

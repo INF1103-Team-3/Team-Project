@@ -30,7 +30,7 @@ class SearchClarificationNeeded(ValueError):
 def validate_special_request_text(text):
     """Check a short English request before BIS sends it for interpretation."""
     text = clean_text(text, 100)
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()\-]*", text):
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()+\-]*", text):
         raise ValueError(
             "Write your special request in English letters and words, "
             "such as chicken rice or a quiet cafe.")
