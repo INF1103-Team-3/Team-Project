@@ -679,7 +679,7 @@
     "postal_code": "819643",
     "address": "Airside – Terminal 2 Departure Transit Lounge Central Level 3, Located within the COOK HOUSE by KOUFU (Food Court, Stall No MR1, Singapore 819643",
     "number": "6282 4288",
-    "g_rating": "4",
+    "g_rating": "4.0",
     "g_no_reviews": "736",
     "cuisine": "south_indian",
     "dietary": [
@@ -687,6 +687,30 @@
     ],
     "avg_price_low_sgd": 10.0,
     "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["0000", "2359"],
+      "tuesday": ["0000", "2359"],
+      "wednesday": ["0000", "2359"],
+      "thursday": ["0000", "2359"],
+      "friday": ["0000", "2359"],
+      "saturday": ["0000", "2359"],
+      "sunday": ["0000", "2359"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJkUm6XI082jERcXC62vfGHAQ",
+    "name": "Kopitiam @ T3 Public",
+    "postal_code": "819663",
+    "address": "65 Airport Blvd., B2-03 Terminal 3 Singapore Changi Airport, Singapore 819663",
+    "number": "6241 0087",
+    "g_rating": "3.9",
+    "g_no_reviews": "2976",
+    "cuisine": null,
+    "dietary": [],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
     "opening_hours": {
       "monday": ["0000", "2359"],
       "tuesday": ["0000", "2359"],

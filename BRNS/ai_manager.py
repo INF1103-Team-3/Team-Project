@@ -172,6 +172,35 @@ def _call_gemini(model_name, system_prompt, user_text):
     return False, "request rejected"
 
 
+def _call_groq(model_id, system_prompt, user_text):
+    """One Groq attempt. Returns (True, reply_text) or (False, error)."""
+    headers = {"Authorization": f"Bearer {config.GROQ_API_KEY}",
+               "Content-Type": "application/json"}
+    messages = [{"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_text}]
+    for use_json_mode in (True, False):
+        payload = {"model": model_id, "messages": messages, "temperature": 0.2}
+        if use_json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        try:
+            resp = requests.post(
+                config.GROQ_URL, headers=headers, json=payload,
+                timeout=(3, 12))
+        except requests.RequestException as err:
+            return False, f"network error: {err}"
+        if resp.status_code == 429:
+            return False, "429 rate limited"
+        if resp.status_code == 400 and use_json_mode:
+            continue                        # retry same model without json mode
+        if resp.status_code != 200:
+            return False, f"HTTP {resp.status_code}: {resp.text[:300]}"
+        try:
+            return True, resp.json()["choices"][0]["message"]["content"]
+        except (KeyError, ValueError) as err:
+            return False, f"unexpected response shape: {err}"
+    return False, "request rejected"
+
+
 def call_ai(user_record):
     """Walk MODEL_CHAIN across providers until one returns schema-valid JSON.
     Returns (True, parsed_dict, model_used) or (False, error_summary, None)."""
@@ -183,6 +212,8 @@ def call_ai(user_record):
             ok, content = _call_openrouter(model, SYSTEM_PROMPT, user_text)
         elif provider == "gemini":
             ok, content = _call_gemini(model, SYSTEM_PROMPT, user_text)
+        elif provider == "groq":
+            ok, content = _call_groq(model, SYSTEM_PROMPT, user_text)
         else:
             ok, content = False, f"unknown provider '{provider}'"
         if ok:
@@ -245,7 +276,8 @@ def has_configured_provider():
     """Check credentials before BRNS spends a Places request."""
     return any(
         (entry.get("provider") == "openrouter" and config.OPENROUTER_API_KEY
-         or entry.get("provider") == "gemini" and config.GEMINI_API_KEY)
+         or entry.get("provider") == "gemini" and config.GEMINI_API_KEY
+         or entry.get("provider") == "groq" and config.GROQ_API_KEY)
         and entry.get("model") and not any(
             char in entry["model"] for char in "<> ")
         for entry in config.MODEL_CHAIN
@@ -303,6 +335,11 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
             _log_ai_event("recommend_candidates",
                           f"Trying {provider}/{model}.", "INFO")
             ok, content = _call_gemini(
+                model, RECOMMEND_SYSTEM_PROMPT, user_text)
+        elif provider == "groq" and config.GROQ_API_KEY:
+            _log_ai_event("recommend_candidates",
+                          f"Trying {provider}/{model}.", "INFO")
+            ok, content = _call_groq(
                 model, RECOMMEND_SYSTEM_PROMPT, user_text)
         else:
             continue
