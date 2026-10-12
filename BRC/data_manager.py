@@ -203,8 +203,6 @@ def load_cuisine_cache(path: Path = CUISINE_CACHE_PATH) -> dict[str, list[str]]:
 def bootstrap_cuisine_cache(snapshot: dict, clean_path: Path,
                             cache: dict[str, list[str]]) -> int:
     """Reuse cuisines from an existing cleaned database when possible."""
-    if cache:
-        return 0
     try:
         database = load_clean_database(clean_path)
     except (ValueError, OSError):
@@ -213,11 +211,16 @@ def bootstrap_cuisine_cache(snapshot: dict, clean_path: Path,
         row["muis"]["certificate_number"]: row["cuisine"]
         for row in database
     }
+    added = 0
     for row in snapshot["listings"]:
+        key = cuisine_cache_key(row)
+        if key in cache:
+            continue
         certificate = row.get("certificate_number")
         if certificate in by_certificate:
-            cache[cuisine_cache_key(row)] = list(by_certificate[certificate])
-    return len(cache)
+            cache[key] = list(by_certificate[certificate])
+            added += 1
+    return added
 
 
 def save_cuisine_cache(tags: dict[str, list[str]],
