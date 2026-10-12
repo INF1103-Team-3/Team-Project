@@ -7,7 +7,7 @@ separate restaurant certification checker:
 | --- | --- | --- |
 | **BIS** — BiteFinder Interaction System | Sign up or resume an account and save food preferences | `python3 main.py` |
 | **BRNS** — BiteFinder Recommendation & Navigation System | Find, rank, and route to restaurants | `python3 BRNS/main.py` |
-| **BRC** — BiteFinder Restaurant Checker | Refresh a MUIS snapshot and check restaurant JSON | `python3 -m BRC.muis_data_scraper` and `python3 -m BRC.main check` |
+| **BRC** — BiteFinder Restaurant Checker | Build the MUIS halal database and check restaurant JSON | `python3 -m BRC.main` |
 
 BIS sends today's confirmed search as JSON to BRNS. The
 [original project scope](project_overview/ProjectInitialDetails.md) describes the intended
@@ -275,23 +275,26 @@ hours and access information when available, are saved in
 
 ## BRC: MUIS certification check
 
-BRC has two separate commands. Refresh its local MUIS snapshot for the names
-in a restaurant JSON file, then check that file against the saved snapshot:
+BRC supports three workflows through one entry point:
 
 ```bash
-python3 -m BRC.muis_data_scraper --input BRNS/data/restaurants.json
-python3 -m BRC.main check --input BRNS/data/restaurants.json --output BRC/data/checked_restaurants.json
+python3 -m BRC.main
+python3 -m BRC.main --input BRNS/data/restaurants.json
 ```
 
-The refresh command searches the official MUIS establishment portal for each
-restaurant name and saves the returned eating-establishment listings in
-`BRC/data/muis_establishments.json`. The portal search caps broad results, so
-the scraper refuses a potentially truncated query. The checker does not make
-MUIS network requests. Its snapshot must cover each input restaurant name and
-must be no more than seven days old. Both generated files stay local.
+With no command arguments, BRC opens a menu. It can build the database, check
+the default `BRNS/data/restaurants.json`, open another object/array JSON file,
+paste one restaurant object, or open a file containing one object. The
+interactive run prints each manager stage and scraper progress.
 
-The checker accepts either an array of restaurant objects or one restaurant
-object. It preserves the input shape, order, and existing fields, adding
+The build option uses a current raw MUIS scrape or invokes `BRC/scraper.py`,
+then runs IO → AI → Logic → Data to build
+`BRC/data/halal_restaurants.json`. The scraper divides searches by postal
+prefix so no result silently exceeds the portal cap.
+
+With `--input` or `--stdin`, BRC accepts one restaurant object or an array.
+If the cleaned database is missing, it builds it first. It preserves the input
+shape, order, and existing fields, adding
 `muis_check` evidence and setting `halal_certification` to `official` only for
 an outlet that matches the original MUIS listing. Gemini proposes matches;
 BRC Logic verifies the postal code, name, address, unit, and any supplied
@@ -300,7 +303,7 @@ certificate validity details. Set `GEMINI_API_KEY` in `.env`; optionally set
 standard output:
 
 ```bash
-cat restaurants.json | python3 -m BRC.main check --stdin --stdout > checked_restaurants.json
+cat restaurants.json | python3 -m BRC.main --stdin --stdout > checked_restaurants.json
 ```
 
 Errors and status messages go to standard error. BRC does not currently run

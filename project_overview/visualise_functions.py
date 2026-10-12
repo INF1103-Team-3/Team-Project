@@ -610,22 +610,22 @@ def draw_project_workflow(path):
     blue = "#dceeff"
     green = "#dbf5e6"
 
-    # The standalone MUIS scraper saves a snapshot read by BRC IO.
+    # BRC main loads or invokes the standalone scraper, then builds clean data.
     draw_workflow_card(draw, (110, 245, 520, 360),
                        "MUIS scraper",
-                       ("Targeted official search", "muis_data_scraper.py"), orange)
+                       ("Complete official search", "scraper.py"), orange)
     draw_workflow_card(draw, (700, 245, 1150, 360),
-                       "MUIS snapshot",
-                       ("Saved MUIS outlet listings", "Name coverage + retrieval time"),
+                       "MUIS raw data",
+                       ("Saved MUIS outlet listings", "Postal coverage + retrieval time"),
                        orange)
     draw_arrow(draw, [(520, 302), (700, 302)], "#a97936", 5)
 
     brc_cards = (
-        ("BRC main()", ("JSON checker command", "One outlet or an array")),
-        ("BRC IO", ("Validate restaurant JSON", "Load MUIS snapshot")),
-        ("BRC AI", ("Gemini proposes outlet", "Certificate number or null")),
-        ("BRC Logic", ("Verify MUIS outlet facts", "Decide official status")),
-        ("BRC Data", ("Save complete checked JSON", "Preserve original fields")),
+        ("BRC main()", ("Build, one outlet, or array", "Coordinate four managers")),
+        ("BRC IO", ("Choose workflow + validate", "Load raw or clean data")),
+        ("BRC AI", ("Tag cuisine / match outlet", "Structured Gemini output")),
+        ("BRC Logic", ("Verify source and identity", "Decide official status")),
+        ("BRC Data", ("Save clean or checked JSON", "Preserve original fields")),
     )
     for x, (name, details) in zip(positions, brc_cards):
         draw_workflow_card(draw, (x, 440, x + card_width, 580),

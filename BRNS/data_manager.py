@@ -80,6 +80,11 @@ def _restaurant_record(candidate):
     rating = candidate.get("rating")
     reviews = candidate.get("rating_count")
     wheelchair = candidate.get("wheelchair_accessible")
+    muis_check = candidate.get("muis_check")
+    officially_verified = (
+        candidate.get("halal_certification") == "official"
+        and isinstance(muis_check, dict)
+        and muis_check.get("status") == "verified")
     return {
         "google_place_id": place_id,
         "name": candidate["name"],
@@ -94,7 +99,9 @@ def _restaurant_record(candidate):
         "avg_price_high_sgd": candidate.get("price_end"),
         "opening_hours": candidate.get("opening_hours"),
         "wheelchair_accessible": wheelchair if type(wheelchair) is bool else None,
-        "halal_certification": "unofficial" if "halal" in dietary else "none",
+        "halal_certification": (
+            "official" if officially_verified
+            else "unofficial" if "halal" in dietary else "none"),
     }
 
 
