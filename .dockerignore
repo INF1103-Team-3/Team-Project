@@ -1,16 +1,20 @@
 .git
-.gitignore 
+.gitignore
 
 .env
 .venv
-venv 
+venv
 
-__pycache__
+__pycache__/
 *.pyc
 *.pyo
 
-.vscode
-.idea
+.vscode/
+.idea/
 
-data/api_errors.log 
-data/search_history.json
+.pytest_cache/
+*.log
+
+tests/
+requirements-dev.txt
+project_overview/
