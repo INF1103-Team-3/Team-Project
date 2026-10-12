@@ -65,6 +65,20 @@ class IntegrationTests(unittest.TestCase):
         self.saved_preferences = saved_preferences.start()
         self.addCleanup(saved_preferences.stop)
 
+        def verify_with_brc(record, **_):
+            checked = dict(record)
+            checked["dietary"] = list(dict.fromkeys(
+                [*(record.get("dietary") or []), "halal"]))
+            checked["halal_certification"] = "official"
+            checked["muis_check"] = {
+                "status": "verified", "certificate_number": "test-cert"}
+            return checked
+
+        brc = patch.object(brns_main.brc_main, "run",
+                           side_effect=verify_with_brc)
+        self.brc_run = brc.start()
+        self.addCleanup(brc.stop)
+
     def test_exit_message_only_mentions_profile_during_setup(self):
         complete = empty_preferences()
         complete.update(location=["pasir ris"], max_distance_km=2,
@@ -141,6 +155,102 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(loaded, [False])
         self.assertIsNone(display_state["test"])
         self.assertTrue(terminal_ui.colors_enabled())
+
+    def test_slashless_commands_map_to_existing_actions(self):
+        from BIS import io_manager as bis_io
+
+        config = {"ai_bypass": True}
+        cases = {
+            "search me a restaurant": {"action": "search"},
+            "I want to edit my profile": {"action": "edit_menu"},
+            "show my profile": {"action": "show_profile"},
+            "color off": {"action": "color", "enabled": False},
+            "turn the colours on": {"action": "color", "enabled": True},
+            "change my budget": {
+                "action": "edit", "field": "budget_per_person",
+                "location_action": "replace"},
+            "add a location": {
+                "action": "edit", "field": "location",
+                "location_action": "add"},
+            "log out": {"action": "logout"},
+        }
+        for text, expected in cases.items():
+            with self.subTest(text=text):
+                self.assertEqual(
+                    bis_io.natural_command_action(text, config),
+                    expected)
+
+    def test_profile_edit_menu_returns_the_selected_field(self):
+        from BIS import io_manager as bis_io
+
+        with patch.object(bis_io, "read_input", side_effect=["wrong", "4"]):
+            selected = bis_io.choose_profile_edit()
+        self.assertEqual(selected, {
+            "action": "edit", "field": "budget_per_person",
+            "location_action": "replace",
+        })
+        with patch.object(bis_io, "read_input", return_value="1"):
+            self.assertEqual(
+                bis_io.choose_profile_edit(), {"action": "rename"})
+        self.assertEqual(
+            bis_io.command_action("/edit"), {"action": "edit_menu"})
+
+    def test_idle_natural_command_uses_bis_ai_fallback(self):
+        from BIS import io_manager as bis_io
+
+        profile = empty_preferences()
+        profile.update(location=["punggol"], max_distance_km=2,
+                       max_travel_time_minutes=40, budget_per_person=10,
+                       dietary_requirements=[], liked_cuisines=[],
+                       disliked_cuisines=[], other_preferences=[])
+        user = {"preferences": profile}
+        with (
+            patch.object(bis_io, "read_input",
+                         return_value="could you begin finding somewhere"),
+            patch.object(bis_io.ai_manager, "interpret_command",
+                         return_value={"command": "search", "field": None})
+                         as interpret,
+        ):
+            action = bis_io.collect_action(
+                user, {"ai_bypass": False})
+        self.assertEqual(action, {"action": "search"})
+        interpret.assert_called_once()
+
+    def test_natural_command_ai_rejects_non_command_profile_text(self):
+        from BIS import io_manager as bis_io
+
+        with patch.object(
+                bis_io.ai_manager, "interpret_command",
+                return_value={"command": "unknown", "field": None}):
+            self.assertIsNone(bis_io.natural_command_action(
+                "I enjoy Korean food", {"ai_bypass": False},
+                allow_ai=True))
+
+    def test_slashless_color_command_persists(self):
+        profile = empty_preferences()
+        profile.update(location=["pasir ris"], max_distance_km=2,
+                       max_travel_time_minutes=40, budget_per_person=10,
+                       dietary_requirements=[], liked_cuisines=["malay"],
+                       disliked_cuisines=[], other_preferences=[])
+        user = {"userID": "test", "username": "John",
+                "preferences": profile}
+        display_state = {}
+
+        def get_state(section, user_id):
+            return display_state.get(user_id) if section == "display" else None
+
+        with (
+            patch.object(bis_main.data_manager, "get_state",
+                         side_effect=get_state),
+            patch.object(bis_main.data_manager, "set_state",
+                         side_effect=lambda section, user_id, value:
+                         display_state.__setitem__(user_id, value)),
+            patch.object(bis_main, "run_search"),
+            patch("builtins.input", side_effect=["color off", "quit"]),
+        ):
+            self.assertEqual(
+                bis_main.run_session(user, {"ai_bypass": True}), "exit")
+        self.assertEqual(display_state["test"], {"color_enabled": False})
 
     def test_alternatives_are_offered_before_display_and_route(self):
         profile = empty_preferences()
@@ -246,7 +356,7 @@ class IntegrationTests(unittest.TestCase):
         with (
             patch.object(bis_io, "read_input",
                          side_effect=["1", "2", "3", "4", "1", "2", "3",
-                                      "4", "5", "6", "", "2"]),
+                                      "4", "5", "6", "7", "", "2"]),
             redirect_stdout(io.StringIO()),
         ):
             self.assertEqual(bis_io.choose_results_action(
@@ -260,11 +370,46 @@ class IntegrationTests(unittest.TestCase):
             self.assertEqual(bis_io.choose_results_action(2), "route")
             self.assertEqual(bis_io.choose_results_action(2), "email")
             self.assertEqual(bis_io.choose_results_action(2), "more")
+            self.assertEqual(bis_io.choose_results_action(2), "sort")
             self.assertEqual(bis_io.choose_results_action(2), "again")
             self.assertEqual(bis_io.choose_results_action(2), "repeat")
             self.assertEqual(bis_io.choose_results_action(2), "done")
             self.assertEqual(bis_io.choose_results_action(2), "done")
             self.assertEqual(bis_io.choose_route_result(2), 2)
+
+    def test_result_sort_menu_and_brns_sorting(self):
+        from BIS import io_manager as bis_io
+
+        with patch.object(bis_io, "read_input", side_effect=["1", "2", ""]):
+            self.assertEqual(bis_io.choose_result_sort(), "rating")
+            self.assertEqual(bis_io.choose_result_sort(), "distance")
+            self.assertIsNone(bis_io.choose_result_sort())
+
+        def item(name, rating, reviews, meters):
+            return {"restaurant": {
+                "name": name, "rating": rating, "rating_count": reviews,
+                "walk_meters": meters,
+            }, "reasons": []}
+
+        results = {
+            "matches": [item("Near", 4.2, 1000, 300),
+                        item("Top", 4.8, 50, 900)],
+            "alternatives": [item("Far", 4.6, 200, 1500),
+                             item("Closer", 4.4, 500, 600)],
+            "mode": "walk",
+        }
+        by_rating = brns_logic.sort_results(results, "rating")
+        self.assertEqual(
+            [row["restaurant"]["name"] for row in by_rating["matches"]],
+            ["Top", "Near"])
+        by_distance = brns_logic.sort_results(results, "distance")
+        self.assertEqual(
+            [row["restaurant"]["name"] for row in by_distance["matches"]],
+            ["Near", "Top"])
+        self.assertEqual(
+            [row["restaurant"]["name"]
+             for row in by_distance["alternatives"]],
+            ["Closer", "Far"])
 
     def test_enter_confirms_search_summary_only(self):
         from BIS import io_manager as bis_io
@@ -441,7 +586,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertIn("route exceeds your distance limit", shown)
         self.assertIn("full budget unverified", shown)
 
-    def test_unofficial_halal_is_a_single_caution_not_a_positive_reason(self):
+    def test_unofficial_google_halal_remains_an_alternative(self):
         candidate = {"name": "R&J Cosy Corner", "cuisines": [],
                      "halal_hint": True, "price_start": 10,
                      "walk_meters": 3910, "walk_source": "route",
@@ -451,18 +596,12 @@ class IntegrationTests(unittest.TestCase):
         result = brns_logic.rank_restaurants(
             [candidate], wanted,
             [{"id": 0, "reason_codes": ["well_rated", "halal_hint_unofficial"]}])
-        reasons = result["alternatives"][0]["reasons"]
-        self.assertEqual(reasons.count("! Halal (unofficial; not checked)"), 1)
-        self.assertNotIn("Halal (unofficial; not checked)", reasons)
-        output = io.StringIO()
-        with redirect_stdout(output):
-            brns_io.show_results(result)
-        shown = output.getvalue()
-        self.assertEqual(shown.count("Halal:"), 1)
-        self.assertEqual(shown.count("cuisine unavailable"), 0)
-        self.assertIn("Cuisine: Unavailable", shown)
-        self.assertIn("• Vegetarian options unverified", shown)
-        self.assertIn("• Rated 4.2 out of 5 on Google", shown)
+        self.assertFalse(result["matches"])
+        self.assertEqual(len(result["alternatives"]), 1)
+        self.assertEqual(result["hidden"], 0)
+        self.assertEqual(result["excluded_reasons"], {})
+        self.assertIn("! Halal (unofficial; not checked)",
+                      result["alternatives"][0]["reasons"])
 
     def test_search_menu_typo_requires_confirmation(self):
         from BIS import io_manager as bis_io
@@ -735,6 +874,28 @@ class IntegrationTests(unittest.TestCase):
         with self.assertRaises(bis_logic.SearchClarificationNeeded):
             bis_logic.validate_search_request(
                 transit, dict(transit, max_travel_minutes=30))
+
+    def test_refine_search_request_allows_changing_other_preferences(self):
+        from BIS import io_manager as bis_io
+        base = request()
+        with (
+            patch.object(bis_io, "read_input", return_value="other"),
+            patch.object(bis_io, "ask_search_wishes",
+                         return_value={"selected": ["quiet cafe"], "text": ""}) as ask_wishes,
+        ):
+            refined = bis_io.refine_search_request(
+                base, empty_preferences(), {"ai_bypass": True})
+        self.assertEqual(refined["other_preferences"], ["quiet cafe"])
+        ask_wishes.assert_called_once()
+
+        with (
+            patch.object(bis_io, "read_input", return_value="4"),
+            patch.object(bis_io, "ask_search_wishes",
+                         return_value={"selected": ["quiet cafe"], "text": "pet friendly"}),
+        ):
+            refined = bis_io.refine_search_request(
+                base, empty_preferences(), {"ai_bypass": True})
+        self.assertEqual(refined["other_preferences"], ["quiet cafe", "pet friendly"])
 
     def test_transit_matrix_and_ranking_use_verified_journey_time(self):
         transit = dict(request(), mode="transit", max_distance_km=None,
@@ -1145,6 +1306,110 @@ class IntegrationTests(unittest.TestCase):
                 "selected": [], "text": ""})
         self.assertIn("English letters", str(message.call_args.args[0]))
 
+    def test_equivalent_special_request_uses_first_saved_wording(self):
+        from BIS import io_manager as bis_io
+
+        profile = empty_preferences()
+        profile["other_preferences"] = [
+            "minimum 4.5 stars", "at least 4.5 stars"]
+        with (
+            patch.object(bis_io, "read_input", return_value="4.5 stars or higher"),
+            patch.object(bis_io.ai_manager, "review_special_request",
+                         return_value="4.5 stars or higher"),
+            patch.object(bis_io.ai_manager, "equivalent_saved_request",
+                         return_value="minimum 4.5 stars") as equivalent,
+            patch.object(bis_io.ai_manager,
+                         "classify_search_constraints") as classify,
+        ):
+            result = bis_io.ask_search_wishes(
+                profile, {"ai_bypass": False})
+        self.assertEqual(result, {
+            "selected": ["minimum 4.5 stars"], "text": ""})
+        equivalent.assert_called_once_with(
+            "4.5 stars or higher", profile["other_preferences"],
+            {"ai_bypass": False})
+        classify.assert_not_called()
+
+    def test_hard_special_request_is_confirmed_before_search(self):
+        from BIS import io_manager as bis_io
+
+        classification = {
+            "hard_requirement": True, "hard_cuisine": "korean",
+            "rating": None, "rating_is_minimum": False}
+        with (
+            patch.object(bis_io, "read_input", return_value="only korean"),
+            patch.object(bis_io.ai_manager, "review_special_request",
+                         return_value="only korean"),
+            patch.object(bis_io.ai_manager, "classify_search_constraints",
+                         return_value=classification),
+            patch.object(bis_io, "ask_yes_no", return_value=True) as confirm,
+        ):
+            result = bis_io.ask_search_wishes(
+                empty_preferences(), {"ai_bypass": False})
+        self.assertEqual(result, {"selected": [], "text": "only korean"})
+        self.assertIn("may be no matching restaurants",
+                      confirm.call_args.args[0])
+
+    def test_bare_star_preference_can_be_confirmed_as_hard(self):
+        from BIS import io_manager as bis_io
+
+        classification = {
+            "hard_requirement": False, "hard_cuisine": None,
+            "rating": 4.5, "rating_is_minimum": False}
+        with (
+            patch.object(bis_io, "read_input", return_value="4.5 stars"),
+            patch.object(bis_io.ai_manager, "review_special_request",
+                         return_value="4.5 stars"),
+            patch.object(bis_io.ai_manager, "classify_search_constraints",
+                         return_value=classification),
+            patch.object(bis_io, "ask_yes_no", return_value=True) as confirm,
+        ):
+            result = bis_io.ask_search_wishes(
+                empty_preferences(), {"ai_bypass": False})
+        self.assertEqual(result["text"],
+                         "4.5 stars, at least 4.5 stars")
+        self.assertIn("hard minimum", confirm.call_args.args[0])
+
+    def test_refinement_accepts_change_other_preferences_phrase(self):
+        from BIS import io_manager as bis_io
+
+        profile = empty_preferences()
+        profile["other_preferences"] = ["spicy food"]
+        with (
+            patch.object(bis_io, "read_input",
+                         return_value="change other preferences"),
+            patch.object(bis_io, "ask_search_wishes",
+                         return_value={"selected": ["spicy food"],
+                                       "text": ""}) as wishes,
+        ):
+            refined = bis_io.refine_search_request(
+                request(), profile, {"ai_bypass": True})
+        self.assertEqual(refined["other_preferences"], ["spicy food"])
+        wishes.assert_called_once()
+
+    def test_refinement_uses_ai_to_correct_a_misspelled_numbered_choice(self):
+        from BIS import io_manager as bis_io
+
+        profile = empty_preferences()
+        with (
+            patch.object(bis_io, "read_input",
+                         side_effect=["other preferen", "yes"]),
+            patch.object(bis_io.ai_manager, "interpret_search_choice",
+                         return_value="other preferences") as interpret,
+            patch.object(bis_io, "ask_search_wishes",
+                         return_value={"selected": ["spicy food"],
+                                       "text": ""}),
+            patch.object(bis_io.ui, "item") as item,
+        ):
+            refined = bis_io.refine_search_request(
+                request(), profile, {"ai_bypass": False})
+        self.assertEqual(refined["other_preferences"], ["spicy food"])
+        interpret.assert_called_once_with(
+            "other preferen",
+            ("travel", "budget", "cuisine", "other preferences"),
+            {"ai_bypass": False})
+        self.assertEqual(item.call_count, 4)
+
     def test_new_special_request_is_reviewed_and_confirmed_before_search_ai(self):
         from BIS import io_manager as bis_io
 
@@ -1290,12 +1555,12 @@ class IntegrationTests(unittest.TestCase):
                          Path(log_dir) / "bitefinder.log"),
         ):
             results = brns_logic.rank_restaurants(
-                [candidate], request(),
+                [candidate], dict(request(), dietary_requirements=[]),
                 [{"id": 0, "reason_codes": ["well_rated"]}])
             details = shared_log.LOG_FILE.read_text(encoding="utf-8")
-        self.assertEqual(len(results["alternatives"]), 1)
+        self.assertEqual(len(results["matches"]), 1)
         self.assertNotIn("rated at least 4 out of 5",
-                         results["alternatives"][0]["reasons"])
+                         results["matches"][0]["reasons"])
         self.assertIn('"candidate_id":0', details)
         self.assertIn('"candidate_name":"Candidate"', details)
         self.assertIn('"rejected_reason_code":"well_rated"', details)
@@ -1339,6 +1604,81 @@ class IntegrationTests(unittest.TestCase):
         from BIS import logic_manager as bis_logic
         self.assertEqual(bis_logic.validate_special_request_text("4.5+ stars"),
                          "4.5+ stars")
+        self.assertEqual(brns_io._clean_free_text_query(
+            ["Minimum 4.5 stars"]), "")
+        self.assertEqual(brns_io._clean_free_text_query(
+            ["Minimum 4.5 stars", "spicy food"]), "spicy food")
+        with patch.object(brns_io.requests, "post") as post:
+            post.return_value.status_code = 200
+            post.return_value.json.return_value = {"places": []}
+            brns_io.fetch_by_profile_text((1.35, 103.98), {
+                "cuisine": "korean",
+                "free_text": "minimum 4.5 stars",
+            })
+            self.assertEqual(post.call_args.kwargs["json"]["textQuery"],
+                             "korean food")
+
+    def test_hard_preferences_relax_budget_and_travel_but_are_enforced(self):
+        candidates = [
+            {"name": "Korean Far Away", "cuisines": ["korean"],
+             "avg_price": 40, "walk_meters": 5000, "walk_source": "route",
+             "rating": 4.6, "rating_count": 100},
+            {"name": "Chinese Nearby", "cuisines": ["chinese"],
+             "avg_price": 8, "walk_meters": 500, "walk_source": "route",
+             "rating": 4.8, "rating_count": 100},
+        ]
+        wanted = dict(
+            request(), cuisine="none", dietary_requirements=[],
+            other_preferences=["only korean", "at least 4.5 stars"])
+        results = brns_logic.rank_restaurants(candidates, wanted)
+        self.assertEqual(
+            [item["restaurant"]["name"] for item in results["matches"]],
+            ["Korean Far Away"])
+        cautions = results["matches"][0]["reasons"]
+        self.assertTrue(any("relaxed for hard requirement" in item
+                            for item in cautions))
+        self.assertEqual(
+            [item["restaurant"]["name"] for item in results["alternatives"]],
+            ["Chinese Nearby"])
+        self.assertEqual(brns_io._search_radius(wanted), 50000)
+
+    def test_bare_rating_is_soft_and_sent_to_brns_ai(self):
+        candidate = {
+            "name": "Popular Cafe", "cuisines": ["western"],
+            "avg_price": 8, "walk_meters": 500, "walk_source": "route",
+            "rating": 4.3, "rating_count": 1900}
+        wanted = dict(request(), cuisine="none", dietary_requirements=[],
+                      other_preferences=["4.5 stars"])
+        results = brns_logic.rank_restaurants([candidate], wanted)
+        self.assertEqual(len(results["matches"]), 1)
+        reply = json.dumps({"recommendations": recommendation(0)})
+        with (
+            patch.object(brns_config, "MODEL_CHAIN",
+                         [{"provider": "openrouter", "model": "test"}]),
+            patch.object(brns_config, "OPENROUTER_API_KEY", "test-key"),
+            patch.object(brns_ai, "_call_openrouter",
+                         return_value=(True, reply)) as call,
+        ):
+            brns_ai.recommend_candidates(wanted, [candidate])
+        sent = json.loads(call.call_args.args[2])
+        self.assertIsNone(sent["minimum_rating"])
+        self.assertEqual(sent["preferred_rating"], 4.5)
+        self.assertFalse(sent["hard_preferences"])
+
+    def test_google_text_search_prioritizes_hard_free_text(self):
+        wanted = dict(
+            request(), other_preferences=[
+                "spicy food", "quiet cafe", "only korean"])
+        with (
+            patch.object(brns_io, "load_saved_restaurants",
+                         return_value=[]),
+            patch.object(brns_io, "build_candidates",
+                         return_value=[]) as build,
+        ):
+            brns_io.find_candidates(wanted)
+        lookup = build.call_args.args[1]
+        self.assertTrue(lookup["free_text"].startswith("only korean"))
+        self.assertIn("spicy food", lookup["free_text"])
 
     def test_brns_ai_receives_review_count_and_adjusted_rating(self):
         candidates = [
@@ -1420,7 +1760,7 @@ class IntegrationTests(unittest.TestCase):
                        "pasir ris mall", "test-key"):
             self.assertNotIn(secret, contents)
 
-    def test_live_request_uses_confirmed_origin_and_unofficial_halal(self):
+    def test_live_halal_request_is_officially_verified_by_brc(self):
         candidate = {
             "name": "Malay Place", "address": "Pasir Ris",
             "lat": 1.373, "lng": 103.951,
@@ -1441,12 +1781,132 @@ class IntegrationTests(unittest.TestCase):
             results = brns_main.search(request())
         self.assertEqual(find.call_args.args[0]["origin"], request()["origin"])
         self.assertEqual(recommend.call_args.args[1], [candidate])
-        self.assertEqual(len(results["alternatives"]), 1)
-        self.assertEqual(results["alternatives"][0]["restaurant"]["halal_status"],
-                         "unofficial")
-        self.assertFalse(results["matches"])
+        self.assertEqual(len(results["matches"]), 1)
+        self.assertEqual(results["matches"][0]["restaurant"]["halal_status"],
+                         "official")
+        self.assertFalse(results["alternatives"])
+        self.brc_run.assert_called_once()
+        checked_input = self.brc_run.call_args.args[0]
+        self.assertEqual(checked_input["name"], "Malay Place")
+        self.assertEqual(checked_input["halal_certification"], "unofficial")
         self.assertNotIn("userID", history.call_args.args[0])
         self.assertEqual(history.call_args.args[2], "live-google")
+
+    def test_brc_uses_google_fallback_and_hides_candidates_without_evidence(self):
+        candidates = [
+            {"name": "Verified", "address": "1 Test Road, Singapore 123456",
+             "cuisines": ["malay"], "dietary_requirements": ["halal"],
+             "avg_price": 8.0, "walk_meters": 800,
+             "walk_source": "route"},
+            {"name": "Unverified", "address": "2 Test Road, Singapore 123457",
+             "cuisines": ["malay"], "dietary_requirements": ["halal"],
+             "avg_price": 8.0, "walk_meters": 700,
+             "walk_source": "route"},
+            {"name": "No Halal Evidence",
+             "address": "3 Test Road, Singapore 123458",
+             "cuisines": ["malay"], "dietary_requirements": [],
+             "avg_price": 8.0, "walk_meters": 600,
+             "walk_source": "route"},
+        ]
+
+        def check(record):
+            verified = record["name"] == "Verified"
+            return {
+                **record,
+                "halal_certification": "official" if verified else "unofficial",
+                "muis_check": {"status": (
+                    "verified" if verified else "not_verified")},
+            }
+
+        with (
+            patch.object(brns_config, "USE_LIVE_GOOGLE", True),
+            patch.object(brns_config, "GOOGLE_MAPS_API_KEY", "test-key"),
+            patch.object(brns_io, "find_candidates", return_value=candidates),
+            patch.object(brns_ai, "recommend_candidates",
+                         return_value=recommendation(1, 2, 0)),
+            patch.object(brns_main.brc_main, "run", side_effect=check) as brc,
+            patch.object(brns_data, "save_restaurants", return_value=3),
+            patch.object(brns_data, "save_search_results", return_value=True),
+        ):
+            results = brns_main.search(request())
+        self.assertEqual(brc.call_count, 3)
+        self.assertEqual(
+            [call.args[0]["name"] for call in brc.call_args_list],
+            ["Unverified", "No Halal Evidence", "Verified"])
+        self.assertEqual(
+            [item["restaurant"]["name"] for item in results["matches"]],
+            ["Verified"])
+        self.assertEqual(
+            [item["restaurant"]["name"] for item in results["alternatives"]],
+            ["Unverified"])
+        self.assertEqual(results["hidden"], 1)
+        self.assertEqual(results["halal_verification"]["candidates"], 3)
+        self.assertEqual(results["halal_verification"]["verified"], 1)
+        self.assertEqual(results["halal_verification"]["not_verified"], 2)
+        self.assertEqual(results["halal_verification"]["google_fallback"], 1)
+        self.assertEqual(results["halal_verification"]["excluded"], 1)
+
+    def test_brc_failure_stops_retries_and_explains_zero_results(self):
+        candidates = [{
+            "name": f"Candidate {number}",
+            "address": f"{number} Test Road, Singapore 12345{number}",
+            "cuisines": ["malay"], "dietary_requirements": ["halal"],
+            "avg_price": 8.0, "walk_meters": 700 + number,
+            "walk_source": "route",
+        } for number in range(3)]
+
+        class CheckerUnavailable(Exception):
+            pass
+
+        with (
+            patch.object(brns_config, "USE_LIVE_GOOGLE", True),
+            patch.object(brns_config, "GOOGLE_MAPS_API_KEY", "test-key"),
+            patch.object(brns_io, "find_candidates", return_value=candidates),
+            patch.object(brns_ai, "recommend_candidates",
+                         return_value=recommendation(0, 1, 2)),
+            patch.object(brns_main.brc_main, "run",
+                         side_effect=CheckerUnavailable) as brc,
+            patch.object(brns_data, "save_restaurants", return_value=3),
+            patch.object(brns_data, "save_search_results", return_value=True),
+        ):
+            results = brns_main.search(request())
+        self.assertEqual(brc.call_count, 1)
+        self.assertFalse(results["matches"])
+        self.assertEqual(len(results["alternatives"]), 3)
+        self.assertEqual(results["hidden"], 0)
+        self.assertEqual(results["halal_verification"]["errors"], 3)
+        self.assertEqual(results["halal_verification"]["google_fallback"], 3)
+        self.assertEqual(results["halal_verification"]["excluded"], 0)
+        self.assertEqual(
+            results["halal_verification"]["error_type"],
+            "CheckerUnavailable")
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            brns_io.show_no_matches(results)
+        shown = output.getvalue()
+        self.assertIn("could not complete official MUIS", shown)
+        self.assertIn("unofficial fallback for 3 candidate(s)", shown)
+
+    def test_non_halal_search_does_not_call_brc(self):
+        candidate = {
+            "name": "Cafe", "address": "1 Test Road, Singapore 123456",
+            "cuisines": [], "dietary_requirements": [], "avg_price": 8.0,
+            "walk_meters": 800, "walk_source": "route",
+        }
+        wanted = dict(request(), cuisine="none", dietary_requirements=[])
+        with (
+            patch.object(brns_config, "USE_LIVE_GOOGLE", True),
+            patch.object(brns_config, "GOOGLE_MAPS_API_KEY", "test-key"),
+            patch.object(brns_io, "find_candidates", return_value=[candidate]),
+            patch.object(brns_ai, "recommend_candidates",
+                         return_value=recommendation(0)),
+            patch.object(brns_data, "save_restaurants", return_value=1),
+            patch.object(brns_data, "save_search_results", return_value=True),
+        ):
+            results = brns_main.search(wanted)
+        self.brc_run.assert_not_called()
+        self.assertEqual(len(results["matches"]), 1)
 
     def test_brns_manager_order_and_io_places_boundary(self):
         candidate = {
@@ -1467,6 +1927,14 @@ class IntegrationTests(unittest.TestCase):
             self.assertEqual(candidates, [candidate])
             return recommendation(0)
 
+        def check(record):
+            events.append("BRC")
+            return {
+                **record, "halal_certification": "official",
+                "dietary": ["halal"],
+                "muis_check": {"status": "verified"},
+            }
+
         def validate(candidates, search_request, order):
             events.append("Logic")
             return rank(candidates, search_request, order)
@@ -1481,13 +1949,14 @@ class IntegrationTests(unittest.TestCase):
             patch.object(brns_io, "find_candidates", side_effect=find),
             patch.object(brns_ai, "recommend_candidates",
                          side_effect=recommend),
+            patch.object(brns_main.brc_main, "run", side_effect=check),
             patch.object(brns_logic, "rank_restaurants",
                          side_effect=validate),
             patch.object(brns_data, "save_search_results",
                          side_effect=store),
         ):
             brns_main.search(request())
-        self.assertEqual(events, ["IO", "AI", "Logic", "Data"])
+        self.assertEqual(events, ["IO", "AI", "BRC", "Logic", "Data"])
 
         with (
             patch.object(brns_places, "load_saved_restaurants", return_value=[]),
@@ -1586,6 +2055,8 @@ class IntegrationTests(unittest.TestCase):
         candidate = {
             "name": "Test", "cuisines": ["malay"],
             "dietary_requirements": ["halal"], "avg_price": 8.0,
+            "halal_certification": "official",
+            "muis_check": {"status": "verified"},
             "walk_meters": 800, "walk_source": "estimate",
         }
         results = brns_logic.rank_restaurants([candidate], wants)
@@ -2077,6 +2548,11 @@ class RestaurantFactsTests(unittest.TestCase):
             self.assertEqual(len(updated), 2)
             self.assertEqual(updated[1]["dietary"], ["halal", "vegetarian"])
             self.assertEqual(updated[1]["halal_certification"], "unofficial")
+            candidate["halal_certification"] = "official"
+            candidate["muis_check"] = {"status": "verified"}
+            self.assertEqual(brns_data.save_restaurants([candidate], path), 1)
+            verified = json.loads(path.read_text())
+            self.assertEqual(verified[1]["halal_certification"], "official")
 
     def test_google_halal_type_is_dietary_not_cuisine(self):
         place = brns_places._parse_place({

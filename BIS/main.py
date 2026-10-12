@@ -151,6 +151,20 @@ def run_search(session, config, automatic=False):
                     brns_io.show_results(
                         results, announce_no_matches=False)
                     continue
+                if action == "sort" and visible:
+                    sort_by = io_manager.choose_result_sort()
+                    if sort_by is None:
+                        continue
+                    results = brns_main.sort_results(results, sort_by)
+                    matches = results["matches"]
+                    alternatives = results["alternatives"]
+                    options = matches + alternatives
+                    io_manager.display_message(
+                        "Results sorted by "
+                        + ("Google rating." if sort_by == "rating"
+                           else "travel distance."))
+                    brns_io.show_result_list(results)
+                    continue
                 if action == "again":
                     refined = io_manager.refine_search_request(
                         request, session["user"]["preferences"], config)
@@ -180,6 +194,13 @@ def run_search(session, config, automatic=False):
                                 "Search change cancelled; previous "
                                 "results remain.")
                             continue
+                    for wish in validated[OTHER_PREFERENCES]:
+                        if (wish not in request[OTHER_PREFERENCES]
+                                and wish not in (
+                                    session["user"]["preferences"].get(
+                                        OTHER_PREFERENCES) or [])):
+                            remember_search_wishes(
+                                session, wish, config)
                     request = validated
                     payload = data_manager.serialize_search_request(request)
                     previous_restaurants = []
@@ -353,6 +374,19 @@ def handle_action(action, session, config, from_ai=False):
         return None
     if intent == "help":
         io_manager.display_help(action.get("topic"))
+        return None
+    if intent == "color":
+        io_manager.apply_color_setting(action["enabled"])
+        return None
+    if intent == "edit_menu":
+        selected = io_manager.choose_profile_edit()
+        if selected is None:
+            return None
+        if selected["action"] == "rename":
+            rename_user(session)
+            return None
+        session.update(field=selected["field"],
+                       location_action=selected["location_action"])
         return None
     if intent == "edit":
         session.update(field=action["field"],

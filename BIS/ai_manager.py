@@ -21,6 +21,10 @@ GEMINI_URL = os.getenv(
     "BITEFINDER_GEMINI_URL",
     "https://generativelanguage.googleapis.com/v1beta/models",
 )
+GROQ_URL = os.getenv(
+    "BITEFINDER_GROQ_URL",
+    "https://api.groq.com/openai/v1/chat/completions",
+)
 
 # BIS owns this fallback order. Keep it independent of BRNS's model chain.
 MODEL_CHAIN = [
@@ -28,6 +32,21 @@ MODEL_CHAIN = [
     {"provider": "gemini", "model": "gemini-3.6-flash"},
     {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
 ]
+
+
+def _extend_bis_chain_with_groq():
+    """Fetch Groq chat models at startup and append them to MODEL_CHAIN."""
+    from dotenv import load_dotenv
+    load_dotenv(BASE_DIR.parent / ".env")
+    api_key = os.getenv("GROQ_API_KEY", "").strip()
+    if not api_key:
+        return
+    from shared.groq_models import fetch_chat_models
+    for model_id in fetch_chat_models(api_key):
+        MODEL_CHAIN.append({"provider": "groq", "model": model_id})
+
+
+_extend_bis_chain_with_groq()
 
 
 def load_api_keys():
@@ -180,6 +199,41 @@ def _call_gemini(payload, model, config):
     raise RuntimeError("Gemini rejected the request.")
 
 
+def _call_groq(payload, model, config):
+    """Call Groq's chat-completions endpoint for a BIS JSON response."""
+    api_key = config.get("groq_api_key")
+    if not api_key:
+        raise RuntimeError("No Groq API key is configured for BIS.")
+    headers = {"Authorization": f"Bearer {api_key}",
+               "Content-Type": "application/json"}
+    groq_payload = dict(payload, model=model)
+    for use_json_mode in (True, False):
+        if use_json_mode:
+            groq_payload["response_format"] = {"type": "json_object"}
+        else:
+            groq_payload.pop("response_format", None)
+        try:
+            response = requests.post(
+                GROQ_URL, headers=headers, json=groq_payload,
+                timeout=(3, 12))
+        except requests.RequestException as error:
+            raise RuntimeError("Groq request failed. Please retry.") from error
+        if response.status_code == 400 and use_json_mode:
+            continue
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"Groq request failed: HTTP {response.status_code}.")
+        try:
+            content = response.json()["choices"][0]["message"]["content"]
+        except (ValueError, KeyError, IndexError, TypeError) as error:
+            raise RuntimeError(
+                "Groq returned an unexpected response.") from error
+        if not isinstance(content, str) or not content.strip():
+            raise RuntimeError("Groq returned an empty response.")
+        return content.strip()
+    raise RuntimeError("Groq rejected the request.")
+
+
 def _parse_json_response(content):
     """Parse a JSON object from the model response."""
     cleaned = content.strip()
@@ -224,6 +278,8 @@ def _call_json_with_fallback(payload, config, validator=None):
                 and (config.get("openrouter_api_keys")
                      or config.get("openrouter_api_key"))):
             continue
+        if provider == "groq" and not config.get("groq_api_key"):
+            continue
         if provider == "gemini" and not config.get("gemini_api_key"):
             continue
         if provider == "openrouter" and not (
@@ -235,6 +291,8 @@ def _call_json_with_fallback(payload, config, validator=None):
                 content = _call_gemini(payload, model, config)
             elif provider == "openrouter":
                 content = _call_openrouter(dict(payload, model=model), config)
+            elif provider == "groq":
+                content = _call_groq(payload, model, config)
             else:
                 continue
         except RuntimeError:
@@ -265,7 +323,9 @@ def has_fallback_provider(config):
              and config.get("gemini_api_key")
              or entry.get("provider") == "openrouter"
              and (config.get("openrouter_api_keys")
-                  or config.get("openrouter_api_key")))
+                  or config.get("openrouter_api_key"))
+             or entry.get("provider") == "groq"
+             and config.get("groq_api_key"))
         for entry in MODEL_CHAIN)
 
 
@@ -326,6 +386,61 @@ def process(record, config):
         "temperature": 0, "max_tokens": 700,
     }
     return _call_json_with_fallback(payload, config, validate_response)
+
+
+def interpret_command(text, config):
+    """Classify natural language at the idle BIS command prompt."""
+    if config.get("ai_bypass"):
+        return {"command": "unknown", "field": None}
+    from sources.profile_schema import clean_text
+
+    payload = {
+        "model": config.get("openrouter_model", ""),
+        "messages": [
+            {"role": "system", "content": (
+                "Classify an explicit BiteFinder command request. Do not "
+                "interpret restaurant wishes or profile answers as commands. "
+                "Return JSON only with exactly command and field. command is "
+                "one of profile, search, help, edit, add_location, "
+                "remove_location, reset, logout, quit, color_on, color_off, "
+                "unknown. For edit, field is one of location, "
+                "max_distance_km, max_travel_time_minutes, "
+                "budget_per_person, dietary_requirements, liked_cuisines, "
+                "disliked_cuisines, other_preferences, username, or null "
+                "when the field is unclear. For every other command field "
+                "must be null. 'I want to edit my profile' means edit with "
+                "a null field so BiteFinder can show the edit menu. "
+                "Choose a command only when the user clearly asks to perform "
+                "it. Examples: 'search me a restaurant' is search; 'show my "
+                "profile' is profile; 'turn colors off' is color_off."
+            )},
+            {"role": "user", "content": clean_text(text, 500)},
+        ],
+        "temperature": 0,
+        "max_tokens": 100,
+    }
+    commands = {
+        "profile", "search", "help", "edit", "add_location",
+        "remove_location", "reset", "logout", "quit", "color_on",
+        "color_off", "unknown",
+    }
+    fields = {
+        "location", "max_distance_km", "max_travel_time_minutes",
+        "budget_per_person", "dietary_requirements", "liked_cuisines",
+        "disliked_cuisines", "other_preferences", "username", None,
+    }
+
+    def check(parsed):
+        if set(parsed) != {"command", "field"}:
+            raise ValueError("Invalid command interpretation response.")
+        command, field = parsed["command"], parsed["field"]
+        if command not in commands or field not in fields:
+            raise ValueError("Invalid interpreted command.")
+        if command != "edit" and field is not None:
+            raise ValueError("Only edit commands may include a field.")
+        return parsed
+
+    return _call_json_with_fallback(payload, config, check)
 
 
 def interpret_location(text, config):
@@ -546,6 +661,121 @@ def review_prompt_text(text, config, context, maximum=1000):
     return reviewed
 
 
+def equivalent_saved_request(text, saved, config):
+    """Return the first semantically equivalent saved request, or None."""
+    if not saved:
+        return None
+    if config.get("ai_bypass"):
+        key = " ".join(text.casefold().split())
+        return next((item for item in saved
+                     if " ".join(item.casefold().split()) == key), None)
+    payload = {
+        "model": config.get("openrouter_model", ""),
+        "messages": [
+            {"role": "system", "content": (
+                "Compare one new restaurant preference with an ordered list "
+                "of saved preferences. Decide whether they are logically "
+                "equivalent, including reordered wording and rating forms "
+                "such as 'minimum 4.5 stars', 'at least 4.5 stars', and "
+                "'4.5 stars or higher'. Different strictness is not "
+                "equivalent: a soft preference is different from a hard "
+                "minimum. Return JSON only: {\"equivalent_index\": "
+                "integer or null}. Use the zero-based index of the first "
+                "equivalent saved preference."
+            )},
+            {"role": "user", "content": json.dumps(
+                {"new_request": text, "saved_requests": saved},
+                ensure_ascii=False)},
+        ],
+        "temperature": 0,
+        "max_tokens": 80,
+    }
+
+    def check(parsed):
+        if set(parsed) != {"equivalent_index"}:
+            raise ValueError("Invalid preference comparison response.")
+        index = parsed["equivalent_index"]
+        if index is not None and (
+                type(index) is not int or not 0 <= index < len(saved)):
+            raise ValueError("Invalid equivalent preference index.")
+        return index
+
+    index = _call_json_with_fallback(payload, config, check)
+    return saved[index] if index is not None else None
+
+
+def classify_search_constraints(text, config):
+    """Identify hard wording and star intent without changing the request."""
+    if config.get("ai_bypass"):
+        rating_match = re.search(
+            r"\b([1-5](?:\.\d+)?)\s*(?:stars?|/\s*5)\b", text, re.I)
+        hard = bool(re.search(
+            r"\b(?:only|must|required|at least|minimum|no less than|"
+            r"exclusively)\b", text, re.I))
+        cuisine = next((item for item in (
+            "chinese", "malay", "indian", "peranakan", "indonesian", "thai",
+            "vietnamese", "filipino", "japanese", "korean", "western",
+            "italian", "french", "american", "mexican", "turkish",
+            "middle eastern", "mediterranean", "fusion", "lebanese")
+            if item in text.casefold() and hard), None)
+        return {"hard_requirement": hard, "hard_cuisine": cuisine,
+                "rating": (float(rating_match.group(1))
+                           if rating_match else None),
+                "rating_is_minimum": bool(rating_match and hard)}
+    payload = {
+        "model": config.get("openrouter_model", ""),
+        "messages": [
+            {"role": "system", "content": (
+                "Classify a restaurant search request. Words such as only, "
+                "must, exclusively, minimum, at least, no less than, or "
+                "equivalent wording make a requirement hard. A bare phrase "
+                "such as '4.5 stars' is a soft rating preference unless the "
+                "wording explicitly makes it a minimum. Return JSON only "
+                "with exactly: hard_requirement (boolean), hard_cuisine "
+                "(one supported cuisine or null), rating (number 1-5 or "
+                "null), rating_is_minimum (boolean). Supported cuisines: "
+                "chinese, malay, indian, peranakan, indonesian, thai, "
+                "vietnamese, filipino, japanese, korean, western, italian, "
+                "french, american, mexican, turkish, middle eastern, "
+                "mediterranean, fusion, lebanese."
+            )},
+            {"role": "user", "content": text},
+        ],
+        "temperature": 0,
+        "max_tokens": 120,
+    }
+    supported = {
+        "chinese", "malay", "indian", "peranakan", "indonesian", "thai",
+        "vietnamese", "filipino", "japanese", "korean", "western", "italian",
+        "french", "american", "mexican", "turkish", "middle eastern",
+        "mediterranean", "fusion", "lebanese",
+    }
+
+    def check(parsed):
+        required = {"hard_requirement", "hard_cuisine", "rating",
+                    "rating_is_minimum"}
+        if set(parsed) != required:
+            raise ValueError("Invalid hard-requirement response.")
+        if type(parsed["hard_requirement"]) is not bool:
+            raise ValueError("Invalid hard-requirement flag.")
+        cuisine = parsed["hard_cuisine"]
+        if isinstance(cuisine, str):
+            cuisine = " ".join(cuisine.casefold().split())
+        if cuisine not in supported | {None}:
+            raise ValueError("Invalid hard cuisine.")
+        rating = parsed["rating"]
+        if rating is not None and (
+                type(rating) not in (int, float) or not 1 <= rating <= 5):
+            raise ValueError("Invalid preferred rating.")
+        if type(parsed["rating_is_minimum"]) is not bool:
+            raise ValueError("Invalid minimum-rating flag.")
+        if parsed["rating_is_minimum"] and rating is None:
+            raise ValueError("A minimum rating needs a rating.")
+        return dict(parsed, hard_cuisine=cuisine)
+
+    return _call_json_with_fallback(payload, config, check)
+
+
 def interpret_search_request(request, today_request, config):
     """Propose a structured search from today's natural-language request."""
     if config.get("ai_bypass"):
@@ -568,6 +798,10 @@ def interpret_search_request(request, today_request, config):
                 "wishes explicitly stated in today_request; use short strings. "
                 "Preserve any stated minimum Google star rating exactly as a "
                 "numeric star threshold (for example, 'minimum 4.5 stars'). "
+                "Other preferences are the strongest part of the search. "
+                "Preserve words such as only, must, minimum, and at least "
+                "because they mark hard constraints. A bare star rating "
+                "without minimum wording remains a soft preference. "
                 "If today_request conflicts with a confirmed choice, reflect "
                 "the conflicting choice so the next layer can ask the user. "
                 "Do not invent locations, restrictions, or restaurant facts. "

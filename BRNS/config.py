@@ -7,14 +7,17 @@ ENV_FILE = BASE_DIR.parent / ".env"
 load_dotenv(ENV_FILE)
 DEBUG = os.getenv("DEBUG", "false").strip().lower() == "true"
 
-# --- AI layer: OpenRouter + direct Gemini (separate quota pools) ---
+# --- AI layer: OpenRouter + direct Gemini + Groq (separate quota pools) ---
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")   # from aistudio.google.com — free, no card
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 OPENROUTER_URL = os.getenv("BITEFINDER_OPENROUTER_URL",
                             "https://openrouter.ai/api/v1/chat/completions")
 GEMINI_URL = os.getenv("BITEFINDER_GEMINI_URL",
                         "https://generativelanguage.googleapis.com/v1beta/models")
+GROQ_URL = os.getenv("BITEFINDER_GROQ_URL",
+                      "https://api.groq.com/openai/v1/chat/completions")
 
 # Try the responsive direct provider first; retain OpenRouter as fallback.
 MODEL_CHAIN = [
@@ -22,6 +25,18 @@ MODEL_CHAIN = [
     {"provider": "gemini", "model": "gemini-3.6-flash"},        # separate daily pool
     {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
 ]
+
+
+def _extend_chain_with_groq():
+    """Fetch Groq chat models at startup and append them to MODEL_CHAIN."""
+    if not GROQ_API_KEY:
+        return
+    from shared.groq_models import fetch_chat_models
+    for model_id in fetch_chat_models(GROQ_API_KEY):
+        MODEL_CHAIN.append({"provider": "groq", "model": model_id})
+
+
+_extend_chain_with_groq()
 
 # --- IO layer: Google Maps Platform ---
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")

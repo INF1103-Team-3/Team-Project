@@ -10,11 +10,12 @@ those plans from executable behavior.
 ## 1. The three running paths
 
 ```text
-INDEPENDENT MUIS SNAPSHOT REFRESH             BRC JSON CHECKER
-BRC/muis_data_scraper.py                     BRC/main.py check
-  -> Official MUIS establishment search          -> BRC IO reads restaurant JSON
-  -> Targeted name queries, with coverage           and the saved MUIS snapshot
-  -> BRC/data/muis_establishments.json            -> BRC AI proposes outlet matches
+COMPLETE MUIS SCRAPE / DATABASE BUILD         BRC JSON CHECKER
+BRC/main.py (no input)                       BRC/main.py --input/--stdin
+  -> BRC IO loads or runs scraper.py             -> BRC IO reads restaurant JSON
+  -> BRC AI assigns cuisine tags                    and the clean halal database
+  -> BRC Logic verifies and deduplicates           -> BRC AI proposes outlet matches
+  -> BRC Data saves halal_restaurants.json
                                                   -> BRC Logic verifies evidence
                                                   -> BRC Data writes checked JSON
 
@@ -46,8 +47,8 @@ hint as **unofficial; not checked** until a BRC result is explicitly consumed.
 | Command from the repository root | What it runs |
 | --- | --- |
 | `python BIS/main.py` | Interactive account, profile, and search chatbot. This is the normal user entry point. |
-| `python -m BRC.muis_data_scraper --input BRNS/data/restaurants.json` | Independently refresh a targeted MUIS snapshot for those restaurant names. |
-| `python -m BRC.main check --input BRNS/data/restaurants.json --output BRC/data/checked_restaurants.json` | Check every restaurant against that snapshot and write complete JSON. A single restaurant object is accepted too. |
+| `python -m BRC.main` | Open the verbose BRC menu to build the database or check default, selected, or pasted restaurant JSON. |
+| `python -m BRC.main --input BRNS/data/restaurants.json --output BRC/data/checked_restaurants.json` | Check every restaurant against the clean database. A single object is accepted too. |
 | `python BRNS/main.py < request.json` | Standalone BRNS adapter: reads one BIS-shaped JSON object from standard input, runs one search, and prints results. Normal BIS use calls `BRNS.main.search()` directly. |
 
 Use the Python environment with the requirements installed. A root `.env`
@@ -58,31 +59,30 @@ Do not put actual credentials in documentation or version control.
 
 ### 2.1 Refreshing the halal directory
 
-`BRC/muis_data_scraper.py` is a standalone command. It reads restaurant names
-from a JSON object or array (or repeated `--query` options), obtains a session
+`BRC/scraper.py` can run alone, while `BRC/main.py` invokes it when needed. It
+retrieves all MUIS eating establishments by splitting capped searches into
+smaller postal-prefix searches. The scraper obtains a session
 token from MUIS's public establishment portal, and queries its search endpoint
 for each name. It keeps eating-establishment listings with their certificate
 number, name, address, postal code and scheme. It refuses a response that may
 be truncated or malformed. Only after all queries succeed does BRC Data save
 the snapshot atomically to `BRC/data/muis_establishments.json`. The snapshot
-records its source, fetch time, name coverage and listings. This is a targeted
-snapshot for the requested names, not a download of the whole directory.
+records its source, fetch time, complete postal coverage and listings.
 
 ### 2.2 How BRC uses the directory
 
-`BRC/main.py check` takes JSON from a file or standard input and uses the
-existing snapshot. BRC IO validates an object or array and loads a snapshot
-that covers every input name and is at most seven days old. It never calls the
-scraper. BRC AI sees only MUIS listings at the same postal code and proposes
+`BRC/main.py` without arguments opens a verbose menu for building or checking
+default, selected, or pasted restaurant JSON. With command-line file or
+standard input, BRC IO validates an object or array and loads that database;
+if it is absent, the build workflow runs first. BRC AI sees narrowed candidates
+and proposes
 an outlet-specific certificate number or null. BRC Logic checks the original
 MUIS record's name, postal code, address, unit and any validity information
 before setting `halal_certification` to `official`. BRC Data writes the full
 checked object or array, preserving original fields and order. Missing
 coverage or an incomplete snapshot stops the check.
 
-The older interactive BRC search and HalalFreak scraper have been removed.
-`BRC/restaurant_history.json` is retained as historical data; the MUIS checker
-does not read or update it.
+The older interactive BRC search, targeted scraper, and history data are removed.
 
 ## 3. BIS startup, accounts, and saved profile
 
@@ -400,15 +400,12 @@ It is not a source of restaurant or certification truth.
 
 | File | Role and main calls |
 | --- | --- |
-| `BRC/muis_data_scraper.py` | Independent MUIS portal search and targeted snapshot refresh. |
-| `BRC/main.py` | Object/array JSON checking command and IO → AI → Logic → Data coordinator. |
-| `BRC/io_manager.py` | Validates JSON input and reads the existing MUIS snapshot. |
-| `BRC/ai_manager.py` | Proposes an outlet certificate number from same-postal MUIS candidates using Gemini. |
-| `BRC/logic_manager.py` | Verifies the original MUIS outlet facts and applies certification updates. |
-| `BRC/data_manager.py` | Loads the MUIS snapshot and writes checked JSON atomically. |
-| `BRC/data/muis_establishments.json` | Locally generated MUIS search snapshot with query coverage and retrieval time. |
-| `BRC/restaurant_history.json` | Retained historical data from the removed interactive search; not read by current BRC. |
-| `BRC/.gitkeep` | Keeps the BRC directory present in version control. |
+| `BRC/main.py` | Coordinates the build, single object, and array workflows. |
+| `BRC/scraper.py` | Retrieves the complete official MUIS directory with resumable postal-prefix coverage. |
+| `BRC/io_manager.py` | Chooses the scenario, validates input, loads sources, and narrows candidates. |
+| `BRC/ai_manager.py` | Tags cuisines and proposes exact outlet matches using Gemini. |
+| `BRC/logic_manager.py` | Validates cuisine output, outlet identity, expiry, and certification changes. |
+| `BRC/data_manager.py` | Atomically stores raw, clean, checked, progress, and cache JSON. |
 
 ### Shared and repository-level files
 

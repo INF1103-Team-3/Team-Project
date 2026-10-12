@@ -34,6 +34,7 @@ def load_config():
             default=30,
         ),
         "gemini_api_key": os.getenv("GEMINI_API_KEY", "").strip(),
+        "groq_api_key": os.getenv("GROQ_API_KEY", "").strip(),
         "google_maps_api_key": os.getenv("GOOGLE_MAPS_API_KEY", "").strip(),
         "smtp_host": os.getenv("SMTP_HOST", "").strip(),
         "smtp_bypass": (
