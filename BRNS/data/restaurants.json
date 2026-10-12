@@ -124,5 +124,579 @@
     },
     "wheelchair_accessible": true,
     "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJ71MpIr492jERk2zyfgPH8GM",
+    "name": "Kimchi Mama @ Changi Airport Terminal 2 (T2)",
+    "postal_code": "819643",
+    "address": "60 Airport Boulevard, #03-09, Changi Airport Terminal 2 Singapore Changi Airport, Singapore 819643",
+    "number": "8040 8327",
+    "g_rating": "4.7",
+    "g_no_reviews": "125",
+    "cuisine": "korean",
+    "dietary": [],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1030", "2200"],
+      "tuesday": ["1030", "2200"],
+      "wednesday": ["1030", "2200"],
+      "thursday": ["1030", "2200"],
+      "friday": ["1030", "2200"],
+      "saturday": ["1030", "2200"],
+      "sunday": ["1030", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJZ8EQ_8E92jERrxdfc6Oufgk",
+    "name": "Gwangjang GAON",
+    "postal_code": "819666",
+    "address": "78 Airport Blvd., #02-243 Jewel Changi Airport, Singapore 819666",
+    "number": "8279 3101",
+    "g_rating": "4.6",
+    "g_no_reviews": "1068",
+    "cuisine": "korean",
+    "dietary": [
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 60.0,
+    "opening_hours": {
+      "monday": ["1100", "2200"],
+      "tuesday": ["1100", "2200"],
+      "wednesday": ["1100", "2200"],
+      "thursday": ["1100", "2200"],
+      "friday": ["1100", "2200"],
+      "saturday": ["1100", "2200"],
+      "sunday": ["1100", "2200"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJbwanJ3E92jERZV1-o1TejvE",
+    "name": "NY Char Grill",
+    "postal_code": "819666",
+    "address": "78 Airport Blvd., #03 - 227 / 228, Singapore 819666",
+    "number": "8772 4227",
+    "g_rating": "4.5",
+    "g_no_reviews": "594",
+    "cuisine": "asian_fusion",
+    "dietary": [],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 50.0,
+    "opening_hours": {
+      "monday": ["1100", "2230"],
+      "tuesday": ["1100", "2230"],
+      "wednesday": ["1100", "2230"],
+      "thursday": ["1100", "2230"],
+      "friday": ["1100", "2230"],
+      "saturday": ["1100", "2230"],
+      "sunday": ["1100", "2230"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJVTacb2w92jERCmGyLLOrWuY",
+    "name": "Korea Culture | T3 Changi Airport | Halal Certified",
+    "postal_code": "819663",
+    "address": "65 Airport Boulevard #03-33, Terminal 3 Singapore Changi Airport, Singapore 819663",
+    "number": "6592 2173",
+    "g_rating": "4.6",
+    "g_no_reviews": "973",
+    "cuisine": "korean",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 30.0,
+    "opening_hours": {
+      "monday": ["1030", "2200"],
+      "tuesday": ["1030", "2200"],
+      "wednesday": ["1030", "2200"],
+      "thursday": ["1030", "2200"],
+      "friday": ["1030", "2200"],
+      "saturday": ["1030", "2200"],
+      "sunday": ["1030", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJtyIbO1M92jERJgYzy-qZ0YI",
+    "name": "Pizzamaru @ Changi Airport Terminal 2 (T2)",
+    "postal_code": "819643",
+    "address": "60 Airport Boulevard, #03-10, Changi Airport Terminal 2 Singapore Changi Airport, Singapore 819643",
+    "number": "8600 9428",
+    "g_rating": "4.9",
+    "g_no_reviews": "22",
+    "cuisine": "korean",
+    "dietary": [],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 30.0,
+    "opening_hours": {
+      "monday": ["1030", "2200"],
+      "tuesday": ["1030", "2200"],
+      "wednesday": ["1030", "2200"],
+      "thursday": ["1030", "2200"],
+      "friday": ["1030", "2200"],
+      "saturday": ["1030", "2200"],
+      "sunday": ["1030", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJOXHGUwA92jERXlGroJhBVvY",
+    "name": "BHC Chicken Changi Jewel",
+    "postal_code": "819666",
+    "address": "78 Airport Blvd., #B1 - 247, Singapore 819666",
+    "number": null,
+    "g_rating": "3.7",
+    "g_no_reviews": "27",
+    "cuisine": "korean",
+    "dietary": [],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 30.0,
+    "opening_hours": {
+      "monday": ["1100", "2200"],
+      "tuesday": ["1100", "2200"],
+      "wednesday": ["1100", "2200"],
+      "thursday": ["1100", "2200"],
+      "friday": ["1100", "2200"],
+      "saturday": ["1100", "2200"],
+      "sunday": ["1100", "2200"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJIytDNtU92jERzxCKsGnVL1Q",
+    "name": "JJ Food Express",
+    "postal_code": "819666",
+    "address": "78 Airport Boulevard, #B2-238/239/240, Jewel, Singapore Changi Airport, Singapore 819666",
+    "number": null,
+    "g_rating": "2.6",
+    "g_no_reviews": "18",
+    "cuisine": "chinese",
+    "dietary": [],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["1130", "2200"],
+      "tuesday": ["1130", "2200"],
+      "wednesday": ["1130", "2200"],
+      "thursday": ["1130", "2200"],
+      "friday": ["1130", "2200"],
+      "saturday": ["1130", "2200"],
+      "sunday": ["1130", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJ8f8xozw92jER4rhP2g9Qwbc",
+    "name": "Kiwami: Ramen & Gyoza Bar (Jewel)",
+    "postal_code": "819666",
+    "address": "78 Airport Blvd, #01-225 Jewel, Singapore Changi Airport, Singapore 819666",
+    "number": "6241 5529",
+    "g_rating": "4.7",
+    "g_no_reviews": "1629",
+    "cuisine": "ramen",
+    "dietary": [
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 30.0,
+    "opening_hours": {
+      "monday": ["1100", "2200"],
+      "tuesday": ["1100", "2200"],
+      "wednesday": ["1100", "2200"],
+      "thursday": ["1100", "2200"],
+      "friday": ["1100", "2200"],
+      "saturday": ["1100", "2200"],
+      "sunday": ["1100", "2200"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJPYjXBHc92jEROusl38YrQ_c",
+    "name": "Lotteria",
+    "postal_code": "819666",
+    "address": "78 Airport Blvd., #B1 - 248, Singapore 819666",
+    "number": null,
+    "g_rating": "4.1",
+    "g_no_reviews": "143",
+    "cuisine": "fast food",
+    "dietary": [],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1000", "2200"],
+      "tuesday": ["1000", "2200"],
+      "wednesday": ["1000", "2200"],
+      "thursday": ["1000", "2200"],
+      "friday": ["1000", "2200"],
+      "saturday": ["1000", "2200"],
+      "sunday": ["1000", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJBZP7ypE92jERPlhKGrflGyQ",
+    "name": "Wa-En Wagyu Yakiniku",
+    "postal_code": "819666",
+    "address": "78 Airport Boulevard, #01-224 Jewel, Singapore Changi Airport, Singapore 819666",
+    "number": "6246 7488",
+    "g_rating": "4.9",
+    "g_no_reviews": "2524",
+    "cuisine": "yakiniku",
+    "dietary": [],
+    "avg_price_low_sgd": 100.0,
+    "avg_price_high_sgd": null,
+    "opening_hours": {
+      "monday": ["1100", "2200"],
+      "tuesday": ["1100", "2200"],
+      "wednesday": ["1100", "2200"],
+      "thursday": ["1100", "2200"],
+      "friday": ["1100", "2200"],
+      "saturday": ["1100", "2200"],
+      "sunday": ["1100", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJSZRGE0o92jERhZoyIzo0a7M",
+    "name": "GOPIZZA - Changi Airport Terminal 2",
+    "postal_code": "819643",
+    "address": "T2 D/T South, Unit No. 02-K-15 Changi Airport, Changi Airport Terminal 2 Departure Hall, Singapore 819643",
+    "number": "9674 0626",
+    "g_rating": "4.9",
+    "g_no_reviews": "672",
+    "cuisine": "western",
+    "dietary": [
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": [["0000", "0030"], ["0600", "2359"]],
+      "tuesday": [["0000", "0030"], ["0600", "2359"]],
+      "wednesday": [["0000", "0030"], ["0600", "2359"]],
+      "thursday": [["0000", "0030"], ["0600", "2359"]],
+      "friday": [["0000", "0030"], ["0600", "2359"]],
+      "saturday": [["0000", "0030"], ["0600", "2359"]],
+      "sunday": [["0000", "0030"], ["0600", "2359"]]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJex2yY_g92jERzkmTprtNM6k",
+    "name": "Ichikokudo Hokkaido Ramen",
+    "postal_code": "819663",
+    "address": "65 Airport Blvd., Terminal 3 Terminal 3, Singapore 819663",
+    "number": null,
+    "g_rating": "4.4",
+    "g_no_reviews": "861",
+    "cuisine": "ramen",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1100", "2330"],
+      "tuesday": ["1100", "2330"],
+      "wednesday": ["1100", "2330"],
+      "thursday": ["1100", "2330"],
+      "friday": ["1100", "2330"],
+      "saturday": ["1100", "2330"],
+      "sunday": ["1100", "2330"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJnZgOI3Y92jERMQZ4ZqI7pqc",
+    "name": "Coucou Hotpot‧Brew Tea (Jewel Changi Airport)",
+    "postal_code": "819666",
+    "address": "78 Airport Blvd., #02 - 208 / 209, Singapore 819666",
+    "number": "6992 2549",
+    "g_rating": "4.8",
+    "g_no_reviews": "8754",
+    "cuisine": "hot_pot",
+    "dietary": [
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": null,
+    "avg_price_high_sgd": null,
+    "opening_hours": {
+      "monday": ["1100", "2130"],
+      "tuesday": ["1100", "2130"],
+      "wednesday": ["1100", "2130"],
+      "thursday": ["1100", "2130"],
+      "friday": ["1100", "2230"],
+      "saturday": ["1100", "2230"],
+      "sunday": ["1100", "2130"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJt6blOwA92jERmBubUk7cxr8",
+    "name": "Buk Chang Dong Soon Tofu (Changi Airport T2)",
+    "postal_code": "819643",
+    "address": "60 Airport Boulevard Singapore Changi Airport, Changi Airport Terminal 2 Transit Lounge, Singapore 819643",
+    "number": null,
+    "g_rating": "3.6",
+    "g_no_reviews": "99",
+    "cuisine": "korean",
+    "dietary": [],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["0000", "2359"],
+      "tuesday": ["0000", "2359"],
+      "wednesday": ["0000", "2359"],
+      "thursday": ["0000", "2359"],
+      "friday": ["0000", "2359"],
+      "saturday": ["0000", "2359"],
+      "sunday": ["0000", "2359"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJUx8eOEE92jERmp8crTVcq-8",
+    "name": "Cosford Container Park",
+    "postal_code": "499550",
+    "address": "30 Cosford Rd, Singapore 499550",
+    "number": "8032 5336",
+    "g_rating": "4.8",
+    "g_no_reviews": "6037",
+    "cuisine": "european",
+    "dietary": [],
+    "avg_price_low_sgd": null,
+    "avg_price_high_sgd": null,
+    "opening_hours": {
+      "monday": ["1130", "2300"],
+      "tuesday": ["1130", "2300"],
+      "wednesday": ["1130", "2300"],
+      "thursday": ["1130", "2300"],
+      "friday": ["1130", "2359"],
+      "saturday": ["0930", "2359"],
+      "sunday": ["0930", "2300"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJL4jqx3Y92jEREb1HCgYr7_E",
+    "name": "El Carbon® @ T2",
+    "postal_code": "819643",
+    "address": "60 Airport Blvd., Level 3M Terminal 2, Singapore 819643",
+    "number": null,
+    "g_rating": "3.4",
+    "g_no_reviews": "23",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["1000", "1930"],
+      "tuesday": ["1000", "1930"],
+      "wednesday": ["1000", "1930"],
+      "thursday": ["1000", "1930"],
+      "friday": ["1000", "1930"],
+      "saturday": [],
+      "sunday": ["1000", "1900"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJ_UkQXok82jERUhx_xfbPKdc",
+    "name": "Tonkatsu by Ma Maison @ Jewel",
+    "postal_code": "819666",
+    "address": "78 Airport Blvd., #02 - 211, Singapore 819666",
+    "number": "6242 9322",
+    "g_rating": "4.4",
+    "g_no_reviews": "598",
+    "cuisine": "tonkatsu",
+    "dietary": [],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 30.0,
+    "opening_hours": {
+      "monday": ["1100", "2200"],
+      "tuesday": ["1100", "2200"],
+      "wednesday": ["1100", "2200"],
+      "thursday": ["1100", "2200"],
+      "friday": ["1100", "2130"],
+      "saturday": ["1100", "2200"],
+      "sunday": ["1100", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJKYXTkbs92jERGXwXp2z8aRY",
+    "name": "Foodies’ Clan @ T2 Level 3M",
+    "postal_code": "819643",
+    "address": "60 Airport Boulevard, Level 3M, #0610-ASC, Changi Airport Terminal 2 Singapore Changi Airport, Singapore 819643",
+    "number": null,
+    "g_rating": "3.4",
+    "g_no_reviews": "83",
+    "cuisine": null,
+    "dietary": [],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0700", "1930"],
+      "tuesday": ["0700", "1930"],
+      "wednesday": ["0700", "1930"],
+      "thursday": ["0700", "1930"],
+      "friday": ["0700", "1930"],
+      "saturday": ["0700", "1930"],
+      "sunday": ["0700", "1930"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJvRwfVoo92jERNI0pATLXTDs",
+    "name": "Five Spice @ Jewel",
+    "postal_code": "819666",
+    "address": "78 Airport Blvd., #B2-238 239/240, Singapore 819666",
+    "number": null,
+    "g_rating": "3.7",
+    "g_no_reviews": "294",
+    "cuisine": null,
+    "dietary": [],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1000", "2200"],
+      "tuesday": ["1000", "2200"],
+      "wednesday": ["1000", "2200"],
+      "thursday": ["1000", "2200"],
+      "friday": ["1000", "2200"],
+      "saturday": ["1000", "2200"],
+      "sunday": ["1000", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJ5b2Mxo082jERWktY6-ruPMM",
+    "name": "Central Thai | T3 Changi Airport | Halal Certified Casual Thai Cuisine",
+    "postal_code": "819663",
+    "address": "65 Airport Boulevard 03-30/31 Changi Airport, Terminal 3 Public Area, Singapore 819663",
+    "number": "9485 4214",
+    "g_rating": "4.6",
+    "g_no_reviews": "769",
+    "cuisine": "thai",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 50.0,
+    "opening_hours": {
+      "monday": ["1130", "2130"],
+      "tuesday": ["1130", "2130"],
+      "wednesday": ["1130", "2130"],
+      "thursday": ["1130", "2130"],
+      "friday": ["1130", "2200"],
+      "saturday": ["1130", "2200"],
+      "sunday": ["1130", "2130"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJc8Fv8ow82jERTmcl9N2UrGk",
+    "name": "The Kitchen By Wolfgang Puck",
+    "postal_code": null,
+    "address": "60 Airport Blvd., Singapore",
+    "number": null,
+    "g_rating": "3.6",
+    "g_no_reviews": "388",
+    "cuisine": null,
+    "dietary": [],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 70.0,
+    "opening_hours": {
+      "monday": [["0000", "0030"], ["0600", "2359"]],
+      "tuesday": [["0000", "0030"], ["0600", "2359"]],
+      "wednesday": [["0000", "0030"], ["0600", "2359"]],
+      "thursday": [["0000", "0030"], ["0600", "2359"]],
+      "friday": [["0000", "0030"], ["0600", "2359"]],
+      "saturday": [["0000", "0030"], ["0600", "2359"]],
+      "sunday": [["0000", "0030"], ["0600", "2359"]]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJrYJgoa492jERsYaUmmyRU4Q",
+    "name": "McDonald's Jewel",
+    "postal_code": "819666",
+    "address": "78 Airport Boulevard Jewel, B1-298 Singapore Changi Airport, Singapore 819666",
+    "number": "6290 6434",
+    "g_rating": "3.1",
+    "g_no_reviews": "327",
+    "cuisine": "fast food",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["0630", "2359"],
+      "tuesday": ["0630", "2359"],
+      "wednesday": ["0630", "2359"],
+      "thursday": ["0630", "2359"],
+      "friday": ["0630", "2359"],
+      "saturday": ["0630", "2359"],
+      "sunday": ["0630", "2359"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJU_Xcwo082jERVXEj7_Vu1ys",
+    "name": "Kaveri Indian Vegetarian - Terminal 2 (AIRSIDE)",
+    "postal_code": "819643",
+    "address": "Airside – Terminal 2 Departure Transit Lounge Central Level 3, Located within the COOK HOUSE by KOUFU (Food Court, Stall No MR1, Singapore 819643",
+    "number": "6282 4288",
+    "g_rating": "4",
+    "g_no_reviews": "736",
+    "cuisine": "south_indian",
+    "dietary": [
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["0000", "2359"],
+      "tuesday": ["0000", "2359"],
+      "wednesday": ["0000", "2359"],
+      "thursday": ["0000", "2359"],
+      "friday": ["0000", "2359"],
+      "saturday": ["0000", "2359"],
+      "sunday": ["0000", "2359"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
   }
 ]

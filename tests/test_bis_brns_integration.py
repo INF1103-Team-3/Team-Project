@@ -736,6 +736,28 @@ class IntegrationTests(unittest.TestCase):
             bis_logic.validate_search_request(
                 transit, dict(transit, max_travel_minutes=30))
 
+    def test_refine_search_request_allows_changing_other_preferences(self):
+        from BIS import io_manager as bis_io
+        base = request()
+        with (
+            patch.object(bis_io, "read_input", return_value="other"),
+            patch.object(bis_io, "ask_search_wishes",
+                         return_value={"selected": ["quiet cafe"], "text": ""}) as ask_wishes,
+        ):
+            refined = bis_io.refine_search_request(
+                base, empty_preferences(), {"ai_bypass": True})
+        self.assertEqual(refined["other_preferences"], ["quiet cafe"])
+        ask_wishes.assert_called_once()
+
+        with (
+            patch.object(bis_io, "read_input", return_value="4"),
+            patch.object(bis_io, "ask_search_wishes",
+                         return_value={"selected": ["quiet cafe"], "text": "pet friendly"}),
+        ):
+            refined = bis_io.refine_search_request(
+                base, empty_preferences(), {"ai_bypass": True})
+        self.assertEqual(refined["other_preferences"], ["quiet cafe", "pet friendly"])
+
     def test_transit_matrix_and_ranking_use_verified_journey_time(self):
         transit = dict(request(), mode="transit", max_distance_km=None,
                        max_travel_minutes=45, dietary_requirements=[])
@@ -1339,6 +1361,19 @@ class IntegrationTests(unittest.TestCase):
         from BIS import logic_manager as bis_logic
         self.assertEqual(bis_logic.validate_special_request_text("4.5+ stars"),
                          "4.5+ stars")
+        self.assertEqual(brns_io._clean_free_text_query(
+            ["Minimum 4.5 stars"]), "")
+        self.assertEqual(brns_io._clean_free_text_query(
+            ["Minimum 4.5 stars", "spicy food"]), "spicy food")
+        with patch.object(brns_io.requests, "post") as post:
+            post.return_value.status_code = 200
+            post.return_value.json.return_value = {"places": []}
+            brns_io.fetch_by_profile_text((1.35, 103.98), {
+                "cuisine": "korean",
+                "free_text": "minimum 4.5 stars",
+            })
+            self.assertEqual(post.call_args.kwargs["json"]["textQuery"],
+                             "korean food")
 
     def test_brns_ai_receives_review_count_and_adjusted_rating(self):
         candidates = [
