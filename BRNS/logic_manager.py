@@ -1,214 +1,483 @@
-"""Logic layer — business rules applied to the AI-enriched record."""
-from datetime import datetime
-import config
-from io_manager import BAND_SYMBOLS
+"""Rank BRNS candidates against a validated BIS search request."""
 
-ALLOWED_DIETARY = {
-    "none": {"none", "vegetarian", "vegan", "halal"},
-    "halal": {"halal"},
-    "vegetarian": {"vegetarian", "vegan"},
-    "vegan": {"vegan"},
-}
+import json
+from datetime import datetime, timedelta, timezone
 
-BAND_ORDER = ["inexpensive", "moderate", "expensive", "very_expensive"]
-BAND_LOW = {"inexpensive": 0.0, "moderate": 8.0, "expensive": 15.0, "very_expensive": 30.0}
+from BRNS import config
+from shared import debug_log as log
 
 
-def _band_index(band):
-    return BAND_ORDER.index(band) if band in BAND_ORDER else -1
+def normalize_candidate(record, *, offline=False):
+    """Keep known facts; never turn a search hint into certification."""
+    candidate = dict(record)
+    # The future checker owns official certification; do not return
+    # saved claims as an official BRNS result.
+    candidate.pop("certification", None)
+    raw_cuisines = candidate.get("cuisines")
+    if raw_cuisines is None:
+        raw_cuisines = [candidate.get("cuisine")]
+    candidate["cuisines"] = [
+        item for item in raw_cuisines or [] if isinstance(item, str)
+        and item in _SUPPORTED_CUISINES
+    ]
+    raw_diet = candidate.get("dietary_requirements")
+    if raw_diet is None:
+        legacy = candidate.get("dietary")
+        raw_diet = ["vegetarian"] if legacy in ("vegetarian", "vegan") else (
+            ["halal"] if legacy == "halal" else [])
+    candidate["dietary_requirements"] = [
+        item for item in raw_diet if item in ("halal", "vegetarian")
+    ]
+    candidate["halal_status"] = (
+        "unofficial" if candidate.get("halal_hint")
+        or "halal" in candidate["dietary_requirements"] else "unverified"
+    )
+    # Saved records have no route from today's origin.
+    if offline:
+        candidate["walk_minutes"] = None
+        candidate["walk_meters"] = None
+        candidate["drive_minutes"] = None
+        candidate["drive_meters"] = None
+        candidate["transit_minutes"] = None
+        candidate["transit_meters"] = None
+        candidate["walk_source"] = None
+        candidate["drive_source"] = None
+        candidate["transit_source"] = None
+        candidate["source"] = "offline restaurants"
+    return candidate
 
 
-def _cheapest_price(r):
-    """Best available price signal: exact catalog price, then range start, then range end."""
-    if r.get("avg_price") is not None:
-        return r["avg_price"]
-    if r.get("price_start") is not None:
-        return r["price_start"]
-    if r.get("price_end") is not None:
-        return r["price_end"]
-    return None
+# This imports BIS's shared vocabulary without importing its interactive code.
+from BIS.sources.profile_schema import CUISINES as _SUPPORTED_CUISINES
 
 
-def _minutes(hhmm):
-    h, m = hhmm.split(":")
-    return int(h) * 60 + int(m)
-
-
-_GOOGLE_DAY = {"monday": 1, "tuesday": 2, "wednesday": 3, "thursday": 4,
-               "friday": 5, "saturday": 6, "sunday": 0}
-
-
-def _resolve_open_hours(restaurant, req):
-    """Returns the HH:MM-HH:MM window for the requested day (or today).
-    Catalog open_hours wins; Google weekly_hours (requested day) is fallback."""
-    eat_day = (req.get("eat_day") or "today").lower()
-    if eat_day != "today":
-        gday = _GOOGLE_DAY.get(eat_day)
-        weekly = restaurant.get("weekly_hours") or {}
-        if gday is not None and gday in weekly:
-            return weekly[gday], eat_day
-        return None, eat_day
-    # today: catalog hours are already today's; else Google's index for today
-    hours = restaurant.get("open_hours")
-    if hours:
-        return hours, "today"
-    weekly = restaurant.get("weekly_hours") or {}
-    today_gday = (datetime.now().weekday() + 1) % 7   # Mon=0 -> Google Sun=0
-    if today_gday in weekly:
-        return weekly[today_gday], "today"
-    return None, "today"
-
-def open_status(restaurant, req):
-    """'open' | 'closed' | 'unknown' for the requested day/time. Never invents."""
-    eat_time = req.get("eat_time", "now")
-    hours, _ = _resolve_open_hours(restaurant, req)
-    if not hours or "-" not in hours:
-        return "unknown"
-    start_s, end_s = hours.split("-")
-    start, end = _minutes(start_s), _minutes(end_s)
-    if eat_time == "now":
-        now = datetime.now()
-        t = now.hour * 60 + now.minute
+def decide_outcome(restaurant, request):
+    """Return match, alternative, or reject with explicit reasons."""
+    if restaurant.get("source") in ("google places", "saved + google places") \
+            and restaurant.get("open_now") is not True:
+        return "reject", 0, ["not confirmed open now"]
+    reasons = []
+    problems = []
+    unverified = []
+    cuisines = restaurant.get("cuisines") or []
+    if set(cuisines) & set(request["disliked_cuisines"]):
+        return "reject", 0, ["contains a disliked cuisine"]
+    wanted = request["cuisine"]
+    if wanted == "none":
+        pass
+    elif wanted in cuisines:
+        reasons.append("matches your selected cuisine")
+    elif cuisines:
+        problems.append("does not match your selected cuisine")
     else:
-        try:
-            t = _minutes(eat_time)
-        except (ValueError, AttributeError):
-            return "unknown"
-    return "open" if start <= t <= end else "closed"
+        unverified.append("cuisine unavailable")
 
+    dietary = set(restaurant.get("dietary_requirements") or [])
+    for requirement in request["dietary_requirements"]:
+        if requirement == "halal":
+            if restaurant.get("halal_status") == "unofficial":
+                unverified.append("Halal (unofficial; not checked)")
+            else:
+                unverified.append("halal status unverified")
+        elif requirement == "vegetarian" and "vegetarian" not in dietary:
+            unverified.append("vegetarian options unverified")
 
-def decide_outcome(restaurant, req):
-    """MULTI-CONDITION RULE using AI output fields.
-
-    Outcomes:
-      'match'       -> all hard rules pass; scored on preferences.
-      'alternative' -> shown with verified positives ('+'), disqualifiers
-                       ('!') and honest unknowns ('!'): dietary
-                       unverifiable, budget over max, travel over limit,
-                       or a requested field unverifiable.
-      'reject'      -> hard-failed (verified dietary conflict,
-                       overlap, rating below minimum) -> hidden.
-    Reasons are tagged here; display prints them verbatim."""
-    reasons = []    # positive reasons (why it's interesting)
-    problems = []   # disqualifiers (why it is not a match right now)
-    notes = []      # informational, does NOT demote a match
-    unverified = []  # requested field unverifiable -> demotes to alternative
-
-    # ---------- HARD RULE 1: dietary ----------
-    wanted = (req.get("dietary") or "none").lower()
-    r_dietary = restaurant.get("dietary", "none")
-    if r_dietary == "unknown":
-        if wanted != "none":
-            unverified.append("dietary certification unknown — please confirm with the restaurant")
-    elif r_dietary not in ALLOWED_DIETARY[wanted]:
-        return "reject", 0, ["dietary requirement not met"]
-
-    # ---------- HARD RULE 2: rating (verified-below-minimum -> hidden) ----------
-    min_rating = req.get("min_rating")
-    rating = restaurant.get("rating")
-    if min_rating is not None and rating is not None and rating < min_rating:
-        return "reject", 0, [f"rating {rating} is below your {min_rating} minimum"]
-
-    # ---------- BUDGET: dollar-max mode or band mode ----------
-    wanted_band = req.get("budget_band")
-    bmin, bmax = req.get("budget_min"), req.get("budget_max")
-    r_band = restaurant.get("price_band")
-    cheapest = _cheapest_price(restaurant)
-    has_price_signal = cheapest is not None or r_band is not None
-
-    if bmax is not None:
-        if cheapest is not None and cheapest > bmax:
-            problems.append(f"cheapest items around ${cheapest:.0f} "
-                            f"exceed your ${bmax:.0f} max")
-        elif r_band is not None and BAND_LOW.get(r_band, 0.0) > bmax:
-            problems.append(f"price band {BAND_SYMBOLS[r_band]} starts "
-                            f"above your ${bmax:.0f} max")
-    elif wanted_band and r_band is not None:
-        if _band_index(r_band) > _band_index(wanted_band):
-            problems.append(f"price band {BAND_SYMBOLS[r_band]} exceeds "
-                            f"your {BAND_SYMBOLS[wanted_band]} budget")
-
-    # ---------- TRAVEL (chosen mode only; other mode is display info) ----------
-    mode = req.get("mode", "walk")
-    if mode == "drive":
-        km_limit = req.get("max_drive_km")
-        d_meters = restaurant.get("drive_meters")
-        if km_limit is not None and d_meters is not None:
-            if (d_meters / 1000) > km_limit:
-                problems.append(f"would be a {d_meters / 1000:.1f} km drive, "
-                                f"over your {km_limit:.0f} km limit")
-        travel_unknown = (km_limit is not None and d_meters is None)
+    budget = request["budget_per_person"]
+    price = restaurant.get("avg_price")
+    minimum_price = restaurant.get("price_start")
+    maximum_price = restaurant.get("price_end")
+    if price is not None:
+        if price > budget:
+            problems.append(
+                f"average price SGD {price:g} exceeds your SGD {budget:g} budget")
+        else:
+            reasons.append("average price is within your budget")
+    elif minimum_price is not None and minimum_price > budget:
+        problems.append(
+            f"prices start at SGD {minimum_price:g}, over your budget")
+    elif (maximum_price is not None and maximum_price <= budget
+          and (minimum_price is None or minimum_price <= maximum_price)):
+        reasons.append("listed price range is within your budget")
+    elif minimum_price is not None:
+        unverified.append("some prices may fit; full budget unverified")
     else:
-        walk_limit = req.get("max_walk_minutes")
-        w_minutes = restaurant.get("walk_minutes")
-        if walk_limit is not None and w_minutes is not None and w_minutes > walk_limit:
-            problems.append(f"would need to walk {w_minutes - walk_limit} more minutes")
-        travel_unknown = (walk_limit is not None and w_minutes is None)
+        unverified.append("price unavailable")
 
-    # ---------- UNVERIFIABLE REQUESTED FIELDS (demote to alternative) ----------
-    if bmax is not None and not has_price_signal:
-        unverified.append(f"price unavailable — cannot verify your ${bmax:.0f} max")
-    if bmax is None and wanted_band and r_band is None:
-        unverified.append("price band unavailable — cannot verify budget")
-    if travel_unknown:
-        unverified.append("travel time unavailable — cannot verify distance")
-    if min_rating is not None and rating is None:
-        unverified.append("rating unavailable — cannot verify quality")
-
-    # ---------- PREFERENCES (scored for matches, listed for alternatives too) ----------
-    score = 0
-    cuisine = (req.get("cuisine") or "any").lower()
-    if cuisine not in ("any", "") and cuisine in (restaurant.get("cuisine") or "").lower():
-        score += 3
-        reasons.append("matches your cuisine preference")
-    if bmax is not None and cheapest is not None:
-        if bmin is not None and bmin <= cheapest <= bmax:
-            score += 1
-            reasons.append(f"right in your ${bmin:.0f}-{bmax:.0f} range")
-        elif bmin is None and cheapest <= bmax * 0.7:
-            score += 1
-            reasons.append("well within budget")
-    elif wanted_band and r_band is not None and _band_index(r_band) < _band_index(wanted_band):
-        score += 1
-        reasons.append(f"cheaper than your {BAND_SYMBOLS[wanted_band]} budget")
-    if rating is not None and rating >= 4.5:
-        score += 1
-        reasons.append("highly rated (4.5+)")
-    status = open_status(restaurant, req)
-    if status == "open":
-        score += 1
-        reasons.append("open at your requested time")
-    elif status == "unknown":
-        notes.append("opening hours unknown — please confirm with the restaurant")
+    mode = request["mode"]
+    source = restaurant.get(f"{mode}_source")
+    if request["max_travel_minutes"] is not None:
+        minutes = restaurant.get(f"{mode}_minutes")
+        if source != "route" or minutes is None:
+            unverified.append(f"{mode} journey time unavailable")
+        elif minutes > request["max_travel_minutes"]:
+            problems.append(
+                f"{mode} journey is {minutes:g} min, over your "
+                f"{request['max_travel_minutes']:g} min limit")
+        else:
+            reasons.append(f"within your {mode} time limit")
     else:
-        score -= 1
-        reasons.append("likely closed at your requested time")
-    if "spicy" in (req.get("free_text_notes") or "").lower() and restaurant.get("spicy_options"):
-        score += 1
-        reasons.append("has spicy options")
+        meters = restaurant.get(f"{mode}_meters")
+        if source != "route" or meters is None:
+            unverified.append("travel distance estimated or unavailable")
+        elif meters > request["max_distance_km"] * 1000:
+            problems.append(
+                f"route is {meters / 1000:.2f} km, over your "
+                f"{request['max_distance_km']:g} km limit")
+        else:
+            reasons.append("within your route distance limit")
 
-    # ---------- OUTCOME ----------
+    if "spicy" in " ".join(request["other_preferences"]):
+        if restaurant.get("spicy_options") is True:
+            reasons.append("has spicy options")
     if problems or unverified:
-        return "alternative", 0, (reasons
-                                  + [f"! {p}" for p in problems]
-                                  + [f"! {u}" for u in unverified])
-    if not reasons and not notes:
-        reasons.append("meets all your hard requirements")
-    return "match", score, reasons + [f"! {n}" for n in notes]
+        return "alternative", 0, (
+            reasons + [f"! {item}" for item in problems + unverified])
+    return "match", len(reasons), reasons
 
-def rank_restaurants(restaurants, req):
+
+def _grounded_ai_reasons(restaurant, request, codes, candidate_id=None):
+    """Translate only AI reason codes proven by candidate facts."""
+    mode = request["mode"]
+    budget = request["budget_per_person"]
+    average = restaurant.get("avg_price")
+    range_end = restaurant.get("price_end")
+    range_start = restaurant.get("price_start")
+    average_within_budget = (
+        type(average) in (int, float) and 0 <= average <= budget)
+    range_within_budget = (
+        average is None and type(range_end) in (int, float)
+        and 0 <= range_end <= budget
+        and (range_start is None or 0 <= range_start <= range_end))
+    if request["max_travel_minutes"] is not None:
+        travel_within_limit = (
+            restaurant.get(f"{mode}_source") == "route"
+            and type(restaurant.get(f"{mode}_minutes")) in (int, float)
+            and 0 <= restaurant[f"{mode}_minutes"]
+            <= request["max_travel_minutes"])
+        travel_reason = f"within your {mode} time limit"
+    else:
+        travel_within_limit = (
+            restaurant.get(f"{mode}_source") == "route"
+            and type(restaurant.get(f"{mode}_meters")) in (int, float)
+            and 0 <= restaurant[f"{mode}_meters"]
+            <= request["max_distance_km"] * 1000)
+        travel_reason = "within your route distance limit"
+    checks = {
+        "cuisine_match": (
+            request["cuisine"] != "none"
+            and request["cuisine"] in restaurant["cuisines"],
+            "matches your selected cuisine"),
+        "within_budget": (
+            average_within_budget or range_within_budget,
+            "average price is within your budget" if average_within_budget
+            else "listed price range is within your budget"),
+        "within_route": (
+            travel_within_limit, travel_reason),
+        "well_rated": (
+            type(restaurant.get("rating")) in (int, float)
+            and 4 <= restaurant["rating"] <= 5,
+            f"rated {restaurant['rating']:g} out of 5 on Google"
+            if type(restaurant.get("rating")) in (int, float) else "rating unavailable"),
+        "vegetarian_options": (
+            "vegetarian" in request["dietary_requirements"]
+            and "vegetarian" in restaurant["dietary_requirements"],
+            "vegetarian options listed"),
+        "halal_hint_unofficial": (
+            "halal" in request["dietary_requirements"]
+            and restaurant["halal_status"] == "unofficial",
+            "Halal (unofficial; not checked)"),
+        "spicy_options": (
+            "spicy" in " ".join(request["other_preferences"])
+            and restaurant.get("spicy_options") is True,
+            "has spicy options"),
+    }
+    if (not isinstance(codes, list) or len(codes) > 4
+            or any(not isinstance(code, str) or code not in checks
+                   for code in codes)
+            or len(codes) != len(set(codes))):
+        log.debug_log(
+            f"Candidate ID {candidate_id}: invalid reason-code list.",
+            "ERROR", "BRNS.logic_manager.rank_restaurants")
+        raise ValueError("BRNS AI returned unsupported reasons.")
+    evidence = {
+        "cuisine_match": {
+            "requested_cuisine": request["cuisine"],
+            "candidate_cuisines": restaurant["cuisines"]},
+        "within_budget": {
+            "budget_sgd": budget,
+            "candidate_avg_price_sgd": average,
+            "candidate_price_start_sgd": range_start,
+            "candidate_price_end_sgd": range_end},
+        "within_route": {
+            "mode": mode,
+            "limit_m": (request["max_distance_km"] * 1000
+                        if request["max_distance_km"] is not None else None),
+            "limit_minutes": request["max_travel_minutes"],
+            "travel_m": restaurant.get(f"{mode}_meters"),
+            "travel_minutes": restaurant.get(f"{mode}_minutes"),
+            "travel_source": restaurant.get(f"{mode}_source")},
+        "well_rated": {"candidate_rating": restaurant.get("rating")},
+        "vegetarian_options": {
+            "vegetarian_requested": (
+                "vegetarian" in request["dietary_requirements"]),
+            "candidate_dietary": restaurant["dietary_requirements"]},
+        "halal_hint_unofficial": {
+            "halal_requested": "halal" in request["dietary_requirements"],
+            "candidate_halal_status": restaurant["halal_status"]},
+        "spicy_options": {
+            "spicy_requested": "spicy" in " ".join(
+                request["other_preferences"]),
+            "candidate_spicy_options": restaurant.get("spicy_options")},
+    }
+    grounded = []
+    for code in codes:
+        if not checks[code][0]:
+            name = restaurant.get("name")
+            if not isinstance(name, str):
+                name = "<unnamed>"
+            detail = {
+                "candidate_id": candidate_id,
+                "candidate_name": name[:100],
+                "rejected_reason_code": code,
+                "evidence": evidence[code],
+            }
+            log.debug_log(
+                "AI reason unsupported: " + json.dumps(
+                    detail, ensure_ascii=False, separators=(",", ":")),
+                "WARNING", "BRNS.logic_manager.rank_restaurants")
+            continue
+        grounded.append(checks[code][1])
+    return grounded
+
+
+def rank_restaurants(restaurants, request, recommendations=None,
+                     previous_restaurants=()):
+    """Verify AI IDs and reasons, then enforce requirements on every candidate."""
+    if recommendations is None:
+        # Kept for direct Logic tests; BRNS.main requires AI recommendations.
+        order = list(range(len(restaurants)))
+        ai_reasons = {}
+    else:
+        if (not isinstance(recommendations, list)
+                or len(recommendations) != len(restaurants)
+                or any(not isinstance(item, dict)
+                       or set(item) != {"id", "reason_codes"}
+                       or type(item["id"]) is not int
+                       or item["id"] < 0 or item["id"] >= len(restaurants)
+                       for item in recommendations)):
+            raise ValueError("BRNS AI returned invalid restaurant IDs.")
+        order = [item["id"] for item in recommendations]
+        if len(set(order)) != len(restaurants):
+            raise ValueError("BRNS AI returned duplicate restaurant IDs.")
+        ai_reasons = {}
+        for item in recommendations:
+            restaurant = normalize_candidate(restaurants[item["id"]])
+            ai_reasons[item["id"]] = _grounded_ai_reasons(
+                restaurant, request, item["reason_codes"], item["id"])
     matches, alternatives = [], []
     hidden = 0
-    for r in restaurants:
-        status, score, reasons = decide_outcome(r, req)
+    for index in order:
+        raw = restaurants[index]
+        restaurant = normalize_candidate(
+            raw, offline=raw.get("source") == "offline restaurants")
+        status, score, reasons = decide_outcome(restaurant, request)
+        for reason in ai_reasons.get(index, []):
+            if reason not in reasons and f"! {reason}" not in reasons:
+                reasons.append(reason)
+        item = {"restaurant": restaurant, "score": score, "reasons": reasons}
         if status == "match":
-            matches.append({"restaurant": r, "score": score, "reasons": reasons})
+            matches.append(item)
         elif status == "alternative":
-            alternatives.append({"restaurant": r, "score": 0, "reasons": reasons})
+            alternatives.append(item)
         else:
             hidden += 1
-    matches.sort(key=lambda x: x["score"], reverse=True)
-    return {"matches": matches[:config.MAX_MATCHES_SHOWN],
-            "alternatives": alternatives[:config.MAX_ALTERNATIVES_SHOWN],
-            "hidden": hidden,
-            "mode": req.get("mode", "walk")}
+    if recommendations is None:
+        matches.sort(key=lambda item: item["score"], reverse=True)
+    previous_keys = {
+        (str(item.get("name", "")).casefold().strip(),
+         str(item.get("address", "")).casefold().strip())
+        for item in previous_restaurants if isinstance(item, dict)
+    }
+
+    def was_returned(item):
+        restaurant = item["restaurant"]
+        return (str(restaurant.get("name", "")).casefold().strip(),
+                str(restaurant.get("address", "")).casefold().strip()) in previous_keys
+
+    matches.sort(key=was_returned)
+    alternatives.sort(key=was_returned)
+    visible_matches = matches[:config.MAX_MATCHES_SHOWN]
+    visible_alternatives = alternatives[:config.MAX_ALTERNATIVES_SHOWN]
+    return {
+        "matches": visible_matches,
+        "alternatives": visible_alternatives,
+        "new_count": sum(not was_returned(item) for item in
+                         visible_matches + visible_alternatives),
+        "hidden": hidden,
+        "mode": request["mode"],
+        "limit_unit": "minutes" if request["max_travel_minutes"] is not None else "km",
+        "traffic_aware": request["traffic_aware"],
+        "requested_dietary": request["dietary_requirements"],
+    }
+
+
+# ---------- Opening-hours decisions (Logic) ----------
+
+SINGAPORE = timezone(timedelta(hours=8))
+DAYS = ("sunday", "monday", "tuesday", "wednesday", "thursday", "friday",
+        "saturday")
+WEEK_MINUTES = 7 * 24 * 60
+
+
+def _minute(point):
+    if not isinstance(point, dict):
+        return None
+    day, hour, minute = point.get("day"), point.get("hour", 0), point.get("minute", 0)
+    if (type(day) is not int or not 0 <= day < 7
+            or type(hour) is not int or not 0 <= hour < 24
+            or type(minute) is not int or not 0 <= minute < 60):
+        return None
+    return day * 1440 + hour * 60 + minute
+
+
+def _intervals(hours):
+    if not isinstance(hours, dict):
+        return []
+    intervals = []
+    for period in hours.get("periods") or []:
+        if not isinstance(period, dict):
+            continue
+        start = _minute(period.get("open"))
+        if start is None:
+            continue
+        if not period.get("close"):
+            return [(0, WEEK_MINUTES)]
+        end = _minute(period["close"])
+        if end is None:
+            continue
+        if end <= start:
+            end += WEEK_MINUTES
+        intervals.append((start, end))
+    return intervals
+
+
+def _local_now(now=None):
+    return now.astimezone(SINGAPORE) if now is not None else datetime.now(SINGAPORE)
+
+
+def _today_index(now):
+    return (now.weekday() + 1) % 7
+
+
+def _fmt(minute):
+    return f"{minute // 60:02d}:{minute % 60:02d}"
+
+
+def open_now_from_weekly(hours, now=None):
+    """Check saved regular opening hours against Singapore local time."""
+    if not isinstance(hours, dict):
+        return False
+    now = _local_now(now)
+    periods = hours.get(DAYS[_today_index(now)])
+    if not isinstance(periods, list):
+        return False
+    if len(periods) == 2 and all(isinstance(part, str) for part in periods):
+        periods = [periods]
+    minute = now.hour * 60 + now.minute
+    for period in periods:
+        if (not isinstance(period, list) or len(period) != 2
+                or any(not isinstance(part, str) or len(part) != 4
+                       or not part.isdigit() for part in period)):
+            continue
+        start = int(period[0][:2]) * 60 + int(period[0][2:])
+        end = int(period[1][:2]) * 60 + int(period[1][2:])
+        if start <= minute < end or (end == 1439 and minute == 1439):
+            return True
+    return False
+
+
+def today_hours_from_weekly(hours, now=None):
+    """Describe today's saved hours for the offline result card."""
+    if not isinstance(hours, dict):
+        return "Hours unavailable"
+    periods = hours.get(DAYS[_today_index(_local_now(now))])
+    if periods is None:
+        return "Hours unavailable"
+    if not periods:
+        return "Closed today"
+    if len(periods) == 2 and all(isinstance(part, str) for part in periods):
+        periods = [periods]
+    if periods == [["0000", "2359"]]:
+        return "Open 24 hours"
+    return ", ".join(
+        f"{pair[0][:2]}:{pair[0][2:]}–{pair[1][:2]}:{pair[1][2:]}"
+        for pair in periods
+        if isinstance(pair, list) and len(pair) == 2
+        and all(isinstance(part, str) and len(part) == 4 for part in pair)
+    ) or "Hours unavailable"
+
+
+def weekly_opening_hours(hours):
+    """Convert regular Google periods into a complete Monday–Sunday week.
+
+    A single daily interval is [start, end]. Split shifts use a list of such
+    pairs, and an empty list means Google listed that day as closed.
+    """
+    if not isinstance(hours, dict) or "periods" not in hours:
+        return None
+    week = {}
+    for day_name in (*DAYS[1:], DAYS[0]):
+        day_index = DAYS.index(day_name)
+        day_start = day_index * 1440
+        segments = set()
+        for start, end in _intervals(hours):
+            for shift in (-WEEK_MINUTES, 0, WEEK_MINUTES):
+                left = max(day_start, start + shift)
+                right = min(day_start + 1440, end + shift)
+                if left < right:
+                    local_start = left - day_start
+                    local_end = right - day_start
+                    segments.add((f"{local_start // 60:02d}{local_start % 60:02d}",
+                                  "2359" if local_end == 1440 else
+                                  f"{local_end // 60:02d}{local_end % 60:02d}"))
+        intervals = [list(pair) for pair in sorted(segments)]
+        week[day_name] = intervals[0] if len(intervals) == 1 else intervals
+    return week
+
+
+def today_hours(hours, now=None):
+    """Display today's live hours, including overnight and 24-hour periods."""
+    now = _local_now(now)
+    day_start = _today_index(now) * 1440
+    segments = []
+    for start, end in _intervals(hours):
+        for shift in (-WEEK_MINUTES, 0, WEEK_MINUTES):
+            left = max(day_start, start + shift)
+            right = min(day_start + 1440, end + shift)
+            if left < right:
+                segments.append((left - day_start, right - day_start))
+    segments = sorted(set(segments))
+    if segments == [(0, 1440)]:
+        return "Open 24 hours"
+    if not segments:
+        if isinstance(hours, dict) and hours.get("periods") == []:
+            return "Closed today"
+        return "Hours unavailable"
+    return ", ".join(
+        f"{_fmt(start)}–{_fmt(end) if end < 1440 else '24:00'}"
+        for start, end in segments)
+
+
+def open_now(hours, now=None):
+    """Prefer Google's special-hours-aware flag; otherwise check its periods."""
+    if not isinstance(hours, dict):
+        return None
+    if type(hours.get("openNow")) is bool:
+        return hours["openNow"]
+    intervals = _intervals(hours)
+    if not intervals:
+        return False if "periods" in hours else None
+    now = _local_now(now)
+    minute = _today_index(now) * 1440 + now.hour * 60 + now.minute
+    return any(start <= minute < end or start <= minute + WEEK_MINUTES < end
+               for start, end in intervals)

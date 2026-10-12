@@ -1,17 +1,16 @@
 # BiteFinder
 
-BiteFinder currently contains two independent Python command-line applications
-and a folder reserved for future work:
+BiteFinder contains two connected Python command-line applications and a
+folder reserved for future work:
 
 | Application | Purpose | Run from the repository root |
 | --- | --- | --- |
-| **BIS** — BiteFinder Interaction System | Sign up or resume an account and save food preferences | `python3 BIS/main.py` |
+| **BIS** — BiteFinder Interaction System | Sign up or resume an account and save food preferences | `python3 main.py` |
 | **BRNS** — BiteFinder Recommendation & Navigation System | Find, rank, and route to restaurants | `python3 BRNS/main.py` |
 | **BRC** — BiteFinder Restaurant Checker | Reserved for team members to add restaurant checking functionality | No command yet |
 
-BIS profiles do not feed into BRNS searches yet. BRNS is based on the `main`
-branch snapshot `43e91b6`; BIS comes from `bitefinder-chatbot-draft`. The
-[original project scope](ProjectInitialDetails.md) describes the intended
+BIS sends today's confirmed search as JSON to BRNS. The
+[original project scope](project_overview/ProjectInitialDetails.md) describes the intended
 combined system, including allergy handling. The current CLIs do not implement
 every feature in that scope.
 
@@ -27,7 +26,83 @@ python3 -m pip install -r requirements.txt
 
 On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` instead.
 The root `requirements.txt` covers both applications. The optional
-`requirements-dev.txt` adds `pycodestyle`.
+`requirements-dev.txt` adds `pycodestyle` and the function graph tools.
+
+## Automated checks
+
+Run all process-level checks with the readable color report:
+
+```bash
+python3 -m tests.blackbox_support
+```
+
+Run one area with `python3 tests/test_blackbox_bis.py`,
+`python3 tests/test_blackbox_brns.py`, or
+`python3 tests/test_blackbox_bis_to_brns.py`. Colors appear in an interactive
+terminal; set `BITEFINDER_TEST_COLOR=always` to force them in redirected output,
+or `BITEFINDER_TEST_COLOR=never` to turn them off.
+
+They launch the real entry points in temporary copies of the application and
+send fixed AI and Maps responses from a local HTTP server. The cases check
+valid and invalid answers, visible retries, saved data, results, and routes.
+Each result shows the input scenario, expected output, lines observed from the
+application, and actual calls in order.
+Run the email verification checks with the same report using
+`python3 tests/test_email_verification.py`. SMTP calls in these tests are mocked;
+no verification email is sent.
+No live API key or email account is needed. Run every test with
+`python3 -m unittest discover -s tests -v`.
+
+BIS and BRNS use the same terminal theme for prompts, profile details,
+restaurant results, and directions. Interactive terminals show color;
+redirected output remains plain text. Set `NO_COLOR=1` to disable color in a
+terminal. After signing in, `/color off` saves a color-free display for that
+account; `/color on` restores the default. Both work at any prompt. The
+wording and warning labels remain visible without color.
+
+After a search, choose a restaurant from the results menu to email its Google
+Maps directions link to your verified account email. This uses the same SMTP
+settings as email verification.
+At the search summary, pressing Enter confirms the displayed choices. After
+results, choose **Search again with the same choices** to rerun BRNS and AI;
+previously returned restaurants are placed after unseen verified matches.
+If the available candidates are exhausted, the results may repeat.
+
+Search travel modes are walking, driving, and transit. Walking and driving
+offer a maximum route distance in km or journey time from 1 to 240 minutes;
+transit uses journey time. After a driving time choice, select 1 for regular
+route times or 2 for live traffic. Press Enter to choose regular route times.
+Results use verified Google Routes durations or distances for the chosen limit.
+Transit routes show available stop and line details.
+
+To generate the function call PNGs on Windows, run these commands from the
+repository root in PowerShell or Command Prompt:
+
+```text
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe project_overview\visualise_functions.py
+```
+
+Use the same Python executable for the install and the script. Pillow is
+installed as `Pillow` but imported as `PIL`. The PNGs appear in
+`project_overview/function_graphs/`: `bis_to_brns.png` is the grouped manager flow,
+`bis_to_brns_functions.png` shows the reachable function calls, and
+`all_functions.png` covers every application function. `project_workflow.png`
+shows the halal scraper and separate BRC checker alongside BIS, BRNS, and
+their shared cache and log. Add `--trace` to run
+BIS and capture a live session graph. The grouped flow shows
+BIS IO → AI → Logic → Data (JSON) → BRNS IO → AI → Logic → Data.
+For an interactive trace on Windows, run
+`.\.venv\Scripts\python.exe project_overview\visualise_live_functions.py`.
+`project_overview/visualise_live_functions.py` starts BIS and records
+the calls made until you quit. Complete a `/search` to include BRNS calls.
+It creates an overview PNG, a function PNG for
+each program called, and `calls.json` with exact call counts in a new
+`project_overview/function_graphs/live_sessions/` folder. The function PNGs group calls by
+`main.py`, IO, AI, Logic, Data, and other files. BRC appears as inactive in
+the overview unless that BIS session actually calls it. On Linux or macOS,
+run `.venv/bin/python project_overview/visualise_live_functions.py`.
 
 Both applications read the same `.env` file at the repository root. If you do
 not have one yet, copy `.env.example` to `.env` and edit the settings you need:
@@ -50,7 +125,26 @@ python3 BIS/main.py
 Choose **Sign up** to create an account with an email and username, or
 **Resume by email** to continue an existing profile. Usernames accept 1–50
 characters. BIS asks one preference question at a time and saves each account's
-answers locally. It does not search for restaurants.
+answers locally. When a profile becomes complete, BIS starts `/search` once.
+An already complete profile starts it on the next resume if it has not run yet.
+The command collects today's location and search limits, then asks one
+optional question about what you want. Enter skips extra wishes; saved
+special requests can be chosen by number or `all`, and a new request can be
+entered in English. BIS checks new text and asks before using any AI wording
+correction. BIS AI then proposes a search request. BIS Logic protects
+confirmed choices and validates the proposal; you confirm it before BIS Data
+serializes the request to JSON. Confirmed new special requests are saved for
+future searches. BRNS receives that JSON for restaurant results.
+The search location accepts a six-digit Singapore postal code or
+`latitude,longitude` as well as an address or landmark. Cuisine can be `none`
+when you want any cuisine. Type `/help` at any prompt to see help and return
+to the same question. AI reviews free-text wording and asks before using a
+correction; BIS owns a model chain copied from BRNS's provider order.
+Budget and distance prompts also accept natural wording such as `i think 12`
+and `about 500 metres`; BIS confirms the interpreted number before using it.
+AI may add wishes from your description but cannot remove selected preferences.
+With `AI_BYPASS=true`, BIS shows the choices without calling AI or BRNS; this
+is the chatbot test mode.
 
 ### BIS commands
 
@@ -59,6 +153,7 @@ answers locally. It does not search for restaurants.
 | `/help` | Show available commands |
 | `/help [command]` | Explain a command, its accepted values, and examples |
 | `/profile` | Show the saved profile |
+| `/search` | Choose today's location and limits, describe your wishes, then confirm the interpreted search |
 | `/edit` | Show how to change an answer |
 | `/add-location` | Add areas to saved locations |
 | `/remove-location` | Remove saved areas; at least one must remain |
@@ -70,16 +165,33 @@ For example, type `/edit budget`, then enter `10` for a new budget in SGD.
 Use `/help edit` for all editable fields and accepted answers. Editing replaces
 an answer; `/add-location` keeps existing areas.
 
-Dietary requirements are halal, vegan, both, or none. Cuisine answers use the
+Dietary requirements are halal, vegetarian, both, or none. Cuisine answers use the
 accepted list in [`BIS/sources/profile_schema.py`](BIS/sources/profile_schema.py);
-spelling suggestions require confirmation. Travel accepts distance or time,
-using **1 km ≈ 20 minutes**. Both values are saved as an estimate, not a
-calculated route.
+you can describe several cuisines without commas, and AI proposals and spelling
+corrections require confirmation. A travel amount without a unit, including
+written numbers such as `ten`, asks you to choose km or minutes. Press Enter
+at the profile's other-preferences prompt for none.
+Travel accepts distance or time,
+using **1 km ≈ 20 minutes of walking**. Both values are saved as an estimate,
+not a calculated route. Other preferences are stored as a list; enter items
+separated by commas, or `none` for an empty list.
+For profile locations, BIS shows the areas it extracted and asks you to confirm
+the list before saving it, including when you add or remove areas later.
+
+For `/search`, BIS confirms your current location before asking the other
+questions. Enter a Singapore postal code, address, landmark, or latitude and
+longitude. Cached locations and coordinates work without a Maps key; uncached
+addresses need `GOOGLE_MAPS_API_KEY` in the root `.env`. Walking searches offer
+your saved walking distance as the default. Driving searches ask for a new
+distance or time limit. Live search also requires a free-text description and confirmation
+of the interpreted request. Search choices do not change your saved profile.
+Use `/help search` for the full sequence.
 
 ### BIS AI and email settings
 
 Signup uses fixed prompts and Python validation. AI can interpret preference
-answers, but saved updates must still pass validation. To enable AI, set these
+answers and is required for live `/search`; saved updates and search requests
+must still pass validation. To enable AI, set these
 values in the root `.env`:
 
 ```dotenv
@@ -92,70 +204,82 @@ Keys rotate in order, including failed requests, and rotation resets on
 launch. Alternatively, use `OPENROUTER_API_KEYS_FILE=secrets/openrouter_keys.json`
 with a JSON list or comma/newline-separated key file. That relative path still
 resolves from `BIS/`. The key list takes priority over the file, then the shared
-`OPENROUTER_API_KEY` setting. BRNS uses only `OPENROUTER_API_KEY`.
+`OPENROUTER_API_KEY` setting. BIS and BRNS each manage their own model chains;
+both can use `GEMINI_API_KEY` from `.env`.
 
 To send verification codes, set `SMTP_BYPASS=false` and fill in the SMTP
-settings in [`.env.example`](.env.example). Codes expire after ten
-minutes and allow five attempts. SMTP bypass does not mark an email as
-verified. Email format checks cannot prove that an inbox exists. Resuming an
-already verified account uses email selection, not a password. Restart BIS
-after changing its settings.
+settings in [`.env.example`](.env.example). Codes expire after ten minutes;
+five incorrect attempts within the configured attempt window block further
+guesses and resends until that window ends. Set
+`VERIFICATION_ATTEMPT_RESET_MINUTES=1` for a one-minute window (default: 10).
+Resends are at least 60 seconds
+apart and do not reset the failed-attempt count. Signup and every account
+resume require an emailed code. SMTP bypass is for local testing and does not
+mark an email as verified. Email format checks cannot prove that an inbox
+exists. Restart BIS after changing its settings.
 
-### BIS saved files and migration
+### BIS saved files
 
 | Path | Purpose |
 | --- | --- |
 | `BIS/data/users.json` | Accounts keyed by user ID; username is outside preferences |
-| `BIS/data/profile_state.json` | Verification and migration review state |
-| `BIS/logs/bitefinder.log` | Operational logs, created on the first logged event |
-| [`BIS/docs/code_tldr.txt`](BIS/docs/code_tldr.txt) | Short code overview |
+| `BIS/data/profile_state.json` | Email verification and first-search state |
+| `data/geocode_cache.json` | Shared BIS, BRC, and BRNS geocode results, including successful /search lookups |
+| `logs/bitefinder.log` | Shared BIS, BRNS, and BRC operational log, created on the first logged event |
 
-Data and logs stay local. Use one BIS process per saved database. Set
-`DEBUG=true` in the root `.env` to also display logs in the terminal. Logs include
-travel distance and time; do not log API keys or verification codes.
+Data and logs stay local. Use one BIS process per saved database. Each search
+has a trace ID that connects its BIS and BRNS events in the shared log. Events
+show the manager function, stage outcome, provider attempt, and candidate
+counts without recording API keys, raw requests, addresses, or raw provider
+text. It records the AI ID and reason-code list. When BRNS drops an unsupported
+AI reason, the log includes the candidate ID
+and name, rejected reason code, and facts used for the check. A search error
+shows its trace ID so you can find the related lines. Set `DEBUG=true` in the
+root `.env` to mirror the log to the terminal; standalone BRNS mirrors it to
+stderr too.
 
-If BIS reports an old profile schema, close it and run this from the repository
-root:
-
-```bash
-cd BIS
-python3 -c "from main import run_migration; run_migration()"
-```
-
-Migration creates timestamped backups before updating the database. Accounts
-may be asked to review old answers. New users never import another user's
-profile. Corrupt data blocks writes so existing accounts are not overwritten.
+Profiles use the current BIS schema only. The local user registry was reset for
+this change, so sign up again to create a new profile. New users never import
+another user's profile. Unreadable JSON or malformed account records block
+writes so existing accounts are not overwritten.
 
 ## BRNS: restaurant search and routes
 
-In the root `.env`, supply an `OPENROUTER_API_KEY` or `GEMINI_API_KEY` for request
-interpretation. BRNS tries the configured model chain in order. For live Google
-restaurant, geocoding,
-and route data, also set `GOOGLE_MAPS_API_KEY` and `USE_LIVE_GOOGLE=true`.
-Set `USE_LIVE_GOOGLE=false` to search the bundled restaurant catalog; AI
-interpretation still needs an AI provider key. Cached locations may work
-without a Maps key, while uncached locations need geocoding.
+BIS sends BRNS the confirmed search request, including origin coordinates,
+travel mode and distance or time limit, cuisine, budget, and dietary preferences. BRNS IO
+validates it and gathers restaurant facts through Google Places. BRNS AI orders
+all candidate IDs and supplies reason codes; Logic keeps only reasons supported
+by candidate facts, applies the requirements, and creates matches and
+alternatives; Data stores a validated search summary. A live search stops
+without a valid BRNS AI recommendation, and can be retried.
+For live Google restaurant and route data, set `GOOGLE_MAPS_API_KEY` and
+`USE_LIVE_GOOGLE=true` in the root `.env`. The existing
+`USE_LIVE_GOOGLE=false` saved restaurant fallback remains available for local use, but
+it still needs BRNS AI to produce a completed recommendation.
 
-```bash
-python3 BRNS/main.py
-```
-
-BRNS asks for a Singapore location, walking time or driving distance, budget,
-meal time, dietary requirement, food preference, minimum rating, and optional
-search text. It ranks matching restaurants, explains alternatives, and offers
-a route or map link when coordinates are available. The current input supports
-`none`, `halal`, and `vegetarian` dietary choices; it does not ask for allergies.
+BRNS ranks candidates and explains alternatives. Halal results are labeled
+unofficial until the restaurant checker is integrated. A route or map link
+is offered when a result has coordinates. Standalone BRNS accepts one BIS
+search JSON object on standard input instead of opening an interactive
+questionnaire.
 
 BRNS reads the root `.env` and keeps its data relative to `BRNS/`, regardless of
-the working directory. The bundled catalog is at `BRNS/data/restaurants.json`.
-Search history and API error logs are local runtime files ignored by Git.
+the working directory. Offline fallback reads `BRNS/data/restaurants.json`.
+Search history and the shared operational log are local runtime files ignored
+by Git. Places and AI failures are recorded in that log.
+Live search cards display Google's rating, review count, and today's opening
+hours when available. BRNS only recommends places confirmed open by the live
+response. Discovered restaurant details, including regular weekly opening
+hours and access information when available, are saved in
+`BRNS/data/restaurants.json`. This is the only BRNS restaurant data file.
 
 ## Code layout and development
 
 Both applications have a `main.py` and separate `io_manager.py`,
 `ai_manager.py`, `logic_manager.py`, and `data_manager.py` modules. BIS also has
 `sources/` for its profile schema and prompts, and `support/` for configuration,
-email delivery, and logging. BRNS has its own `config.py` and restaurant data.
+email delivery, and logging. BRNS's `io_manager.py` handles Google Places,
+geocoding, and routing; its `logic_manager.py` evaluates opening hours.
 
 To install the optional formatting checker and run it on BIS:
 

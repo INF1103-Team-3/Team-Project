@@ -349,7 +349,7 @@ def show_results(
     if rejected_count and shown:
         print(f"{rejected_count} other candidate(s) were rejected by your filters.")
     if not saved:
-        print("Note: results could not be saved to history (see restaurant_finder.log).")
+        print("Note: results could not be saved to history (see logs/bitefinder.log).")
     print()
 
 

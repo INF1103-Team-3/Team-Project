@@ -1,2 +1,4 @@
 -r requirements.txt
 pycodestyle>=2.11,<3
+python-call-graph==2.1.6
+Pillow>=10,<13
