@@ -1,0 +1,318 @@
+name: bf
+
+x-common: &common
+  env_file: ${PROJECT_DIR:-.}/.env
+  # Default is root, which works with Docker Desktop on Mac and Windows.
+  # On Linux run:  export HOST_UID=$(id -u) HOST_GID=$(id -g)
+  user: "${HOST_UID:-0}:${HOST_GID:-0}"
+  restart: unless-stopped
+  init: true                      # clean, immediate `docker stop`
+  networks:
+    - bf-net
+
+networks:
+  bf-net:
+    name: bf-net
+    driver: bridge
+
+services:
+  # ------------------------------------------------------------------ BRC
+  brc:
+    <<: *common
+    image: bf-brc
+    container_name: bf-brc
+    build:
+      context: ${PROJECT_DIR:-.}
+      args:
+        PY_IMAGE: ${PY_IMAGE:-python:3.12-slim}
+      dockerfile_inline: |
+        ARG PY_IMAGE=python:3.12-slim
+        FROM $${PY_IMAGE}
+        ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+        WORKDIR /app
+        COPY requirements.txt /tmp/requirements.txt
+        RUN pip install --no-cache-dir -r /tmp/requirements.txt \
+            && (useradd --create-home --uid 1000 app || true)
+        COPY <<'PY' /opt/bf/brc_link_server.py
+        """Read-only link server run by the brc container (Docker only).
+
+        GET /health                 JSON status of this container and database
+        GET /halal_restaurants.json the database BRC built (ETag supported)
+        Nothing else is served and nothing is ever written.
+        """
+        import json
+        import os
+        from datetime import datetime, timezone
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        DB = os.environ.get("BRC_DB_FILE", "/app/BRC/data/halal_restaurants.json")
+        PORT = int(os.environ.get("BRC_LINK_PORT", "8000"))
+        NAME = "/" + os.path.basename(DB)
+        _seen = {"stamp": None, "records": 0}
+
+
+        def summary():
+            try:
+                info = os.stat(DB)
+            except OSError:
+                return {"database_ready": False, "database_records": 0,
+                        "database_updated": None}
+            stamp = (info.st_mtime_ns, info.st_size)
+            if _seen["stamp"] != stamp:
+                try:
+                    with open(DB, encoding="utf-8") as stream:
+                        rows = json.load(stream).get("restaurants")
+                    records = len(rows) if isinstance(rows, list) else 0
+                except (OSError, ValueError, AttributeError):
+                    records = 0
+                _seen.update(stamp=stamp, records=records)
+            updated = datetime.fromtimestamp(
+                info.st_mtime, timezone.utc).isoformat(timespec="seconds")
+            return {"database_ready": _seen["records"] > 0,
+                    "database_records": _seen["records"],
+                    "database_updated": updated}
+
+
+        class Handler(BaseHTTPRequestHandler):
+            server_version = "BiteFinderBRCLink/1.0"
+
+            def log_message(self, *_args):
+                pass
+
+            def send_json(self, status, body):
+                data = json.dumps(body).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def do_GET(self):
+                path = self.path.split("?", 1)[0]
+                if path == "/health":
+                    self.send_json(200, dict(summary(), status="ok"))
+                elif path == NAME:
+                    try:
+                        with open(DB, "rb") as stream:
+                            info = os.fstat(stream.fileno())
+                            body = stream.read()
+                    except OSError:
+                        self.send_json(404, {"error": "Database not built yet."})
+                        return
+                    etag = '"%d-%d"' % (info.st_mtime_ns, info.st_size)
+                    if self.headers.get("If-None-Match") == etag:
+                        self.send_response(304)
+                        self.send_header("ETag", etag)
+                        self.end_headers()
+                        return
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.send_header("ETag", etag)
+                    self.end_headers()
+                    self.wfile.write(body)
+                else:
+                    self.send_json(404, {"error": "Not found."})
+
+
+        if __name__ == "__main__":
+            print("BRC link server listening on port %d" % PORT, flush=True)
+            ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+        PY
+        EXPOSE 8000
+        HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=5 \
+            CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+        CMD ["python", "/opt/bf/brc_link_server.py"]
+    expose:
+      - "8000"
+    volumes:
+      # Code from the project (read-only); BRC's own data folder on top, rw.
+      - ${PROJECT_DIR:-.}/BRC:/app/BRC:ro
+      - ${PROJECT_DIR:-.}/BRC/data:/app/BRC/data
+      - ${PROJECT_DIR:-.}/shared:/app/shared:ro
+      - ${PROJECT_DIR:-.}/BRNS/data:/app/BRNS/data:ro
+      - ${PROJECT_DIR:-.}/data:/app/data
+      - ${PROJECT_DIR:-.}/logs:/app/logs
+
+  # ------------------------------------------------------------- BIS + BRNS
+  bis-brns:
+    <<: *common
+    image: bf-bis-brns
+    container_name: bf-bis-brns
+    build:
+      context: ${PROJECT_DIR:-.}
+      args:
+        PY_IMAGE: ${PY_IMAGE:-python:3.12-slim}
+      dockerfile_inline: |
+        ARG PY_IMAGE=python:3.12-slim
+        FROM $${PY_IMAGE}
+        ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+        WORKDIR /app
+        COPY requirements.txt /tmp/requirements.txt
+        RUN pip install --no-cache-dir -r /tmp/requirements.txt \
+            && (useradd --create-home --uid 1000 app || true)
+        COPY <<'PY' /opt/bf/brc_link_sync.py
+        """Keeps this container connected to the brc container (Docker only).
+
+        Every few seconds: ask brc for /health (proof the network link works,
+        recorded as a heartbeat for the container health check) and, when brc
+        has a newer halal database, copy it into BRC/data so BRNS can use it.
+        """
+        import http.client
+        import json
+        import os
+        import time
+        import urllib.error
+        import urllib.request
+
+        BASE = os.environ.get("BRC_LINK_URL", "http://brc:8000").rstrip("/")
+        DEST = os.environ.get("BRC_DB_FILE", "/app/BRC/data/halal_restaurants.json")
+        EVERY = float(os.environ.get("BRC_SYNC_SECONDS", "15"))
+        BEAT = "/tmp/brc_link_ok"
+        etag = None
+
+
+        def say(message):
+            print(time.strftime("%H:%M:%S"), message, flush=True)
+
+
+        def get(path, headers=None):
+            request = urllib.request.Request(BASE + path, headers=headers or {})
+            return urllib.request.urlopen(request, timeout=10)
+
+
+        def valid(data):
+            rows = data.get("restaurants") if isinstance(data, dict) else None
+            return (isinstance(rows, list) and bool(rows)
+                    and data.get("restaurant_count") == len(rows))
+
+
+        def pull():
+            global etag
+            headers = {"If-None-Match": etag} if etag else {}
+            try:
+                with get(DEST_NAME, headers) as reply:
+                    body, new_etag = reply.read(), reply.headers.get("ETag")
+            except urllib.error.HTTPError as error:
+                if error.code == 304:
+                    return
+                raise
+            data = json.loads(body)
+            if not valid(data):
+                raise ValueError("brc sent an incomplete database")
+            os.makedirs(os.path.dirname(DEST), exist_ok=True)
+            part = DEST + ".part"
+            with open(part, "wb") as stream:
+                stream.write(body)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(part, DEST)
+            etag = new_etag
+            say("Copied the halal database from brc (%d restaurants)."
+                % len(data["restaurants"]))
+
+
+        DEST_NAME = "/" + os.path.basename(DEST)
+
+        if __name__ == "__main__":
+            connected = waiting = None
+            problem = ""
+            say("Link started: brc at %s, every %gs." % (BASE, EVERY))
+            while True:
+                try:
+                    with get("/health") as reply:
+                        health = json.load(reply)
+                    with open(BEAT, "w") as stream:
+                        stream.write(str(time.time()))
+                except (OSError, ValueError, http.client.HTTPException) as error:
+                    if connected is not False:
+                        say("Cannot reach the brc container (%s); retrying."
+                            % type(error).__name__)
+                        connected = False
+                    time.sleep(EVERY)
+                    continue
+                if connected is not True:
+                    say("Connected to the brc container.")
+                    connected = True
+                if not health.get("database_ready"):
+                    if waiting is not True:
+                        say("brc has not built the halal database yet. Run: "
+                            "docker compose exec brc python -m BRC.main")
+                        waiting = True
+                else:
+                    waiting = False
+                    try:
+                        pull()
+                        problem = ""
+                    except (OSError, ValueError, http.client.HTTPException) as error:
+                        text = "%s: %s" % (type(error).__name__, error)
+                        if text != problem:
+                            say("Could not copy the database; keeping the "
+                                "last good copy (%s)." % text[:120])
+                            problem = text
+                time.sleep(EVERY)
+        PY
+        CMD ["python", "/opt/bf/brc_link_sync.py"]
+    # The container's main process is the link above. The chatbot is opened
+    # inside it with: docker compose exec bis-brns python BIS/main.py
+    healthcheck:
+      # Healthy only while the last successful call to brc is under 60s old.
+      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/brc_link_ok') < 60 else 1)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    depends_on:
+      brc:
+        condition: service_healthy
+    environment:
+      BRC_LINK_URL: http://brc:8000
+    volumes:
+      - ${PROJECT_DIR:-.}/BIS:/app/BIS
+      - ${PROJECT_DIR:-.}/BRNS:/app/BRNS
+      # BRNS imports BRC in-process, so the BRC code is here too (read-only).
+      - ${PROJECT_DIR:-.}/BRC:/app/BRC:ro
+      # This container's own BRC data (database copy pulled from brc, caches).
+      - ${PROJECT_DIR:-.}/BRC/data/bis-brns:/app/BRC/data
+      - ${PROJECT_DIR:-.}/shared:/app/shared:ro
+      - ${PROJECT_DIR:-.}/data:/app/data
+      - ${PROJECT_DIR:-.}/logs:/app/logs
+
+
+# BiteFinder in two permanent containers on one Docker network.
+#
+# THIS FILE IS THE ONLY NEW FILE. Keep it INSIDE the Team-Project folder:
+#
+#     Team-Project/
+#       docker-compose.yml     <- this file
+#       .env                   <- your keys (cp .env.example .env)
+#       BIS/  BRNS/  BRC/  shared/ ...   
+#
+# Run every docker compose command from inside Team-Project. Nothing else
+# needs to be set. (PROJECT_DIR can point elsewhere if you ever move this
+# file out of the project folder.)
+#
+# How the two containers are connected
+#   brc        BRC (MUIS halal database builder/checker). It also runs a tiny
+#              read-only "link" server on port 8000 that serves the database
+#              BRC builds and reports health.
+#   bis-brns   BIS chatbot + BRNS search. BRNS runs BRC as a Python function
+#              call (from BRC import main), so this container carries the BRC
+#              code too. Its main process pulls the halal database from the
+#              brc container every few seconds over the network and keeps a
+#              heartbeat; the container is "healthy" only while it can reach
+#              brc.
+
+#   Both join the network "bf-net"; Docker's DNS lets bis-brns reach the other
+#   container simply as "brc". Port 8000 is NOT published to your computer.
+#
+# Neither image contains your project files or secrets: the code is mounted
+# from Team-Project at run time, and your .env is passed as environment
+# variables. Images hold only Python, the project's requirements.txt packages
+# and a small link script.
+#
+# Requires a recent Docker Desktop (Compose 2.17 or newer). Start-up guide:
+#   docker compose up -d --build
+#   docker compose ps                                   (both "healthy")
+#   docker compose exec brc python BRC/main.py         (choose 1: build DB)
+#   docker compose exec bis-brns python BIS/main.py     (the chatbot)
