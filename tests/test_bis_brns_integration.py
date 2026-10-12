@@ -1312,6 +1312,65 @@ class IntegrationTests(unittest.TestCase):
         self.assertNotIn("average price is within your budget",
                          results["alternatives"][0]["reasons"])
 
+    def test_minimum_star_request_is_enforced_on_restaurant_matches(self):
+        candidates = [
+            {"name": "Many Reviews", "cuisines": ["malay"],
+             "avg_price": 8, "walk_meters": 800, "walk_source": "route",
+             "rating": 4.3, "rating_count": 1920},
+            {"name": "Meets Minimum", "cuisines": ["malay"],
+             "avg_price": 8, "walk_meters": 800, "walk_source": "route",
+             "rating": 4.5, "rating_count": 75},
+            {"name": "No Rating", "cuisines": ["malay"],
+             "avg_price": 8, "walk_meters": 800, "walk_source": "route"},
+        ]
+        wanted = dict(request(), dietary_requirements=[],
+                      other_preferences=["minimum 4.5 stars"])
+        results = brns_logic.rank_restaurants(candidates, wanted)
+        self.assertEqual([item["restaurant"]["name"] for item in
+                          results["matches"]], ["Meets Minimum"])
+        self.assertEqual(len(results["alternatives"]), 2)
+        self.assertTrue(any("below your 4.5/5 minimum" in reason for reason in
+                            results["alternatives"][0]["reasons"]))
+        self.assertTrue(any("rating unavailable" in reason for reason in
+                            results["alternatives"][1]["reasons"]))
+        self.assertEqual(brns_logic.minimum_rating(
+            ["at least 4 stars", "4.5 stars or higher"]), 4.5)
+        self.assertEqual(brns_logic.minimum_rating(["4.5+ stars"]), 4.5)
+        from BIS import logic_manager as bis_logic
+        self.assertEqual(bis_logic.validate_special_request_text("4.5+ stars"),
+                         "4.5+ stars")
+
+    def test_brns_ai_receives_review_count_and_adjusted_rating(self):
+        candidates = [
+            {"name": "Few Reviews", "rating": 4.5, "rating_count": 75},
+            {"name": "Many Reviews", "rating": 4.3, "rating_count": 1920},
+        ]
+        reply = json.dumps({"recommendations": recommendation(1, 0)})
+        with (
+            patch.object(brns_config, "MODEL_CHAIN",
+                         [{"provider": "openrouter", "model": "test"}]),
+            patch.object(brns_config, "OPENROUTER_API_KEY", "test-key"),
+            patch.object(brns_ai, "_call_openrouter",
+                         return_value=(True, reply)) as call,
+        ):
+            result = brns_ai.recommend_candidates(
+                dict(request(), other_preferences=[]),
+                candidates)
+            sent = json.loads(call.call_args.args[2])
+            brns_ai.recommend_candidates(
+                dict(request(), other_preferences=["minimum 4.5 stars"]),
+                candidates)
+            floor_sent = json.loads(call.call_args.args[2])
+        self.assertIsNone(sent["minimum_rating"])
+        self.assertEqual(floor_sent["minimum_rating"], 4.5)
+        self.assertEqual([item["review_count"] for item in sent["candidates"]],
+                         [75, 1920])
+        self.assertGreater(
+            sent["candidates"][1]["confidence_adjusted_rating"],
+            sent["candidates"][0]["confidence_adjusted_rating"])
+        self.assertEqual([item["id"] for item in result], [1, 0])
+        self.assertIn("minimum_rating is a hard minimum", call.call_args.args[1])
+
     def test_full_price_range_can_confirm_budget(self):
         candidate = {"name": "Budget Cafe", "cuisines": ["malay"],
                      "avg_price": None, "price_start": 5,

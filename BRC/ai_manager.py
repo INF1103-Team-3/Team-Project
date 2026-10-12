@@ -1,105 +1,76 @@
+"""Use Gemini to propose MUIS outlet matches for logic to verify."""
+
 from __future__ import annotations
 
 import json
-import logging
-import math
 import re
-import time
 
 from google import genai
 from google.genai import types
 
-log = logging.getLogger(__name__)
-
-AI_FIELDS_DEFAULT = {
-    "cuisine": None,
-    "ai_avg_price": None,
-    "allergens": [],
-    "spicy_options": None,
-}
-
 
 class AIManager:
-    def __init__(self, api_key: str, model: str, max_retries: int = 2):
+    def __init__(self, api_key: str, model: str):
         self._api_key = api_key
         self.model = model
-        self.max_retries = max_retries
         self._client = None
 
-    # ------------------------------------------------------------ public API
+    def propose_muis_matches(self, records: list[dict], snapshot: dict) -> list[str | None]:
+        """Ask AI to select a candidate listing for each outlet, never certify it."""
+        from BRC import logic_manager
 
-    def enrich(self, records: list[dict]) -> list[dict]:
-        """Return every input record with AI fields and an ai_status added."""
-        results: dict[int, dict] = {}
-        pending = list(range(len(records)))
-
-        for attempt in range(1, self.max_retries + 2):  # first try + retries
-            if not pending:
-                break
-            try:
-                text = self._call_api(self._build_prompt(records, pending))
-                items = self._parse_response(text)
-            except Exception as exc:  # API failure or unparseable output
-                log.warning("AI attempt %d/%d failed: %s", attempt, self.max_retries + 1, exc)
-                if getattr(exc, "code", None) == 429:
-                    log.error("Gemini quota exceeded (429); not retrying.")
-                    break
-                self._pause(attempt)
-                continue
-
-            for item in items:
-                try:
-                    index, fields = self._validate_item(item)
-                except ValueError as exc:
-                    log.warning("Rejected malformed AI item %r: %s", item, exc)
-                    continue
-                if index in pending and index not in results:
-                    results[index] = fields
-
-            pending = [i for i in pending if i not in results]
-            if pending:
-                log.warning("%d record(s) still missing valid AI output", len(pending))
-                self._pause(attempt)
-
-        enriched = []
-        for i, record in enumerate(records):
-            out = dict(record)
-            if i in results:
-                out.update(results[i])
-                out["ai_status"] = "ok"
-            else:
-                out.update({k: (list(v) if isinstance(v, list) else v) for k, v in AI_FIELDS_DEFAULT.items()})
-                out["ai_status"] = "failed"
-                log.error("AI enrichment failed for record %r", record.get("name"))
-            enriched.append(out)
-        return enriched
-
-    # ------------------------------------------------------------- internals
-
-    def _build_prompt(self, records: list[dict], indexes: list[int]) -> str:
-        items = [
-            {
-                "index": i,
-                "name": records[i].get("name", ""),
-                "address": records[i].get("address", ""),
-                "type": records[i].get("primary_type", ""),
+        by_postal: dict[str, list[dict]] = {}
+        for listing in snapshot["listings"]:
+            by_postal.setdefault(listing["postal_code"], []).append(listing)
+        proposals: list[str | None] = [None] * len(records)
+        pending = []
+        for index, record in enumerate(records):
+            postal = logic_manager.muis_postal(record)
+            candidates = by_postal.get(postal, []) if postal else []
+            if candidates:
+                pending.append((index, record, candidates))
+        for start in range(0, len(pending), 10):
+            batch = pending[start:start + 10]
+            allowed = {
+                index: {candidate["certificate_number"] for candidate in candidates}
+                for index, _, candidates in batch
             }
-            for i in indexes
-        ]
-        return f"""
-For each restaurant below, use general knowledge of the restaurant and its type to fill in:
-  "index": the same index given
-  "cuisine": string, lowercase (e.g. "chinese")
-  "avg_price": number, typical spend per person in the local currency of the address, no symbol (null if you cannot estimate)
-  "allergens": array of common allergens likely present (e.g. "soy", "peanuts", "gluten", "shellfish", "dairy"); empty array if unknown
-  "spicy_options": boolean, true if spicy dishes or spice-level options are likely offered, null if unknown
-
-Return ONLY a JSON array with exactly one object per restaurant. No markdown, no commentary.
-These are estimates; do not claim certainty.
-
-Restaurants:
-{json.dumps(items, ensure_ascii=False, indent=2)}
-""".strip()
+            items = [{
+                "index": index,
+                "restaurant": {"name": record["name"],
+                               "address": record["address"],
+                               "postal_code": logic_manager.muis_postal(record)},
+                "muis_candidates": [
+                    {"certificate_number": item["certificate_number"],
+                     "name": item["name"], "address": item["address"],
+                     "postal_code": item["postal_code"]}
+                    for item in candidates],
+            } for index, record, candidates in batch]
+            prompt = (
+                "Compare each restaurant with its MUIS candidate listings. "
+                "Select the exact same outlet or null. Normalize spelling, "
+                "branch names and addresses, but never assume all branches "
+                "of one brand are certified. Return only a JSON array with "
+                "exactly one object per restaurant: "
+                "{\"index\": integer, \"certificate_number\": string or null}. "
+                "Copy certificate numbers exactly from the provided candidates. "
+                "A separate logic layer will verify every proposal.\n"
+                + json.dumps(items, ensure_ascii=False, separators=(",", ":"))
+            )
+            response = self._parse_response(self._call_api(prompt))
+            if (len(response) != len(batch)
+                    or any(not isinstance(item, dict)
+                           or set(item) != {"index", "certificate_number"}
+                           or type(item["index"]) is not int
+                           or item["index"] not in allowed
+                           or item["certificate_number"] not in (
+                               *allowed[item["index"]], None)
+                           for item in response)
+                    or {item["index"] for item in response} != set(allowed)):
+                raise ValueError("BRC AI returned invalid MUIS match proposals.")
+            for item in response:
+                proposals[item["index"]] = item["certificate_number"]
+        return proposals
 
     def _call_api(self, prompt: str) -> str:
         if self._client is None:
@@ -126,47 +97,3 @@ Restaurants:
         if not isinstance(data, list):
             raise ValueError("Model response is not a JSON array.")
         return data
-
-    @staticmethod
-    def _validate_item(item) -> tuple[int, dict]:
-        """Check one response item against the expected schema."""
-        if not isinstance(item, dict):
-            raise ValueError("item is not an object")
-
-        index = item.get("index")
-        if isinstance(index, bool) or not isinstance(index, int):
-            raise ValueError("index must be an integer")
-
-        cuisine = item.get("cuisine")
-        if not isinstance(cuisine, str) or not cuisine.strip():
-            raise ValueError("cuisine must be a non-empty string")
-
-        price = item.get("avg_price")
-        if price is not None:
-            if (
-                isinstance(price, bool)
-                or not isinstance(price, (int, float))
-                or not math.isfinite(price)
-                or price < 0
-            ):
-                raise ValueError("avg_price must be a non-negative number or null")
-            price = float(price)
-
-        allergens = item.get("allergens")
-        if not isinstance(allergens, list) or not all(isinstance(a, str) for a in allergens):
-            raise ValueError("allergens must be a list of strings")
-
-        spicy = item.get("spicy_options")
-        if spicy is not None and not isinstance(spicy, bool):
-            raise ValueError("spicy_options must be true, false or null")
-
-        return index, {
-            "cuisine": cuisine.strip().lower(),
-            "ai_avg_price": price,
-            "allergens": [a.strip().lower() for a in allergens if a.strip()],
-            "spicy_options": spicy,
-        }
-
-    def _pause(self, attempt: int) -> None:
-        if attempt <= self.max_retries:
-            time.sleep(min(2 ** attempt, 8))
