@@ -7,7 +7,7 @@
     "number": "6370 1155",
     "g_rating": "3.4",
     "g_no_reviews": "530",
-    "cuisine": null,
+    "cuisine": "malay",
     "dietary": [
       "halal"
     ],
@@ -23,7 +23,7 @@
       "sunday": ["0000", "2359"]
     },
     "wheelchair_accessible": true,
-    "halal_certification": "unofficial"
+    "halal_certification": "official"
   },
   {
     "google_place_id": "ChIJkSFt868V2jERvdiIQsspXoM",
@@ -35,6 +35,7 @@
     "g_no_reviews": "1673",
     "cuisine": "chinese",
     "dietary": [
+      "halal",
       "vegetarian"
     ],
     "avg_price_low_sgd": 20.0,
@@ -49,7 +50,7 @@
       "sunday": [["0000", "0400"], ["1030", "2359"]]
     },
     "wheelchair_accessible": true,
-    "halal_certification": "none"
+    "halal_certification": "official"
   },
   {
     "google_place_id": "ChIJpUHKm6AX2jERkrMF0Kavx2I",
@@ -60,7 +61,9 @@
     "g_rating": "4.2",
     "g_no_reviews": "216",
     "cuisine": "japanese",
-    "dietary": [],
+    "dietary": [
+      "halal"
+    ],
     "avg_price_low_sgd": 10.0,
     "avg_price_high_sgd": 20.0,
     "opening_hours": {
@@ -73,7 +76,7 @@
       "sunday": ["0000", "2359"]
     },
     "wheelchair_accessible": null,
-    "halal_certification": "none"
+    "halal_certification": "official"
   },
   {
     "google_place_id": "ChIJxV9tXxoX2jERm470TcJitJ0",
@@ -84,7 +87,9 @@
     "g_rating": "3.9",
     "g_no_reviews": "71",
     "cuisine": "tonkatsu",
-    "dietary": [],
+    "dietary": [
+      "halal"
+    ],
     "avg_price_low_sgd": 10.0,
     "avg_price_high_sgd": 20.0,
     "opening_hours": {
@@ -97,7 +102,7 @@
       "sunday": ["1130", "2130"]
     },
     "wheelchair_accessible": null,
-    "halal_certification": "none"
+    "halal_certification": "official"
   },
   {
     "google_place_id": "ChIJJQep-owV2jERrkjXxwYWNJU",
@@ -109,6 +114,7 @@
     "g_no_reviews": "1710",
     "cuisine": "thai",
     "dietary": [
+      "halal",
       "vegetarian"
     ],
     "avg_price_low_sgd": 10.0,
@@ -123,6 +129,7 @@
       "sunday": ["1100", "2200"]
     },
     "wheelchair_accessible": true,
+<<<<<<< HEAD
     "halal_certification": "none"
   },
   {
@@ -168,10 +175,35 @@
       "tuesday": ["1100", "2200"],
       "wednesday": ["1100", "2200"],
       "thursday": ["1100", "2200"],
+=======
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJKRwoS_sV2jERl_qBSbAssS4",
+    "name": "Dian Xiao Er (Waterway Point)",
+    "postal_code": "828761",
+    "address": "83 Punggol Central, #01-30 Waterway Point East Wing, Singapore 828761",
+    "number": "6385 8513",
+    "g_rating": "4.4",
+    "g_no_reviews": "833",
+    "cuisine": null,
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 30.0,
+    "opening_hours": {
+      "monday": ["1100", "2130"],
+      "tuesday": ["1100", "2130"],
+      "wednesday": ["1100", "2130"],
+      "thursday": ["1100", "2130"],
+>>>>>>> 7e3a7e538db5bf8c066868a0ed0312b7d43182cd
       "friday": ["1100", "2200"],
       "saturday": ["1100", "2200"],
       "sunday": ["1100", "2200"]
     },
+<<<<<<< HEAD
     "wheelchair_accessible": null,
     "halal_certification": "none"
   },
@@ -208,10 +240,77 @@
     "g_rating": "4.6",
     "g_no_reviews": "973",
     "cuisine": "korean",
+=======
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJn4C5Pv8X2jERPQnwp4m68R0",
+    "name": "王府点心 Wangfu Dimsum (Rivervale Mall)",
+    "postal_code": "545082",
+    "address": "11 Rivervale Cres, #01-06 Rivervale Mall, Singapore 545082",
+    "number": "8040 5263",
+    "g_rating": "4.7",
+    "g_no_reviews": "550",
+    "cuisine": "chinese",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1000", "2100"],
+      "tuesday": ["1000", "2100"],
+      "wednesday": ["1000", "2100"],
+      "thursday": ["1000", "2100"],
+      "friday": ["1000", "2100"],
+      "saturday": ["1000", "2100"],
+      "sunday": ["1000", "2100"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJJfiRKZAX2jERk4wsfTWr9Hg",
+    "name": "D Laksa Compass One",
+    "postal_code": "545078",
+    "address": "1 Sengkang Sq, #B1-46, Singapore 545078",
+    "number": "9764 7708",
+    "g_rating": "3.6",
+    "g_no_reviews": "109",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["1000", "2200"],
+      "tuesday": ["1000", "2200"],
+      "wednesday": ["1000", "2200"],
+      "thursday": ["1000", "2200"],
+      "friday": ["1000", "2200"],
+      "saturday": ["1000", "2200"],
+      "sunday": ["1000", "2200"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJDV8kFPg92jERKulk55S832w",
+    "name": "Frienzie Bar & Bistro",
+    "postal_code": "828836",
+    "address": "10, Tebing Lane, #01-02, Singapore 828836",
+    "number": "6441 0966",
+    "g_rating": "3.9",
+    "g_no_reviews": "1022",
+    "cuisine": null,
+>>>>>>> 7e3a7e538db5bf8c066868a0ed0312b7d43182cd
     "dietary": [
       "halal"
     ],
     "avg_price_low_sgd": 20.0,
+<<<<<<< HEAD
     "avg_price_high_sgd": 30.0,
     "opening_hours": {
       "monday": ["1030", "2200"],
@@ -285,6 +384,35 @@
     "dietary": [],
     "avg_price_low_sgd": 1.0,
     "avg_price_high_sgd": 10.0,
+=======
+    "avg_price_high_sgd": 70.0,
+    "opening_hours": {
+      "monday": ["1600", "2359"],
+      "tuesday": ["1800", "2359"],
+      "wednesday": ["1600", "2359"],
+      "thursday": ["1600", "2359"],
+      "friday": ["1600", "2359"],
+      "saturday": [["0000", "0100"], ["1600", "2359"]],
+      "sunday": [["0000", "0100"], ["1800", "2359"]]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJlQSK8XYX2jERQt2--tWx2Vk",
+    "name": "Buddy Hoagies Steak & Grill Restaurant",
+    "postal_code": "530205",
+    "address": "205 Hougang St 21, #01-27 Heartland Mall, Singapore 530205",
+    "number": "6970 1283",
+    "g_rating": "4.3",
+    "g_no_reviews": "577",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+>>>>>>> 7e3a7e538db5bf8c066868a0ed0312b7d43182cd
     "opening_hours": {
       "monday": ["1130", "2200"],
       "tuesday": ["1130", "2200"],
@@ -295,6 +423,7 @@
       "sunday": ["1130", "2200"]
     },
     "wheelchair_accessible": true,
+<<<<<<< HEAD
     "halal_certification": "none"
   },
   {
@@ -612,10 +741,30 @@
     "avg_price_low_sgd": 10.0,
     "avg_price_high_sgd": 50.0,
     "opening_hours": {
+=======
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJOdEhcRc92jERcT6RF47eric",
+    "name": "Watami Japanese Dining",
+    "postal_code": "519599",
+    "address": "1 Pasir Ris Cl, #02-104/105, Singapore 519599",
+    "number": "6970 6893",
+    "g_rating": "3.9",
+    "g_no_reviews": "543",
+    "cuisine": "japanese",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+>>>>>>> 7e3a7e538db5bf8c066868a0ed0312b7d43182cd
       "monday": ["1130", "2130"],
       "tuesday": ["1130", "2130"],
       "wednesday": ["1130", "2130"],
       "thursday": ["1130", "2130"],
+<<<<<<< HEAD
       "friday": ["1130", "2200"],
       "saturday": ["1130", "2200"],
       "sunday": ["1130", "2130"]
@@ -656,12 +805,58 @@
     "g_rating": "3.1",
     "g_no_reviews": "327",
     "cuisine": "fast food",
+=======
+      "friday": ["1130", "2130"],
+      "saturday": ["1130", "2130"],
+      "sunday": ["1130", "2130"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJk_MggW8U2jERn-zPsv-4j8w",
+    "name": "PUTIEN Northpoint City",
+    "postal_code": "769098",
+    "address": "930 Yishun Avenue 2, #02-42/43/44, Northpoint City North Wing, 930 Yishun Ave 2, #02 - 42 / 43 / 44, Singapore 769098",
+    "number": "6257 1482",
+    "g_rating": "4.7",
+    "g_no_reviews": "2124",
+    "cuisine": "chinese",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 30.0,
+    "opening_hours": {
+      "monday": ["1130", "2200"],
+      "tuesday": ["1130", "2200"],
+      "wednesday": ["1130", "2200"],
+      "thursday": ["1130", "2200"],
+      "friday": ["1130", "2200"],
+      "saturday": ["1100", "2200"],
+      "sunday": ["1100", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJ48hEnDcW2jER7qtNI-oHUm4",
+    "name": "Pepper Lunch - Hougang Mall",
+    "postal_code": "538766",
+    "address": "90 Hougang Ave 10, #03-11 Hougang Mall, Singapore 538766",
+    "number": "6387 2800",
+    "g_rating": "4.1",
+    "g_no_reviews": "487",
+    "cuisine": "japanese",
+>>>>>>> 7e3a7e538db5bf8c066868a0ed0312b7d43182cd
     "dietary": [
       "halal"
     ],
     "avg_price_low_sgd": 10.0,
     "avg_price_high_sgd": 20.0,
     "opening_hours": {
+<<<<<<< HEAD
       "monday": ["0630", "2359"],
       "tuesday": ["0630", "2359"],
       "wednesday": ["0630", "2359"],
@@ -683,11 +878,36 @@
     "g_no_reviews": "736",
     "cuisine": "south_indian",
     "dietary": [
+=======
+      "monday": ["1000", "2200"],
+      "tuesday": ["1000", "2200"],
+      "wednesday": ["1000", "2200"],
+      "thursday": ["1000", "2200"],
+      "friday": ["1000", "2200"],
+      "saturday": ["1000", "2200"],
+      "sunday": ["1000", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJ0y_h3jsV2jER0X7-hrLJll8",
+    "name": "Ajumma's (Waterway Point)",
+    "postal_code": "828761",
+    "address": "83 Punggol Central, #02-26 West Wing Waterway Point, Singapore 828761",
+    "number": "8749 7993",
+    "g_rating": "4.7",
+    "g_no_reviews": "4537",
+    "cuisine": "korean",
+    "dietary": [
+      "halal",
+>>>>>>> 7e3a7e538db5bf8c066868a0ed0312b7d43182cd
       "vegetarian"
     ],
     "avg_price_low_sgd": 10.0,
     "avg_price_high_sgd": 20.0,
     "opening_hours": {
+<<<<<<< HEAD
       "monday": ["0000", "2359"],
       "tuesday": ["0000", "2359"],
       "wednesday": ["0000", "2359"],
@@ -709,6 +929,1398 @@
     "g_no_reviews": "2976",
     "cuisine": null,
     "dietary": [],
+=======
+      "monday": ["1100", "2100"],
+      "tuesday": ["1100", "2115"],
+      "wednesday": ["1100", "2115"],
+      "thursday": ["1100", "2115"],
+      "friday": ["1100", "2115"],
+      "saturday": ["1100", "2115"],
+      "sunday": ["1100", "2115"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJV-ohMgAV2jERWrUDVtH2mVA",
+    "name": "O.BBa BBQ & Jjajang @ Waterway Point",
+    "postal_code": "828761",
+    "address": "83 Punggol Central, #01-33, Singapore 828761",
+    "number": "8850 5757",
+    "g_rating": "4.5",
+    "g_no_reviews": "206",
+    "cuisine": "korean_barbecue",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 30.0,
+    "avg_price_high_sgd": 90.0,
+    "opening_hours": {
+      "monday": ["1130", "2230"],
+      "tuesday": ["1130", "2230"],
+      "wednesday": ["1130", "2230"],
+      "thursday": ["1130", "2230"],
+      "friday": ["1130", "2230"],
+      "saturday": ["1130", "2230"],
+      "sunday": ["1130", "2230"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJQX2vcwAV2jER6g5IerAfGfA",
+    "name": "Daily Chicken (Waterway Point)",
+    "postal_code": "828761",
+    "address": "83 Punggol Central, #01-66 Waterway Point, West Wing, Singapore 828761",
+    "number": "6585 0868",
+    "g_rating": "4.6",
+    "g_no_reviews": "774",
+    "cuisine": "korean",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1100", "2200"],
+      "tuesday": ["1100", "2200"],
+      "wednesday": ["1100", "2200"],
+      "thursday": ["1100", "2200"],
+      "friday": ["1100", "2200"],
+      "saturday": ["1100", "2200"],
+      "sunday": ["1100", "2200"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJKYKpCgkZ2jER_sLEJTB0ZTA",
+    "name": "Oni Kimbap & Obba Jjajang Express (CQ central)",
+    "postal_code": "059817",
+    "address": "6 Eu Tong Sen St, B-K1-K3, Singapore 059817",
+    "number": "8850 8787",
+    "g_rating": "4.3",
+    "g_no_reviews": "99",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1130", "2100"],
+      "tuesday": ["1130", "2100"],
+      "wednesday": ["1130", "2100"],
+      "thursday": ["1130", "2100"],
+      "friday": ["1130", "2100"],
+      "saturday": ["1130", "2100"],
+      "sunday": ["1130", "2100"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJX5ShLQAX2jERVWQF6sApcWs",
+    "name": "OmmaKase",
+    "postal_code": "569933",
+    "address": "3 Ang Mo Kio Ave 3, B2-55 AMK Hub, Singapore 569933",
+    "number": null,
+    "g_rating": "4.9",
+    "g_no_reviews": "403",
+    "cuisine": "korean",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["1000", "2200"],
+      "tuesday": ["1000", "2200"],
+      "wednesday": ["1000", "2200"],
+      "thursday": ["1000", "2200"],
+      "friday": ["1000", "2200"],
+      "saturday": ["1000", "2200"],
+      "sunday": ["1000", "2200"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJSzOCPQAV2jERqAP4q42fA3o",
+    "name": "90 Minutes",
+    "postal_code": "829857",
+    "address": "98 Punggol Wy, #01-230 Punggol Coast Mall, Singapore 829857",
+    "number": "6466 6646",
+    "g_rating": "4.2",
+    "g_no_reviews": "84",
+    "cuisine": "korean",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 30.0,
+    "opening_hours": {
+      "monday": ["1100", "2230"],
+      "tuesday": ["1100", "2230"],
+      "wednesday": ["1100", "2230"],
+      "thursday": ["1100", "2230"],
+      "friday": ["1100", "2230"],
+      "saturday": ["1100", "2230"],
+      "sunday": ["1100", "2230"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJBWX2EQAV2jERHh_KdsLrLFg",
+    "name": "Nayana +",
+    "postal_code": "829913",
+    "address": "88 Punggol Wy, #02-115 Punggol Coast Mall, Singapore 829913",
+    "number": "9323 4585",
+    "g_rating": "4.4",
+    "g_no_reviews": "282",
+    "cuisine": "korean",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 30.0,
+    "opening_hours": {
+      "monday": ["1000", "2300"],
+      "tuesday": ["1000", "2300"],
+      "wednesday": ["1000", "2300"],
+      "thursday": ["1000", "2300"],
+      "friday": ["1000", "2300"],
+      "saturday": ["0900", "2300"],
+      "sunday": ["0900", "2300"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJlxWZdtwX2jERp2mNsH9Fi4w",
+    "name": "Ajumma's Lentor",
+    "postal_code": "788887",
+    "address": "1 Lentor Central, #01-30 Lentor Modern, Singapore 788887",
+    "number": null,
+    "g_rating": "4.7",
+    "g_no_reviews": "5071",
+    "cuisine": "korean",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1100", "2115"],
+      "tuesday": ["1100", "2115"],
+      "wednesday": ["1100", "2115"],
+      "thursday": ["1100", "2115"],
+      "friday": ["1100", "2115"],
+      "saturday": ["1100", "2115"],
+      "sunday": ["1100", "2115"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJMTIUJ0YX2jERsU4pW51GpTw",
+    "name": "OMMA Chicken Soup - Kovan",
+    "postal_code": "530209",
+    "address": "Hougang St 21, #01-11 Kovan Market, Singapore 530209",
+    "number": "8089 4869",
+    "g_rating": "4.2",
+    "g_no_reviews": "35",
+    "cuisine": "korean",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["1000", "2000"],
+      "tuesday": ["1000", "2000"],
+      "wednesday": ["1000", "2000"],
+      "thursday": ["1000", "2000"],
+      "friday": ["1000", "2000"],
+      "saturday": ["1000", "2000"],
+      "sunday": ["1000", "2000"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJQVM9IY0V2jERMVzqT1sZ6XE",
+    "name": "JIN Kimchi Express @ ONE Punggol",
+    "postal_code": "828629",
+    "address": "1 Punggol Dr., #02-16, Singapore 828629",
+    "number": "6910 3180",
+    "g_rating": "3.7",
+    "g_no_reviews": "337",
+    "cuisine": "korean",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": [["1100", "1430"], ["1630", "2030"]],
+      "tuesday": [["1100", "1430"], ["1700", "2030"]],
+      "wednesday": [["1100", "1430"], ["1630", "2030"]],
+      "thursday": [["1100", "1430"], ["1700", "2030"]],
+      "friday": [["1100", "1430"], ["1700", "2030"]],
+      "saturday": [["1100", "1430"], ["1700", "2030"]],
+      "sunday": [["1100", "1430"], ["1700", "2030"]]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJj4EoehwX2jERz9YRKefxQBE",
+    "name": "OMMA Chicken Soup - Compass One Kopitiam",
+    "postal_code": "545078",
+    "address": "1 Sengkang Sq, #04-11 CompassOne Kopitiam, Singapore 545078",
+    "number": "8089 4869",
+    "g_rating": "3.1",
+    "g_no_reviews": "35",
+    "cuisine": "korean",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1000", "2100"],
+      "tuesday": ["1000", "2100"],
+      "wednesday": ["1000", "2100"],
+      "thursday": ["1000", "2100"],
+      "friday": ["1000", "2100"],
+      "saturday": ["1000", "2100"],
+      "sunday": ["1000", "2100"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJ98EW-_g92jERT1piAsJAnow",
+    "name": "Seoul Good Korean Restaurant (PUNGGOL)",
+    "postal_code": "828824",
+    "address": "50 Punggol E, Singapore 828824",
+    "number": "8378 7873",
+    "g_rating": "4.1",
+    "g_no_reviews": "466",
+    "cuisine": "korean",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 30.0,
+    "opening_hours": {
+      "monday": ["1530", "2345"],
+      "tuesday": ["1530", "2345"],
+      "wednesday": ["1530", "2345"],
+      "thursday": ["1530", "2345"],
+      "friday": ["1530", "2345"],
+      "saturday": ["1530", "2345"],
+      "sunday": ["1530", "2345"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJmwUlHgAV2jERG4fy93sJS3o",
+    "name": "Paik's Noodle (Waterway Point)",
+    "postal_code": "828761",
+    "address": "83 Punggol Central, #02-21, Singapore 828761",
+    "number": "6027 5873",
+    "g_rating": "4.3",
+    "g_no_reviews": "738",
+    "cuisine": "korean",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1100", "2100"],
+      "tuesday": ["1100", "2100"],
+      "wednesday": ["1100", "2100"],
+      "thursday": ["1100", "2100"],
+      "friday": ["1100", "2100"],
+      "saturday": ["1100", "2100"],
+      "sunday": ["1100", "2100"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJTyjYuFwV2jERWcsppGWYHcs",
+    "name": "Ajumma's Northpoint",
+    "postal_code": "768019",
+    "address": "1 North Point Dr, B1-201,202, Singapore 768019",
+    "number": "8892 6047",
+    "g_rating": "4.7",
+    "g_no_reviews": "6309",
+    "cuisine": "korean",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1100", "2100"],
+      "tuesday": ["1100", "2115"],
+      "wednesday": ["1100", "2115"],
+      "thursday": ["1100", "2115"],
+      "friday": ["1100", "2115"],
+      "saturday": ["1100", "2115"],
+      "sunday": ["1100", "2115"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJTyDOBQAV2jER9ppHiL9QEPo",
+    "name": "Tofu G Gelato (Waterway Point) | Korean Premium Ice Cream | Fresh-Churn Gelato",
+    "postal_code": "828761",
+    "address": "83 Punggol Central, #01-53, Singapore 828761",
+    "number": null,
+    "g_rating": "4.0",
+    "g_no_reviews": "45",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": null,
+    "avg_price_high_sgd": null,
+    "opening_hours": {
+      "monday": ["1000", "2200"],
+      "tuesday": ["1000", "2200"],
+      "wednesday": ["1000", "2200"],
+      "thursday": ["1000", "2200"],
+      "friday": ["1000", "2200"],
+      "saturday": ["1000", "2200"],
+      "sunday": ["1000", "2200"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJ2wSZ2QkV2jER0dNr1RyW56I",
+    "name": "Chingu @ The Oval",
+    "postal_code": "797865",
+    "address": "7 The Oval, Singapore 797865",
+    "number": "9690 8002",
+    "g_rating": "4.5",
+    "g_no_reviews": "1291",
+    "cuisine": "korean",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": null,
+    "avg_price_high_sgd": null,
+    "opening_hours": {
+      "monday": ["1100", "2300"],
+      "tuesday": ["1100", "2300"],
+      "wednesday": ["1100", "2300"],
+      "thursday": ["1100", "2300"],
+      "friday": ["1100", "2300"],
+      "saturday": ["1000", "2300"],
+      "sunday": ["1000", "2300"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJUXwEPk0V2jERNydsf_FqOYc",
+    "name": "Three Little Coconut by Mr Coconut @ One Punggol Hub",
+    "postal_code": "828629",
+    "address": "1 Punggol Dr., #01-03, One, Singapore 828629",
+    "number": "6015 0435",
+    "g_rating": "4.4",
+    "g_no_reviews": "102",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": null,
+    "avg_price_high_sgd": null,
+    "opening_hours": {
+      "monday": ["1100", "2145"],
+      "tuesday": ["1100", "2145"],
+      "wednesday": ["1100", "2145"],
+      "thursday": ["1100", "2145"],
+      "friday": ["1100", "2145"],
+      "saturday": ["1100", "2145"],
+      "sunday": ["1100", "2145"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJ-578bAAX2jERw3Q-4NWnBUw",
+    "name": "Bibimbap/Dosirak",
+    "postal_code": "540339",
+    "address": "339 Anchorvale Rd, #01-01, Singapore 540339",
+    "number": "9780 8929",
+    "g_rating": "4.2",
+    "g_no_reviews": "34",
+    "cuisine": "korean",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["1000", "2130"],
+      "tuesday": ["1000", "2130"],
+      "wednesday": ["1000", "2130"],
+      "thursday": ["1000", "2130"],
+      "friday": ["1000", "2130"],
+      "saturday": ["1000", "2130"],
+      "sunday": ["1000", "2130"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJ3-TmE78Z2jERH86_UuZkRzE",
+    "name": "Overrice (Voted Best Halal Restaurant near Haji Lane)",
+    "postal_code": "198489",
+    "address": "41 Sultan Gate, Singapore 198489",
+    "number": "8915 9998",
+    "g_rating": "4.7",
+    "g_no_reviews": "1125",
+    "cuisine": "cafe",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1200", "2100"],
+      "tuesday": ["1200", "2100"],
+      "wednesday": ["1200", "2100"],
+      "thursday": ["1200", "2100"],
+      "friday": ["1200", "2100"],
+      "saturday": ["1200", "2100"],
+      "sunday": ["1200", "2100"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJg1pOiD0Z2jERavAWxT7kZdU",
+    "name": "Kitchenman Nasi Lemak",
+    "postal_code": "339407",
+    "address": "2 Kallang Ave, #01-08/13 CT HUB, Singapore 339407",
+    "number": null,
+    "g_rating": "4.4",
+    "g_no_reviews": "257",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1130", "1930"],
+      "tuesday": ["1130", "1930"],
+      "wednesday": ["1130", "1930"],
+      "thursday": ["1130", "1930"],
+      "friday": ["1130", "1930"],
+      "saturday": ["1130", "1930"],
+      "sunday": []
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJBxMa5bNt2jERC9rh4zniG3E",
+    "name": "Spazzo Artisanal Fresh Pasta",
+    "postal_code": "80250",
+    "address": "29, Jalan Kebun Teh 1, Taman Kebun Teh, 80250 Johor Bahru, Johor Darul Ta'zim, Malaysia",
+    "number": "014-386 8432",
+    "g_rating": "4.6",
+    "g_no_reviews": "322",
+    "cuisine": "cafe",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 40.0,
+    "opening_hours": {
+      "monday": ["1200", "2300"],
+      "tuesday": ["1200", "2300"],
+      "wednesday": ["1200", "2300"],
+      "thursday": ["1200", "2300"],
+      "friday": ["1200", "2300"],
+      "saturday": ["1200", "2300"],
+      "sunday": ["1200", "2300"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJS8EeGAAZ2jERMnU5f-IZ9RE",
+    "name": "LONGJING Restaurant",
+    "postal_code": "038983",
+    "address": "SG Suntec Singapore Convention & Exhibition Centre - Atrium Convention (Near Uniqlo H&M, #01-384/385 Postal Code:, Singapore 038983",
+    "number": "6348 6523",
+    "g_rating": "4.5",
+    "g_no_reviews": "3642",
+    "cuisine": "chinese",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 30.0,
+    "avg_price_high_sgd": 40.0,
+    "opening_hours": {
+      "monday": ["1130", "2200"],
+      "tuesday": ["1130", "2200"],
+      "wednesday": ["1130", "2200"],
+      "thursday": ["1130", "2200"],
+      "friday": ["1130", "2200"],
+      "saturday": ["1100", "2200"],
+      "sunday": ["1100", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJQUHLtbYe2jER2Mhu3PXf1cA",
+    "name": "Latitude Restaurant & Terrace (ONE°15 Marina Members only)",
+    "postal_code": "098497",
+    "address": "11 Cove Dr, #01-01 ONE°15 Marina Club, Sentosa Cove, Singapore 098497",
+    "number": "6305 6982",
+    "g_rating": "4.2",
+    "g_no_reviews": "147",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 30.0,
+    "avg_price_high_sgd": 40.0,
+    "opening_hours": {
+      "monday": ["0700", "2200"],
+      "tuesday": ["0700", "2200"],
+      "wednesday": ["0700", "2200"],
+      "thursday": ["0700", "2200"],
+      "friday": ["0700", "2300"],
+      "saturday": ["0700", "2300"],
+      "sunday": ["0700", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJ7ZNPTtgZ2jERN9dcjte6Ko4",
+    "name": "MADD PIZZA",
+    "postal_code": "189212",
+    "address": "19 Haji Ln, Singapore 189212",
+    "number": "9003 6045",
+    "g_rating": "4.6",
+    "g_no_reviews": "571",
+    "cuisine": null,
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 40.0,
+    "opening_hours": {
+      "monday": ["1130", "2359"],
+      "tuesday": ["1130", "2359"],
+      "wednesday": ["1130", "2359"],
+      "thursday": ["1130", "2359"],
+      "friday": ["1130", "2359"],
+      "saturday": ["1130", "2359"],
+      "sunday": ["1130", "2359"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJjXD-ND0R2jERuRYQ3A8_gFI",
+    "name": "OMMA Korean Charcoal BBQ",
+    "postal_code": "599744",
+    "address": "20 Cheong Chin Nam Rd, Singapore 599744",
+    "number": "8765 5822",
+    "g_rating": "4.6",
+    "g_no_reviews": "2023",
+    "cuisine": "korean_barbecue",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 30.0,
+    "avg_price_high_sgd": 80.0,
+    "opening_hours": {
+      "monday": ["1200", "2300"],
+      "tuesday": ["1200", "2300"],
+      "wednesday": ["1200", "2300"],
+      "thursday": ["1200", "2300"],
+      "friday": ["1200", "2300"],
+      "saturday": ["1200", "2300"],
+      "sunday": ["1200", "2300"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJew1nJnw92jER5ld1UZbAGI8",
+    "name": "Ayam Penyet President - Djitsun Bedok",
+    "postal_code": "469661",
+    "address": "445 BEDOK NORTH STREET 1 Djitsun, Mall, #01-07/08, Singapore 469661",
+    "number": "6970 2849",
+    "g_rating": "4.4",
+    "g_no_reviews": "581",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1030", "2030"],
+      "tuesday": ["1030", "2030"],
+      "wednesday": ["1030", "2030"],
+      "thursday": ["1030", "2030"],
+      "friday": ["1030", "2030"],
+      "saturday": ["1030", "2030"],
+      "sunday": ["1030", "2030"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJN4Y-0DUZ2jER_WIyfmcV_Z0",
+    "name": "Lazy Sloth & Drunken Sloth",
+    "postal_code": "428761",
+    "address": "41 E Coast Rd, Singapore 428761",
+    "number": "6241 3933",
+    "g_rating": "4.6",
+    "g_no_reviews": "199",
+    "cuisine": null,
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 40.0,
+    "opening_hours": {
+      "monday": ["1500", "2359"],
+      "tuesday": ["1500", "2359"],
+      "wednesday": ["1500", "2359"],
+      "thursday": ["1500", "2359"],
+      "friday": ["1500", "2359"],
+      "saturday": ["1230", "2359"],
+      "sunday": ["1130", "2359"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJ6TLi86Js2jERCfv2bn6gFGU",
+    "name": "Café BLD",
+    "postal_code": "81750",
+    "address": "2, Jalan Permas 11, Bandar Baru Permas Jaya, 81750 Johor Bahru, Johor Darul Ta'zim, Malaysia",
+    "number": "07-381 3322",
+    "g_rating": "4.1",
+    "g_no_reviews": "952",
+    "cuisine": "buffet",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 60.0,
+    "avg_price_high_sgd": 160.0,
+    "opening_hours": {
+      "monday": ["0600", "2200"],
+      "tuesday": ["0600", "2200"],
+      "wednesday": ["0600", "2200"],
+      "thursday": ["0600", "2200"],
+      "friday": ["0600", "2200"],
+      "saturday": ["0600", "2200"],
+      "sunday": ["0600", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJwdlvMQAZ2jERhx1ZKsX6iZg",
+    "name": "XIAONOODLES",
+    "postal_code": "238895",
+    "address": "313 Orchard Rd, #B3-37/38 313@somerset, Singapore 238895",
+    "number": "6298 4256",
+    "g_rating": "4.2",
+    "g_no_reviews": "106",
+    "cuisine": "chinese",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1000", "2130"],
+      "tuesday": ["1000", "2130"],
+      "wednesday": ["1000", "2130"],
+      "thursday": ["1000", "2130"],
+      "friday": ["1000", "2130"],
+      "saturday": ["1000", "2130"],
+      "sunday": ["1000", "2130"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJ-SK1atAV2jERFmkEbLptHaE",
+    "name": "OK Chicken Rice & Humfull Laksa (Punggol)",
+    "postal_code": "823308",
+    "address": "308C Punggol Walk, #01-308 Waterway Terraces 1, Singapore 823308",
+    "number": "6717 6291",
+    "g_rating": "4.3",
+    "g_no_reviews": "251",
+    "cuisine": "chinese",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0800", "2200"],
+      "tuesday": ["0800", "2200"],
+      "wednesday": ["0800", "2200"],
+      "thursday": ["0800", "2200"],
+      "friday": ["0800", "2200"],
+      "saturday": ["0800", "2200"],
+      "sunday": ["0800", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJ89FOy7EV2jERmsFk4BkS2R8",
+    "name": "Wingstop Punggol Safra",
+    "postal_code": "828654",
+    "address": "9 Sentul Cres, #02-02 SAFRA, Singapore 828654",
+    "number": "6977 7114",
+    "g_rating": "4.6",
+    "g_no_reviews": "833",
+    "cuisine": "chicken_wings",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1100", "2200"],
+      "tuesday": ["1100", "2200"],
+      "wednesday": ["1100", "2200"],
+      "thursday": ["1100", "2200"],
+      "friday": ["1100", "2200"],
+      "saturday": ["1100", "2200"],
+      "sunday": ["1100", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJl6xUyK4V2jERL_Ukt9kBJA4",
+    "name": "Lahori.SG Desi Delivery Kitchen",
+    "postal_code": "821401",
+    "address": "401a Northshore Dr, Singapore 821401",
+    "number": "6920 1773",
+    "g_rating": "4.4",
+    "g_no_reviews": "9",
+    "cuisine": "pakistani",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": null,
+    "avg_price_high_sgd": null,
+    "opening_hours": {
+      "monday": ["1000", "2200"],
+      "tuesday": ["1000", "2200"],
+      "wednesday": ["1000", "2200"],
+      "thursday": ["1000", "2200"],
+      "friday": ["1000", "2200"],
+      "saturday": ["0900", "2200"],
+      "sunday": ["0900", "2200"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJzSeNfOUV2jERR57c4Me7CLk",
+    "name": "AL HABIB INDIAN MUSLIM FOOD -",
+    "postal_code": "821312",
+    "address": "BLK 312A Sumang Link, #01-05, SINGAPORE 821312 PUNGGOL PARCVISTA, Singapore 821312",
+    "number": null,
+    "g_rating": "3.2",
+    "g_no_reviews": "110",
+    "cuisine": "cafe",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0600", "2300"],
+      "tuesday": ["0600", "2300"],
+      "wednesday": ["0600", "2300"],
+      "thursday": ["0600", "2300"],
+      "friday": ["0600", "2300"],
+      "saturday": ["0600", "2300"],
+      "sunday": ["0600", "2300"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJIS7ZbgwV2jERoT5HGKOp5YM",
+    "name": "Botak Cantonese Porridge",
+    "postal_code": "828629",
+    "address": "1 Punggol Dr., #02-14 One Punggol Hawker Centre, Singapore 828629",
+    "number": "8332 4255",
+    "g_rating": "4.7",
+    "g_no_reviews": "852",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0700", "2100"],
+      "tuesday": ["0700", "2100"],
+      "wednesday": ["0700", "2100"],
+      "thursday": ["0700", "2100"],
+      "friday": ["0700", "2100"],
+      "saturday": ["0700", "2100"],
+      "sunday": ["0700", "2100"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJWfJVReMV2jERzXEYmzVzAzU",
+    "name": "So Pho (Waterway Point)",
+    "postal_code": "828761",
+    "address": "83 Punggol Central, #01 - 28 East Wing, Singapore 828761",
+    "number": "6385 8378",
+    "g_rating": "4.4",
+    "g_no_reviews": "1039",
+    "cuisine": "vietnamese",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1100", "2200"],
+      "tuesday": ["1100", "2200"],
+      "wednesday": ["1100", "2200"],
+      "thursday": ["1100", "2200"],
+      "friday": ["1100", "2200"],
+      "saturday": ["1100", "2200"],
+      "sunday": ["1100", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJK7bJ8TkV2jEROrdhLWJTXaI",
+    "name": "Crave Nasi Lemak (Waterway Point)",
+    "postal_code": "828761",
+    "address": "83 Punggol Central, B1-K7 Waterway Point, Singapore 828761",
+    "number": null,
+    "g_rating": "4.2",
+    "g_no_reviews": "479",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0700", "2200"],
+      "tuesday": ["0700", "2200"],
+      "wednesday": ["0700", "2200"],
+      "thursday": ["0700", "2200"],
+      "friday": ["0700", "2200"],
+      "saturday": ["0700", "2200"],
+      "sunday": ["0700", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJLZLBeGYV2jERxD6XYgYXg6g",
+    "name": "Foodgle",
+    "postal_code": "823308",
+    "address": "308C Punggol Walk, #01-308, Singapore 823308",
+    "number": null,
+    "g_rating": "3.8",
+    "g_no_reviews": "143",
+    "cuisine": "cafe",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0730", "1930"],
+      "tuesday": ["0800", "2100"],
+      "wednesday": ["0730", "1930"],
+      "thursday": ["0730", "1930"],
+      "friday": ["0800", "2100"],
+      "saturday": ["0730", "1930"],
+      "sunday": ["0730", "1930"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJta3nSfEV2jER4u5YS-cH-6c",
+    "name": "WOK HEY (Waterway Point)",
+    "postal_code": "828761",
+    "address": "83 Punggol Central, #01-K6 Waterway Point East Wing, Singapore 828761",
+    "number": null,
+    "g_rating": "4.2",
+    "g_no_reviews": "301",
+    "cuisine": "fast food",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["1030", "2145"],
+      "tuesday": ["1030", "2145"],
+      "wednesday": ["1030", "2145"],
+      "thursday": ["1030", "2145"],
+      "friday": ["1030", "2145"],
+      "saturday": ["1030", "2145"],
+      "sunday": ["1030", "2145"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJh7PvMgAV2jER2ZrTNK9-60M",
+    "name": "Kopi Korner (Punggol Safra)",
+    "postal_code": "828654",
+    "address": "9 Sentul Cres, #03-04 SAFRA, Punggol 828654",
+    "number": "6611 1686",
+    "g_rating": "4.2",
+    "g_no_reviews": "76",
+    "cuisine": "cafe",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0800", "2030"],
+      "tuesday": ["0800", "2030"],
+      "wednesday": ["0800", "2030"],
+      "thursday": ["0800", "2030"],
+      "friday": ["0800", "2030"],
+      "saturday": ["0800", "2030"],
+      "sunday": ["0800", "2030"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJQSqz0w0V2jERXcPVc88FAGM",
+    "name": "Wholesome - A halal concept by Food Canopy @ SIT",
+    "postal_code": "829979",
+    "address": "13 New Punggol Rd, #02-11, 02-12, Singapore 829979",
+    "number": "6334 3033",
+    "g_rating": "3.7",
+    "g_no_reviews": "44",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0700", "1900"],
+      "tuesday": ["0700", "1900"],
+      "wednesday": ["0700", "1900"],
+      "thursday": ["0700", "1900"],
+      "friday": ["0700", "1900"],
+      "saturday": [],
+      "sunday": []
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJp_MGSfwV2jERDw6AWZK4yis",
+    "name": "One Punggol Hawker Centre",
+    "postal_code": "828629",
+    "address": "1 Punggol Dr., Level 2, Singapore 828629",
+    "number": "6225 5632",
+    "g_rating": "3.6",
+    "g_no_reviews": "977",
+    "cuisine": null,
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0700", "2200"],
+      "tuesday": ["0700", "2200"],
+      "wednesday": ["0700", "2200"],
+      "thursday": ["0700", "2200"],
+      "friday": ["0700", "2200"],
+      "saturday": ["0700", "2200"],
+      "sunday": ["0700", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJSdMALqQV2jER8axrWvcrUNQ",
+    "name": "One Punggol Rojak & Prata",
+    "postal_code": "828629",
+    "address": "1 Punggol Dr., #02-02 One Punggol Hawker Centre, Singapore 828629",
+    "number": null,
+    "g_rating": "3.0",
+    "g_no_reviews": "46",
+    "cuisine": "indian",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0900", "2200"],
+      "tuesday": [],
+      "wednesday": ["0900", "2200"],
+      "thursday": ["0900", "2200"],
+      "friday": ["0900", "2200"],
+      "saturday": ["0800", "2100"],
+      "sunday": ["0700", "2200"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJXyLgQQA92jERy4CCNiM7L8c",
+    "name": "Rasa Bagus (Halal)",
+    "postal_code": "821654",
+    "address": "654A Punggol Dr., Waterway Sunrise 2, Singapore 821654",
+    "number": "9366 3100",
+    "g_rating": "4.2",
+    "g_no_reviews": "232",
+    "cuisine": "asian",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1200", "2300"],
+      "tuesday": ["1200", "2300"],
+      "wednesday": ["1200", "2300"],
+      "thursday": ["1200", "2300"],
+      "friday": ["1200", "2300"],
+      "saturday": ["1200", "2300"],
+      "sunday": ["1200", "2300"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJb8Mhp-QV2jERAt7Vfgox5-Q",
+    "name": "Fish & Co. (Waterway Point)",
+    "postal_code": "828761",
+    "address": "83 Punggol Central, B1-18 Waterway Point East Wing, Singapore 828761",
+    "number": "6385 9061",
+    "g_rating": "4",
+    "g_no_reviews": "735",
+    "cuisine": "seafood",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1100", "2130"],
+      "tuesday": ["1100", "2130"],
+      "wednesday": ["1100", "2130"],
+      "thursday": ["1100", "2130"],
+      "friday": ["1100", "2130"],
+      "saturday": ["1100", "2130"],
+      "sunday": ["1100", "2130"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJYwDm0uQX2jERbl_mZmIk67A",
+    "name": "WOKE Ramen CompassOne | Halal Certified | Seng Kang | Singapore",
+    "postal_code": "545078",
+    "address": "1 Sengkang Sq, Unit 03 - 13, Singapore 545078",
+    "number": null,
+    "g_rating": "4.7",
+    "g_no_reviews": "1221",
+    "cuisine": "ramen",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1030", "2200"],
+      "tuesday": ["1030", "2200"],
+      "wednesday": ["1030", "2200"],
+      "thursday": ["1030", "2200"],
+      "friday": ["1030", "2200"],
+      "saturday": ["1030", "2200"],
+      "sunday": ["1030", "2200"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJJZH-fwAV2jERBuBUtVJ8tRQ",
+    "name": "Punggol Coast Hawker Centre",
+    "postal_code": "829911",
+    "address": "84 Punggol Wy, Singapore 829911",
+    "number": "6225 5632",
+    "g_rating": "3.9",
+    "g_no_reviews": "574",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0600", "2200"],
+      "tuesday": ["0600", "2200"],
+      "wednesday": ["0600", "2200"],
+      "thursday": ["0600", "2200"],
+      "friday": ["0600", "2200"],
+      "saturday": ["0600", "2200"],
+      "sunday": ["0600", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJlT19iQ0W2jERlRjDm-Fx-kc",
+    "name": "Penang Culture | All-day Buffet | Halal Certified | CompassOne",
+    "postal_code": "545078",
+    "address": "1 Sengkang Sq, Unit 03 - 13, Singapore 545078",
+    "number": "9129 5228",
+    "g_rating": "4.6",
+    "g_no_reviews": "2208",
+    "cuisine": "malaysian",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 30.0,
+    "opening_hours": {
+      "monday": ["1030", "2200"],
+      "tuesday": ["1030", "2200"],
+      "wednesday": ["1030", "2200"],
+      "thursday": ["1030", "2200"],
+      "friday": ["1030", "2200"],
+      "saturday": ["1030", "2200"],
+      "sunday": ["1030", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJyTRcFAEV2jERFpDH6Y9IlUM",
+    "name": "Aladdin Indian Muslim Cuisine",
+    "postal_code": "823273",
+    "address": "273C Punggol Pl, #01-882 KOPITIAM Corner, Singapore 823273",
+    "number": "8621 3530",
+    "g_rating": "3.7",
+    "g_no_reviews": "68",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0930", "2359"],
+      "tuesday": [["0000", "0030"], ["0930", "2230"]],
+      "wednesday": ["0930", "2230"],
+      "thursday": ["0930", "2230"],
+      "friday": ["0930", "2230"],
+      "saturday": ["0930", "2230"],
+      "sunday": ["0930", "2230"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJxy6W08M92jER_f8DWFRfewQ",
+    "name": "D’Rubinah @ Punggol",
+    "postal_code": "828849",
+    "address": "10 Tebing Ln, Singapore 828849",
+    "number": "6816 4989",
+    "g_rating": "3.4",
+    "g_no_reviews": "479",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": [["0000", "0300"], ["1600", "2359"]],
+      "tuesday": [["0000", "0300"], ["1600", "2359"]],
+      "wednesday": [["0000", "0300"], ["1600", "2359"]],
+      "thursday": [["0000", "0300"], ["1600", "2359"]],
+      "friday": [["0000", "0300"], ["1600", "2359"]],
+      "saturday": [["0000", "0300"], ["1600", "2359"]],
+      "sunday": [["0000", "0300"], ["1600", "2359"]]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJu64djLkV2jERH0MBEdNYIDM",
+    "name": "Encik Tan",
+    "postal_code": "820681",
+    "address": "681 Punggol Dr., #01-39, Singapore 820681",
+    "number": null,
+    "g_rating": "3.2",
+    "g_no_reviews": "48",
+    "cuisine": "malay",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0930", "2000"],
+      "tuesday": ["0930", "2000"],
+      "wednesday": ["0930", "2000"],
+      "thursday": ["0930", "2000"],
+      "friday": ["0930", "2000"],
+      "saturday": ["0930", "2000"],
+      "sunday": ["0930", "2000"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJienOU9MX2jERAM0sI5z_WOM",
+    "name": "Nanay's Kitchen (Sengkang)",
+    "postal_code": "544278",
+    "address": "278D Compassvale Bow, #01-05 Rasa Rasa @, Singapore 544278",
+    "number": "8894 0728",
+    "g_rating": "4.6",
+    "g_no_reviews": "32",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1000", "2200"],
+      "tuesday": ["1000", "2200"],
+      "wednesday": ["1000", "2200"],
+      "thursday": ["1000", "2200"],
+      "friday": ["1000", "2200"],
+      "saturday": ["1000", "2200"],
+      "sunday": ["1000", "2200"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJR4xj4J892jERWws0xBCaKqo",
+    "name": "Tenderbest Makcik Tuckshop @ Punggol East",
+    "postal_code": "828825",
+    "address": "60 Punggol E, #01-09, Singapore 828825",
+    "number": "8950 5583",
+    "g_rating": "4.2",
+    "g_no_reviews": "1127",
+    "cuisine": "western",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1030", "2330"],
+      "tuesday": ["1030", "2330"],
+      "wednesday": ["1030", "2330"],
+      "thursday": ["1030", "2330"],
+      "friday": ["1030", "2330"],
+      "saturday": ["0830", "2330"],
+      "sunday": ["0830", "2330"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJvZP8zMoX2jERy0uNogbxofI",
+    "name": "Charlie's Western | Halal Western Stall in Singapore",
+    "postal_code": "543215",
+    "address": "215C Compassvale Dr, #01 -06 Happy Hawkers, Singapore 543215",
+    "number": "8096 1377",
+    "g_rating": "4.5",
+    "g_no_reviews": "139",
+    "cuisine": "western",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1200", "2100"],
+      "tuesday": ["1200", "2100"],
+      "wednesday": ["1200", "2100"],
+      "thursday": ["1200", "2100"],
+      "friday": ["1200", "2100"],
+      "saturday": ["1200", "2100"],
+      "sunday": ["1200", "2100"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJXyvahRIW2jERDi2gmslkVE8",
+    "name": "Kopitiam Square",
+    "postal_code": "544829",
+    "address": "10 Sengkang Sq, Singapore 544829",
+    "number": "9177 3076",
+    "g_rating": "3.9",
+    "g_no_reviews": "4104",
+    "cuisine": null,
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+>>>>>>> 7e3a7e538db5bf8c066868a0ed0312b7d43182cd
     "avg_price_low_sgd": 1.0,
     "avg_price_high_sgd": 10.0,
     "opening_hours": {
@@ -721,6 +2333,10 @@
       "sunday": ["0000", "2359"]
     },
     "wheelchair_accessible": true,
+<<<<<<< HEAD
     "halal_certification": "none"
+=======
+    "halal_certification": "unofficial"
+>>>>>>> 7e3a7e538db5bf8c066868a0ed0312b7d43182cd
   }
 ]

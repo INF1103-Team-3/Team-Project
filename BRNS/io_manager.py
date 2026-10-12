@@ -114,6 +114,10 @@ def find_candidates(request):
     lookup = dict(request)
     lookup["free_text"] = _clean_free_text_query(
         request.get("other_preferences") or [])
+    preferences = list(request["other_preferences"])
+    preferences.sort(
+        key=lambda item: not logic_manager.has_hard_preferences([item]))
+    lookup["free_text"] = " ".join(preferences)
     saved_restaurants = load_saved_restaurants()
     log.debug_log(f"Loaded {len(saved_restaurants)} saved restaurants.", "DEBUG",
                   "BRNS.io_manager.find_candidates")
@@ -177,16 +181,79 @@ def show_no_matches(results):
     """Explain why the leading alternative is not a verified match."""
     ui.message("No fully verified matches for these search choices.",
                "warning")
+    verification = results.get("halal_verification")
+    if verification:
+        if verification["errors"]:
+            ui.message(
+                "BRC could not complete official MUIS halal verification. "
+                f"Google halal indications were used as an unofficial fallback "
+                f"for {verification['google_fallback']} candidate(s).", "warning")
+            if verification.get("database_missing"):
+                ui.message(
+                    "The cleaned BRC halal database is missing and its automatic "
+                    "build failed. Run BRC/main.py to build it, then retry.",
+                    "warning")
+        elif (verification["verified"] == 0
+              and verification["google_fallback"] == 0):
+            ui.message(
+                f"BRC checked {verification['checked']} candidate(s), but none "
+                "matched an active official MUIS listing or had a Google halal "
+                "indication.", "warning")
+        elif verification["verified"]:
+            ui.message(
+                f"BRC verified {verification['verified']} halal candidate(s), "
+                "but the remaining search requirements excluded them.",
+                "warning")
+    exclusions = results.get("excluded_reasons") or {}
+    visible_exclusions = [
+        (reason, count) for reason, count in exclusions.items()
+        if reason != "MUIS halal certification not verified"
+    ]
+    if visible_exclusions:
+        ui.line("  Excluded before results:", "warning")
+        for reason, count in sorted(
+                visible_exclusions, key=lambda item: item[1], reverse=True)[:3]:
+            ui.line(f"    {count} — {reason[:1].upper()}{reason[1:]}",
+                    "warning")
     alternatives = results["alternatives"]
     if not alternatives:
-        ui.message("No alternatives found. Try changing today's search.",
-                   "warning")
+        if not verification:
+            ui.message("No alternatives found. Try changing today's search.",
+                       "warning")
         return
     cautions = [reason[2:] for reason in alternatives[0]["reasons"]
                 if reason.startswith("! ")]
     if cautions:
         ui.message("Why the top alternative is not a match: "
                    + "; ".join(cautions[:3]) + ".", "warning")
+
+
+def show_halal_verification_start(candidate_count, database_missing=False):
+    """Show the official halal check stage before potentially slow BRC work."""
+    ui.message(
+        f"BRC is checking {candidate_count} candidate(s) against official "
+        "MUIS halal records.")
+    if database_missing:
+        ui.message(
+            "BRC is preparing its cleaned MUIS database; the first check may "
+            "take longer.", "warning")
+
+
+def show_halal_verification_summary(summary):
+    """Show how many candidates BRC accepted or rejected."""
+    ui.message(
+        f"BRC halal check: {summary['verified']} verified, "
+        f"{summary['not_verified']} not verified.")
+    if summary["google_fallback"]:
+        ui.message(
+            f"Using {summary['google_fallback']} Google-indicated halal "
+            "candidate(s) as unofficial fallback results.", "warning")
+    if summary["errors"]:
+        ui.message(
+            f"BRC stopped after a {summary['error_type']} error; "
+            "continuing with Google halal information where available. "
+            f"{summary['excluded']} candidate(s) had no accepted halal "
+            "evidence. Details: logs/bitefinder.log.", "warning")
 
 
 def _show_result(number, item, results, role):
@@ -233,7 +300,10 @@ def _show_result(number, item, results, role):
     ui.field("Hours today", restaurant.get("today_hours") or "Unavailable", indent=5)
     if dietary:
         ui.field("Dietary", dietary, indent=5)
-    if halal == "unofficial":
+    if halal == "official":
+        ui.field("Halal", "Official MUIS certification verified",
+                 indent=5, role="success")
+    elif halal == "unofficial":
         ui.field("Halal", "Unofficial indication; not checked",
                  indent=5, role="warning")
     elif halal == "unverified" and "halal" in results["requested_dietary"]:
@@ -310,6 +380,7 @@ def load_saved_restaurants(path=config.RESTAURANT_FILE):
         except (KeyError, TypeError, ValueError):
             candidate["rating_count"] = None
         candidate["halal_hint"] = row.get("halal_certification") == "unofficial"
+        candidate["halal_certification"] = row.get("halal_certification")
         candidate["today_hours"] = logic_manager.today_hours_from_weekly(
             row.get("opening_hours"))
         restaurants.append(candidate)
@@ -491,6 +562,9 @@ def _parse_place(p):
 
 def _search_radius(req):
     """Choose a Places discovery radius; Routes decides actual eligibility."""
+    if logic_manager.has_hard_preferences(
+            req.get("other_preferences") or []):
+        return 50000
     if req.get("max_travel_minutes") is not None:
         speed = {"walk": 100, "drive": 650, "transit": 650}[req["mode"]]
         return max(500, min(int(req["max_travel_minutes"] * speed), 50000))
@@ -902,6 +976,7 @@ def build_candidates(origin, req, saved_restaurants):
                           "INFO", "BRNS.io_manager.build_candidates")
             continue
         c = enrich_place(p, saved_restaurants)
+        c["google_search_rank"] = len(candidates) + 1
         key = _norm(c["name"])
         if key not in seen:
             seen.add(key)

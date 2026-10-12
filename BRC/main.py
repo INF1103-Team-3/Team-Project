@@ -10,9 +10,26 @@ if __package__ in (None, ""):
 from BRC import ai_manager, data_manager, io_manager, logic_manager, scraper
 from shared import debug_log
 
+_DEFAULT_AI = None
+_DEFAULT_AI_SETTINGS = None
+
+
+def default_ai_manager():
+    """Reuse one paced Gemini client across database and outlet checks."""
+    global _DEFAULT_AI, _DEFAULT_AI_SETTINGS
+    settings = (
+        os.getenv("GEMINI_API_KEY"),
+        os.getenv("BRC_GEMINI_MODEL", "gemini-3.5-flash-lite"),
+    )
+    if _DEFAULT_AI is None or settings != _DEFAULT_AI_SETTINGS:
+        _DEFAULT_AI = ai_manager.AIManager(*settings)
+        _DEFAULT_AI_SETTINGS = settings
+    return _DEFAULT_AI
+
 def run(value=io_manager.NO_INPUT, *, ai=None, output=None,
         raw_path=data_manager.RAW_MUIS_PATH,
         clean_path=data_manager.CLEAN_DATABASE_PATH,
+        cuisine_cache_path=None,
         verbose=False, scrape_progress=None):
     """Execute IO -> AI -> Logic -> Data and return the resulting value."""
     def report(message):
@@ -27,6 +44,7 @@ def run(value=io_manager.NO_INPUT, *, ai=None, output=None,
     except io_manager.CleanDatabaseRequired:
         report("IO Manager: cleaned halal database is missing; building it first.")
         run(ai=ai, raw_path=raw_path, clean_path=clean_path, verbose=verbose,
+            cuisine_cache_path=cuisine_cache_path,
             scrape_progress=scrape_progress)
         context = io_manager.prepare_workflow(
             value, raw_path=raw_path, clean_path=clean_path,
@@ -38,13 +56,25 @@ def run(value=io_manager.NO_INPUT, *, ai=None, output=None,
     if context["scenario"] == "build_database":
         count = len(context["raw_snapshot"]["listings"])
         report(f"IO Manager: loaded {count} complete MUIS restaurant listings.")
+        cache_path = (Path(cuisine_cache_path) if cuisine_cache_path else
+                      data_manager.CUISINE_CACHE_PATH
+                      if Path(raw_path) == data_manager.RAW_MUIS_PATH else
+                      Path(clean_path).with_name("cuisine_tags_cache.json"))
+        cuisine_cache = data_manager.load_cuisine_cache(cache_path)
+        bootstrapped = data_manager.bootstrap_cuisine_cache(
+            context["raw_snapshot"], Path(clean_path), cuisine_cache)
+        if bootstrapped:
+            data_manager.save_cuisine_cache(cuisine_cache, cache_path)
+            report(f"Data Manager: recovered {bootstrapped} cuisine tags "
+                   "from the existing cleaned database.")
+        context["cuisine_cache"] = cuisine_cache
+        context["save_cuisine_cache"] = (
+            lambda tags: data_manager.save_cuisine_cache(tags, cache_path))
     else:
         report(f"IO Manager: accepted {len(context['records'])} restaurant(s).")
 
     if ai is None:
-        ai = ai_manager.AIManager(
-            os.getenv("GEMINI_API_KEY"),
-            os.getenv("BRC_GEMINI_MODEL", "gemini-3.5-flash-lite"))
+        ai = default_ai_manager()
     report("AI Manager: normalizing restaurant information...")
     proposals = ai.process(context)
 

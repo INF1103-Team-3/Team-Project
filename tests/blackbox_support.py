@@ -218,13 +218,14 @@ class BlackBoxFixture(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="bitefinder-blackbox-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        for folder in ("BIS", "BRNS", "shared"):
+        for folder in ("BIS", "BRNS", "BRC", "shared"):
             shutil.copytree(
                 SOURCE / folder, self.root / folder,
                 ignore=shutil.ignore_patterns(
                     "__pycache__", "*.pyc", "data", "docs", ".gitignore"))
         (self.root / "BIS/data").mkdir()
         (self.root / "BRNS/data").mkdir()
+        (self.root / "BRC/data").mkdir()
         (self.root / "data").mkdir()
         (self.root / "BRNS/data/restaurants.json").write_text("[]")
         self.fixture = FixtureServer()
