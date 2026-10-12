@@ -95,12 +95,25 @@ def accept_bis_json(payload):
     }
 
 
+def _clean_free_text_query(preferences):
+    """Exclude rating floor patterns from Places search text."""
+    cleaned = []
+    for pref in preferences:
+        stripped = logic_manager._RATING_FLOOR.sub("", pref).strip()
+        stripped = re.sub(r"\b(?:and|with)\b", " ", stripped, flags=re.IGNORECASE)
+        stripped = re.sub(r"^[,\s&/]+|[,\s&/]+$", "", stripped).strip()
+        if stripped:
+            cleaned.append(stripped)
+    return " ".join(cleaned)
+
+
 def find_candidates(request):
     """Collect restaurant facts through Places or saved records."""
     origin = (request["origin"]["latitude"],
               request["origin"]["longitude"])
     lookup = dict(request)
-    lookup["free_text"] = " ".join(request["other_preferences"])
+    lookup["free_text"] = _clean_free_text_query(
+        request.get("other_preferences") or [])
     saved_restaurants = load_saved_restaurants()
     log.debug_log(f"Loaded {len(saved_restaurants)} saved restaurants.", "DEBUG",
                   "BRNS.io_manager.find_candidates")
@@ -543,7 +556,10 @@ def fetch_by_profile_text(origin, req):
     lat, lng = origin
     cuisine = (req.get("cuisine") or "").strip()
     dietary = req.get("dietary_requirements") or []
-    free_text = (req.get("free_text") or "").strip().lower()[:200]
+    raw_free_text = (req.get("free_text") or "").strip()
+    free_text = logic_manager._RATING_FLOOR.sub("", raw_free_text).strip()
+    free_text = re.sub(r"\b(?:and|with)\b", " ", free_text, flags=re.IGNORECASE)
+    free_text = re.sub(r"^[,\s&/]+|[,\s&/]+$", "", free_text).strip().lower()[:200]
     terms = list(dietary)
     if cuisine not in ("any", "none", ""):
         terms.append(cuisine)
