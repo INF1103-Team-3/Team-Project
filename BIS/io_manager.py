@@ -672,7 +672,7 @@ def choose_results_action(result_count, alternatives_hidden=False):
         actions.extend((("route", "Show a route"),
                         ("email", "Email a Google Maps link"),
                         ("more", "Show full restaurant details")))
-    actions.extend((("again", "Change travel limit, budget, or cuisine"),
+    actions.extend((("again", "Change travel limit, budget, cuisine, or other preferences"),
                     ("repeat", "Search again with the same choices"),
                     ("done", "Finish and return to commands")))
     while True:
@@ -713,7 +713,7 @@ def refine_search_request(request, profile, config):
     travel_choice = "time" if request["mode"] == "transit" else "travel"
     while True:
         choice = read_input(
-            f"Change {travel_choice}, budget, or cuisine "
+            f"Change {travel_choice}, budget, cuisine, or other preferences "
             "[Enter = results]: ")
         if _cancelled(choice) or not choice:
             return None
@@ -722,7 +722,7 @@ def refine_search_request(request, profile, config):
         if request["max_distance_km"] is not None:
             defaults["max_distance_km"] = request["max_distance_km"]
         defaults["budget_per_person"] = request["budget_per_person"]
-        if choice == travel_choice:
+        if choice in {travel_choice, "travel", "time", "1"}:
             distance, minutes = ask_search_limit(
                 defaults, request["mode"], config,
                 current=(request["max_distance_km"], request["max_travel_minutes"]))
@@ -734,17 +734,32 @@ def refine_search_request(request, profile, config):
                 return None
             return dict(request, max_distance_km=distance,
                         max_travel_minutes=minutes, traffic_aware=traffic_aware)
-        elif choice == "budget":
+        elif choice in {"budget", "2"}:
             value = ask_search_budget(
                 defaults, config, default_source="current search")
             field = "budget_per_person"
-        elif choice == "cuisine":
+        elif choice in {"cuisine", "3"}:
             value = ask_search_cuisine(
                 profile, config, current_cuisine=request["cuisine"])
             field = "cuisine"
+        elif choice in {"other", "other preferences", "other_preferences",
+                        "other preference", "preferences", "wishes", "extra", "4"}:
+            defaults[OTHER_PREFERENCES] = list(dict.fromkeys(
+                (profile.get(OTHER_PREFERENCES) or [])
+                + (request.get(OTHER_PREFERENCES) or [])
+            ))
+            wishes = ask_search_wishes(defaults, config)
+            if wishes is None:
+                return None
+            other = wishes["selected"]
+            if wishes["text"]:
+                other = validate_value(
+                    OTHER_PREFERENCES, other + [wishes["text"]])
+            field = OTHER_PREFERENCES
+            value = other
         else:
             display_message(
-                f"Choose {travel_choice}, budget, or cuisine.")
+                f"Choose {travel_choice}, budget, cuisine, or other preferences.")
             continue
         if value is None:
             return None
