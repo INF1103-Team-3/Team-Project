@@ -17,6 +17,16 @@ _RATING_FLOOR = re.compile(
     r"|\b(\d+(?:\.\d+)?)\s*\+\s*(?:stars?|/\s*5)\b",
     re.IGNORECASE,
 )
+_ANY_RATING = re.compile(
+    r"\b(?:rating\s*(?:of\s*)?|rated\s*)"
+    r"([1-5](?:\.\d+)?)\s*(?:stars?|/\s*5)?\b"
+    r"|\b([1-5](?:\.\d+)?)\s*(?:stars?|/\s*5|rating)\b",
+    re.IGNORECASE,
+)
+_HARD_LANGUAGE = re.compile(
+    r"\b(?:only|must|required|hard requirement|minimum|at least|"
+    r"no less than|exclusively)\b", re.IGNORECASE,
+)
 
 
 def minimum_rating(preferences):
@@ -31,12 +41,77 @@ def minimum_rating(preferences):
     return max(ratings, default=None)
 
 
+def preferred_rating(preferences):
+    """Read any stated star preference, including a soft bare rating."""
+    ratings = [
+        float(next(group for group in match.groups() if group))
+        for preference in preferences
+        for match in _ANY_RATING.finditer(preference)
+    ]
+    if any(not 1 <= rating <= 5 for rating in ratings):
+        raise ValueError("Preferred Google rating must be between 1 and 5 stars.")
+    return max(ratings, default=None)
+
+
+def hard_required_cuisines(preferences):
+    """Read canonical hard cuisines confirmed by BIS."""
+    required = []
+    for preference in preferences:
+        text = preference.casefold()
+        for cuisine in _SUPPORTED_CUISINES:
+            escaped = re.escape(cuisine)
+            if (re.search(rf"\bonly\s+{escaped}(?:\s+cuisine)?\b", text)
+                    or re.search(rf"\b{escaped}\s+(?:cuisine\s+)?only\b", text)
+                    or re.search(rf"\b(?:must be|exclusively)\s+{escaped}\b",
+                                 text)):
+                if cuisine not in required:
+                    required.append(cuisine)
+    return required
+
+
+def has_hard_preferences(preferences):
+    return any(_HARD_LANGUAGE.search(item) for item in preferences)
+
+
 def confidence_adjusted_rating(rating, review_count):
     """Shrink small review samples toward 4/5 for ranking comparisons."""
     if (type(rating) not in (int, float) or not 1 <= rating <= 5
             or type(review_count) is not int or review_count < 0):
         return None
     return round((rating * review_count + 4 * 100) / (review_count + 100), 3)
+
+
+def sort_results(results, sort_by):
+    """Sort matches and alternatives while preserving their classifications."""
+    if sort_by not in {"rating", "distance"}:
+        raise ValueError("Sort results by rating or distance.")
+    mode = results.get("mode")
+
+    def facts(item):
+        restaurant = item.get("restaurant", {})
+        rating = restaurant.get("rating")
+        rating = rating if type(rating) in (int, float) else None
+        reviews = restaurant.get("rating_count")
+        reviews = reviews if type(reviews) is int and reviews >= 0 else 0
+        distance = restaurant.get(f"{mode}_meters")
+        distance = (distance if type(distance) in (int, float)
+                    and distance >= 0 else None)
+        name = str(restaurant.get("name") or "").casefold()
+        return rating, reviews, distance, name
+
+    def key(item):
+        rating, reviews, distance, name = facts(item)
+        if sort_by == "rating":
+            return (rating is None, -(rating or 0), -reviews,
+                    distance is None, distance or 0, name)
+        return (distance is None, distance or 0, rating is None,
+                -(rating or 0), -reviews, name)
+
+    sorted_results = dict(results)
+    sorted_results["matches"] = sorted(results.get("matches", []), key=key)
+    sorted_results["alternatives"] = sorted(
+        results.get("alternatives", []), key=key)
+    return sorted_results
 
 
 def normalize_candidate(record, *, offline=False):
@@ -60,10 +135,16 @@ def normalize_candidate(record, *, offline=False):
     candidate["dietary_requirements"] = [
         item for item in raw_diet if item in ("halal", "vegetarian")
     ]
+    certification = candidate.get("halal_certification")
+    muis_check = candidate.get("muis_check")
+    officially_verified = (
+        certification == "official" and isinstance(muis_check, dict)
+        and muis_check.get("status") == "verified")
     candidate["halal_status"] = (
-        "unofficial" if candidate.get("halal_hint")
-        or "halal" in candidate["dietary_requirements"] else "unverified"
-    )
+        "official" if officially_verified
+        else "unofficial" if candidate.get("halal_hint")
+        or certification == "unofficial"
+        or "halal" in candidate["dietary_requirements"] else "unverified")
     # Saved records have no route from today's origin.
     if offline:
         candidate["walk_minutes"] = None
@@ -91,6 +172,8 @@ def decide_outcome(restaurant, request):
     reasons = []
     problems = []
     unverified = []
+    advisories = []
+    hard_preferences = has_hard_preferences(request["other_preferences"])
     cuisines = restaurant.get("cuisines") or []
     if set(cuisines) & set(request["disliked_cuisines"]):
         return "reject", 0, ["contains a disliked cuisine"]
@@ -103,14 +186,24 @@ def decide_outcome(restaurant, request):
         problems.append("does not match your selected cuisine")
     else:
         unverified.append("cuisine unavailable")
+    for required in hard_required_cuisines(request["other_preferences"]):
+        if required in cuisines:
+            reasons.append(f"meets your {required} only requirement")
+        elif cuisines:
+            problems.append(f"does not meet your {required} only requirement")
+        else:
+            unverified.append(
+                f"cuisine unavailable for your {required} only requirement")
 
     dietary = set(restaurant.get("dietary_requirements") or [])
     for requirement in request["dietary_requirements"]:
         if requirement == "halal":
-            if restaurant.get("halal_status") == "unofficial":
+            if restaurant.get("halal_status") == "official":
+                reasons.append("MUIS halal certification verified")
+            elif restaurant.get("halal_status") == "unofficial":
                 unverified.append("Halal (unofficial; not checked)")
             else:
-                unverified.append("halal status unverified")
+                return "reject", 0, ["MUIS halal certification not verified"]
         elif requirement == "vegetarian" and "vegetarian" not in dietary:
             unverified.append("vegetarian options unverified")
 
@@ -120,20 +213,22 @@ def decide_outcome(restaurant, request):
     maximum_price = restaurant.get("price_end")
     if price is not None:
         if price > budget:
-            problems.append(
+            (advisories if hard_preferences else problems).append(
                 f"average price SGD {price:g} exceeds your SGD {budget:g} budget")
         else:
             reasons.append("average price is within your budget")
     elif minimum_price is not None and minimum_price > budget:
-        problems.append(
+        (advisories if hard_preferences else problems).append(
             f"prices start at SGD {minimum_price:g}, over your budget")
     elif (maximum_price is not None and maximum_price <= budget
           and (minimum_price is None or minimum_price <= maximum_price)):
         reasons.append("listed price range is within your budget")
     elif minimum_price is not None:
-        unverified.append("some prices may fit; full budget unverified")
+        (advisories if hard_preferences else unverified).append(
+            "some prices may fit; full budget unverified")
     else:
-        unverified.append("price unavailable")
+        (advisories if hard_preferences else unverified).append(
+            "price unavailable")
 
     rating_floor = minimum_rating(request["other_preferences"])
     if rating_floor is not None:
@@ -152,9 +247,10 @@ def decide_outcome(restaurant, request):
     if request["max_travel_minutes"] is not None:
         minutes = restaurant.get(f"{mode}_minutes")
         if source != "route" or minutes is None:
-            unverified.append(f"{mode} journey time unavailable")
+            (advisories if hard_preferences else unverified).append(
+                f"{mode} journey time unavailable")
         elif minutes > request["max_travel_minutes"]:
-            problems.append(
+            (advisories if hard_preferences else problems).append(
                 f"{mode} journey is {minutes:g} min, over your "
                 f"{request['max_travel_minutes']:g} min limit")
         else:
@@ -162,9 +258,10 @@ def decide_outcome(restaurant, request):
     else:
         meters = restaurant.get(f"{mode}_meters")
         if source != "route" or meters is None:
-            unverified.append("travel distance estimated or unavailable")
+            (advisories if hard_preferences else unverified).append(
+                "travel distance estimated or unavailable")
         elif meters > request["max_distance_km"] * 1000:
-            problems.append(
+            (advisories if hard_preferences else problems).append(
                 f"route is {meters / 1000:.2f} km, over your "
                 f"{request['max_distance_km']:g} km limit")
         else:
@@ -175,8 +272,11 @@ def decide_outcome(restaurant, request):
             reasons.append("has spicy options")
     if problems or unverified:
         return "alternative", 0, (
-            reasons + [f"! {item}" for item in problems + unverified])
-    return "match", len(reasons), reasons
+            reasons + [f"! {item}" for item in
+                       problems + unverified + advisories])
+    return "match", len(reasons), (
+        reasons + [f"! {item} (relaxed for hard requirement)"
+                   for item in advisories])
 
 
 def _grounded_ai_reasons(restaurant, request, codes, candidate_id=None):
@@ -294,6 +394,22 @@ def _grounded_ai_reasons(restaurant, request, codes, candidate_id=None):
     return grounded
 
 
+def recommendation_order(restaurants, recommendations):
+    """Validate the complete AI ordering before another manager uses it."""
+    if (not isinstance(recommendations, list)
+            or len(recommendations) != len(restaurants)
+            or any(not isinstance(item, dict)
+                   or set(item) != {"id", "reason_codes"}
+                   or type(item["id"]) is not int
+                   or item["id"] < 0 or item["id"] >= len(restaurants)
+                   for item in recommendations)):
+        raise ValueError("BRNS AI returned invalid restaurant IDs.")
+    order = [item["id"] for item in recommendations]
+    if len(set(order)) != len(restaurants):
+        raise ValueError("BRNS AI returned duplicate restaurant IDs.")
+    return order
+
+
 def rank_restaurants(restaurants, request, recommendations=None,
                      previous_restaurants=()):
     """Verify AI IDs and reasons, then enforce requirements on every candidate."""
@@ -302,29 +418,21 @@ def rank_restaurants(restaurants, request, recommendations=None,
         order = list(range(len(restaurants)))
         ai_reasons = {}
     else:
-        if (not isinstance(recommendations, list)
-                or len(recommendations) != len(restaurants)
-                or any(not isinstance(item, dict)
-                       or set(item) != {"id", "reason_codes"}
-                       or type(item["id"]) is not int
-                       or item["id"] < 0 or item["id"] >= len(restaurants)
-                       for item in recommendations)):
-            raise ValueError("BRNS AI returned invalid restaurant IDs.")
-        order = [item["id"] for item in recommendations]
-        if len(set(order)) != len(restaurants):
-            raise ValueError("BRNS AI returned duplicate restaurant IDs.")
+        order = recommendation_order(restaurants, recommendations)
         ai_reasons = {}
         for item in recommendations:
             restaurant = normalize_candidate(restaurants[item["id"]])
             ai_reasons[item["id"]] = _grounded_ai_reasons(
                 restaurant, request, item["reason_codes"], item["id"])
     matches, alternatives = [], []
+    excluded_reasons = {}
     hidden = 0
     for index in order:
         raw = restaurants[index]
         restaurant = normalize_candidate(
             raw, offline=raw.get("source") == "offline restaurants")
         status, score, reasons = decide_outcome(restaurant, request)
+        decision_reasons = list(reasons)
         for reason in ai_reasons.get(index, []):
             if reason not in reasons and f"! {reason}" not in reasons:
                 reasons.append(reason)
@@ -335,6 +443,8 @@ def rank_restaurants(restaurants, request, recommendations=None,
             alternatives.append(item)
         else:
             hidden += 1
+            for reason in decision_reasons:
+                excluded_reasons[reason] = excluded_reasons.get(reason, 0) + 1
     if recommendations is None:
         matches.sort(key=lambda item: item["score"], reverse=True)
     previous_keys = {
@@ -358,6 +468,7 @@ def rank_restaurants(restaurants, request, recommendations=None,
         "new_count": sum(not was_returned(item) for item in
                          visible_matches + visible_alternatives),
         "hidden": hidden,
+        "excluded_reasons": excluded_reasons,
         "mode": request["mode"],
         "limit_unit": "minutes" if request["max_travel_minutes"] is not None else "km",
         "traffic_aware": request["traffic_aware"],

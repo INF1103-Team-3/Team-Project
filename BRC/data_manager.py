@@ -15,6 +15,7 @@ BRC_DIR = Path(__file__).resolve().parent
 DATA_DIR = BRC_DIR / "data"
 RAW_MUIS_PATH = DATA_DIR / "muis_establishments.json"
 CLEAN_DATABASE_PATH = DATA_DIR / "halal_restaurants.json"
+CUISINE_CACHE_PATH = DATA_DIR / "cuisine_tags_cache.json"
 CHECK_CACHE_PATH = DATA_DIR / "checked_restaurants_cache.json"
 SINGLE_RESULT_PATH = DATA_DIR / "checked_restaurant.json"
 BATCH_RESULT_PATH = DATA_DIR / "checked_restaurants.json"
@@ -172,6 +173,67 @@ def save_clean_database(restaurants: list[dict], source: dict,
     }
     write_json_atomic(value, path)
     return value
+
+
+def cuisine_cache_key(row: dict) -> str:
+    """Build a stable key that changes when identifying cuisine text changes."""
+    identity = row.get("listing_id") or row.get("certificate_number") or "unknown"
+    name = " ".join(re.findall(
+        r"[a-z0-9]+", str(row.get("name") or "").casefold()))
+    category = " ".join(re.findall(
+        r"[a-z0-9]+", str(row.get("category") or "").casefold()))
+    return f"{identity}|{name}|{category}"
+
+
+def load_cuisine_cache(path: Path = CUISINE_CACHE_PATH) -> dict[str, list[str]]:
+    """Load saved cuisine tags; an invalid cache is treated as empty."""
+    try:
+        value = _read_json(path)
+    except ValueError:
+        return {}
+    tags = value.get("tags") if isinstance(value, dict) else None
+    if (value.get("version") != 1 or not isinstance(tags, dict)
+            or any(not isinstance(key, str) or not isinstance(items, list)
+                   or any(not isinstance(item, str) for item in items)
+                   for key, items in tags.items())):
+        return {}
+    return tags
+
+
+def bootstrap_cuisine_cache(snapshot: dict, clean_path: Path,
+                            cache: dict[str, list[str]]) -> int:
+    """Reuse cuisines from an existing cleaned database when possible."""
+    if cache:
+        return 0
+    try:
+        database = load_clean_database(clean_path)
+    except (ValueError, OSError):
+        return 0
+    by_certificate = {
+        row["muis"]["certificate_number"]: row["cuisine"]
+        for row in database
+    }
+    for row in snapshot["listings"]:
+        certificate = row.get("certificate_number")
+        if certificate in by_certificate:
+            cache[cuisine_cache_key(row)] = list(by_certificate[certificate])
+    return len(cache)
+
+
+def save_cuisine_cache(tags: dict[str, list[str]],
+                       path: Path = CUISINE_CACHE_PATH) -> None:
+    """Persist completed cuisine tags after each successful AI batch."""
+    if (not isinstance(tags, dict)
+            or any(not isinstance(key, str) or not isinstance(items, list)
+                   or any(not isinstance(item, str) for item in items)
+                   for key, items in tags.items())):
+        raise ValueError("Refusing to save an invalid cuisine tag cache.")
+    write_json_atomic({
+        "version": 1,
+        "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "entry_count": len(tags),
+        "tags": tags,
+    }, path)
 
 
 def _cache_key(row: dict) -> str:

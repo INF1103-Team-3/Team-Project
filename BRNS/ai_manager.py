@@ -216,7 +216,14 @@ Include every candidate ID exactly once, most suitable first. Use only these
 reason codes when supported by the supplied facts: cuisine_match,
 within_budget, within_route, well_rated, vegetarian_options,
 halal_hint_unofficial, spicy_options. Use [] if no code is supported.
-Consider cuisine, budget, dietary needs, travel, and other preferences.
+Treat other_preferences as the strongest part of the search. Google text
+search already uses their complete wording, so use that wording when ordering
+candidates. google_search_rank preserves Google's text-query relevance for
+free-text wishes such as spicy food; prefer that evidence for requests not
+covered by another candidate fact. Words such as only, must, exclusively, minimum, and at least mark
+hard constraints. A bare rating such as "4.5 stars" is a soft preference.
+When hard_preferences is true, prioritize the hard request ahead of budget
+and travel because those two limits are relaxed by Logic.
 minimum_rating is a hard minimum Google star rating extracted from the user's
 other preferences. Put candidates below it or without a rating after those
 that meet it. The next layer will enforce the minimum.
@@ -260,6 +267,12 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
                   f"Preparing {len(candidates)} candidate summaries.", "INFO")
     mode = request["mode"]
     rating_floor = logic_manager.minimum_rating(request["other_preferences"])
+    rating_preference = logic_manager.preferred_rating(
+        request["other_preferences"])
+    hard_cuisines = logic_manager.hard_required_cuisines(
+        request["other_preferences"])
+    hard_preferences = logic_manager.has_hard_preferences(
+        request["other_preferences"])
     facts = []
     for index, candidate in enumerate(candidates):
         facts.append({
@@ -274,6 +287,7 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
             "review_count": candidate.get("rating_count"),
             "confidence_adjusted_rating": logic_manager.confidence_adjusted_rating(
                 candidate.get("rating"), candidate.get("rating_count")),
+            "google_search_rank": candidate.get("google_search_rank"),
             "spicy_options": candidate.get("spicy_options"),
             "travel_meters": candidate.get(f"{mode}_meters"),
             "travel_minutes": candidate.get(f"{mode}_minutes"),
@@ -289,6 +303,9 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
         if isinstance(restaurant, dict)
         and isinstance(restaurant.get("name"), str)))
     user_text = json.dumps({"request": request, "minimum_rating": rating_floor,
+                            "preferred_rating": rating_preference,
+                            "hard_cuisines": hard_cuisines,
+                            "hard_preferences": hard_preferences,
                             "candidates": facts,
                             "previous_restaurants": prior_names},
                            separators=(",", ":"))

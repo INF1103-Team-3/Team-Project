@@ -58,7 +58,7 @@ class BISToBRNSBlackBoxTests(BlackBoxFixture):
         self.fixture.six_matches = True
         output = self.run_cli("BIS", [
             "2", "tester@example.com", "/search", "1.352,103.944", "yes",
-            "walk", "1", "2", "none", "10", "", "", "5", "", "/quit"])
+            "walk", "1", "2", "none", "10", "", "", "6", "", "/quit"])
         self.assert_shows(output, "Search with these choices?",
                           "Found 5 matches", "Top match: Near Cafe.",
                           "Top match: Sixth Cafe.")
@@ -88,7 +88,7 @@ class BISToBRNSBlackBoxTests(BlackBoxFixture):
         self.seed_complete_user()
         output = self.run_cli("BIS", [
             "2", "tester@example.com", "/search", "1.352,103.944", "yes",
-            "walk", "1", "2", "none", "10", "", "", "5", "", "/quit"])
+            "walk", "1", "2", "none", "10", "", "", "6", "", "/quit"])
         self.assert_shows(output, "No new restaurants found for these choices")
         self.assertEqual(output.count("Searching restaurants..."), 2)
         self.assertEqual(len(self.history()), 2)

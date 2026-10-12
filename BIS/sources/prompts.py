@@ -101,7 +101,9 @@ HELP_TEXT = """What would you like to do?
 /logout — Save and switch to another account.
 /quit — Save and close the chatbot.
 
-Use /help [command] for more detailed info."""
+Use /help [command] for more detailed info.
+At the main prompt, you can also ask naturally, such as "search me a
+restaurant", "show my profile", "change my budget", or "color off"."""
 
 EDIT_HINT = """Choose what you want to change. For example, type:
 /edit budget
@@ -169,6 +171,16 @@ or none, today's budget, and one optional special request. Press Enter for
 none, select a previous request by number or all, or describe a new request
 in English. BIS checks the input,
 uses AI to review new wording, and asks before applying a correction. BIS AI
+also compares a new special request with saved requests and reuses the first
+logically equivalent one instead of saving a duplicate. Wording such as
+"only Korean" or "at least 4.5 stars" is treated as a possible hard
+requirement and must be confirmed because it may return no matches. A bare
+rating such as "4.5 stars" can remain a soft preference or be confirmed as a
+hard minimum. Confirmed hard requests take priority over today's budget and
+travel limit; those two limits become secondary cautions.
+Google text search receives the full special request, including requests such
+as spicy food.
+BIS AI
 can interpret natural budget, distance, and journey-time answers, such as
 "i think 12" or "about 500 metres"; confirm the proposed number before use.
 BIS AI then interprets the request; press Enter to confirm its proposed
