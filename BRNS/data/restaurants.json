@@ -1,127 +1,54 @@
 [
-    {
-        "name": "Encik Tan",
-        "avg_price": 6.5,
-        "allergens": [
-            "egg",
-            "peanuts"
-        ],
-        "open_hours": "10:00-20:30",
-        "spicy_options": true,
-        "certification": "official",
-        "cuisines": [
-            "malay"
-        ],
-        "dietary_requirements": [
-            "halal"
-        ]
+  {
+    "google_place_id": "ChIJJ7NCpuQV2jER6P2ctCfcRm0",
+    "name": "Encik Tan (Waterway Point)",
+    "postal_code": "828761",
+    "address": "83 Punggol Central, B2-03 Waterway Point, Singapore 828761",
+    "number": "6370 1155",
+    "g_rating": "3.4",
+    "g_no_reviews": "530",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0000", "2359"],
+      "tuesday": ["0000", "2359"],
+      "wednesday": ["0000", "2359"],
+      "thursday": ["0000", "2359"],
+      "friday": ["0000", "2359"],
+      "saturday": ["0000", "2359"],
+      "sunday": ["0000", "2359"]
     },
-    {
-        "name": "Sakura Sushi Bar",
-        "avg_price": 12.0,
-        "allergens": [
-            "shellfish",
-            "soy"
-        ],
-        "open_hours": "11:00-21:00",
-        "spicy_options": false,
-        "certification": "unknown",
-        "cuisines": [
-            "japanese"
-        ],
-        "dietary_requirements": []
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJkSFt868V2jERvdiIQsspXoM",
+    "name": "辣不辣 Labula Mala Sichuan Restaurant @ Oasis Terrace",
+    "postal_code": "820681",
+    "address": "681 Punggol Dr., #01-07, Singapore 820681",
+    "number": "8870 6606",
+    "g_rating": "4.6",
+    "g_no_reviews": "1673",
+    "cuisine": "chinese",
+    "dietary": [
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 30.0,
+    "opening_hours": {
+      "monday": [["0000", "0400"], ["1030", "2359"]],
+      "tuesday": [["0000", "0400"], ["1030", "2359"]],
+      "wednesday": [["0000", "0400"], ["1030", "2359"]],
+      "thursday": [["0000", "0400"], ["1030", "2359"]],
+      "friday": [["0000", "0400"], ["1030", "2359"]],
+      "saturday": [["0000", "0400"], ["1030", "2359"]],
+      "sunday": [["0000", "0400"], ["1030", "2359"]]
     },
-    {
-        "name": "Green Dot",
-        "avg_price": 8.0,
-        "allergens": [
-            "soy"
-        ],
-        "open_hours": "11:00-21:30",
-        "spicy_options": true,
-        "certification": "restaurant-reported",
-        "cuisines": [
-            "chinese"
-        ],
-        "dietary_requirements": [
-            "vegetarian"
-        ]
-    },
-    {
-        "name": "Prata Wala",
-        "avg_price": 7.0,
-        "allergens": [
-            "dairy",
-            "egg"
-        ],
-        "open_hours": "08:00-22:00",
-        "spicy_options": true,
-        "certification": "official",
-        "cuisines": [
-            "indian"
-        ],
-        "dietary_requirements": [
-            "halal"
-        ]
-    },
-    {
-        "name": "Simply Wrapps",
-        "avg_price": 9.5,
-        "allergens": [
-            "gluten",
-            "dairy"
-        ],
-        "open_hours": "10:00-20:00",
-        "spicy_options": false,
-        "certification": "restaurant-reported",
-        "cuisines": [
-            "western"
-        ],
-        "dietary_requirements": [
-            "vegetarian"
-        ]
-    },
-    {
-        "name": "Uncle Chicken Rice",
-        "avg_price": 5.0,
-        "allergens": [
-            "soy"
-        ],
-        "open_hours": "10:30-19:30",
-        "spicy_options": true,
-        "certification": "unknown",
-        "cuisines": [],
-        "dietary_requirements": []
-    },
-    {
-        "name": "Han's Cafe",
-        "avg_price": 11.0,
-        "allergens": [
-            "gluten",
-            "egg",
-            "dairy"
-        ],
-        "open_hours": "08:00-21:00",
-        "spicy_options": false,
-        "certification": "unknown",
-        "cuisines": [
-            "western"
-        ],
-        "dietary_requirements": []
-    },
-    {
-        "name": "Loving Hut",
-        "avg_price": 10.0,
-        "allergens": [
-            "soy",
-            "peanuts"
-        ],
-        "open_hours": "11:00-20:00",
-        "spicy_options": true,
-        "certification": "official",
-        "cuisines": [],
-        "dietary_requirements": [
-            "vegetarian"
-        ]
-    }
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  }
 ]

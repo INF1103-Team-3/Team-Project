@@ -43,7 +43,7 @@ class BISToBRNSBlackBoxTests(BlackBoxFixture):
         for body in self.fixture.bodies("/matrix") + self.fixture.bodies("/route"):
             self.assertEqual(body.get("routingPreference"), "TRAFFIC_AWARE")
         self.assertEqual(len(self.history()), 1)
-        self.assertEqual(self.history()[0]["top_matches"], [PLACE_NAMES[0]])
+        self.assertEqual(self.history()[0]["top_match_place_ids"], ["test-place-1"])
         cache = json.loads((self.root / "data/geocode_cache.json").read_text())
         self.assertEqual(cache["530912"], [1.352, 103.944])
 
@@ -66,8 +66,8 @@ class BISToBRNSBlackBoxTests(BlackBoxFixture):
         self.assertEqual(self.fixture.paths().count("/nearby"), 2)
         self.assertEqual(self.fixture.paths().count("/matrix"), 2)
         self.assertEqual(len(self.history()), 2)
-        self.assertEqual([entry["top_matches"][0] for entry in self.history()],
-                         ["Near Cafe", "Sixth Cafe"])
+        self.assertEqual([entry["top_match_place_ids"][0] for entry in self.history()],
+                         ["test-place-1", "test-place-6"])
         ai_calls = self.fixture.bodies("/chat/completions")
         recommendation_calls = [body for body in ai_calls if
             "Rank every supplied restaurant candidate" in

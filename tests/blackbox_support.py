@@ -48,8 +48,19 @@ def places_response(extra=False):
                          "Sixth Cafe"), 3))
     return {"places": [
         {"displayName": {"text": name},
+         "id": f"test-place-{number}",
          "formattedAddress": f"{number} Test Road, Singapore",
+         "postalAddress": {"postalCode": f"1234{number:02d}"},
+         "nationalPhoneNumber": f"61234{number:03d}",
+         "rating": 4.2, "userRatingCount": 125,
+         "servesVegetarianFood": number == 2,
+         "accessibilityOptions": {"wheelchairAccessibleEntrance": number == 1},
          "location": {"latitude": latitude, "longitude": 103.95},
+         "currentOpeningHours": {
+             "openNow": True,
+             "periods": [{"open": {"day": 0, "hour": 0}}]},
+         "regularOpeningHours": {
+             "periods": [{"open": {"day": 0, "hour": 0}}]},
          "types": ["restaurant"],
          "priceRange": {"startPrice": {"units": "5"},
                         "endPrice": {"units": "8"}}}

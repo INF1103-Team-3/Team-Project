@@ -5,6 +5,7 @@ import io
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
@@ -19,7 +20,8 @@ from BRNS import data_manager as brns_data
 from BRNS import io_manager as brns_io
 from BRNS import logic_manager as brns_logic
 from BRNS import main as brns_main
-from BRNS import places_client as brns_places
+from BRNS import io_manager as brns_places
+from BRNS import logic_manager as brns_hours
 from shared import debug_log as shared_log
 from shared import geocode_cache
 from shared import terminal_ui
@@ -460,7 +462,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(shown.count("cuisine unavailable"), 0)
         self.assertIn("Cuisine: Unavailable", shown)
         self.assertIn("• Vegetarian options unverified", shown)
-        self.assertIn("• Rated at least 4 out of 5", shown)
+        self.assertIn("• Rated 4.2 out of 5 on Google", shown)
 
     def test_search_menu_typo_requires_confirmation(self):
         from BIS import io_manager as bis_io
@@ -1429,7 +1431,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(events, ["IO", "AI", "Logic", "Data"])
 
         with (
-            patch.object(brns_places, "load_catalog", return_value=[]),
+            patch.object(brns_places, "load_saved_restaurants", return_value=[]),
             patch.object(brns_places, "build_candidates",
                          return_value=[candidate]) as build,
         ):
@@ -1497,7 +1499,8 @@ class IntegrationTests(unittest.TestCase):
             brns_data.save_search_results(
                 dict(request(), userID="private"), results, "live-google")
         entry = save.call_args.args[0]
-        self.assertEqual(entry["top_matches"], ["Approved"])
+        self.assertEqual(entry["top_match_place_ids"], [])
+        self.assertNotIn("top_matches", entry)
         self.assertEqual(entry["origin"], [1.372, 103.95])
         self.assertNotIn("userID", entry)
         self.assertNotIn("certification", entry)
@@ -1930,6 +1933,148 @@ class IntegrationTests(unittest.TestCase):
                       lines)
         self.assertIn('"rejected_reason_code":"well_rated"', lines)
         self.assertIn('"candidate_rating":3.1', lines)
+
+
+class RestaurantFactsTests(unittest.TestCase):
+    def test_today_hours_and_overnight_open_status(self):
+        hours = {"periods": [{
+            "open": {"day": 5, "hour": 20},
+            "close": {"day": 6, "hour": 2},
+        }]}
+        singapore = timezone(timedelta(hours=8))
+        friday = datetime(2026, 10, 9, 21, tzinfo=singapore)
+        saturday = datetime(2026, 10, 10, 1, tzinfo=singapore)
+        self.assertEqual(brns_hours.today_hours(hours, friday), "20:00–24:00")
+        self.assertEqual(brns_hours.today_hours(hours, saturday), "00:00–02:00")
+        self.assertTrue(brns_hours.open_now(hours, saturday))
+        self.assertFalse(brns_hours.open_now(hours, saturday.replace(hour=3)))
+        week = brns_hours.weekly_opening_hours(hours)
+        self.assertEqual(week["friday"], ["2000", "2359"])
+        self.assertEqual(week["saturday"], ["0000", "0200"])
+        self.assertEqual(week["monday"], [])
+        always = {"periods": [{"open": {"day": 0, "hour": 0}}]}
+        self.assertEqual(brns_hours.today_hours(always, saturday), "Open 24 hours")
+        self.assertTrue(all(value == ["0000", "2359"] for value in
+                            brns_hours.weekly_opening_hours(always).values()))
+        current_week = {"periods": [{"open": {"day": 4, "hour": 0}}]}
+        self.assertEqual(brns_hours.today_hours(current_week, saturday),
+                         "Open 24 hours")
+
+    def test_live_places_exclude_closed_and_unknown_hours(self):
+        places = [dict(name=name, address=name, lat=1.35, lng=103.95,
+                       types=["restaurant"], open_now=status,
+                       rating=4.3, google_place_id=name)
+                  for name, status in (("Open", True), ("Closed", False),
+                                       ("Unknown", None))]
+        with (patch.object(brns_config, "USE_LIVE_GOOGLE", True),
+              patch.object(brns_places, "fetch_nearby_restaurants",
+                           return_value=places),
+              patch.object(brns_places, "travel_times_matrix"),
+              patch.object(brns_places, "_fill_travel_estimates")):
+            candidates = brns_places.build_candidates(
+                (1.35, 103.95), {"mode": "walk", "cuisine": "none"}, [])
+        self.assertEqual([item["name"] for item in candidates], ["Open"])
+        self.assertEqual(candidates[0]["dietary_requirements"], [])
+
+    def test_google_facts_are_saved_as_a_complete_restaurant_record(self):
+        place = brns_places._parse_place({
+            "id": "test-place", "displayName": {"text": "Test Cafe"},
+            "formattedAddress": "1 Test Road", "postalAddress": {"postalCode": "123456"},
+            "nationalPhoneNumber": "61234567", "rating": 4.7,
+            "userRatingCount": 125,
+            "accessibilityOptions": {"wheelchairAccessibleEntrance": True},
+            "servesVegetarianFood": True,
+            "location": {"latitude": 1.35, "longitude": 103.95},
+            "currentOpeningHours": {"openNow": True,
+                                    "periods": [{"open": {"day": 0, "hour": 0}}]},
+            "regularOpeningHours": {
+                "periods": [{"open": {"day": 0, "hour": 0}}]},
+        })
+        candidate = brns_places.enrich_place(place, [])
+        self.assertEqual(candidate["rating"], 4.7)
+        self.assertEqual(candidate["rating_count"], 125)
+        self.assertEqual(candidate["today_hours"], "Open 24 hours")
+        self.assertEqual(candidate["dietary_requirements"], ["vegetarian"])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "restaurants.json"
+            path.write_text(json.dumps([
+                {"name": "Curated Cafe", "dietary": []},
+                {"google_place_id": "test-place", "dietary": []},
+            ]))
+            self.assertEqual(brns_data.save_restaurants([candidate], path), 1)
+            self.assertEqual(brns_data.save_restaurants([candidate], path), 1)
+            saved = json.loads(path.read_text())
+            self.assertEqual(len(saved), 2)
+            self.assertEqual(saved[1]["name"], "Test Cafe")
+            self.assertEqual(saved[1]["g_rating"], "4.7")
+            self.assertEqual(saved[1]["g_no_reviews"], "125")
+            self.assertEqual(saved[1]["dietary"], ["vegetarian"])
+            self.assertEqual(saved[1]["opening_hours"]["friday"], ["0000", "2359"])
+            self.assertTrue(saved[1]["wheelchair_accessible"])
+            self.assertEqual(saved[1]["halal_certification"], "none")
+            candidate["halal_hint"] = True
+            self.assertEqual(brns_data.save_restaurants([candidate], path), 1)
+            updated = json.loads(path.read_text())
+            self.assertEqual(len(updated), 2)
+            self.assertEqual(updated[1]["dietary"], ["halal", "vegetarian"])
+            self.assertEqual(updated[1]["halal_certification"], "unofficial")
+
+    def test_google_halal_type_is_dietary_not_cuisine(self):
+        place = brns_places._parse_place({
+            "id": "halal-place", "displayName": {"text": "Halal Cafe"},
+            "formattedAddress": "Singapore 123456",
+            "location": {"latitude": 1.35, "longitude": 103.95},
+            "types": ["halal_restaurant", "restaurant"],
+        })
+        candidate = brns_places.enrich_place(place, [])
+        self.assertEqual(candidate["cuisines"], ["unknown"])
+        self.assertTrue(candidate["halal_hint"])
+        record = brns_data._restaurant_record(candidate)
+        self.assertEqual(record["cuisine"], None)
+        self.assertEqual(record["dietary"], ["halal"])
+        self.assertEqual(record["halal_certification"], "unofficial")
+
+    def test_offline_fallback_reads_current_restaurant_schema(self):
+        all_day = {day: ["0000", "2359"] for day in brns_hours.DAYS}
+        closed = {day: [] for day in brns_hours.DAYS}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "restaurants.json"
+            path.write_text(json.dumps([
+                {"google_place_id": "open", "name": "Open Cafe",
+                 "cuisine": "chinese", "dietary": ["vegetarian"],
+                 "g_rating": "4.6", "g_no_reviews": "125",
+                 "avg_price_low_sgd": 5, "avg_price_high_sgd": 10,
+                 "opening_hours": all_day,
+                 "halal_certification": "none"},
+                {"google_place_id": "closed", "name": "Closed Cafe",
+                 "cuisine": "chinese", "dietary": [],
+                 "opening_hours": closed},
+            ]))
+            saved = brns_places.load_saved_restaurants(path)
+            with patch.object(brns_config, "USE_LIVE_GOOGLE", False):
+                candidates = brns_places.build_candidates(
+                    (1.35, 103.95), {"mode": "walk"}, saved)
+        self.assertEqual([item["name"] for item in candidates], ["Open Cafe"])
+        self.assertEqual(candidates[0]["cuisines"], ["chinese"])
+        self.assertEqual(candidates[0]["dietary_requirements"], ["vegetarian"])
+        self.assertEqual(candidates[0]["rating"], 4.6)
+        self.assertEqual(candidates[0]["rating_count"], 125)
+        self.assertEqual(candidates[0]["today_hours"], "Open 24 hours")
+
+    def test_saved_weekly_hours_use_one_line_per_day(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "restaurants.json"
+            record = {"opening_hours": {
+                "sunday": ["0000", "2359"],
+                "monday": [["0000", "0400"], ["1030", "2359"]],
+            }}
+            self.assertTrue(brns_data._save_json(
+                path, [record], compact_hours=True))
+            contents = path.read_text()
+        self.assertIn('"monday": [["0000", "0400"], ["1030", "2359"]]',
+                      contents)
+        self.assertIn('"sunday": ["0000", "2359"]', contents)
+        self.assertLess(contents.index('"monday"'), contents.index('"sunday"'))
 
 
 if __name__ == "__main__":

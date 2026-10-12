@@ -40,7 +40,7 @@ ROUTES_URL = os.getenv("BITEFINDER_ROUTES_URL",
 MAX_MATCHES_SHOWN = 5
 MAX_ALTERNATIVES_SHOWN = 5
 
-# Set USE_LIVE_GOOGLE=false in .env for offline catalog mode
+# Set USE_LIVE_GOOGLE=false in .env to use saved restaurant records.
 # (deterministic output, demo backup if APIs fail)
 USE_LIVE_GOOGLE = os.getenv("USE_LIVE_GOOGLE", "true").lower() == "true"
 

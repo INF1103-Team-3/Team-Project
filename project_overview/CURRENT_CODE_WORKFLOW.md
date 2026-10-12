@@ -25,10 +25,10 @@ BIS/main.py
   -> BIS Logic validates and protects confirmed choices
   -> BIS Data saves the profile and serializes one ten-field JSON request
   -> BRNS/main.py search(json)
-       -> BRNS IO validates JSON and gathers Places/catalog candidates
+       -> BRNS IO validates JSON and gathers Places/saved candidates
        -> BRNS AI orders every candidate and suggests reason codes
        -> BRNS Logic verifies facts and creates matches/alternatives
-       -> BRNS Data stores a small search summary
+       -> BRNS Data saves searched restaurants and a search summary
   -> BRNS IO prints results and, if chosen, a route
 
 SHARED SUPPORT
@@ -40,10 +40,8 @@ shared/debug_log.py     -> logs/bitefinder.log
 BIS does not read it, and BRNS does not call BRC or read its directory. The
 official halal checker integration shown in project planning documents has
 not been connected to the BIS → BRNS path. BRNS deliberately labels a halal
-hint as **unofficial; not checked**. Its bundled catalog can contain a legacy
-`certification` field, but BRNS Logic removes that field before returning a
-restaurant. Therefore no current BIS search can turn a BRNS result into an
-official halal claim.
+hint as **unofficial; not checked**. A Google `halal_restaurant` place type is
+saved as an unofficial indication, not an official halal claim.
 
 ### Entry points
 
@@ -261,8 +259,8 @@ estimate it from straight-line distance.
 
 `AI_BYPASS=true` is the BIS chatbot test mode: BIS parses/validates locally,
 shows the choices, marks that test search complete, and skips BRNS entirely.
-It is not the normal live recommendation path. BRNS retains a catalog
-fallback when `USE_LIVE_GOOGLE=false`, but `BRNS.main.search()` still
+It is not the normal live recommendation path. BRNS reads saved records from
+`BRNS/data/restaurants.json` when `USE_LIVE_GOOGLE=false`, but `BRNS.main.search()` still
 requires a configured and successful AI recommendation in that mode.
 
 ## 5. BRNS search: IO → AI → Logic → Data
@@ -270,30 +268,30 @@ requires a configured and successful AI recommendation in that mode.
 `BRNS/main.py:search()` starts or reuses the current shared trace ID and
 coordinates four manager stages:
 
-### Stage 1 — BRNS IO and its Places client
+### Stage 1 — BRNS IO
 
 `BRNS/io_manager.accept_bis_json()` revalidates the BIS contract. BRNS checks
 for an AI provider and, in live Google mode, a Maps key before spending a
 Places request. `BRNS/io_manager.find_candidates()` converts the confirmed
-origin into coordinates, loads the bundled catalog through
-`BRNS/places_client.load_catalog()`, and asks
-`BRNS/places_client.build_candidates()` to collect candidate facts. BRNS
+origin into coordinates, loads saved restaurant records through
+`BRNS/io_manager.load_saved_restaurants()`, and calls
+`BRNS/io_manager.build_candidates()` to collect candidate facts. BRNS
 Data does **not** find restaurants.
 
 In live mode the client builds a Google Places text query from dietary
 requirements, selected cuisine, and today's other preferences. If it gets
 no usable text-search places, it tries generic nearby Places. It parses
 names, addresses, coordinates, ratings, price ranges, Google place types,
-and opening hours. A place can be enriched with bundled catalog facts only
+and opening hours. A place can be enriched with saved facts only
 when both normalized name **and** address match. Missing cuisine, price,
 dietary, or spice data remain unknown; a Google starting price is kept as
 `price_start`, not treated as a known average price. The client de-duplicates
 names, asks Google Routes for a travel matrix for the selected mode, and
-labels any missing walking or driving route as an estimate. In catalog fallback mode,
-it returns catalog rows without pretending that old catalog walking times
-are routes from today's origin.
+labels any missing walking or driving route as an estimate. In saved-record
+fallback mode, it returns only restaurants open under their stored weekly hours;
+it does not treat old travel times as routes from today's origin.
 
-If a Places text search included `halal`, the resulting candidates receive
+If Google marks a place as `halal_restaurant`, the candidate receives
 an `halal_hint` that eventually becomes `unofficial`. This only records how
 the candidate was found; it is not a certificate check.
 
@@ -339,7 +337,7 @@ promote an AI reason into a fact merely because the model said it.
 
 `BRNS/data_manager.save_search_results()` appends a small validated summary
 to `BRNS/data/search_history.json`: source (`live-google` or
-`offline-catalog`), origin coordinates, mode, selected cuisine, and top
+`offline-restaurants`), origin coordinates, mode, selected cuisine, and top
 match names. A history write failure is logged as a warning and does not
 erase the result. BRNS returns the result object to BIS. BIS marks the
 search completed in `BIS/data/profile_state.json` only after BRNS returns
@@ -410,13 +408,12 @@ It is not a source of restaurant or certification truth.
 | File | Role and main calls |
 | --- | --- |
 | `BRNS/main.py` | `search` coordinates IO → AI → Logic → Data, reuses BIS trace IDs, and returns validated results. `route_to` builds an optional route. `main` is the standalone JSON-on-stdin entry. |
-| `BRNS/io_manager.py` | Validates the exact BIS JSON contract, collects candidate facts through `places_client`, requests routes, and displays results/routes. It does not ask new user questions during a search. |
-| `BRNS/places_client.py` | Google Geocoding, Places text/nearby search, place parsing, catalog enrichment, route matrix, route estimates, on-demand directions, Maps links, and shared geocode cache access. This is an IO-side API client, not the Data Manager. |
+| `BRNS/io_manager.py` | Validates the exact BIS JSON contract, calls Google Geocoding, Places text/nearby search and Routes, parses/enriches candidates, uses the shared geocode cache, and displays results/routes. It does not ask new user questions during a search. |
 | `BRNS/ai_manager.py` | Provider chain, HTTP calls, factual candidate summaries, JSON/recommendation validation, and AI ordering/reason suggestions. `recommend_candidates` is the active search function; the older `call_ai` interface is not used by `BRNS.main.search`. |
-| `BRNS/logic_manager.py` | Normalizes candidate facts, strips legacy certification claims, validates AI reasons, applies cuisine/dietary/budget/route rules, and divides results into matches, alternatives, and hidden rejects. |
-| `BRNS/data_manager.py` | Reads/writes BRNS JSON files and stores a compact approved search summary. Its catalog loader exists, but current candidate gathering calls the Places client's catalog loader. |
-| `BRNS/config.py` | Root `.env` settings, live/catalog switch, Google endpoints, AI provider order, display limits, and data paths. |
-| `BRNS/data/restaurants.json` | Bundled candidate catalog. Used for matching enrichment in live mode and as candidate fallback when `USE_LIVE_GOOGLE=false`. Legacy certification text is not returned as official BRNS evidence. |
+| `BRNS/logic_manager.py` | Normalizes candidate facts, evaluates today's opening hours, strips legacy certification claims, validates AI reasons, applies cuisine/dietary/budget/route rules, and divides results into matches, alternatives, and hidden rejects. |
+| `BRNS/data_manager.py` | Reads/writes BRNS JSON files, saves searched restaurant records with regular weekly hours, and stores a compact approved search summary. Candidate gathering loads saved records through the IO manager. |
+| `BRNS/config.py` | Root `.env` settings, live/saved switch, Google endpoints, AI provider order, display limits, and data paths. |
+| `BRNS/data/restaurants.json` | Saved restaurant records. Used for matching enrichment in live mode and as the fallback source when `USE_LIVE_GOOGLE=false`. Google halal hints stay unofficial. |
 | `BRNS/data/search_history.json` | Locally generated compact BRNS search history. |
 | `BRNS/.gitignore` | Ignores local BRNS runtime files such as search history. |
 
@@ -427,7 +424,7 @@ It is not a source of restaurant or certification truth.
 | `BRC/halal_data_scrape.py` | Standalone HalalFreak sitemap/area scraper and directory refresh. |
 | `BRC/restaurant_finder.py` | Separate BRC CLI coordinator: collect BRC request, fetch Places, enrich with AI, check directory and rules, save/display results. |
 | `BRC/io_manager.py` | BRC prompts, validation at the CLI boundary, restaurant formatting, warnings, and history/summary displays. |
-| `BRC/places_client.py` | BRC's Google Geocoding, Places, walking matrix, hours/price parsing, directions links, and shared geocode cache use. Independent of `BRNS/places_client.py`. |
+| `BRC/places_client.py` | BRC's Google Geocoding, Places, walking matrix, hours/price parsing, directions links, and shared geocode cache use. Independent of BRNS's IO manager. |
 | `BRC/ai_manager.py` | Gemini enrichment of BRC candidates with estimated cuisine, price, allergens, and spice fields; validates each returned item and retries missing ones. Independent of BRNS AI. |
 | `BRC/logic_manager.py` | BRC certification matching using directory postal codes and names; accept/flag/reject rules, scoring, and summaries. |
 | `BRC/data_manager.py` | BRC history load/save/filter, corrupt-file quarantine, and HalalFreak directory load/save/timestamp. |
@@ -469,7 +466,7 @@ For a user seeking chicken rice near Sengkang, the decisive sequence is:
    `other_preferences`. BIS Logic checks that confirmed choices stayed fixed.
 3. The user confirms the summary. BIS Data serializes the ten-field JSON.
 4. BRNS IO validates it, asks Google Places for candidates, enriches with
-   catalog facts, and gets route distances.
+   saved facts, and gets route distances.
 5. BRNS AI orders every candidate and proposes reason codes. BRNS Logic
    removes claims that cannot be supported by candidate facts. A low
    `price_start` alone never proves `within_budget`.
