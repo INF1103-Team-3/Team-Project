@@ -50,5 +50,79 @@
     },
     "wheelchair_accessible": true,
     "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJpUHKm6AX2jERkrMF0Kavx2I",
+    "name": "Sukiya Gyudon • Curry (Hougang 1)",
+    "postal_code": "538692",
+    "address": "1 Hougang Street 91, #01-23 Hougang 1, Singapore 538692",
+    "number": null,
+    "g_rating": "4.2",
+    "g_no_reviews": "216",
+    "cuisine": "japanese",
+    "dietary": [],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["0000", "2359"],
+      "tuesday": ["0000", "2359"],
+      "wednesday": ["0000", "2359"],
+      "thursday": ["0000", "2359"],
+      "friday": ["0000", "2359"],
+      "saturday": ["0000", "2359"],
+      "sunday": ["0000", "2359"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJxV9tXxoX2jERm470TcJitJ0",
+    "name": "TONKATSU Ton ton",
+    "postal_code": "545078",
+    "address": "1 Sengkang Sq, #02 - 39 Compass One, Singapore 545078",
+    "number": "6200 4971",
+    "g_rating": "3.9",
+    "g_no_reviews": "71",
+    "cuisine": "tonkatsu",
+    "dietary": [],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1130", "2130"],
+      "tuesday": ["1130", "2130"],
+      "wednesday": ["1130", "2130"],
+      "thursday": ["1130", "2130"],
+      "friday": ["1130", "2130"],
+      "saturday": ["1130", "2130"],
+      "sunday": ["1130", "2130"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJJQep-owV2jERrkjXxwYWNJU",
+    "name": "Sanook Kitchen (Waterway Point)",
+    "postal_code": "828761",
+    "address": "83 Punggol Central, #B1-13 Waterway Point West Wing, Singapore 828761",
+    "number": "6231 1597",
+    "g_rating": "4.7",
+    "g_no_reviews": "1710",
+    "cuisine": "thai",
+    "dietary": [
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1100", "2200"],
+      "tuesday": ["1100", "2200"],
+      "wednesday": ["1100", "2200"],
+      "thursday": ["1100", "2200"],
+      "friday": ["1100", "2200"],
+      "saturday": ["1100", "2200"],
+      "sunday": ["1100", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
   }
 ]

@@ -10,13 +10,13 @@ those plans from executable behavior.
 ## 1. The three running paths
 
 ```text
-OPTIONAL HALAL DIRECTORY PREPARATION          SEPARATE BRC CHECKER
-BRC/halal_data_scrape.py                      BRC/restaurant_finder.py
-  -> HalalFreak sitemap and area pages           -> BRC IO collects its own request
-  -> BRC/data/HalalFreak_restaurants.json         -> Google Places and Routes
-                                                  -> BRC AI enriches candidates
-                                                  -> BRC Logic checks directory
-                                                  -> BRC Data saves history
+INDEPENDENT MUIS SNAPSHOT REFRESH             BRC JSON CHECKER
+BRC/muis_data_scraper.py                     BRC/main.py check
+  -> Official MUIS establishment search          -> BRC IO reads restaurant JSON
+  -> Targeted name queries, with coverage           and the saved MUIS snapshot
+  -> BRC/data/muis_establishments.json            -> BRC AI proposes outlet matches
+                                                  -> BRC Logic verifies evidence
+                                                  -> BRC Data writes checked JSON
 
 MAIN USER PATH
 BIS/main.py
@@ -36,73 +36,53 @@ shared/geocode_cache.py -> data/geocode_cache.json
 shared/debug_log.py     -> logs/bitefinder.log
 ```
 
-**Current integration boundary:** The HalalFreak directory belongs to BRC.
-BIS does not read it, and BRNS does not call BRC or read its directory. The
-official halal checker integration shown in project planning documents has
-not been connected to the BIS → BRNS path. BRNS deliberately labels a halal
-hint as **unofficial; not checked**. A Google `halal_restaurant` place type is
-saved as an unofficial indication, not an official halal claim.
+**Current integration boundary:** BRC can check BRNS's saved restaurant JSON
+as a separate command and output a complete checked JSON file. BIS and BRNS do
+not yet call BRC in the live search path. BRNS still labels a Google halal
+hint as **unofficial; not checked** until a BRC result is explicitly consumed.
 
 ### Entry points
 
 | Command from the repository root | What it runs |
 | --- | --- |
 | `python BIS/main.py` | Interactive account, profile, and search chatbot. This is the normal user entry point. |
-| `python BRC/halal_data_scrape.py` | Separate download/refresh of BRC's HalalFreak directory. It is not called by BIS or BRNS. |
-| `python BRC/restaurant_finder.py` | Separate BRC restaurant checker with its own interactive questions and history. |
+| `python -m BRC.muis_data_scraper --input BRNS/data/restaurants.json` | Independently refresh a targeted MUIS snapshot for those restaurant names. |
+| `python -m BRC.main check --input BRNS/data/restaurants.json --output BRC/data/checked_restaurants.json` | Check every restaurant against that snapshot and write complete JSON. A single restaurant object is accepted too. |
 | `python BRNS/main.py < request.json` | Standalone BRNS adapter: reads one BIS-shaped JSON object from standard input, runs one search, and prints results. Normal BIS use calls `BRNS.main.search()` directly. |
 
 Use the Python environment with the requirements installed. A root `.env`
 supplies credentials and settings; `.env.example` shows the expected names.
 Do not put actual credentials in documentation or version control.
 
-## 2. Halal data preparation and the independent BRC path
+## 2. MUIS data preparation and the independent BRC path
 
 ### 2.1 Refreshing the halal directory
 
-`BRC/halal_data_scrape.py` is a standalone scraper. Its `main()` connects
-BRC's Python logging to the global log and calls `refresh()`. `refresh()` calls
-`scrape_all()`, which reads the HalalFreak sitemap, selects area page URLs,
-fetches each area, and parses establishment links. The parser extracts a
-name, listed establishment type, optional six-digit postal code, area, and
-profile URL. It de-duplicates by profile URL. One failing area is reported
-and skipped; a failed sitemap stops the refresh. If the final list is empty,
-the existing directory is retained instead of being overwritten.
-
-The successful result is written atomically by
-`BRC/data_manager.save_halal_directory()` to
-`BRC/data/HalalFreak_restaurants.json`. That file and even its `BRC/data/`
-directory may be absent before the first successful refresh. A scraped row
-records the source's `Certified` label, but it is not consumed by the live
-BIS → BRNS search.
+`BRC/muis_data_scraper.py` is a standalone command. It reads restaurant names
+from a JSON object or array (or repeated `--query` options), obtains a session
+token from MUIS's public establishment portal, and queries its search endpoint
+for each name. It keeps eating-establishment listings with their certificate
+number, name, address, postal code and scheme. It refuses a response that may
+be truncated or malformed. Only after all queries succeed does BRC Data save
+the snapshot atomically to `BRC/data/muis_establishments.json`. The snapshot
+records its source, fetch time, name coverage and listings. This is a targeted
+snapshot for the requested names, not a download of the whole directory.
 
 ### 2.2 How BRC uses the directory
 
-`BRC/restaurant_finder.py` starts a **different** application. BRC IO asks
-for a location, `halal`/`non-halal`/`vegetarian`, maximum walking minutes,
-minimum rating, and maximum average spend. These become a `SearchRequest`
-dataclass from `BRC/models.py`. BRC's `places_client.py` geocodes the area,
-performs a Google Places text search (up to 20 candidates), gets walking
-routes, and builds candidate records containing Google facts. Its
-`BRC/ai_manager.py` sends the candidates to Gemini to estimate cuisine,
-average price, likely allergens, and spicy options. It validates each AI item
-and retries missing items; an unavailable AI detail is recorded as failed
-rather than silently being treated as fact.
+`BRC/main.py check` takes JSON from a file or standard input and uses the
+existing snapshot. BRC IO validates an object or array and loads a snapshot
+that covers every input name and is at most seven days old. It never calls the
+scraper. BRC AI sees only MUIS listings at the same postal code and proposes
+an outlet-specific certificate number or null. BRC Logic checks the original
+MUIS record's name, postal code, address, unit and any validity information
+before setting `halal_certification` to `official`. BRC Data writes the full
+checked object or array, preserving original fields and order. Missing
+coverage or an incomplete snapshot stops the check.
 
-For a **halal BRC search only**, `BRC/restaurant_finder.run_search()` loads
-the scraped directory and passes an index to `BRC/logic_manager.py`. The
-index groups rows by postal code. Logic extracts a postal code from a Google
-address, compares normalized establishment names at the same postal code,
-and sets a BRC certification status (`halal-certified`, `not-listed`, or
-`unverified`). A missing directory or postal code means `unverified`, not an
-official match. Logic also applies walk, rating, budget, AI-estimate, and
-dietary flags, assigns accept/flag/reject, and scores each candidate. BRC
-Data saves the processed records in `BRC/restaurant_history.json`; BRC IO
-shows up to five accepted or flagged results.
-
-This BRC certification check is **not** the future official BIS/BRNS checker.
-Its source and name-matching behavior should not be assumed to apply to
-BRNS output.
+The older interactive BRC search and HalalFreak scraper have been removed.
+`BRC/restaurant_history.json` is retained as historical data; the MUIS checker
+does not read or update it.
 
 ## 3. BIS startup, accounts, and saved profile
 
@@ -359,20 +339,19 @@ profile already saved before that attempt remains saved.
 
 ### Geocoding cache
 
-`shared/geocode_cache.py` is the single durable cache for BIS, BRC, and
-BRNS. It lowercases and trims text keys, validates finite latitude/longitude
+`shared/geocode_cache.py` is the single durable cache for BIS and BRNS.
+It lowercases and trims text keys, validates finite latitude/longitude
 pairs, and stores successful lookups in `data/geocode_cache.json`. Its
 read-modify-write uses a lock file and atomic replacement; it uses `msvcrt`
 on Windows and `fcntl` on Unix. BIS can store both the user's original
-location text and the AI-cleaned query as aliases. BRC and BRNS use the
+location text and the AI-cleaned query as aliases. BRNS uses the
 same lookup and remember functions. Cache entries are coordinates, not
 restaurant search results.
 
 ### Global log
 
-`shared/debug_log.py` writes to `logs/bitefinder.log`. BIS and BRNS call it
-directly. BRC's existing Python `logging` calls are bridged into it by
-`configure_python_logging()`. A search trace ID connects BIS and BRNS
+`shared/debug_log.py` writes to `logs/bitefinder.log`. BIS, BRNS, and BRC call
+it directly. A search trace ID connects BIS and BRNS
 events in one process; the CLI displays that ID when a search error occurs.
 `DEBUG=true` mirrors operational events to the terminal. BRNS records
 provider attempts, candidate counts, accepted AI order, rejected reason
@@ -417,36 +396,33 @@ It is not a source of restaurant or certification truth.
 | `BRNS/data/search_history.json` | Locally generated compact BRNS search history. |
 | `BRNS/.gitignore` | Ignores local BRNS runtime files such as search history. |
 
-### BRC: separate checker and halal preparation
+### BRC: MUIS JSON checker
 
 | File | Role and main calls |
 | --- | --- |
-| `BRC/halal_data_scrape.py` | Standalone HalalFreak sitemap/area scraper and directory refresh. |
-| `BRC/restaurant_finder.py` | Separate BRC CLI coordinator: collect BRC request, fetch Places, enrich with AI, check directory and rules, save/display results. |
-| `BRC/io_manager.py` | BRC prompts, validation at the CLI boundary, restaurant formatting, warnings, and history/summary displays. |
-| `BRC/places_client.py` | BRC's Google Geocoding, Places, walking matrix, hours/price parsing, directions links, and shared geocode cache use. Independent of BRNS's IO manager. |
-| `BRC/ai_manager.py` | Gemini enrichment of BRC candidates with estimated cuisine, price, allergens, and spice fields; validates each returned item and retries missing ones. Independent of BRNS AI. |
-| `BRC/logic_manager.py` | BRC certification matching using directory postal codes and names; accept/flag/reject rules, scoring, and summaries. |
-| `BRC/data_manager.py` | BRC history load/save/filter, corrupt-file quarantine, and HalalFreak directory load/save/timestamp. |
-| `BRC/models.py` | BRC `SearchRequest` dataclass with its own five input fields. This is not the BIS → BRNS JSON contract. |
-| `BRC/restaurant_history.json` | BRC processed restaurant history. Separate from BRNS search history. |
-| `BRC/data/HalalFreak_restaurants.json` | Generated directory after a successful scrape; may not yet exist locally. Read by BRC only. |
-| `BRC/requirements.txt` | Extra dependencies for BRC's Gemini SDK, dotenv, requests, and HTML scraper. |
+| `BRC/muis_data_scraper.py` | Independent MUIS portal search and targeted snapshot refresh. |
+| `BRC/main.py` | Object/array JSON checking command and IO → AI → Logic → Data coordinator. |
+| `BRC/io_manager.py` | Validates JSON input and reads the existing MUIS snapshot. |
+| `BRC/ai_manager.py` | Proposes an outlet certificate number from same-postal MUIS candidates using Gemini. |
+| `BRC/logic_manager.py` | Verifies the original MUIS outlet facts and applies certification updates. |
+| `BRC/data_manager.py` | Loads the MUIS snapshot and writes checked JSON atomically. |
+| `BRC/data/muis_establishments.json` | Locally generated MUIS search snapshot with query coverage and retrieval time. |
+| `BRC/restaurant_history.json` | Retained historical data from the removed interactive search; not read by current BRC. |
 | `BRC/.gitkeep` | Keeps the BRC directory present in version control. |
 
 ### Shared and repository-level files
 
 | File | Role |
 | --- | --- |
-| `shared/geocode_cache.py` | One geocode store and cross-platform lock for all three applications. |
-| `shared/debug_log.py` | One operational log, BIS/BRNS trace IDs, optional terminal mirror, and BRC Python-logging bridge. |
+| `shared/geocode_cache.py` | One geocode store and cross-platform lock for BIS and BRNS. |
+| `shared/debug_log.py` | One operational log, BIS/BRNS trace IDs, and optional terminal mirror. |
 | `data/geocode_cache.json` | Shared successful text-to-coordinate lookups; runtime data. |
 | `data/geocode_cache.lock` | Lock file used during cache writes; runtime data. |
 | `logs/bitefinder.log` | Shared diagnostic log; runtime data. |
 | `.env.example` | Safe example of environment variable names and defaults; copy to local `.env` and fill credentials there. |
 | `.env` | Local credentials and settings; ignored by Git and not part of the program's documented source. |
 | `.gitignore` | Root rules for secrets, local data/logs, generated graphs, and other files that should not be committed. |
-| `requirements.txt` | Core BIS/BRNS Python packages (`python-dotenv`, `requests`). |
+| `requirements.txt` | Dependencies for BIS, BRNS, and BRC, including Gemini and HTML scraping. |
 | `requirements-dev.txt` | Core packages plus style, call-graph, and Pillow tooling. |
 | `tests/test_bis_brns_integration.py` | Automated regression checks for request shape, manager order, AI validation, evidence-based reasons, logging, routes, cancellation, test mode, and the BIS → BRNS handoff. |
 | `project_overview/visualise_functions.py` | Generates static call-graph PNGs and `project_workflow.png`, a diagram of the separate halal/BRC and BIS → BRNS paths; has an optional live BIS trace mode. |
@@ -473,6 +449,6 @@ For a user seeking chicken rice near Sengkang, the decisive sequence is:
 6. BRNS Logic returns matches or clearly labeled alternatives; BRNS Data
    stores the compact summary; BIS prints results and optionally a route.
 
-At no point in that path is the BRC HalalFreak directory consulted. Halal
-information shown by BRNS remains explicitly unofficial or unverified until
-the separate official checker integration is implemented.
+At no point in that path is BRC's MUIS snapshot consulted. Halal information
+shown by BRNS remains explicitly unofficial or unverified until its output
+is connected to the separate BRC JSON checker.

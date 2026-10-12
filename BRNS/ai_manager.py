@@ -5,7 +5,7 @@ import json
 import re
 import time
 import requests
-from BRNS import config
+from BRNS import config, logic_manager
 from shared import debug_log as log
 
 SYSTEM_PROMPT = """You convert a user's food request into strict JSON.
@@ -217,6 +217,15 @@ reason codes when supported by the supplied facts: cuisine_match,
 within_budget, within_route, well_rated, vegetarian_options,
 halal_hint_unofficial, spicy_options. Use [] if no code is supported.
 Consider cuisine, budget, dietary needs, travel, and other preferences.
+minimum_rating is a hard minimum Google star rating extracted from the user's
+other preferences. Put candidates below it or without a rating after those
+that meet it. The next layer will enforce the minimum.
+For candidates that satisfy the hard requirements, weigh Google review count
+alongside the star rating. Use confidence_adjusted_rating to compare rating
+quality: it shrinks ratings with few reviews toward 4/5 using 100 prior
+reviews. For example, 4.3 stars from 1,920 reviews is stronger evidence than
+4.5 stars from 75 reviews. Prefer the former when their other facts are similar
+and no minimum excludes it. A missing review count provides weak evidence.
 When previous_restaurants is supplied, prefer suitable candidates not named
 there over similarly suitable candidates already returned. Include every ID.
 Use within_budget only when avg_price is a number no greater than the user's
@@ -250,6 +259,7 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
     _log_ai_event("recommend_candidates",
                   f"Preparing {len(candidates)} candidate summaries.", "INFO")
     mode = request["mode"]
+    rating_floor = logic_manager.minimum_rating(request["other_preferences"])
     facts = []
     for index, candidate in enumerate(candidates):
         facts.append({
@@ -261,6 +271,9 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
             "avg_price": candidate.get("avg_price"),
             "price_start": candidate.get("price_start"),
             "rating": candidate.get("rating"),
+            "review_count": candidate.get("rating_count"),
+            "confidence_adjusted_rating": logic_manager.confidence_adjusted_rating(
+                candidate.get("rating"), candidate.get("rating_count")),
             "spicy_options": candidate.get("spicy_options"),
             "travel_meters": candidate.get(f"{mode}_meters"),
             "travel_minutes": candidate.get(f"{mode}_minutes"),
@@ -275,7 +288,8 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
         restaurant.get("name") for restaurant in previous_restaurants
         if isinstance(restaurant, dict)
         and isinstance(restaurant.get("name"), str)))
-    user_text = json.dumps({"request": request, "candidates": facts,
+    user_text = json.dumps({"request": request, "minimum_rating": rating_floor,
+                            "candidates": facts,
                             "previous_restaurants": prior_names},
                            separators=(",", ":"))
     for entry in config.MODEL_CHAIN:
