@@ -1,0 +1,60 @@
+# Two containers on one network:
+#   brc      - BRC halal checker service (always running)
+#   bis-brns - BIS + BRNS (kept running; open the chatbot with `docker compose exec`)
+#   Run: 
+#   docker compose up -d --build
+#   docker compose exec bis-brns python BIS/main.py
+#   docker compose exec brc python -m BRC.main
+
+name: bitefinder
+
+services:
+  brc:
+    build:
+      context: .
+      target: brc
+    image: bitefinder-brc
+    container_name: bitefinder-brc
+    hostname: brc
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - brc-data:/data
+    networks:
+      - bitefinder-net
+
+  bis-brns:
+    build:
+      context: .
+      target: bis-brns
+    image: bitefinder
+    container_name: bitefinder-bis-brns
+    hostname: bis-brns
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    command: ["sleep", "infinity"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      BRC_SERVICE_URL: http://brc:8000
+    depends_on:
+      brc:
+        condition: service_healthy
+    volumes:
+      - bis-brns-data:/data
+    networks:
+      - bitefinder-net
+
+networks:
+  bitefinder-net:
+    name: bitefinder-net
+
+volumes:
+  brc-data:
+    name: bitefinder-brc-data
+  bis-brns-data:
+    name: bitefinder-bis-brns-data
