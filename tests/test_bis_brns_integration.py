@@ -2211,6 +2211,11 @@ class IntegrationTests(unittest.TestCase):
                          side_effect=[dict(request(), mode="drive"),
                                       request()]) as interpret,
             patch.object(bis_main.brns_io, "show_results"),
+            patch.object(
+    bis_main.io_manager,
+    "choose_results_action",
+    return_value="done",
+),
             patch.object(bis_main.brns_main, "search",
                          return_value={"matches": [], "alternatives": [],
                                        "hidden": 0}) as search,
@@ -2442,6 +2447,11 @@ class IntegrationTests(unittest.TestCase):
             patch.object(bis_main.io_manager, "display_message") as message,
             patch.object(bis_main.ai_manager, "interpret_search_request",
                          return_value=request()),
+            patch.object(
+                bis_main.io_manager,
+                "choose_results_action",
+                return_value="done",
+            ),
             patch.object(brns_config, "USE_LIVE_GOOGLE", True),
             patch.object(brns_config, "GOOGLE_MAPS_API_KEY", "test-key"),
             patch.object(brns_io, "find_candidates",
