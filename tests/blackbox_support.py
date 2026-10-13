@@ -232,7 +232,7 @@ class BlackBoxFixture(unittest.TestCase):
         self.addCleanup(self.fixture.close)
         self.env = os.environ.copy()
         for name in tuple(self.env):
-            if (name.startswith(("OPENROUTER_", "GEMINI_", "SMTP_",
+            if (name.startswith(("OPENROUTER_", "GEMINI_", "GROQ_", "SMTP_",
                                  "BITEFINDER_"))
                     or name in ("GOOGLE_MAPS_API_KEY", "AI_BYPASS",
                                 "USE_LIVE_GOOGLE", "DEBUG")):

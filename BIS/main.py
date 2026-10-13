@@ -67,10 +67,13 @@ def run_search(session, config, automatic=False):
                     debug_log.debug_log("AI proposal validated.", "INFO",
                                         "BIS.logic.validate_search_request")
                     break
-                except logic_manager.SearchClarificationNeeded as error:
+                except ValueError as error:
+                    if not logic_manager.is_search_clarification(error):
+                        raise
                     debug_log.debug_log("Clarification required.", "WARNING",
                                         "BIS.logic.validate_search_request")
-                    io_manager.display_message(error)
+                    io_manager.display_message(
+                        logic_manager.clarification_message(error))
                     today_request = io_manager.ask_search_clarification(config)
                     if today_request is None:
                         io_manager.display_message("Search cancelled.")

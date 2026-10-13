@@ -118,7 +118,7 @@ def _call_openrouter(model_id, system_prompt, user_text):
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_text}]
     for use_json_mode in (True, False):
-        payload = {"model": model_id, "messages": messages, "temperature": 0.2}
+        payload = {"model": model_id, "messages": messages, "temperature": 0}
         if use_json_mode:
             payload["response_format"] = {"type": "json_object"}
         try:
@@ -147,7 +147,7 @@ def _call_gemini(model_name, system_prompt, user_text):
     body = {
         "systemInstruction": {"parts": [{"text": system_prompt}]},
         "contents": [{"role": "user", "parts": [{"text": user_text}]}],
-        "generationConfig": {"temperature": 0.2,
+        "generationConfig": {"temperature": 0,
                              "responseMimeType": "application/json"},
     }
     for use_json in (True, False):
@@ -179,7 +179,7 @@ def _call_groq(model_id, system_prompt, user_text):
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_text}]
     for use_json_mode in (True, False):
-        payload = {"model": model_id, "messages": messages, "temperature": 0.2}
+        payload = {"model": model_id, "messages": messages, "temperature": 0}
         if use_json_mode:
             payload["response_format"] = {"type": "json_object"}
         try:
@@ -233,6 +233,21 @@ def call_ai(user_record):
         _log_ai_event("fallback", f"{provider}/{model}: {_safe_failure(content)}")
         time.sleep(1)
     return False, "; ".join(errors), None
+
+
+def call_api(prompt):
+    """Send one prepared BRNS record through the configured AI chain."""
+    return call_ai(prompt)
+
+
+def parse_response(raw):
+    """Parse a raw BRNS AI JSON response."""
+    return parse_json_reply(raw)
+
+
+def validate_response(data):
+    """Validate a parsed BRNS interpretation response."""
+    return validate_ai_output(data)
 
 
 REASON_CODES = {

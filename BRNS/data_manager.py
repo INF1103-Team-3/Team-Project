@@ -3,17 +3,22 @@ import json
 import os
 import re
 from BRNS import config
+from shared.debug_log import debug_log
 
 
 # ---------- generic helpers ----------
 
 def _load_json(path):
     if not os.path.exists(path):
+        debug_log("Saved JSON file is missing; using an empty collection.",
+                  "WARNING", "BRNS.data.load")
         return None
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError):
+        debug_log("Saved JSON file is unreadable; using an empty collection.",
+                  "ERROR", "BRNS.data.load")
         return None
 
 
@@ -170,3 +175,20 @@ def save_search_results(request, results, source):
         entry["top_matches"] = [
             item["restaurant"]["name"] for item in results["matches"]]
     return save_history(entry)
+
+
+def save(record):
+    """Append one evaluated search-history record."""
+    if not isinstance(record, dict):
+        raise ValueError("Saved BRNS records must be dictionaries.")
+    return save_history(record)
+
+
+def load():
+    """Load persisted BRNS search records, returning [] on file errors."""
+    return load_history()
+
+
+def query(filter_fn):
+    """Return persisted BRNS records accepted by a caller filter."""
+    return [record for record in load() if filter_fn(record)]

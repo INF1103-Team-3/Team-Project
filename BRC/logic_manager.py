@@ -88,3 +88,21 @@ def process(context,ai_output):
     if context["scenario"]=="build_database":
         return build_database(context["raw_snapshot"],ai_output["cuisines"])
     return check_restaurants(context["records"],context["database"],ai_output["matches"])
+
+
+def evaluate(record):
+    """Apply BRC business rules to one AI-enriched workflow record."""
+    if not isinstance(record, dict) or set(record) != {"context", "ai_output"}:
+        raise ValueError("BRC evaluation needs context and AI output.")
+    return process(record["context"], record["ai_output"])
+
+
+def score(record):
+    """Return 1 for official MUIS verification and 0 otherwise."""
+    return int(isinstance(record, dict)
+               and record.get("halal_certification") == "official")
+
+
+def route(record):
+    """Route a checked restaurant to its verification outcome."""
+    return "verified" if score(record) else "not_verified"

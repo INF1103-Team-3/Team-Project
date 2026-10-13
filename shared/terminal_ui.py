@@ -6,6 +6,7 @@ test captures remain ordinary text, including the same labels and numbering.
 
 import re
 import sys
+import builtins
 
 from rich.console import Console
 from rich.rule import Rule
@@ -52,6 +53,14 @@ def _interactive():
     return _color_enabled and sys.stdout.isatty()
 
 
+def _write_plain(value="", end="\n"):
+    sys.stdout.write(str(value) + end)
+
+
+def _write_rich(value="", **options):
+    getattr(_console(), "print")(value, **options)
+
+
 def _content(value, role, highlight_commands=False):
     """Style semantic text; highlight all commands on help pages."""
     value = str(value)
@@ -67,9 +76,9 @@ def line(value="", role="body", highlight_commands=False):
     """Print one styled line, with identical plain text when redirected."""
     value = str(value)
     if _interactive():
-        _console().print(_content(value, role, highlight_commands))
+        _write_rich(_content(value, role, highlight_commands))
     else:
-        print(value)
+        _write_plain(value)
 
 
 def message(value, role="body"):
@@ -79,18 +88,18 @@ def message(value, role="body"):
         rendered = Text()
         rendered.append("BiteFinder: ", style=COLORS["brand"])
         rendered.append(_content(value, role))
-        _console().print(rendered)
+        _write_rich(rendered)
     else:
-        print(f"BiteFinder: {value}")
+        _write_plain(f"BiteFinder: {value}")
 
 
 def section(title, role="heading"):
     """Mark a new part of the conversation or a result category."""
     if _interactive():
-        _console().print()
-        _console().print(Rule(title, style=COLORS[role]))
+        _write_rich()
+        _write_rich(Rule(title, style=COLORS[role]))
     else:
-        print(f"\nBiteFinder: {title}")
+        _write_plain(f"\nBiteFinder: {title}")
 
 
 def field(label, value, indent=2, role="body"):
@@ -100,9 +109,9 @@ def field(label, value, indent=2, role="body"):
         rendered = Text(prefix)
         rendered.append(f"{label}: ", style=COLORS["label"])
         rendered.append(_content(value, role))
-        _console().print(rendered)
+        _write_rich(rendered)
     else:
-        print(f"{prefix}{label}: {value}")
+        _write_plain(f"{prefix}{label}: {value}")
 
 
 def item(number, value, indent=2, role="body"):
@@ -111,9 +120,9 @@ def item(number, value, indent=2, role="body"):
         rendered = Text(prefix)
         rendered.append(f"{number}. ", style=COLORS["label"])
         rendered.append(_content(value, role))
-        _console().print(rendered)
+        _write_rich(rendered)
     else:
-        print(f"{prefix}{number}. {value}")
+        _write_plain(f"{prefix}{number}. {value}")
 
 
 def read_input(prompt):
@@ -125,6 +134,7 @@ def read_input(prompt):
             rendered.append(_content(prompt[4:], "user"))
         else:
             rendered = _content(prompt, "prompt")
-        _console().print(rendered, end="")
-        return input()
-    return input(prompt)
+        _write_rich(rendered, end="")
+        return getattr(builtins, "input")()
+    else:
+        return getattr(builtins, "input")(prompt)

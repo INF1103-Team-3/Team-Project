@@ -279,3 +279,24 @@ def save_checked_result(result, *, single: bool,
     destination = output or (SINGLE_RESULT_PATH if single else BATCH_RESULT_PATH)
     write_json_atomic(result, destination, compact_hours=True)
     return result
+
+
+def save(record):
+    """Persist one evaluated BRC restaurant record."""
+    return save_checked_result(record, single=True)
+
+
+def load():
+    """Load cleaned BRC records, returning [] for missing or corrupt data."""
+    try:
+        return load_clean_database()
+    except (ValueError, OSError):
+        from shared.debug_log import debug_log
+        debug_log("Cleaned BRC database is unavailable; returning no records.",
+                  "ERROR", "BRC.data.load")
+        return []
+
+
+def query(filter_fn):
+    """Return persisted BRC records accepted by a caller filter."""
+    return [record for record in load() if filter_fn(record)]

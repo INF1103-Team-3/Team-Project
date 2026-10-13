@@ -368,6 +368,20 @@ def validate_response(data):
     return {"action": intent, "updates": updates, "location_action": action}
 
 
+def call_api(prompt, config):
+    """Send prepared messages through the configured model chain."""
+    payload = {
+        "model": config["openrouter_model"], "messages": prompt,
+        "temperature": 0, "max_tokens": 700,
+    }
+    return _call_json_with_fallback(payload, config)
+
+
+def parse_response(raw):
+    """Parse one raw AI JSON response before schema validation."""
+    return _parse_json_response(raw)
+
+
 def process(record, config):
     """Stable temporary interface for the forthcoming team AI Manager."""
     if config.get("ai_bypass"):

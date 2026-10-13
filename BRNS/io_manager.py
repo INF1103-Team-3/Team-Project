@@ -148,6 +148,22 @@ def show_results(results, announce_no_matches=True):
                          "match" if heading == "Matches" else "alternative")
 
 
+def display_record(record):
+    """Display one ranked restaurant record."""
+    display_result({"matches": [record], "alternatives": [], "mode": "walk"})
+
+
+def display_list(records):
+    """Display a validated collection of ranked restaurant records."""
+    display_result({"matches": list(records), "alternatives": [],
+                    "mode": "walk"})
+
+
+def display_result(result):
+    """Display one complete BRNS result dictionary."""
+    show_results(result, announce_no_matches=False)
+
+
 def show_result_list(results):
     """Show a compact numbered list before optional details or routing."""
     number = 0
