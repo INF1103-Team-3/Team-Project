@@ -184,16 +184,15 @@ docker compose exec brc python -m BRC.main
 
 ## Testing
 
-Run the focused checker tests:
+Run the integration and Docker deployment tests that cover BRC boundaries:
 
 ```bash
-docker compose exec bis-brns env -u BRC_SERVICE_URL \
-  python -m unittest tests.test_brc_checker -v
+docker compose exec bis-brns python tests/run_tests.py integration
+docker compose exec bis-brns python tests/run_tests.py deployment
 ```
 
-The tests cover database building, deterministic matching, rejection cases,
-cache behavior, input shapes, and BRNS integration boundaries without relying
-on a live MUIS, OneMap, or Gemini request.
+These tests verify the halal request contract and the live BRC service health
+boundary without spending live AI, Maps, or SMTP quota.
 
 See [ProjectFlow.md](../ProjectFlow.md) for BRC's place in the complete
 BiteFinder flow.

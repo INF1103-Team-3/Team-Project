@@ -286,12 +286,9 @@ Places, matrices, routes, and AI calls to local fixture servers.
 Run BRNS-focused suites from the repository root:
 
 ```bash
-docker compose exec bis-brns env -u BRC_SERVICE_URL python tests/test_blackbox_brns.py
-docker compose exec bis-brns env -u BRC_SERVICE_URL python -m unittest tests.test_unit_brns_ai -v
-docker compose exec bis-brns env -u BRC_SERVICE_URL python -m unittest tests.test_unit_brns_logic -v
-docker compose exec bis-brns env -u BRC_SERVICE_URL python -m unittest tests.test_unit_data_manager.TestBRNSDataManager -v
-docker compose exec bis-brns env -u BRC_SERVICE_URL python -m unittest tests.test_bis_brns_integration -v
-docker compose exec bis-brns env -u BRC_SERVICE_URL python tests/test_blackbox_bis_to_brns.py
+docker compose exec bis-brns python tests/run_tests.py brns
+docker compose exec bis-brns python tests/run_tests.py blackbox
+docker compose exec bis-brns python tests/run_tests.py integration
 ```
 
 The black box suite starts the real standalone entry point, posts fixed AI,

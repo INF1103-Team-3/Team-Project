@@ -12,8 +12,18 @@ jobs:
       - name: Check out the project
         uses: actions/checkout@v7
 
-      - name: Build Docker image
-        run: docker build -t bitefinder .
+      - name: Build and start BiteFinder
+        run: docker compose up -d --build
 
       - name: Run tests inside Docker
-        run: docker run --rm --entrypoint python bitefinder -m unittest discover -s tests -v
+        run: >-
+          docker compose exec -T -e BITEFINDER_TEST_COLOR=never bis-brns
+          python tests/run_tests.py all
+
+      - name: Show container logs after failure
+        if: failure()
+        run: docker compose logs --tail=200
+
+      - name: Stop BiteFinder
+        if: always()
+        run: docker compose down -v

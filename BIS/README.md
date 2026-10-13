@@ -318,11 +318,9 @@ settings and requires a verified account plus restaurant coordinates.
 Relevant suites from the repository root:
 
 ```bash
-docker compose exec bis-brns env -u BRC_SERVICE_URL python tests/test_blackbox_bis.py
-docker compose exec bis-brns env -u BRC_SERVICE_URL python tests/test_email_verification.py
-docker compose exec bis-brns env -u BRC_SERVICE_URL python -m unittest tests.test_unit_bis_logic -v
-docker compose exec bis-brns env -u BRC_SERVICE_URL python -m unittest tests.test_unit_data_manager.TestBISDataManager -v
-docker compose exec bis-brns env -u BRC_SERVICE_URL python -m unittest tests.test_bis_brns_integration -v
+docker compose exec bis-brns python tests/run_tests.py bis
+docker compose exec bis-brns python tests/run_tests.py blackbox
+docker compose exec bis-brns python tests/run_tests.py integration
 ```
 
 Black box tests launch the real `BIS/main.py` inside a temporary project copy.

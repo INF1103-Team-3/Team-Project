@@ -91,7 +91,7 @@ test commands:
 | BIS account, profile, and search interaction | [BIS/README.md](BIS/README.md) |
 | BRNS recommendation, routing, and result processing | [BRNS/README.md](BRNS/README.md) |
 | BRC MUIS database and halal verification | [BRC/README.md](BRC/README.md) |
-| Unit, integration, black box, and compliance tests | [tests/README.md](tests/README.md) |
+| Function, integration, black-box, and deployment tests | [tests/README.md](tests/README.md) |
 | Static and live function visualizations | [project_overview/README.md](project_overview/README.md) |
 | Shared logging, geocoding, terminal UI, and model discovery | [shared/README.md](shared/README.md) |
 | End-to-end data states, AI payloads, and file storage | [DataFlowDiagram.md](DataFlowDiagram.md) |
@@ -139,8 +139,8 @@ BRC/                         MUIS halal database and outlet checker
 
 shared/                      geocode cache, model discovery, terminal UI, logs
   README.md                  shared-service contracts and design rules
-tests/                       unit, integration, black box, email, and BRC tests
-  README.md                  test layers, commands, isolation, and CI behavior
+tests/                       function, integration, black-box, and Docker tests
+  README.md                  test groups, commands, isolation, and color controls
 project_overview/            function-graph generators and local graph output
   README.md                  static and live visualization instructions
 .github/workflows/tests.yml  host and Docker CI checks
@@ -312,8 +312,8 @@ The shell starts in `/app`. From there, choose the operation needed:
 # Start the complete BiteFinder CLI.
 python main.py
 
-# Run the complete automated test suite without the Docker BRC adapter.
-env -u BRC_SERVICE_URL python -m unittest discover -s tests -v
+# Run the complete automated test suite.
+python tests/run_tests.py all
 
 # Follow the BIS and BRNS application log. Press Ctrl+C to stop following it.
 tail -f logs/bitefinder.log
@@ -355,43 +355,39 @@ search, or return to commands.
 
 ## Run the tests
 
-Normal tests use temporary project copies and local fixture servers. They do
-not call live AI, Google, SMTP, or the running BRC service. Unsetting
-`BRC_SERVICE_URL` disables the Compose HTTP adapter during tests so the suite
-can exercise the BRC source modules directly.
+Normal tests use hardcoded AI replies, temporary project copies, and local
+fixture servers. They do not call live AI, Google, or SMTP services. The runner
+disables the BRC HTTP adapter except for deployment tests that intentionally
+check communication between the containers.
 
 Run every test:
 
 ```bash
-docker compose exec bis-brns env -u BRC_SERVICE_URL \
-  python -m unittest discover -s tests -v
+docker compose exec bis-brns python tests/run_tests.py all
 ```
 
-Run the readable BIS, BRNS, and combined black box report:
+The runner colors headings, expected and actual values, PASS results, and FAIL
+results in an interactive terminal. Set `BITEFINDER_TEST_COLOR=always` or
+`never` with `docker compose exec -e` to override automatic detection; see the
+[test guide](tests/README.md) for examples.
+
+Run only the BIS and BRNS function tests:
 
 ```bash
-docker compose exec bis-brns env -u BRC_SERVICE_URL \
-  python -m tests.blackbox_support
+docker compose exec bis-brns python tests/run_tests.py core
 ```
 
-Run one black box boundary:
+Run all process-level black-box tests:
 
 ```bash
-docker compose exec bis-brns env -u BRC_SERVICE_URL \
-  python tests/test_blackbox_bis.py
-docker compose exec bis-brns env -u BRC_SERVICE_URL \
-  python tests/test_blackbox_brns.py
-docker compose exec bis-brns env -u BRC_SERVICE_URL \
-  python tests/test_blackbox_bis_to_brns.py
+docker compose exec bis-brns python tests/run_tests.py blackbox
 ```
 
-Run email tests or the INF1103 source check:
+Run the BIS-to-BRNS integration tests or Docker deployment checks:
 
 ```bash
-docker compose exec bis-brns env -u BRC_SERVICE_URL \
-  python tests/test_email_verification.py
-docker compose exec bis-brns env -u BRC_SERVICE_URL \
-  python tests/inf1103_compliance_check.py
+docker compose exec bis-brns python tests/run_tests.py integration
+docker compose exec bis-brns python tests/run_tests.py deployment
 ```
 
 GitHub Actions builds the application image and runs the complete suite inside

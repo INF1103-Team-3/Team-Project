@@ -125,8 +125,7 @@ Shared behavior is exercised by subsystem tests, especially data manager,
 black box, BRC, and AI fallback cases. Run the complete suite with:
 
 ```bash
-docker compose exec bis-brns env -u BRC_SERVICE_URL \
-  python -m unittest discover -s tests -v
+docker compose exec bis-brns python tests/run_tests.py all
 ```
 
 See [ProjectFlow.md](../ProjectFlow.md) for where each shared service appears in
