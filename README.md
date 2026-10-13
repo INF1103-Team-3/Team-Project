@@ -1,18 +1,16 @@
 # BiteFinder
 
-BiteFinder contains two connected Python command-line applications and a
-separate restaurant certification checker:
+BiteFinder contains three connected procedural Python applications:
 
 | Application | Purpose | Run from the repository root |
 | --- | --- | --- |
 | **BIS** — BiteFinder Interaction System | Sign up or resume an account and save food preferences | `python3 main.py` |
 | **BRNS** — BiteFinder Recommendation & Navigation System | Find, rank, and route to restaurants | `python3 BRNS/main.py` |
-| **BRC** — BiteFinder Restaurant Checker | Build the MUIS halal database and check restaurant JSON | `python3 -m BRC.main` |
+| **BRC** — BiteFinder Restaurant Checker | Build the MUIS halal database and verify halal search candidates | `python3 -m BRC.main` |
 
-BIS sends today's confirmed search as JSON to BRNS. The
-[original project scope](project_overview/ProjectInitialDetails.md) describes the intended
-combined system, including allergy handling. The current CLIs do not implement
-every feature in that scope.
+BIS sends today's validated search as JSON to BRNS. BRNS retrieves and ranks
+restaurants, then asks BRC to check halal candidates against cleaned MUIS data
+when halal is required. The root `main.py` starts the complete BIS workflow.
 
 ## Install
 
@@ -28,30 +26,50 @@ On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` instead.
 The root `requirements.txt` covers all three applications. The optional
 `requirements-dev.txt` adds `pycodestyle` and the function graph tools.
 
-## Automated checks
+## Tests and automated checks
 
-Run all process-level checks with the readable color report:
+The suite uses Python's built-in `unittest` runner. It supplies fixed AI, Maps,
+routing, and SMTP responses locally, so it does not spend API quota, send email,
+or require live credentials.
+
+Run all 243 tests from the repository root:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+The suite covers BIS, BRNS, the complete BIS → BRNS handoff, BRC, SMTP
+verification, routing, AI failure handling, persistence, and manager logic.
+
+Run the three process-level black box suites with a readable scenario report:
 
 ```bash
 python3 -m tests.blackbox_support
 ```
 
-Run one area with `python3 tests/test_blackbox_bis.py`,
-`python3 tests/test_blackbox_brns.py`, or
-`python3 tests/test_blackbox_bis_to_brns.py`. Colors appear in an interactive
-terminal; set `BITEFINDER_TEST_COLOR=always` to force them in redirected output,
-or `BITEFINDER_TEST_COLOR=never` to turn them off.
+Run one black box area separately:
 
-They launch the real entry points in temporary copies of the application and
-send fixed AI and Maps responses from a local HTTP server. The cases check
-valid and invalid answers, visible retries, saved data, results, and routes.
-Each result shows the input scenario, expected output, lines observed from the
-application, and actual calls in order.
-Run the email verification checks with the same report using
-`python3 tests/test_email_verification.py`. SMTP calls in these tests are mocked;
-no verification email is sent.
-No live API key or email account is needed. Run every test with
-`python3 -m unittest discover -s tests -v`.
+```bash
+python3 tests/test_blackbox_bis.py
+python3 tests/test_blackbox_brns.py
+python3 tests/test_blackbox_bis_to_brns.py
+```
+
+The black box tests launch real entry points in temporary project copies and
+serve fixed external responses from a local HTTP server. Each result explains
+the input scenario, expected behavior, observed application output, and calls
+made in order. Set `BITEFINDER_TEST_COLOR=always` to force color in redirected
+output or `BITEFINDER_TEST_COLOR=never` to disable it.
+
+Run the email tests or INF1103 source check separately:
+
+```bash
+python3 tests/test_email_verification.py
+python3 tests/inf1103_compliance_check.py
+```
+
+The compliance check verifies the procedural production managers, required
+function names, terminal I/O boundaries, and root deployment files.
 
 BIS and BRNS use the same terminal theme for prompts, profile details,
 restaurant results, and directions. Interactive terminals show color;
@@ -104,7 +122,7 @@ each program called, and `calls.json` with exact call counts in a new
 the overview unless that BIS session actually calls it. On Linux or macOS,
 run `.venv/bin/python project_overview/visualise_live_functions.py`.
 
-Both applications read the same `.env` file at the repository root. If you do
+All three applications read the same `.env` file at the repository root. If you do
 not have one yet, copy `.env.example` to `.env` and edit the settings you need:
 
 ```bash
@@ -181,10 +199,11 @@ the list before saving it, including when you add or remove areas later.
 For `/search`, BIS confirms your current location before asking the other
 questions. Enter a Singapore postal code, address, landmark, or latitude and
 longitude. Cached locations and coordinates work without a Maps key; uncached
-addresses need `GOOGLE_MAPS_API_KEY` in the root `.env`. Walking searches offer
-your saved walking distance as the default. Driving searches ask for a new
-distance or time limit. Live search also requires a free-text description and confirmation
-of the interpreted request. Search choices do not change your saved profile.
+addresses need `GOOGLE_MAPS_API_KEY` in the root `.env`. Walking, driving, and
+transit searches offer the compatible saved distance or time from your profile
+as the default. Live search also accepts an optional free-text request and asks
+for confirmation when AI interprets or corrects it. Search choices do not
+change your saved profile.
 Use `/help search` for the full sequence.
 
 ### BIS AI and email settings
@@ -257,11 +276,12 @@ For live Google restaurant and route data, set `GOOGLE_MAPS_API_KEY` and
 `USE_LIVE_GOOGLE=false` saved restaurant fallback remains available for local use, but
 it still needs BRNS AI to produce a completed recommendation.
 
-BRNS ranks candidates and explains alternatives. Halal results are labeled
-unofficial until the restaurant checker is integrated. A route or map link
-is offered when a result has coordinates. Standalone BRNS accepts one BIS
-search JSON object on standard input instead of opening an interactive
-questionnaire.
+BRNS ranks candidates and explains alternatives. For halal searches it sends
+each candidate to BRC and marks confirmed MUIS outlets as official. If BRC is
+temporarily unavailable, Google-indicated halal candidates can continue as
+clearly labelled unofficial fallback results. A route or map link is offered
+when a result has coordinates. Standalone BRNS accepts one BIS search JSON
+object on standard input instead of opening an interactive questionnaire.
 
 BRNS reads the root `.env` and keeps its data relative to `BRNS/`, regardless of
 the working directory. Offline fallback reads `BRNS/data/restaurants.json`.
@@ -306,9 +326,9 @@ standard output:
 cat restaurants.json | python3 -m BRC.main --stdin --stdout > checked_restaurants.json
 ```
 
-Errors and status messages go to standard error. BRC does not currently run
-inside BIS or BRNS searches; the checked JSON is an explicit output for the
-future container integration.
+Errors and status messages go to standard error. BRNS also calls BRC directly
+during halal searches and uses the returned certification evidence when it
+filters and displays results.
 
 ## Code layout and development
 
@@ -327,21 +347,77 @@ python3 -m pycodestyle *.py sources support
 ```
 
 
-## Docker Deployment
+## Docker
 
-BiteFinder can be run inside a Docker container to provide a consistent environment across different systems.
+The root `Dockerfile` builds one BiteFinder image and starts BIS by default.
+BIS calls BRNS and BRC from the same image when the selected workflow needs
+them. The previous Compose deployment has been removed.
 
-### Prerequisites
+### Build the image
 
-- Docker Desktop
-- A `.env` file containing the required API keys
+Install Docker Desktop or Docker Engine, open a terminal in the repository
+root, and run:
 
-### Environment Variables
+```bash
+docker build -t bitefinder .
+```
 
-Copy `.env.example` to `.env` and provide the required values:
+The build installs `requirements.txt` inside the image. No host Python packages
+are required.
 
-```env
-OPENROUTER_API_KEY=
-GEMINI_API_KEY=
-GOOGLE_MAPS_API_KEY=
-USE_LIVE_GOOGLE=true
+### Configure and run BiteFinder
+
+Copy the example environment file and fill in the services you intend to use:
+
+```bash
+cp .env.example .env
+docker run --rm -it --env-file .env bitefinder
+```
+
+PowerShell users can create the file with:
+
+```powershell
+Copy-Item .env.example .env
+docker run --rm -it --env-file .env bitefinder
+```
+
+The `.env` file is excluded from Git and the Docker image. Docker passes its
+values to the container at runtime. Common settings are:
+
+| Setting | Purpose |
+| --- | --- |
+| `OPENROUTER_API_KEY`, `GROQ_API_KEY`, or `GEMINI_API_KEY` | Provide an AI model for BIS, BRNS, and BRC processing |
+| `GOOGLE_MAPS_API_KEY` | Enable live geocoding, Places, routes, and restaurant facts |
+| `USE_LIVE_GOOGLE=true` | Use live Google restaurant and route data |
+| `SMTP_*` | Send signup, resume, and Maps-link emails |
+| `AI_BYPASS=true` | Run BIS profile testing without live AI or BRNS search |
+| `SMTP_BYPASS=true` | Skip SMTP delivery during local testing |
+
+The `--rm` option deletes the stopped container, including data written only
+inside it. Remove `--rm` if you need to inspect that container afterward, or
+copy generated JSON and logs out before it is removed.
+
+Run BRC's interactive menu from the same image:
+
+```bash
+docker run --rm -it --env-file .env bitefinder python -m BRC.main
+```
+
+### Run tests inside Docker
+
+The test directory is included in the image and the full suite does not use
+live APIs:
+
+```bash
+docker run --rm --entrypoint python bitefinder -m unittest discover -s tests -v
+```
+
+Run the INF1103 production-source check inside the image with:
+
+```bash
+docker run --rm --entrypoint python bitefinder tests/inf1103_compliance_check.py
+```
+
+Expected results are `Ran 243 tests` followed by `OK`, and an INF1103
+production-source check pass. Run both commands after changing application,
+test, dependency, or Docker files.
