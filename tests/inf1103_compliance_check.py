@@ -71,6 +71,17 @@ def check_submission_files():
         failures.append("The repository root has no Dockerfile.")
     if not (ROOT / "requirements.txt").is_file():
         failures.append("The repository root has no requirements.txt.")
+    dockerignore = ROOT / ".dockerignore"
+    if dockerignore.is_file():
+        ignored = {
+            line.strip().rstrip("/")
+            for line in dockerignore.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        }
+        if "tests" in ignored:
+            failures.append(
+                "The Docker build context excludes tests, so the offline "
+                "suite cannot run inside the image.")
     return failures
 
 

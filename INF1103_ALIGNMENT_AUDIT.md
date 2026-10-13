@@ -14,7 +14,7 @@ Reference: `BIS/docs/INF1103_Part1_Consolidated_Requirements.md`
 | AI JSON validation | Pass | BIS, BRNS, and BRC request structured results and validate model output before logic or persistence uses it. Invalid output and provider failure paths are tested. |
 | Flat-file persistence | Pass | Saved application data uses JSON. Missing and corrupt file behavior is covered by tests. |
 | Automated tests | Pass on host | `python -m unittest discover -s tests -v` completed 243 tests successfully, including BIS, BRNS, BIS-to-BRNS, BRC, SMTP, and manager tests. HTTP services are locally simulated in black box tests. |
-| Root Docker deployment files | Present | The root `Dockerfile` and `.dockerignore` now match the `docker-deployment` branch. The main-only `docker-compose.yml` was removed. |
+| Root Docker deployment files | Present | The root `Dockerfile` comes from the `docker-deployment` branch, the main-only `docker-compose.yml` was removed, and the image context includes the offline tests required by the course. |
 | Docker execution | Not verified here | Docker is unavailable in the current workspace, so image build, `docker run`, and tests inside the container still require verification on a team machine. |
 | Git history | Partial | The repository has iterative history and feature merges, but several existing commit messages are vague (`update`, `In Progress`). Rewriting shared history shortly before submission is unsafe. |
 | Engineering report and submission package | Missing from repository | No final five-page report, DFD, exception matrix, exported Docker image, Git-history artifact, or submission ZIP was found. These require team and submission metadata. |
@@ -28,7 +28,7 @@ Reference: `BIS/docs/INF1103_Part1_Consolidated_Requirements.md`
 - Made missing or corrupt BRNS/BRC JSON loads log the problem and return an empty result.
 - Isolated Groq credentials in black box tests so tests never fall through to a live provider.
 - Added `tests/inf1103_compliance_check.py` to check production classes, I/O boundaries, manager function names, requirements, and root Docker files.
-- Restored `.dockerignore` and `Dockerfile` from `origin/docker-deployment` and removed the main-only Compose deployment.
+- Restored `.dockerignore` and `Dockerfile` from `origin/docker-deployment`, removed the main-only Compose deployment, and retained the offline tests in the image context as required by the course.
 
 ## Remaining submission risks
 
@@ -38,9 +38,9 @@ The exact consolidated wording says there must be no class definitions anywhere 
 
 Before packaging, the team should obtain a lecturer ruling or submit only a procedural test script and exclude development visualization tools. Converting the full 243-test harness to class-free procedural tests is possible, but should be treated as a deliberate submission change rather than deleting proven coverage at the last minute.
 
-### Docker test conflict
+### Docker verification
 
-The `docker-deployment` branch's `.dockerignore` excludes `tests/` and `requirements-dev.txt`. This matches the requested deployment branch exactly, but the consolidated requirements say automated tests must pass inside Docker. The current image therefore cannot contain or run the repository test suite. Resolve this before submission by removing those two exclusions, installing the chosen test dependency if needed, and running the offline suite in the built image.
+The image context contains the standard-library `unittest` suite, so it can be invoked without `requirements-dev.txt`. Docker is unavailable in this workspace, so the team must still build the image and execute the tests in the resulting container on a Docker-capable machine.
 
 ### AI repeatability
 

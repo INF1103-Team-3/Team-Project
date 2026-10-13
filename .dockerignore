@@ -15,6 +15,5 @@ __pycache__/
 .pytest_cache/
 *.log
 
-tests/
 requirements-dev.txt
 project_overview/
