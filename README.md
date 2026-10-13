@@ -1,5 +1,28 @@
 # BiteFinder
 
+## Problem statement and objectives
+
+Choosing a restaurant in Singapore can be difficult when several practical
+needs must be satisfied at once. Users may need food within a budget and a
+realistic travel limit, while also considering cuisine preferences, dietary
+requirements, and whether a halal claim is officially verified. Information is
+often spread across different services, making it harder to compare options
+with confidence.
+
+BiteFinder helps users find suitable Singapore restaurants by combining their
+saved preferences with a search for nearby restaurants and routes. Its
+objectives are to:
+
+- collect and save a user's location, budget, travel, cuisine, and dietary
+  preferences;
+- recommend restaurants that meet the selected search criteria, using route
+  distance or journey time to check travel limits;
+- use official MUIS records to verify halal candidates when halal is required;
+- explain why a restaurant is recommended, offered as an alternative, or
+  excluded; and
+- allow users to view routes and email a selected restaurant's Google Maps
+  directions link.
+
 BiteFinder contains three connected procedural Python applications:
 
 | Application | Purpose | Run from the repository root |
