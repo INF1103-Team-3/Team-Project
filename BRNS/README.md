@@ -5,11 +5,12 @@ facts, requires AI to rank the current candidate set, applies deterministic
 business rules, optionally checks halal candidates through BRC, saves validated
 facts, and returns matches and alternatives.
 
-BRNS normally runs inside BIS. It can also run independently by reading one
-search JSON object from standard input:
+BRNS normally runs inside BIS. In the Docker deployment it can also read one
+search JSON object from standard input. `-T` allows the host file to be piped
+into the running container:
 
 ```bash
-python BRNS/main.py < search_request.json
+docker compose exec -T bis-brns python BRNS/main.py < search_request.json
 ```
 
 ## Responsibilities
@@ -285,12 +286,12 @@ Places, matrices, routes, and AI calls to local fixture servers.
 Run BRNS-focused suites from the repository root:
 
 ```bash
-python tests/test_blackbox_brns.py
-python -m unittest tests.test_unit_brns_ai -v
-python -m unittest tests.test_unit_brns_logic -v
-python -m unittest tests.test_unit_data_manager.TestBRNSDataManager -v
-python -m unittest tests.test_bis_brns_integration -v
-python tests/test_blackbox_bis_to_brns.py
+docker compose exec bis-brns env -u BRC_SERVICE_URL python tests/test_blackbox_brns.py
+docker compose exec bis-brns env -u BRC_SERVICE_URL python -m unittest tests.test_unit_brns_ai -v
+docker compose exec bis-brns env -u BRC_SERVICE_URL python -m unittest tests.test_unit_brns_logic -v
+docker compose exec bis-brns env -u BRC_SERVICE_URL python -m unittest tests.test_unit_data_manager.TestBRNSDataManager -v
+docker compose exec bis-brns env -u BRC_SERVICE_URL python -m unittest tests.test_bis_brns_integration -v
+docker compose exec bis-brns env -u BRC_SERVICE_URL python tests/test_blackbox_bis_to_brns.py
 ```
 
 The black box suite starts the real standalone entry point, posts fixed AI,

@@ -284,4 +284,4 @@ ENV PYTHONPATH=/opt/bitefinder${PYTHONPATH:+:${PYTHONPATH}}
 VOLUME ["/data"]
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["python", "BIS/main.py"]
+CMD ["python", "main.py"]

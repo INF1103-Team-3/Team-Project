@@ -78,10 +78,10 @@ it before checking the supplied restaurant data.
 
 ## Running BRC
 
-From the project root, open the interactive menu:
+From the project root, open the interactive menu in the running BRC container:
 
 ```bash
-python -m BRC.main
+docker compose exec brc python -m BRC.main
 ```
 
 The menu can build the database, check the default BRNS restaurant file, check
@@ -91,19 +91,21 @@ file containing one object.
 Check a specific file without the menu:
 
 ```bash
-python -m BRC.main --input BRNS/data/restaurants.json
+docker compose cp restaurants.json brc:/tmp/restaurants.json
+docker compose exec brc python -m BRC.main --input /tmp/restaurants.json
 ```
 
 Use JSON over standard input and output:
 
 ```bash
-cat restaurants.json | python -m BRC.main --stdin --stdout > checked.json
+cat restaurants.json | docker compose exec -T brc \
+  python -m BRC.main --stdin --stdout > checked.json
 ```
 
 Run only the raw data scraper:
 
 ```bash
-python -m BRC.scraper
+docker compose exec brc python -m BRC.scraper
 ```
 
 The standalone scraper displays its current stage, completed record count,
@@ -183,7 +185,8 @@ docker compose exec brc python -m BRC.main
 Run the focused checker tests:
 
 ```bash
-python -m unittest tests.test_brc_checker -v
+docker compose exec bis-brns env -u BRC_SERVICE_URL \
+  python -m unittest tests.test_brc_checker -v
 ```
 
 The tests cover database building, deterministic matching, rejection cases,

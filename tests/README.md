@@ -7,27 +7,33 @@ so results are repeatable.
 
 ## Run the tests
 
-Install the application and development dependencies, then run the complete
-suite from the project root:
+Start the Docker Compose services, then run the complete suite in the
+BIS/BRNS container:
 
 ```bash
-python -m pip install -r requirements-dev.txt
-python -m unittest discover -s tests -v
+docker compose up -d --build
+docker compose exec bis-brns env -u BRC_SERVICE_URL \
+  python -m unittest discover -s tests -v
 ```
+
+`BRC_SERVICE_URL` is unset for tests so Python loads the local BRC source under
+test instead of the Compose HTTP adapter. Test fixtures still replace live AI,
+Maps, SMTP, MUIS, and routing calls.
 
 Run the user friendly black box report:
 
 ```bash
-python -m tests.blackbox_support
+docker compose exec bis-brns env -u BRC_SERVICE_URL \
+  python -m tests.blackbox_support
 ```
 
 Run one file when working on a subsystem:
 
 ```bash
-python -m unittest tests.test_brc_checker -v
-python tests/test_blackbox_bis.py
-python tests/test_blackbox_brns.py
-python tests/test_blackbox_bis_to_brns.py
+docker compose exec bis-brns env -u BRC_SERVICE_URL python -m unittest tests.test_brc_checker -v
+docker compose exec bis-brns env -u BRC_SERVICE_URL python tests/test_blackbox_bis.py
+docker compose exec bis-brns env -u BRC_SERVICE_URL python tests/test_blackbox_brns.py
+docker compose exec bis-brns env -u BRC_SERVICE_URL python tests/test_blackbox_bis_to_brns.py
 ```
 
 ## Test layers
@@ -112,7 +118,8 @@ recovery case where the user can correct the problem.
 Run the static course requirements check directly with:
 
 ```bash
-python tests/inf1103_compliance_check.py
+docker compose exec bis-brns env -u BRC_SERVICE_URL \
+  python tests/inf1103_compliance_check.py
 ```
 
 It verifies that production code in BIS, BRNS, BRC, and `shared` remains
@@ -123,17 +130,9 @@ are outside the production manager restriction.
 
 ## Docker and continuous integration
 
-Run the same suite in the application image:
-
-```bash
-docker build -t bitefinder .
-docker run --rm --entrypoint python bitefinder -m unittest discover -s tests -v
-```
-
-`.github/workflows/tests.yml` runs tests on pushes and pull requests using
-Python 3.11, builds the Docker image, and repeats the suite inside the image.
-This catches missing packaged files and dependency differences in addition to
-normal host failures.
+`.github/workflows/tests.yml` builds the Docker image on pushes and pull
+requests, then runs the complete suite inside that image. This catches missing
+packaged files and dependency differences in addition to normal test failures.
 
 See [ProjectFlow.md](../ProjectFlow.md) for the runtime boundaries these tests
 exercise.
