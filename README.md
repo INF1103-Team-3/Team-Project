@@ -226,6 +226,36 @@ Check container state at any time with:
 docker compose ps
 ```
 
+### Test Docker networking
+
+Check external internet access from the BIS/BRNS container:
+
+```bash
+docker compose exec bis-brns python -c "import urllib.request; r=urllib.request.urlopen('https://www.google.com/generate_204', timeout=10); print('Internet working, HTTP', r.status)"
+```
+
+Check external internet access from the BRC container:
+
+```bash
+docker compose exec brc python -c "import urllib.request; r=urllib.request.urlopen('https://www.google.com/generate_204', timeout=10); print('Internet working, HTTP', r.status)"
+```
+
+Check that BIS/BRNS can reach the BRC service over `bitefinder-net`:
+
+```bash
+docker compose exec bis-brns python -c "import urllib.request; print(urllib.request.urlopen('http://brc:8000/health', timeout=5).read().decode())"
+```
+
+Successful external checks print `Internet working, HTTP 204`. A successful
+BRC health check prints `{"status": "ok"}`.
+
+Inspect network and BRC errors with:
+
+```bash
+docker compose logs --tail=100 brc
+docker compose exec bis-brns tail -n 100 logs/bitefinder.log
+```
+
 ### First halal search
 
 If the cleaned MUIS database does not exist, BRC prepares it automatically when
@@ -246,8 +276,9 @@ docker compose exec brc python -m BRC.main
 
 `bitefinder-brc-data` preserves the raw and cleaned MUIS data, cuisine tags,
 and restaurant-check caches. `bitefinder-bis-brns-data` preserves accounts,
-profile state, restaurant facts, search history, the shared geocode cache, and
-logs.
+profile state, restaurant facts, search history, and the shared geocode cache.
+`bitefinder-logs` is mounted into both containers so BIS, BRNS, and BRC append
+to the same `logs/bitefinder.log` file and share search trace IDs.
 
 Stop both containers while keeping those named volumes:
 
@@ -391,10 +422,10 @@ keys or raw provider responses.
 Follow the application logs from the host:
 
 ```bash
-# BIS and BRNS file log
+# Shared BIS, BRNS, and BRC file log
 docker compose exec bis-brns tail -f logs/bitefinder.log
 
-# BRC file log
+# The same shared file viewed from the BRC container
 docker compose exec brc tail -f logs/bitefinder.log
 
 # BRC container output and service errors

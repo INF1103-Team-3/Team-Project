@@ -4,6 +4,15 @@
 #
 #   docker compose up -d --build
 #   docker compose exec bis-brns python main.py
+#
+# Test container internet and service networking:
+#   docker compose exec bis-brns python -c "import urllib.request; r=urllib.request.urlopen('https://www.google.com/generate_204', timeout=10); print('Internet working, HTTP', r.status)"
+#   docker compose exec brc python -c "import urllib.request; r=urllib.request.urlopen('https://www.google.com/generate_204', timeout=10); print('Internet working, HTTP', r.status)"
+#   docker compose exec bis-brns python -c "import urllib.request; print(urllib.request.urlopen('http://brc:8000/health', timeout=5).read().decode())"
+#
+# Inspect network and BRC errors:
+#   docker compose logs --tail=100 brc
+#   docker compose exec bis-brns tail -n 100 logs/bitefinder.log
 name: bitefinder
 
 services:
@@ -20,6 +29,7 @@ services:
         required: false
     volumes:
       - brc-data:/data
+      - bitefinder-logs:/data/logs
     networks:
       - bitefinder-net
 
@@ -46,6 +56,7 @@ services:
         condition: service_healthy
     volumes:
       - bis-brns-data:/data
+      - bitefinder-logs:/data/logs
     networks:
       - bitefinder-net
 
@@ -60,3 +71,5 @@ volumes:
     name: bitefinder-brc-data
   bis-brns-data:
     name: bitefinder-bis-brns-data
+  bitefinder-logs:
+    name: bitefinder-logs

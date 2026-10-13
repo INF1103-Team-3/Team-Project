@@ -121,15 +121,18 @@ class Handler(BaseHTTPRequestHandler):
             send_json(self, 400, {"error": f"Invalid request: {error}"})
             return
         with RUN_LOCK:
-            token = debug_log.start_trace()
+            token = debug_log.adopt_trace(
+                self.headers.get("X-BiteFinder-Trace-ID"))
             try:
                 result = brc_main.run(value)
             except ValueError as error:
                 send_json(self, 400, {"error": str(error)})
                 return
             except Exception as error:  # report every other failure to the caller
+                detail = debug_log.safe_error_detail(error)
                 debug_log.debug_log(
-                    f"BRC service check failed: {type(error).__name__}.",
+                    f"BRC service check failed: {type(error).__name__}: "
+                    f"{detail}",
                     "ERROR", "BRC.service")
                 send_json(self, 500, {"error": f"{type(error).__name__}: {error}"})
                 return
@@ -198,6 +201,8 @@ import urllib.error
 import urllib.request
 from types import SimpleNamespace
 
+from shared import debug_log
+
 NO_INPUT = object()
 
 
@@ -219,6 +224,9 @@ def _request(path, payload=None):
     if payload is not None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         headers["Content-Type"] = "application/json"
+    trace_id = debug_log.current_trace_id()
+    if trace_id:
+        headers["X-BiteFinder-Trace-ID"] = trace_id
     unreachable = None
     for attempt in range(4):
         request = urllib.request.Request(

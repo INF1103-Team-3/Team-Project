@@ -297,6 +297,8 @@ flowchart LR
     E --> F[BRC service and MUIS database]
     B --> G[(bis-brns-data volume)]
     E --> H[(brc-data volume)]
+    B --> J[(bitefinder-logs volume)]
+    E --> J
     C --> I[AI, Maps, and SMTP services]
     D --> I
     E --> I
@@ -304,8 +306,9 @@ flowchart LR
 
 The two containers share the private `bitefinder-net` network. The `brc`
 container exposes its health and checking service only inside that network.
-Named volumes retain application JSON, caches, and logs across container
-replacement.
+Named volumes retain application JSON and caches across container replacement.
+Both containers mount `bitefinder-logs`, so all manager events are written to
+one traceable log file.
 
 ## Main persisted data
 
