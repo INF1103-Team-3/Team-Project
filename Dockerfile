@@ -1,10 +1,20 @@
 FROM python:3.11-slim-bookworm AS source
+ARG SEED_ACCOUNTS=yes
 WORKDIR /src
 COPY . .
 RUN set -eux; \
-    mkdir -p BIS/data BRC/data BRNS/data data logs; \
-    find BIS/data BRC/data data logs -mindepth 1 -delete; \
-    rm -f BRNS/data/search_history.json
+    mkdir -p BIS/data BRC/data BRNS/data data logs /seed; \
+    find data logs -mindepth 1 -delete; \
+    find BIS/data BRC/data BRNS/data \
+        \( -name '.gitkeep' -o -name '*.lock' -o -name '*.tmp' -o -name '*.bak' \) -delete; \
+    if [ "$SEED_ACCOUNTS" != "yes" ]; then \
+        rm -f BIS/data/users.json BIS/data/profile_state.json; \
+    fi; \
+    cp -a BIS/data /seed/bis; \
+    cp -a BRNS/data /seed/brns; \
+    cp -a BRC/data /seed/brc; \
+    find BIS/data BRNS/data BRC/data -mindepth 1 -delete
+
 
 FROM python:3.11-slim-bookworm AS base
 ENV PYTHONUNBUFFERED=1 \
@@ -13,17 +23,53 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+
+COPY <<'EOF' /usr/local/bin/docker-entrypoint.sh
+#!/bin/sh
+set -e
+mkdir -p /data/logs
+for src in /opt/seed/*/; do
+    [ -d "$src" ] || continue
+    name=${src%/}
+    name=${name##*/}
+    mkdir -p "/data/$name"
+done
+if [ ! -e /data/.seeded ]; then
+    for src in /opt/seed/*/; do
+        [ -d "$src" ] || continue
+        name=${src%/}
+        name=${name##*/}
+        (cd "$src" && find . -type f) | while IFS= read -r file; do
+            target="/data/$name/${file#./}"
+            if [ ! -e "$target" ]; then
+                mkdir -p "${target%/*}"
+                cp -p "$src${file#./}" "$target"
+            fi
+        done
+    done
+    touch /data/.seeded
+fi
+exec "$@"
+EOF
+RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
+
+
 FROM base AS brc
 
 COPY --from=source --chown=10001:10001 /src/BRC /app/BRC
 COPY --from=source --chown=10001:10001 /src/shared /app/shared
 
+RUN mkdir -p /opt/seed/brc
+COPY --from=source --chown=10001:10001 /seed/brc/ /opt/seed/brc/
+
 RUN set -eux; \
     mkdir -p /data/brc /data/logs; \
+    cp -a /opt/seed/brc/. /data/brc/; \
     rm -rf /app/BRC/data /app/logs; \
     ln -s /data/brc  /app/BRC/data; \
     ln -s /data/logs /app/logs; \
     chown -R 10001:10001 /data
+
 
 COPY --chown=10001:10001 <<'PYEOF' /app/brc_service.py
 """Serve BRC restaurant checks to the BIS/BRNS container."""
@@ -112,14 +158,6 @@ if __name__ == "__main__":
     serve()
 PYEOF
 
-COPY <<'EOF' /usr/local/bin/docker-entrypoint.sh
-#!/bin/sh
-set -e
-mkdir -p /data/brc /data/logs
-exec "$@"
-EOF
-RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
-
 
 VOLUME ["/data"]
 USER 10001:10001
@@ -135,19 +173,21 @@ FROM base AS bis-brns
 COPY --from=source --chown=10001:10001 /src/ /app/
 
 
+RUN mkdir -p /opt/seed/bis /opt/seed/brns
+COPY --from=source --chown=10001:10001 /seed/bis/ /opt/seed/bis/
+COPY --from=source --chown=10001:10001 /seed/brns/ /opt/seed/brns/
 RUN set -eux; \
-    mkdir -p /opt/seed /data/bis /data/brns /data/brc /data/shared /data/logs; \
-    if [ -f /app/BRNS/data/restaurants.json ]; then \
-        cp /app/BRNS/data/restaurants.json /opt/seed/restaurants.json; \
-        cp /app/BRNS/data/restaurants.json /data/brns/restaurants.json; \
-    fi; \
-    rm -rf /app/BIS/data /app/BRNS/data /app/BRC/data /app/data /app/logs; \
-    ln -s /data/bis    /app/BIS/data; \
-    ln -s /data/brns   /app/BRNS/data; \
-    ln -s /data/brc    /app/BRC/data; \
-    ln -s /data/shared /app/data; \
-    ln -s /data/logs   /app/logs; \
-    chown -R 10001:10001 /data /opt/seed
+    mkdir -p /data/bis /data/brns /data/logs; \
+    cp -a /opt/seed/bis/. /data/bis/; \
+    cp -a /opt/seed/brns/. /data/brns/; \
+    rm -rf /app/BIS/data /app/BRNS/data /app/data /app/logs; \
+    mkdir -p /app/BRC/data; \
+    ln -s /data/bis  /app/BIS/data; \
+    ln -s /data/brns /app/BRNS/data; \
+    ln -s /data/brns /app/data; \
+    ln -s /data/logs /app/logs; \
+    chown -R 10001:10001 /data /app/BRC/data
+
 
 COPY <<'PYEOF' /opt/bitefinder/brc_remote.py
 """Stand-in for BRC.main that talks to the BRC container over HTTP."""
@@ -240,16 +280,6 @@ PYEOF
 
 ENV PYTHONPATH=/opt/bitefinder${PYTHONPATH:+:${PYTHONPATH}}
 
-COPY <<'EOF' /usr/local/bin/docker-entrypoint.sh
-#!/bin/sh
-set -e
-mkdir -p /data/bis /data/brns /data/brc /data/shared /data/logs
-if [ -f /opt/seed/restaurants.json ] && [ ! -e /data/brns/restaurants.json ]; then
-    cp /opt/seed/restaurants.json /data/brns/restaurants.json
-fi
-exec "$@"
-EOF
-RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
 
 VOLUME ["/data"]
 USER 10001:10001
