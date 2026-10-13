@@ -7,7 +7,16 @@ from BRC import data_manager
 NO_INPUT = object()
 DEFAULT_RESTAURANTS_PATH = (
     Path(__file__).resolve().parent.parent / "BRNS" / "data" / "restaurants.json")
-class CleanDatabaseRequired(RuntimeError): pass
+CLEAN_DATABASE_REQUIRED = "BRC_CLEAN_DATABASE_REQUIRED"
+
+
+def clean_database_required(error):
+    """Return the procedural signal used when BRC must build its database."""
+    return RuntimeError(CLEAN_DATABASE_REQUIRED)
+
+
+def is_clean_database_required(error):
+    return isinstance(error, RuntimeError) and str(error) == CLEAN_DATABASE_REQUIRED
 
 def validate_restaurants(value):
     single = isinstance(value, dict)
@@ -67,6 +76,29 @@ def collect_interactive_input():
         raise ValueError("The selected file must contain one restaurant object.")
     return value
 
+
+def display_record(record):
+    """Display one checked restaurant as JSON."""
+    print(json.dumps(record, ensure_ascii=False, indent=2))
+
+
+def display_list(records):
+    """Display a checked restaurant collection as JSON."""
+    print(json.dumps(list(records), ensure_ascii=False, indent=2))
+
+
+def display_result(result):
+    """Display a concise result for a completed BRC workflow."""
+    if isinstance(result, list):
+        print(f"Checked {len(result)} restaurant(s).")
+    else:
+        print("Checked 1 restaurant.")
+
+
+def display_status(message, *, error=False):
+    """Display one BRC status message from the IO boundary."""
+    print(message, file=sys.stderr if error else sys.stdout)
+
 def postal(record):
     value = str(record.get("postal_code") or "")
     if re.fullmatch(r"\d{6}", value): return value
@@ -100,6 +132,7 @@ def prepare_workflow(value=NO_INPUT, *, raw_path=data_manager.RAW_MUIS_PATH,
                 "clean_path": Path(clean_path)}
     records, single = validate_restaurants(value)
     try: database = data_manager.load_clean_database(clean_path)
-    except (ValueError, OSError) as exc: raise CleanDatabaseRequired from exc
+    except (ValueError, OSError) as exc:
+        raise clean_database_required(exc) from exc
     return {"scenario": "check_restaurants", "records": records, "single": single,
             "database": database, "candidates": candidate_sets(records, database)}

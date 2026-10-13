@@ -28,43 +28,47 @@ TIMEOUT = (5, 20)
 GEOCODE_WORKERS = 8
 
 
-class _ConsoleProgress:
-    """Render one updating progress line for the standalone scraper."""
+def console_progress(stream=None, width=28):
+    """Return mutable state for the standalone procedural progress display."""
+    stream = stream or sys.stderr
+    return {
+        "stream": stream,
+        "width": width,
+        "interactive": bool(getattr(stream, "isatty", lambda: False)()),
+        "last_stage": None,
+        "last_report": None,
+    }
 
-    def __init__(self, stream=None, width=28):
-        self.stream = stream or sys.stderr
-        self.width = width
-        self.interactive = bool(getattr(self.stream, "isatty", lambda: False)())
-        self._last_stage = None
-        self._last_report = None
 
-    def __call__(self, stage: str, current: int, total: int, detail: str) -> None:
-        total = max(total, 1)
-        current = min(max(current, 0), total)
-        fraction = current / total
-        filled = round(self.width * fraction)
-        bar = "#" * filled + "-" * (self.width - filled)
-        label = "MUIS" if stage == "retrieve" else "OneMap"
-        detail = re.sub(r"\s+", " ", detail).strip()
-        if len(detail) > 58:
-            detail = detail[:55] + "..."
-        line = (f"[{bar}] {fraction:6.1%} {label}: "
-                f"{current}/{total} | {detail}")
-        if self.interactive:
-            self.stream.write("\r\033[2K" + line)
-            self.stream.flush()
-        report = (stage, current, total)
-        if (not self.interactive
-                and (stage != self._last_stage or current == total)
-                and report != self._last_report):
-            print(line, file=self.stream)
-        self._last_stage = stage
-        self._last_report = report
+def update_console_progress(state, stage, current, total, detail):
+    """Render one progress update and retain only display state in a dict."""
+    total = max(total, 1)
+    current = min(max(current, 0), total)
+    fraction = current / total
+    filled = round(state["width"] * fraction)
+    bar = "#" * filled + "-" * (state["width"] - filled)
+    label = "MUIS" if stage == "retrieve" else "OneMap"
+    detail = re.sub(r"\s+", " ", detail).strip()
+    if len(detail) > 58:
+        detail = detail[:55] + "..."
+    line = (f"[{bar}] {fraction:6.1%} {label}: "
+            f"{current}/{total} | {detail}")
+    if state["interactive"]:
+        state["stream"].write("\r\033[2K" + line)
+        state["stream"].flush()
+    report = (stage, current, total)
+    if (not state["interactive"]
+            and (stage != state["last_stage"] or current == total)
+            and report != state["last_report"]):
+        state["stream"].write(line + "\n")
+    state["last_stage"] = stage
+    state["last_report"] = report
 
-    def finish(self) -> None:
-        if self.interactive:
-            self.stream.write("\n")
-            self.stream.flush()
+
+def finish_console_progress(state):
+    if state["interactive"]:
+        state["stream"].write("\n")
+        state["stream"].flush()
 
 
 def _portal_token(session) -> str:
@@ -318,19 +322,22 @@ def main(argv=None) -> int:
     parser.add_argument("--no-geocode", action="store_true")
     parser.add_argument("--delay", type=float, default=0.1)
     args = parser.parse_args(argv)
-    display = _ConsoleProgress()
-    print("Downloading the complete MUIS eating-establishment directory...",
-          file=sys.stderr)
+    display = console_progress()
+    sys.stderr.write(
+        "Downloading the complete MUIS eating-establishment directory...\n")
     try:
         snapshot = scrape_all(args.output, delay=max(0, args.delay),
-                              geocode=not args.no_geocode, progress=display)
+                              geocode=not args.no_geocode,
+                              progress=lambda *values: update_console_progress(
+                                  display, *values))
     except (ValueError, OSError, requests.RequestException) as exc:
-        print(f"MUIS scrape failed: {exc}", file=sys.stderr)
+        sys.stderr.write(f"MUIS scrape failed: {exc}\n")
         return 1
     finally:
-        display.finish()
-    print(f"Saved {snapshot['listing_count']} MUIS-certified restaurants "
-          f"to {args.output}.")
+        finish_console_progress(display)
+    sys.stdout.write(
+        f"Saved {snapshot['listing_count']} MUIS-certified restaurants "
+        f"to {args.output}.\n")
     return 0
 
 

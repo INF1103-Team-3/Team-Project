@@ -131,6 +131,22 @@ def display_profile(user):
                 "muted")
 
 
+def display_record(record):
+    """Display one BiteFinder profile record."""
+    display_profile(record)
+
+
+def display_list(records):
+    """Display a numbered list through the terminal IO boundary."""
+    for number, record in enumerate(records, 1):
+        ui.item(number, str(record))
+
+
+def display_result(result):
+    """Display one validated BIS search result."""
+    display_search_summary(result)
+
+
 def display_help(topic=None):
     """Show brief command help or detailed editing instructions."""
     if topic is None:

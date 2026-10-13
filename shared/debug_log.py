@@ -16,19 +16,26 @@ _TRACE_ID = ContextVar("bitefinder_trace_id", default=None)
 _LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR"}
 
 
-class _SharedLogHandler(logging.Handler):
-    """Send Python logging records to the BiteFinder log."""
+def _emit_python_log(record):
+    """Send one standard-library logging record to the BiteFinder log."""
+    level = record.levelname if record.levelname in _LEVELS else "ERROR"
+    debug_log(record.getMessage(), level, f"BRC.{record.name}")
 
-    def emit(self, record):
-        level = record.levelname if record.levelname in _LEVELS else "ERROR"
-        debug_log(record.getMessage(), level, f"BRC.{record.name}")
+
+def _shared_log_handler():
+    """Create a standard handler configured with a procedural callback."""
+    handler = logging.Handler()
+    handler.emit = _emit_python_log
+    handler.bitefinder_shared_handler = True
+    return handler
 
 
 def configure_python_logging():
     """Connect BRC's existing Python loggers to the global log once."""
     root = logging.getLogger()
-    if not any(isinstance(handler, _SharedLogHandler) for handler in root.handlers):
-        root.addHandler(_SharedLogHandler())
+    if not any(getattr(handler, "bitefinder_shared_handler", False)
+               for handler in root.handlers):
+        root.addHandler(_shared_log_handler())
     root.setLevel(logging.INFO)
 
 

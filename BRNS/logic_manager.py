@@ -636,3 +636,26 @@ def open_now(hours, now=None):
     minute = _today_index(now) * 1440 + now.hour * 60 + now.minute
     return any(start <= minute < end or start <= minute + WEEK_MINUTES < end
                for start, end in intervals)
+
+
+def evaluate(record):
+    """Apply all BRNS business rules to one AI-ordered restaurant."""
+    if not isinstance(record, dict):
+        raise ValueError("Logic evaluation needs a record dictionary.")
+    restaurant = normalize_candidate(record["restaurant"])
+    status, numeric_score, reasons = decide_outcome(
+        restaurant, record["request"])
+    return {"restaurant": restaurant, "decision": status,
+            "score": numeric_score, "reasons": reasons}
+
+
+def score(record):
+    """Return the numeric score from an evaluated BRNS record."""
+    evaluated = record if "decision" in record else evaluate(record)
+    return evaluated["score"]
+
+
+def route(record):
+    """Route an evaluated restaurant to match, alternative, or rejection."""
+    evaluated = record if "decision" in record else evaluate(record)
+    return evaluated["decision"]

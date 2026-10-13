@@ -871,7 +871,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(refined["mode"], "transit")
         ask_time.assert_called_once_with(
             "transit", {"ai_bypass": False}, default=45)
-        with self.assertRaises(bis_logic.SearchClarificationNeeded):
+        with self.assertRaisesRegex(ValueError, "SEARCH_CLARIFICATION"):
             bis_logic.validate_search_request(
                 transit, dict(transit, max_travel_minutes=30))
 

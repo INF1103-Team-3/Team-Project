@@ -2,6 +2,7 @@
 import io, json, tempfile, unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 from BRC import ai_manager, data_manager, io_manager, logic_manager, main, scraper
 
@@ -22,11 +23,11 @@ def restaurant(unit="B2-03"):
             "address":f"83 Punggol Central #{unit}, Singapore 828761",
             "dietary":[],"halal_certification":"unofficial","custom":"kept"}
 
-class FakeAI:
-    def process(self,context):
-        if context["scenario"]=="build_database":
-            return {"cuisines":[["malay"] for _ in context["raw_snapshot"]["listings"]]}
-        return {"matches":["cert-1" for _ in context["records"]]}
+def fake_ai(context):
+    if context["scenario"] == "build_database":
+        return {"cuisines": [
+            ["malay"] for _ in context["raw_snapshot"]["listings"]]}
+    return {"matches": ["cert-1" for _ in context["records"]]}
 
 class BRCTests(unittest.TestCase):
     def test_cuisine_cache_resumes_after_a_failed_ai_batch(self):
@@ -37,7 +38,6 @@ class BRCTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             cache_path = Path(folder) / "cuisine_tags_cache.json"
             cache = {}
-            manager = ai_manager.AIManager("test-key", "test-model")
             responses = iter([
                 json.dumps([{"index": 0, "cuisines": ["western"]}]),
                 RuntimeError("simulated rate limit"),
@@ -49,34 +49,31 @@ class BRCTests(unittest.TestCase):
                     raise response
                 return response
 
-            manager._call = fail_on_second_batch
             with (patch.dict(ai_manager.os.environ,
                              {"BRC_AI_BATCH_SIZE": "1"}),
                   self.assertRaisesRegex(RuntimeError, "rate limit")):
-                manager._tag_cuisines(
+                ai_manager._tag_cuisines(
                     rows, cache=cache,
                     save_cache=lambda tags: data_manager.save_cuisine_cache(
-                        tags, cache_path))
+                        tags, cache_path), request=fail_on_second_batch)
 
             persisted = data_manager.load_cuisine_cache(cache_path)
             self.assertEqual(
                 persisted[data_manager.cuisine_cache_key(first)], ["western"])
             self.assertNotIn(data_manager.cuisine_cache_key(second), persisted)
 
-            resumed = ai_manager.AIManager("test-key", "test-model")
             calls = []
 
             def finish_remaining(prompt):
                 calls.append(prompt)
                 return json.dumps([{"index": 1, "cuisines": ["italian"]}])
 
-            resumed._call = finish_remaining
             with patch.dict(ai_manager.os.environ,
                             {"BRC_AI_BATCH_SIZE": "1"}):
-                result = resumed._tag_cuisines(
+                result = ai_manager._tag_cuisines(
                     rows, cache=persisted,
                     save_cache=lambda tags: data_manager.save_cuisine_cache(
-                        tags, cache_path))
+                        tags, cache_path), request=finish_remaining)
 
             self.assertEqual(result, [["western"], ["italian"]])
             self.assertEqual(len(calls), 1)
@@ -123,9 +120,11 @@ class BRCTests(unittest.TestCase):
 
     def test_standalone_progress_names_stage_and_current_restaurant(self):
         output = io.StringIO()
-        display = scraper._ConsoleProgress(output, width=10)
-        display("retrieve", 3, 10, "Encik Tan (Waterway Point)")
-        display("geocode", 1, 2, "Example Restaurant (828761)")
+        display = scraper.console_progress(output, width=10)
+        scraper.update_console_progress(
+            display, "retrieve", 3, 10, "Encik Tan (Waterway Point)")
+        scraper.update_console_progress(
+            display, "geocode", 1, 2, "Example Restaurant (828761)")
         text = output.getvalue()
         self.assertIn("30.0% MUIS: 3/10", text)
         self.assertIn("Encik Tan", text)
@@ -136,7 +135,7 @@ class BRCTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder); raw=root/"raw.json"; clean=root/"clean.json"
             data_manager.save_raw_snapshot(snapshot(),raw)
-            result=main.run(ai=FakeAI(),raw_path=raw,clean_path=clean)
+            result=main.run(ai=fake_ai,raw_path=raw,clean_path=clean)
             self.assertEqual(result[0]["cuisine"],["malay"])
             self.assertEqual(result[0]["halal_certification"],"official")
             self.assertEqual(data_manager.load_clean_database(clean),result)
@@ -147,7 +146,7 @@ class BRCTests(unittest.TestCase):
             data_manager.save_raw_snapshot(snapshot(),raw)
             with patch.object(data_manager,"save_checked_result",
                               side_effect=lambda value,**_:value):
-                result=main.run(restaurant(),ai=FakeAI(),raw_path=raw,clean_path=clean)
+                result=main.run(restaurant(),ai=fake_ai,raw_path=raw,clean_path=clean)
             self.assertEqual(result["halal_certification"],"official")
             self.assertEqual(result["cuisine"],"malay")
             self.assertEqual(result["custom"],"kept")
@@ -165,56 +164,55 @@ class BRCTests(unittest.TestCase):
         context={"scenario":"check_restaurants","records":records,"single":False,
                  "database":database,
                  "candidates":io_manager.candidate_sets(records,database)}
-        class MatchAI:
-            def _call(self,prompt): return '{"certificate_number":"cert-1"}'
-        manager=ai_manager.AIManager("key","model"); manager._call=MatchAI()._call
-        output=logic_manager.process(context,manager.process(context))
+        proposals = {"matches": ai_manager._match(
+            context["records"], context["candidates"],
+            request=lambda _prompt: '{"certificate_number":"cert-1"}')}
+        output=logic_manager.process(context,proposals)
         self.assertEqual(len(output),2)
         self.assertEqual(output[0]["halal_certification"],"official")
         self.assertEqual(output[1]["muis_check"]["status"],"not_verified")
 
     def test_generic_restaurant_label_does_not_invent_cuisine(self):
-        manager=ai_manager.AIManager("key","model")
-        manager._call=lambda _: '[{"index":0,"cuisines":[]}]'
-        tags=manager._tag_cuisines([raw_row(name="Example Restaurant")])
+        tags=ai_manager._tag_cuisines(
+            [raw_row(name="Example Restaurant")],
+            request=lambda _: '[{"index":0,"cuisines":[]}]')
         self.assertEqual(tags,[[]])
 
     def test_unsupported_ai_cuisine_labels_are_filtered(self):
-        manager=ai_manager.AIManager("key","model")
-        manager._call=lambda _: (
-            '[{"index":0,"cuisines":["Singaporean"," CHINESE ","Cafe"]}]')
-        tags=manager._tag_cuisines([raw_row(name="Example Restaurant")])
+        tags=ai_manager._tag_cuisines(
+            [raw_row(name="Example Restaurant")], request=lambda _: (
+                '[{"index":0,"cuisines":["Singaporean"," CHINESE ","Cafe"]}]'))
         self.assertEqual(tags,[["chinese"]])
 
     def test_exact_outlet_match_does_not_spend_an_ai_request(self):
         database=logic_manager.build_database(snapshot(),[["malay"]])
-        manager=ai_manager.AIManager("key","model")
-        manager._call=lambda _: (_ for _ in ()).throw(
-            AssertionError("AI should not be called for one exact outlet"))
-        matches=manager._match(
+        matches=ai_manager._match(
             [restaurant()],
-            [io_manager.candidate_sets([restaurant()],database)[0]])
+            [io_manager.candidate_sets([restaurant()],database)[0]],
+            request=lambda _: (_ for _ in ()).throw(
+                AssertionError("AI should not be called for one exact outlet")))
         self.assertEqual(matches,["cert-1"])
 
     def test_gemini_rate_limit_waits_and_retries(self):
-        class RateLimited(Exception):
-            code=429
-        class Models:
-            def __init__(self): self.calls=0
-            def generate_content(self,**_):
-                self.calls+=1
-                if self.calls==1:
-                    raise RateLimited("retry in 5.5s")
-                return type("Response",(),{"text":"[]"})()
-        models=Models()
-        manager=ai_manager.AIManager("key","model")
-        manager._client=type("Client",(),{"models":models})()
-        manager._request_interval=0
+        calls = []
+        limited = RuntimeError("retry in 5.5s")
+        limited.code = 429
+
+        def generate_content(**_):
+            calls.append(True)
+            if len(calls) == 1:
+                raise limited
+            return SimpleNamespace(text="[]")
+
+        models = SimpleNamespace(generate_content=generate_content)
+        manager=ai_manager.create_manager("key", "model")
+        manager["client"] = SimpleNamespace(models=models)
+        manager["request_interval"] = 0
         messages=[]
-        manager._report=messages.append
+        manager["report"] = messages.append
         with patch.object(ai_manager.time,"sleep") as sleep:
-            self.assertEqual(manager._call("prompt"),"[]")
-        self.assertEqual(models.calls,2)
+            self.assertEqual(ai_manager.call_api("prompt", manager),"[]")
+        self.assertEqual(len(calls),2)
         sleep.assert_called_once_with(5.5)
         self.assertIn("rate limit reached",messages[0])
 

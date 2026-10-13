@@ -23,8 +23,23 @@ SEARCH_FIELDS = {
 }
 
 
-class SearchClarificationNeeded(ValueError):
-    """The AI interpretation disagrees with a confirmed user choice."""
+SEARCH_CLARIFICATION_PREFIX = "SEARCH_CLARIFICATION: "
+
+
+def search_clarification_error(message):
+    """Return a procedural clarification error for the interactive loop."""
+    return ValueError(SEARCH_CLARIFICATION_PREFIX + message)
+
+
+def is_search_clarification(error):
+    """Identify clarification errors without defining an exception class."""
+    return (isinstance(error, ValueError)
+            and str(error).startswith(SEARCH_CLARIFICATION_PREFIX))
+
+
+def clarification_message(error):
+    """Remove the internal marker before displaying an error."""
+    return str(error)[len(SEARCH_CLARIFICATION_PREFIX):]
 
 
 def validate_special_request_text(text):
@@ -53,12 +68,12 @@ def validate_search_request(request, ai_response=None):
             "The AI returned an invalid search request. Please retry.") from error
     protected = SEARCH_FIELDS - {OTHER_PREFERENCES}
     if any(proposed[field] != confirmed[field] for field in protected):
-        raise SearchClarificationNeeded(
+        raise search_clarification_error(
             "The AI interpretation conflicts with a confirmed choice. "
             "Please clarify what you want today.")
     if not set(confirmed[OTHER_PREFERENCES]).issubset(
             proposed[OTHER_PREFERENCES]):
-        raise SearchClarificationNeeded(
+        raise search_clarification_error(
             "The AI removed a selected preference. Please clarify your request.")
     return proposed
 
@@ -309,3 +324,27 @@ def next_field(preferences):
         if preferences[field] is None:
             return field
     return None
+
+
+def evaluate(record):
+    """Apply profile business rules to one AI-enriched update record."""
+    if not isinstance(record, dict) or not isinstance(
+            record.get("preferences"), dict):
+        raise ValueError("Logic evaluation needs preferences and AI updates.")
+    updated = apply_updates(
+        record["preferences"], record.get("updates", {}),
+        record.get("location_action", "add"))
+    return {"preferences": updated, "next_field": next_field(updated)}
+
+
+def score(record):
+    """Return a numeric profile-completeness score."""
+    preferences = record.get("preferences") if isinstance(record, dict) else None
+    preferences = validate_preferences(preferences)
+    return sum(preferences[field] is not None for field in PREFERENCE_FIELDS)
+
+
+def route(record):
+    """Route an evaluated profile to completion or its next required field."""
+    field = record.get("next_field") if isinstance(record, dict) else None
+    return "profile_complete" if field is None else field
