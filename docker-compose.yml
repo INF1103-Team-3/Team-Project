@@ -1,11 +1,9 @@
 # Two containers on one network:
 #   brc      - BRC halal checker service (always running)
 #   bis-brns - BIS + BRNS (kept running; open the chatbot with `docker compose exec`)
-#   Run: 
+#
 #   docker compose up -d --build
 #   docker compose exec bis-brns python BIS/main.py
-#   docker compose exec brc python -m BRC.main
-
 name: bitefinder
 
 services:
@@ -29,6 +27,8 @@ services:
     build:
       context: .
       target: bis-brns
+      args:
+        SEED_ACCOUNTS: ${SEED_ACCOUNTS:-yes}   # set to "no" to leave users.json out of the image
     image: bitefinder
     container_name: bitefinder-bis-brns
     hostname: bis-brns
@@ -52,6 +52,8 @@ services:
 networks:
   bitefinder-net:
     name: bitefinder-net
+    driver: bridge
+    internal: false   # containers can reach each other AND the internet
 
 volumes:
   brc-data:
