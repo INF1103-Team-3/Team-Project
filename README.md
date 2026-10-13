@@ -103,26 +103,6 @@ how user and provider data becomes validated AI payloads and stored JSON. Open
 the relevant folder README when implementing, testing, or troubleshooting one
 subsystem.
 
-## Assignment alignment
-
-- BIS, BRNS, and BRC use procedural manager modules and dictionary records.
-- Live searches require valid BIS and BRNS AI output. Removing either AI stage
-  prevents the normal recommendation workflow from completing.
-- AI exchanges request structured JSON and validate required fields before
-  downstream use.
-- BRNS Logic combines cuisine, dietary status, price, opening hours, route
-  limits, ratings, review counts, hard constraints, and AI ordering.
-- BRC Logic verifies AI-proposed outlet matches against postal code, name,
-  address, unit, certificate validity, and source evidence.
-- Application persistence uses JSON files with atomic writes where records are
-  replaced or updated.
-- Automated tests use local fixtures for AI, Maps, routing, and SMTP behavior;
-  normal tests do not consume API quota or send email.
-- GitHub Actions runs the tests, builds the Docker image, and runs the tests
-  inside the image on pushes and pull requests.
-- Docker Compose separates the BRC service from the BIS and BRNS application
-  while retaining data in named volumes.
-
 The current project statement is in
 [ProjectInitialDetails.md](ProjectInitialDetails.md).
 
@@ -174,7 +154,7 @@ ProjectInitialDetails.md     problem, users, AI use, and business rules
 
 ## Requirements
 
-For the recommended deployment:
+The application is designed to run through Docker Compose. The host requires:
 
 - Docker Desktop or Docker Engine.
 - Docker Compose 2.24 or newer.
@@ -183,12 +163,8 @@ For the recommended deployment:
 - A Google Maps Platform key for live Places, geocoding, and routes.
 - Gmail or another SMTP account when email verification is enabled.
 
-For development outside Docker:
-
-- Python 3.11.
-- The packages in `requirements.txt`.
-- The optional packages in `requirements-dev.txt` for style and function
-  visualizations.
+Python and application packages are installed in the images. A host Python
+installation is not required to run BiteFinder or its automated tests.
 
 ## Configure the environment
 
@@ -224,81 +200,99 @@ or SMTP credentials.
 
 ## Run the complete project with Docker Compose
 
-Build and start the BRC and BIS-BRNS containers:
+The commands shown at the top of `docker-compose.yml` are the canonical way to
+run BiteFinder:
 
 ```bash
 docker compose up -d --build
+docker compose exec bis-brns python main.py
+```
+
+The first command builds and starts two containers on `bitefinder-net`:
+
+| Container | Runtime role |
+| --- | --- |
+| `bitefinder-brc` | Runs the BRC halal-checking HTTP service continuously and reports its health to Compose. |
+| `bitefinder-bis-brns` | Remains running with an interactive terminal available; it contains BIS and BRNS. |
+
+Compose waits for BRC to become healthy before starting the BIS/BRNS container.
+The second command opens the root BiteFinder launcher inside that running
+container. When the user exits BiteFinder, the container stays available, so
+the command can be run again without rebuilding it.
+
+Check container state at any time with:
+
+```bash
 docker compose ps
 ```
 
-The first official halal check needs a cleaned BRC database. Build or refresh
-it interactively and choose option `1`:
+### First halal search
+
+If the cleaned MUIS database does not exist, BRC prepares it automatically when
+the first halal verification is requested. That first check may take longer
+because BRC may need to scrape MUIS data and process uncached cuisine tags in
+paced AI batches. Completed batches are saved in the
+`bitefinder-brc-data` volume, so an interrupted or rate-limited build can
+resume without retagging completed restaurants.
+
+To build or refresh the BRC database manually, open its menu and choose option
+`1`:
 
 ```bash
 docker compose exec brc python -m BRC.main
 ```
 
-The initial MUIS build may take time because missing cuisine tags are processed
-in paced AI batches. Completed batches are cached, so a later run resumes
-instead of retagging every restaurant.
+### Container data and shutdown
 
-Start the BiteFinder CLI:
+`bitefinder-brc-data` preserves the raw and cleaned MUIS data, cuisine tags,
+and restaurant-check caches. `bitefinder-bis-brns-data` preserves accounts,
+profile state, restaurant facts, search history, the shared geocode cache, and
+logs.
 
-```bash
-docker compose exec bis-brns python BIS/main.py
-```
-
-Stop the containers while keeping saved accounts, restaurant facts, MUIS data,
-caches, and logs:
+Stop both containers while keeping those named volumes:
 
 ```bash
 docker compose down
 ```
 
-To remove both containers and their saved named volumes:
+Delete the containers and all saved named-volume data only when a complete
+reset is intended:
 
 ```bash
 docker compose down -v
 ```
 
-The containers communicate on the private `bitefinder-net` network. BRNS sends
-halal checks to the `brc` service; its port is not published to the host.
+BRNS sends halal checks to `http://brc:8000` over the Compose network. The BRC
+port is available to the BIS/BRNS container but is not published to the host.
+Both containers can still reach configured AI, Google, MUIS, OneMap, and SMTP
+services on the internet.
 
-## Run with local Python
+## Work inside the application container
 
-Create a virtual environment and install the dependencies:
-
-```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-```
-
-On Windows PowerShell:
-
-```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-```
-
-Start the complete local BIS workflow from the repository root:
+Open a shell in the already running BIS/BRNS container:
 
 ```bash
+docker compose exec bis-brns sh
+```
+
+The shell starts in `/app`. From there, choose the operation needed:
+
+```bash
+# Start the complete BiteFinder CLI.
 python main.py
+
+# Run the complete automated test suite without the Docker BRC adapter.
+env -u BRC_SERVICE_URL python -m unittest discover -s tests -v
+
+# Follow the BIS and BRNS application log. Press Ctrl+C to stop following it.
+tail -f logs/bitefinder.log
+
+# Leave the container shell without stopping the containers.
+exit
 ```
 
-Local BIS imports BRNS and BRC directly. Build or inspect BRC separately with:
-
-```bash
-python -m BRC.main
-```
-
-Run standalone BRNS by piping one validated BIS search JSON object to it:
-
-```bash
-python BRNS/main.py < search_request.json
-```
+Opening a shell is optional. Every command can also be executed directly with
+`docker compose exec`, as shown in the following sections.
 
 ## Use the CLI
 
@@ -331,45 +325,46 @@ search, or return to commands.
 ## Run the tests
 
 Normal tests use temporary project copies and local fixture servers. They do
-not call live AI, Google, or SMTP services.
+not call live AI, Google, SMTP, or the running BRC service. Unsetting
+`BRC_SERVICE_URL` disables the Compose HTTP adapter during tests so the suite
+can exercise the BRC source modules directly.
 
 Run every test:
 
 ```bash
-python -m unittest discover -s tests -v
+docker compose exec bis-brns env -u BRC_SERVICE_URL \
+  python -m unittest discover -s tests -v
 ```
 
 Run the readable BIS, BRNS, and combined black box report:
 
 ```bash
-python -m tests.blackbox_support
+docker compose exec bis-brns env -u BRC_SERVICE_URL \
+  python -m tests.blackbox_support
 ```
 
 Run one black box boundary:
 
 ```bash
-python tests/test_blackbox_bis.py
-python tests/test_blackbox_brns.py
-python tests/test_blackbox_bis_to_brns.py
+docker compose exec bis-brns env -u BRC_SERVICE_URL \
+  python tests/test_blackbox_bis.py
+docker compose exec bis-brns env -u BRC_SERVICE_URL \
+  python tests/test_blackbox_brns.py
+docker compose exec bis-brns env -u BRC_SERVICE_URL \
+  python tests/test_blackbox_bis_to_brns.py
 ```
 
 Run email tests or the INF1103 source check:
 
 ```bash
-python tests/test_email_verification.py
-python tests/inf1103_compliance_check.py
+docker compose exec bis-brns env -u BRC_SERVICE_URL \
+  python tests/test_email_verification.py
+docker compose exec bis-brns env -u BRC_SERVICE_URL \
+  python tests/inf1103_compliance_check.py
 ```
 
-Build the default `bis-brns` image and run the complete suite inside it:
-
-```bash
-docker build -t bitefinder .
-docker run --rm --entrypoint python bitefinder \
-  -m unittest discover -s tests -v
-```
-
-GitHub Actions performs the host tests, image build, and container tests for
-every push and pull request.
+GitHub Actions builds the application image and runs the complete suite inside
+that image for every push and pull request.
 
 ## Saved data and logs
 
@@ -393,20 +388,22 @@ Each search receives a trace ID. Logs record manager stages, provider attempts,
 candidate counts, rejected reason codes, and error types without logging API
 keys or raw provider responses.
 
+Follow the application logs from the host:
+
+```bash
+# BIS and BRNS file log
+docker compose exec bis-brns tail -f logs/bitefinder.log
+
+# BRC file log
+docker compose exec brc tail -f logs/bitefinder.log
+
+# BRC container output and service errors
+docker compose logs -f brc
+```
+
 ## Function visualizations
 
-Install the optional development packages and generate the static graphs:
-
-```bash
-python -m pip install -r requirements-dev.txt
-python project_overview/visualise_functions.py
-```
-
-Capture an interactive BIS session and its real function calls with:
-
-```bash
-python project_overview/visualise_live_functions.py
-```
-
-Generated PNGs and live-session call data are written below
-`project_overview/function_graphs/` and remain local.
+Function visualization is optional development tooling rather than part of the
+deployed application image. Setup and generation instructions are kept in
+[project_overview/README.md](project_overview/README.md). Generated PNGs and
+live-session call data remain below `project_overview/function_graphs/`.

@@ -4,23 +4,22 @@ BIS is BiteFinder's account, profile, command, and search-input application. It
 owns the interactive CLI, validates what the user confirms, persists reusable
 preferences, and hands one structured JSON search request to BRNS.
 
-Run BIS from the repository root:
+Start the Compose services, then run BIS through the repository root launcher:
 
 ```bash
+docker compose up -d --build
+docker compose exec bis-brns python main.py
+```
+
+To work from a shell inside the running application container:
+
+```bash
+docker compose exec bis-brns sh
 python main.py
 ```
 
-The root launcher imports `BIS.main`. Direct execution also works:
-
-```bash
-python BIS/main.py
-```
-
-In Docker Compose, use:
-
-```bash
-docker compose exec bis-brns python BIS/main.py
-```
+The root launcher imports `BIS.main`. BiteFinder is designed to run in this
+container so its BRC service connection and persistent volumes are available.
 
 ## Responsibilities
 
@@ -319,11 +318,11 @@ settings and requires a verified account plus restaurant coordinates.
 Relevant suites from the repository root:
 
 ```bash
-python tests/test_blackbox_bis.py
-python tests/test_email_verification.py
-python -m unittest tests.test_unit_bis_logic -v
-python -m unittest tests.test_unit_data_manager.TestBISDataManager -v
-python -m unittest tests.test_bis_brns_integration -v
+docker compose exec bis-brns env -u BRC_SERVICE_URL python tests/test_blackbox_bis.py
+docker compose exec bis-brns env -u BRC_SERVICE_URL python tests/test_email_verification.py
+docker compose exec bis-brns env -u BRC_SERVICE_URL python -m unittest tests.test_unit_bis_logic -v
+docker compose exec bis-brns env -u BRC_SERVICE_URL python -m unittest tests.test_unit_data_manager.TestBISDataManager -v
+docker compose exec bis-brns env -u BRC_SERVICE_URL python -m unittest tests.test_bis_brns_integration -v
 ```
 
 Black box tests launch the real `BIS/main.py` inside a temporary project copy.

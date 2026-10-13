@@ -3,7 +3,7 @@
 #   bis-brns - BIS + BRNS (kept running; open the chatbot with `docker compose exec`)
 #
 #   docker compose up -d --build
-#   docker compose exec bis-brns python BIS/main.py
+#   docker compose exec bis-brns python main.py
 name: bitefinder
 
 services:
