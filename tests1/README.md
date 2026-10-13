@@ -1,8 +1,5 @@
 # BiteFinder Test Strategy
 
-For the shortest grader procedure, Docker commands, expected results and
-manual application check, see [`../GRADER_TEST_GUIDE.md`](../GRADER_TEST_GUIDE.md).
-
 BiteFinder uses layered automated testing to verify its input handling,
 restaurant recommendation rules, BIS-to-BRNS data flow and Docker deployment.
 
