@@ -94,11 +94,14 @@ test commands:
 | Unit, integration, black box, and compliance tests | [tests/README.md](tests/README.md) |
 | Static and live function visualizations | [project_overview/README.md](project_overview/README.md) |
 | Shared logging, geocoding, terminal UI, and model discovery | [shared/README.md](shared/README.md) |
+| End-to-end data states, AI payloads, and file storage | [DataFlowDiagram.md](DataFlowDiagram.md) |
 
 Start with this root README for setup and operation. Use
 [ProjectFlow.md](ProjectFlow.md) to follow the whole application from the user
-through BIS, BRNS, and BRC. Open the relevant folder README when implementing,
-testing, or troubleshooting one subsystem.
+through BIS, BRNS, and BRC. Use [DataFlowDiagram.md](DataFlowDiagram.md) to see
+how user and provider data becomes validated AI payloads and stored JSON. Open
+the relevant folder README when implementing, testing, or troubleshooting one
+subsystem.
 
 ## Assignment alignment
 
@@ -165,6 +168,7 @@ Dockerfile                   `brc` and `bis-brns` image targets
 docker-compose.yml           two-container deployment and persistent volumes
 main.py                      repository-root BIS launcher
 ProjectFlow.md               complete project and decision flow
+DataFlowDiagram.md           data transformations, AI payloads, and file stores
 ProjectInitialDetails.md     problem, users, AI use, and business rules
 ```
 
