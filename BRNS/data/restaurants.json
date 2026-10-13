@@ -528,5 +528,157 @@
     },
     "wheelchair_accessible": null,
     "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJXyvahRIW2jERDi2gmslkVE8",
+    "name": "Kopitiam Square",
+    "postal_code": "544829",
+    "address": "10 Sengkang Sq, Singapore 544829",
+    "number": "9177 3076",
+    "g_rating": "3.9",
+    "g_no_reviews": "4103",
+    "cuisine": null,
+    "dietary": [
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0000", "2359"],
+      "tuesday": ["0000", "2359"],
+      "wednesday": ["0000", "2359"],
+      "thursday": ["0000", "2359"],
+      "friday": ["0000", "2359"],
+      "saturday": ["0000", "2359"],
+      "sunday": ["0000", "2359"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJxy6W08M92jER_f8DWFRfewQ",
+    "name": "D’Rubinah @ Punggol",
+    "postal_code": "828849",
+    "address": "10 Tebing Ln, Singapore 828849",
+    "number": "6816 4989",
+    "g_rating": "3.4",
+    "g_no_reviews": "479",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": [["0000", "0300"], ["1600", "2359"]],
+      "tuesday": [["0000", "0300"], ["1600", "2359"]],
+      "wednesday": [["0000", "0300"], ["1600", "2359"]],
+      "thursday": [["0000", "0300"], ["1600", "2359"]],
+      "friday": [["0000", "0300"], ["1600", "2359"]],
+      "saturday": [["0000", "0300"], ["1600", "2359"]],
+      "sunday": [["0000", "0300"], ["1600", "2359"]]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJJ7NCpuQV2jER6P2ctCfcRm0",
+    "name": "Encik Tan (Waterway Point)",
+    "postal_code": "828761",
+    "address": "83 Punggol Central, B2-03 Waterway Point, Singapore 828761",
+    "number": "6370 1155",
+    "g_rating": "3.3",
+    "g_no_reviews": "529",
+    "cuisine": null,
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0000", "2359"],
+      "tuesday": ["0000", "2359"],
+      "wednesday": ["0000", "2359"],
+      "thursday": ["0000", "2359"],
+      "friday": ["0000", "2359"],
+      "saturday": ["0000", "2359"],
+      "sunday": ["0000", "2359"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJV9JWLRIX2jER1JCFi7lks8E",
+    "name": "Sengkang Square Oyster Omelette",
+    "postal_code": "544829",
+    "address": "10 Sengkang Sq, #01-57 Kopitiam Square, Singapore 544829",
+    "number": null,
+    "g_rating": "1.7",
+    "g_no_reviews": "107",
+    "cuisine": null,
+    "dietary": [],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0000", "2359"],
+      "tuesday": ["0000", "2359"],
+      "wednesday": ["0000", "2359"],
+      "thursday": ["0000", "2359"],
+      "friday": ["0000", "2359"],
+      "saturday": ["0000", "2359"],
+      "sunday": ["0000", "2359"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJtRTtDwcW2jERIvR442LXPW8",
+    "name": "GM by Broadway",
+    "postal_code": "820198",
+    "address": "198 Punggol Fld, #01-01 S820198, Singapore 820198",
+    "number": "6312 4144",
+    "g_rating": "2.7",
+    "g_no_reviews": "72",
+    "cuisine": "cafe",
+    "dietary": [],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0000", "2359"],
+      "tuesday": ["0000", "2359"],
+      "wednesday": ["0000", "2359"],
+      "thursday": ["0000", "2359"],
+      "friday": ["0000", "2359"],
+      "saturday": ["0000", "2359"],
+      "sunday": ["0000", "2359"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJSaTYcRcW2jERI1SrczpjcZw",
+    "name": "McDonald's Rivervale Plaza",
+    "postal_code": "540118",
+    "address": "118 Rivervale Dr, #01-32 Rivervale Plaza, Singapore 540118",
+    "number": "6881 0380",
+    "g_rating": "4",
+    "g_no_reviews": "1803",
+    "cuisine": "fast food",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["0000", "2359"],
+      "tuesday": ["0000", "2359"],
+      "wednesday": ["0000", "2359"],
+      "thursday": ["0000", "2359"],
+      "friday": ["0000", "2359"],
+      "saturday": ["0000", "2359"],
+      "sunday": ["0000", "2359"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
   }
 ]
