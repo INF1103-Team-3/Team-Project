@@ -1,0 +1,30 @@
+name: Test BiteFinder
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the project
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run automated tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build Docker image
+        run: docker build -t bitefinder .
+
+      - name: Run tests inside Docker
+        run: docker run --rm --entrypoint python bitefinder -m unittest discover -s tests -v
