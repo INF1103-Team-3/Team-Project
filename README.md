@@ -52,8 +52,10 @@ User
   -> BIS and BRNS I/O: show results and post-search actions
 ```
 
-The complete flow, including account, profile, search, BRC, failure, result,
-and Docker branches, is documented in [ProjectFlow.md](ProjectFlow.md).
+**See [ProjectFlow.md](ProjectFlow.md) for the complete project workflow.** It
+is the main flow reference for account setup, profile creation, BIS search,
+BRNS recommendation and navigation, BRC halal verification, failures, result
+actions, shared services, and Docker deployment.
 
 The three applications have separate responsibilities:
 
@@ -77,6 +79,26 @@ Each application follows the procedural manager pattern:
 
 `main.py` coordinates the managers and decides whether processing continues or
 returns safely to the user after a failure.
+
+## Detailed documentation
+
+Each major project folder has its own README with its responsibilities,
+workflow, files, data contracts, configuration, failure behavior, and relevant
+test commands:
+
+| Area | Detailed guide |
+| --- | --- |
+| BIS account, profile, and search interaction | [BIS/README.md](BIS/README.md) |
+| BRNS recommendation, routing, and result processing | [BRNS/README.md](BRNS/README.md) |
+| BRC MUIS database and halal verification | [BRC/README.md](BRC/README.md) |
+| Unit, integration, black box, and compliance tests | [tests/README.md](tests/README.md) |
+| Static and live function visualizations | [project_overview/README.md](project_overview/README.md) |
+| Shared logging, geocoding, terminal UI, and model discovery | [shared/README.md](shared/README.md) |
+
+Start with this root README for setup and operation. Use
+[ProjectFlow.md](ProjectFlow.md) to follow the whole application from the user
+through BIS, BRNS, and BRC. Open the relevant folder README when implementing,
+testing, or troubleshooting one subsystem.
 
 ## Assignment alignment
 
@@ -105,6 +127,7 @@ The current project statement is in
 
 ```text
 BIS/                         account, profile, search-input, and email workflow
+  README.md                  detailed BIS workflow and manager documentation
   main.py                    BIS orchestration and result-action loop
   io_manager.py              CLI input and display boundary
   ai_manager.py              BIS interpretation and model fallback chain
@@ -114,6 +137,7 @@ BIS/                         account, profile, search-input, and email workflow
   support/                   configuration and SMTP verification
 
 BRNS/                        restaurant recommendation and navigation
+  README.md                  detailed BRNS search, ranking, and route guide
   main.py                    BRNS search, BRC handoff, sorting, and routing
   io_manager.py              BIS JSON, Google Places, Routes, and result display
   ai_manager.py              candidate ranking and provider fallback chain
@@ -122,6 +146,7 @@ BRNS/                        restaurant recommendation and navigation
   data/restaurants.json      saved facts and offline restaurant fallback
 
 BRC/                         MUIS halal database and outlet checker
+  README.md                  detailed BRC build and verification guide
   main.py                    database-build and restaurant-check workflows
   scraper.py                 raw MUIS and OneMap collection
   io_manager.py              scenario selection and JSON validation
@@ -130,8 +155,11 @@ BRC/                         MUIS halal database and outlet checker
   data_manager.py            raw, cleaned, cached, and checked JSON records
 
 shared/                      geocode cache, model discovery, terminal UI, logs
+  README.md                  shared-service contracts and design rules
 tests/                       unit, integration, black box, email, and BRC tests
+  README.md                  test layers, commands, isolation, and CI behavior
 project_overview/            function-graph generators and local graph output
+  README.md                  static and live visualization instructions
 .github/workflows/tests.yml  host and Docker CI checks
 Dockerfile                   `brc` and `bis-brns` image targets
 docker-compose.yml           two-container deployment and persistent volumes
