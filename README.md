@@ -1,446 +1,380 @@
 # BiteFinder
 
-## Problem statement and objectives
+BiteFinder is a procedural command-line application that helps people choose
+restaurants in Singapore when several practical requirements must be considered
+together. It combines saved preferences, today's request, restaurant facts,
+route information, AI-assisted ranking, and official MUIS halal verification
+in one guided workflow.
 
-Choosing a restaurant in Singapore can be difficult when several practical
-needs must be satisfied at once. Users may need food within a budget and a
-realistic travel limit, while also considering cuisine preferences, dietary
-requirements, and whether a halal claim is officially verified. Information is
-often spread across different services, making it harder to compare options
-with confidence.
+The system is designed for students, staff, office workers, visitors,
+budget-conscious diners, Halal or vegetarian diners, public-transport users,
+and anyone who wants recommendations supported by clear facts instead of a
+single unexplained result.
 
-BiteFinder helps users find suitable Singapore restaurants by combining their
-saved preferences with a search for nearby restaurants and routes. Its
-objectives are to:
+## Features
 
-- collect and save a user's location, budget, travel, cuisine, and dietary
-  preferences;
-- recommend restaurants that meet the selected search criteria, using route
-  distance or journey time to check travel limits;
-- use official MUIS records to verify halal candidates when halal is required;
-- explain why a restaurant is recommended, offered as an alternative, or
-  excluded; and
-- allow users to view routes and email a selected restaurant's Google Maps
-  directions link.
+- Create or resume an account using six-digit email verification.
+- Save locations, budget, travel limits, dietary requirements, liked and
+  disliked cuisines, and reusable special requests.
+- Enter locations as Singapore postal codes, addresses, landmarks, or latitude
+  and longitude.
+- Search using walking, driving, or public transit distance and journey-time
+  limits, including optional traffic-aware driving time.
+- Describe requests naturally, including soft preferences such as `4.5 stars`
+  and confirmed hard constraints such as `only Korean` or `at least 4.5 stars`.
+- Use BIS AI to interpret free text while protecting confirmed user choices.
+- Use Google Places and Routes for restaurant facts, opening hours, ratings,
+  review counts, coordinates, distances, durations, and directions.
+- Use BRNS AI to rank only the candidates found for the current search.
+- Check halal candidates against cleaned MUIS records through BRC.
+- Clearly distinguish official MUIS verification from unofficial Google halal
+  indications.
+- Show matches, alternatives, exclusions, cautions, and grounded reasons.
+- Sort results by Google rating or travel distance.
+- Display routes or email a selected Google Maps link to the verified account.
+- Repeat the same search while preferring restaurants not previously returned.
+- Retain an offline restaurant fallback while still requiring BRNS AI ranking.
+- Share geocode caching and traceable operational logs across the application.
 
-BiteFinder contains three connected procedural Python applications:
-
-| Application | Purpose | Run from the repository root |
-| --- | --- | --- |
-| **BIS** — BiteFinder Interaction System | Sign up or resume an account and save food preferences | `python3 main.py` |
-| **BRNS** — BiteFinder Recommendation & Navigation System | Find, rank, and route to restaurants | `python3 BRNS/main.py` |
-| **BRC** — BiteFinder Restaurant Checker | Build the MUIS halal database and verify halal search candidates | `python3 -m BRC.main` |
-
-BIS sends today's validated search as JSON to BRNS. BRNS retrieves and ranks
-restaurants, then asks BRC to check halal candidates against cleaned MUIS data
-when halal is required. The root `main.py` starts the complete BIS workflow.
-
-## Install
-
-Use Python 3.10 or newer. From the repository root:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -r requirements.txt
-```
-
-On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` instead.
-The root `requirements.txt` covers all three applications. The optional
-`requirements-dev.txt` adds `pycodestyle` and the function graph tools.
-
-## Tests and automated checks
-
-The suite uses Python's built-in `unittest` runner. It supplies fixed AI, Maps,
-routing, and SMTP responses locally, so it does not spend API quota, send email,
-or require live credentials.
-
-Run all 243 tests from the repository root:
-
-```bash
-python3 -m unittest discover -s tests -v
-```
-
-The suite covers BIS, BRNS, the complete BIS → BRNS handoff, BRC, SMTP
-verification, routing, AI failure handling, persistence, and manager logic.
-
-Run the three process-level black box suites with a readable scenario report:
-
-```bash
-python3 -m tests.blackbox_support
-```
-
-Run one black box area separately:
-
-```bash
-python3 tests/test_blackbox_bis.py
-python3 tests/test_blackbox_brns.py
-python3 tests/test_blackbox_bis_to_brns.py
-```
-
-The black box tests launch real entry points in temporary project copies and
-serve fixed external responses from a local HTTP server. Each result explains
-the input scenario, expected behavior, observed application output, and calls
-made in order. Set `BITEFINDER_TEST_COLOR=always` to force color in redirected
-output or `BITEFINDER_TEST_COLOR=never` to disable it.
-
-Run the email tests or INF1103 source check separately:
-
-```bash
-python3 tests/test_email_verification.py
-python3 tests/inf1103_compliance_check.py
-```
-
-The compliance check verifies the procedural production managers, required
-function names, terminal I/O boundaries, and root deployment files.
-
-BIS and BRNS use the same terminal theme for prompts, profile details,
-restaurant results, and directions. Interactive terminals show color;
-redirected output remains plain text. Set `NO_COLOR=1` to disable color in a
-terminal. After signing in, `/color off` saves a color-free display for that
-account; `/color on` restores the default. Both work at any prompt. The
-wording and warning labels remain visible without color.
-
-After a search, choose a restaurant from the results menu to email its Google
-Maps directions link to your verified account email. This uses the same SMTP
-settings as email verification.
-At the search summary, pressing Enter confirms the displayed choices. After
-results, choose **Search again with the same choices** to rerun BRNS and AI;
-previously returned restaurants are placed after unseen verified matches.
-If the available candidates are exhausted, the results may repeat.
-
-Search travel modes are walking, driving, and transit. Walking and driving
-offer a maximum route distance in km or journey time from 1 to 240 minutes;
-transit uses journey time. After a driving time choice, select 1 for regular
-route times or 2 for live traffic. Press Enter to choose regular route times.
-Results use verified Google Routes durations or distances for the chosen limit.
-Transit routes show available stop and line details.
-
-To generate the function call PNGs on Windows, run these commands from the
-repository root in PowerShell or Command Prompt:
+## How it works
 
 ```text
-py -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python.exe project_overview\visualise_functions.py
+User
+  -> BIS I/O: account, profile, commands, and today's choices
+  -> BIS AI: interpret free text and produce structured search data
+  -> BIS Logic: validate values and protect confirmed choices
+  -> BIS Data: save the profile and serialize search JSON
+  -> BRNS I/O: validate JSON and gather restaurant and route facts
+  -> BRNS AI: rank current candidate IDs with controlled reason codes
+  -> BRC when halal is requested: check candidates against MUIS data
+  -> BRNS Logic: classify matches, alternatives, and exclusions
+  -> BRNS Data: save restaurant facts and the validated search summary
+  -> BIS and BRNS I/O: show results and post-search actions
 ```
 
-Use the same Python executable for the install and the script. Pillow is
-installed as `Pillow` but imported as `PIL`. The PNGs appear in
-`project_overview/function_graphs/`: `bis_to_brns.png` is the grouped manager flow,
-`bis_to_brns_functions.png` shows the reachable function calls, and
-`all_functions.png` covers every application function. `project_workflow.png`
-shows the MUIS scraper and separate BRC checker alongside BIS, BRNS, and
-their shared cache and log. Add `--trace` to run
-BIS and capture a live session graph. The grouped flow shows
-BIS IO → AI → Logic → Data (JSON) → BRNS IO → AI → Logic → Data.
-For an interactive trace on Windows, run
-`.\.venv\Scripts\python.exe project_overview\visualise_live_functions.py`.
-`project_overview/visualise_live_functions.py` starts BIS and records
-the calls made until you quit. Complete a `/search` to include BRNS calls.
-It creates an overview PNG, a function PNG for
-each program called, and `calls.json` with exact call counts in a new
-`project_overview/function_graphs/live_sessions/` folder. The function PNGs group calls by
-`main.py`, IO, AI, Logic, Data, and other files. BRC appears as inactive in
-the overview unless that BIS session actually calls it. On Linux or macOS,
-run `.venv/bin/python project_overview/visualise_live_functions.py`.
+The complete flow, including account, profile, search, BRC, failure, result,
+and Docker branches, is documented in [ProjectFlow.md](ProjectFlow.md).
 
-All three applications read the same `.env` file at the repository root. If you do
-not have one yet, copy `.env.example` to `.env` and edit the settings you need:
+The three applications have separate responsibilities:
+
+- **BIS — BiteFinder Interaction System:** owns accounts, email verification,
+  profiles, natural-language commands, search collection, and user interaction.
+- **BRNS — BiteFinder Recommendation and Navigation System:** validates the BIS
+  request, retrieves restaurant and route facts, ranks candidates, applies
+  search rules, and prepares routes.
+- **BRC — BiteFinder Restaurant Checker:** scrapes MUIS listings, builds the
+  cleaned official halal database, caches cuisine tags, and checks restaurant
+  objects or arrays against that database.
+
+Each application follows the procedural manager pattern:
+
+| Manager | Responsibility |
+| --- | --- |
+| `io_manager.py` | Validate external input and present user-facing output |
+| `ai_manager.py` | Build prompts, call providers, parse JSON, and validate AI output |
+| `logic_manager.py` | Apply domain rules, scores, classifications, and routes |
+| `data_manager.py` | Save, load, and query JSON records |
+
+`main.py` coordinates the managers and decides whether processing continues or
+returns safely to the user after a failure.
+
+## Assignment alignment
+
+- BIS, BRNS, and BRC use procedural manager modules and dictionary records.
+- Live searches require valid BIS and BRNS AI output. Removing either AI stage
+  prevents the normal recommendation workflow from completing.
+- AI exchanges request structured JSON and validate required fields before
+  downstream use.
+- BRNS Logic combines cuisine, dietary status, price, opening hours, route
+  limits, ratings, review counts, hard constraints, and AI ordering.
+- BRC Logic verifies AI-proposed outlet matches against postal code, name,
+  address, unit, certificate validity, and source evidence.
+- Application persistence uses JSON files with atomic writes where records are
+  replaced or updated.
+- Automated tests use local fixtures for AI, Maps, routing, and SMTP behavior;
+  normal tests do not consume API quota or send email.
+- GitHub Actions runs the tests, builds the Docker image, and runs the tests
+  inside the image on pushes and pull requests.
+- Docker Compose separates the BRC service from the BIS and BRNS application
+  while retaining data in named volumes.
+
+The current project statement is in
+[ProjectInitialDetails.md](ProjectInitialDetails.md).
+
+## Repository structure
+
+```text
+BIS/                         account, profile, search-input, and email workflow
+  main.py                    BIS orchestration and result-action loop
+  io_manager.py              CLI input and display boundary
+  ai_manager.py              BIS interpretation and model fallback chain
+  logic_manager.py           profile and search-request rules
+  data_manager.py            user, state, and search JSON persistence
+  sources/                   prompts and profile schema
+  support/                   configuration and SMTP verification
+
+BRNS/                        restaurant recommendation and navigation
+  main.py                    BRNS search, BRC handoff, sorting, and routing
+  io_manager.py              BIS JSON, Google Places, Routes, and result display
+  ai_manager.py              candidate ranking and provider fallback chain
+  logic_manager.py           matching, alternatives, scores, and opening hours
+  data_manager.py            restaurant facts and search history
+  data/restaurants.json      saved facts and offline restaurant fallback
+
+BRC/                         MUIS halal database and outlet checker
+  main.py                    database-build and restaurant-check workflows
+  scraper.py                 raw MUIS and OneMap collection
+  io_manager.py              scenario selection and JSON validation
+  ai_manager.py              cuisine tagging and ambiguous outlet matching
+  logic_manager.py           deterministic certification checks
+  data_manager.py            raw, cleaned, cached, and checked JSON records
+
+shared/                      geocode cache, model discovery, terminal UI, logs
+tests/                       unit, integration, black box, email, and BRC tests
+project_overview/            function-graph generators and local graph output
+.github/workflows/tests.yml  host and Docker CI checks
+Dockerfile                   `brc` and `bis-brns` image targets
+docker-compose.yml           two-container deployment and persistent volumes
+main.py                      repository-root BIS launcher
+ProjectFlow.md               complete project and decision flow
+ProjectInitialDetails.md     problem, users, AI use, and business rules
+```
+
+## Requirements
+
+For the recommended deployment:
+
+- Docker Desktop or Docker Engine.
+- Docker Compose 2.24 or newer.
+- At least one supported AI provider key for BIS and BRNS.
+- A Gemini key when building or using BRC AI workflows.
+- A Google Maps Platform key for live Places, geocoding, and routes.
+- Gmail or another SMTP account when email verification is enabled.
+
+For development outside Docker:
+
+- Python 3.11.
+- The packages in `requirements.txt`.
+- The optional packages in `requirements-dev.txt` for style and function
+  visualizations.
+
+## Configure the environment
+
+Create the local environment file on macOS or Linux:
 
 ```bash
 cp .env.example .env
 ```
 
-Keep `.env` and API keys private. The root `.env` is ignored by Git.
-
-## BIS: profiles and preferences
-
-To use BIS locally without AI requests or verification emails, set
-`AI_BYPASS=true` and `SMTP_BYPASS=true` in the root `.env`, then run:
-
-```bash
-python3 BIS/main.py
-```
-
-Choose **Sign up** to create an account with an email and username, or
-**Resume by email** to continue an existing profile. Usernames accept 1–50
-characters. BIS asks one preference question at a time and saves each account's
-answers locally. When a profile becomes complete, BIS starts `/search` once.
-An already complete profile starts it on the next resume if it has not run yet.
-The command collects today's location and search limits, then asks one
-optional question about what you want. Enter skips extra wishes; saved
-special requests can be chosen by number or `all`, and a new request can be
-entered in English. BIS checks new text and asks before using any AI wording
-correction. BIS AI then proposes a search request. BIS Logic protects
-confirmed choices and validates the proposal; you confirm it before BIS Data
-serializes the request to JSON. Confirmed new special requests are saved for
-future searches. BRNS receives that JSON for restaurant results.
-The search location accepts a six-digit Singapore postal code or
-`latitude,longitude` as well as an address or landmark. Cuisine can be `none`
-when you want any cuisine. Type `/help` at any prompt to see help and return
-to the same question. AI reviews free-text wording and asks before using a
-correction; BIS owns a model chain copied from BRNS's provider order.
-Budget and distance prompts also accept natural wording such as `i think 12`
-and `about 500 metres`; BIS confirms the interpreted number before using it.
-AI may add wishes from your description but cannot remove selected preferences.
-With `AI_BYPASS=true`, BIS shows the choices without calling AI or BRNS; this
-is the chatbot test mode.
-
-### BIS commands
-
-| Command | What it does |
-| --- | --- |
-| `/help` | Show available commands |
-| `/help [command]` | Explain a command, its accepted values, and examples |
-| `/profile` | Show the saved profile |
-| `/search` | Choose today's location and limits, describe your wishes, then confirm the interpreted search |
-| `/edit` | Show how to change an answer |
-| `/add-location` | Add areas to saved locations |
-| `/remove-location` | Remove saved areas; at least one must remain |
-| `/reset` | Clear preferences, keeping the account and username |
-| `/logout` | Save and return to the account menu |
-| `/quit` or `/exit` | Save and close the chatbot |
-
-For example, type `/edit budget`, then enter `10` for a new budget in SGD.
-Use `/help edit` for all editable fields and accepted answers. Editing replaces
-an answer; `/add-location` keeps existing areas.
-
-Dietary requirements are halal, vegetarian, both, or none. Cuisine answers use the
-accepted list in [`BIS/sources/profile_schema.py`](BIS/sources/profile_schema.py);
-you can describe several cuisines without commas, and AI proposals and spelling
-corrections require confirmation. A travel amount without a unit, including
-written numbers such as `ten`, asks you to choose km or minutes. Press Enter
-at the profile's other-preferences prompt for none.
-Travel accepts distance or time,
-using **1 km ≈ 20 minutes of walking**. Both values are saved as an estimate,
-not a calculated route. Other preferences are stored as a list; enter items
-separated by commas, or `none` for an empty list.
-For profile locations, BIS shows the areas it extracted and asks you to confirm
-the list before saving it, including when you add or remove areas later.
-
-For `/search`, BIS confirms your current location before asking the other
-questions. Enter a Singapore postal code, address, landmark, or latitude and
-longitude. Cached locations and coordinates work without a Maps key; uncached
-addresses need `GOOGLE_MAPS_API_KEY` in the root `.env`. Walking, driving, and
-transit searches offer the compatible saved distance or time from your profile
-as the default. Live search also accepts an optional free-text request and asks
-for confirmation when AI interprets or corrects it. Search choices do not
-change your saved profile.
-Use `/help search` for the full sequence.
-
-### BIS AI and email settings
-
-Signup uses fixed prompts and Python validation. AI can interpret preference
-answers and is required for live `/search`; saved updates and search requests
-must still pass validation. To enable AI, set these
-values in the root `.env`:
-
-```dotenv
-AI_BYPASS=false
-OPENROUTER_MODEL=your-model-slug
-OPENROUTER_API_KEYS='["first-key", "second-key"]'
-```
-
-Keys rotate in order, including failed requests, and rotation resets on
-launch. Alternatively, use `OPENROUTER_API_KEYS_FILE=secrets/openrouter_keys.json`
-with a JSON list or comma/newline-separated key file. That relative path still
-resolves from `BIS/`. The key list takes priority over the file, then the shared
-`OPENROUTER_API_KEY` setting. BIS and BRNS each manage their own model chains;
-both can use `GEMINI_API_KEY` from `.env`.
-
-To send verification codes, set `SMTP_BYPASS=false` and fill in the SMTP
-settings in [`.env.example`](.env.example). Codes expire after ten minutes;
-five incorrect attempts within the configured attempt window block further
-guesses and resends until that window ends. Set
-`VERIFICATION_ATTEMPT_RESET_MINUTES=1` for a one-minute window (default: 10).
-Resends are at least 60 seconds
-apart and do not reset the failed-attempt count. Signup and every account
-resume require an emailed code. SMTP bypass is for local testing and does not
-mark an email as verified. Email format checks cannot prove that an inbox
-exists. Restart BIS after changing its settings.
-
-### BIS saved files
-
-| Path | Purpose |
-| --- | --- |
-| `BIS/data/users.json` | Accounts keyed by user ID; username is outside preferences |
-| `BIS/data/profile_state.json` | Email verification and first-search state |
-| `data/geocode_cache.json` | Shared BIS and BRNS geocode results, including successful /search lookups |
-| `logs/bitefinder.log` | Shared BIS, BRNS, and BRC operational log, created on the first logged event |
-
-Data and logs stay local. Use one BIS process per saved database. Each search
-has a trace ID that connects its BIS and BRNS events in the shared log. Events
-show the manager function, stage outcome, provider attempt, and candidate
-counts without recording API keys, raw requests, addresses, or raw provider
-text. It records the AI ID and reason-code list. When BRNS drops an unsupported
-AI reason, the log includes the candidate ID
-and name, rejected reason code, and facts used for the check. A search error
-shows its trace ID so you can find the related lines. Set `DEBUG=true` in the
-root `.env` to mirror the log to the terminal; standalone BRNS mirrors it to
-stderr too.
-
-Profiles use the current BIS schema only. The local user registry was reset for
-this change, so sign up again to create a new profile. New users never import
-another user's profile. Unreadable JSON or malformed account records block
-writes so existing accounts are not overwritten.
-
-## BRNS: restaurant search and routes
-
-BIS sends BRNS the confirmed search request, including origin coordinates,
-travel mode and distance or time limit, cuisine, budget, and dietary preferences. BRNS IO
-validates it and gathers restaurant facts through Google Places. BRNS AI orders
-all candidate IDs and supplies reason codes; Logic keeps only reasons supported
-by candidate facts, applies the requirements, and creates matches and
-alternatives; Data stores a validated search summary. A live search stops
-without a valid BRNS AI recommendation, and can be retried.
-For live Google restaurant and route data, set `GOOGLE_MAPS_API_KEY` and
-`USE_LIVE_GOOGLE=true` in the root `.env`. The existing
-`USE_LIVE_GOOGLE=false` saved restaurant fallback remains available for local use, but
-it still needs BRNS AI to produce a completed recommendation.
-
-BRNS ranks candidates and explains alternatives. For halal searches it sends
-each candidate to BRC and marks confirmed MUIS outlets as official. If BRC is
-temporarily unavailable, Google-indicated halal candidates can continue as
-clearly labelled unofficial fallback results. A route or map link is offered
-when a result has coordinates. Standalone BRNS accepts one BIS search JSON
-object on standard input instead of opening an interactive questionnaire.
-
-BRNS reads the root `.env` and keeps its data relative to `BRNS/`, regardless of
-the working directory. Offline fallback reads `BRNS/data/restaurants.json`.
-Search history and the shared operational log are local runtime files ignored
-by Git. Places and AI failures are recorded in that log.
-Live search cards display Google's rating, review count, and today's opening
-hours when available. BRNS only recommends places confirmed open by the live
-response. Discovered restaurant details, including regular weekly opening
-hours and access information when available, are saved in
-`BRNS/data/restaurants.json`. This is the only BRNS restaurant data file.
-
-## BRC: MUIS certification check
-
-BRC supports three workflows through one entry point:
-
-```bash
-python3 -m BRC.main
-python3 -m BRC.main --input BRNS/data/restaurants.json
-```
-
-With no command arguments, BRC opens a menu. It can build the database, check
-the default `BRNS/data/restaurants.json`, open another object/array JSON file,
-paste one restaurant object, or open a file containing one object. The
-interactive run prints each manager stage and scraper progress.
-
-The build option uses a current raw MUIS scrape or invokes `BRC/scraper.py`,
-then runs IO → AI → Logic → Data to build
-`BRC/data/halal_restaurants.json`. The scraper divides searches by postal
-prefix so no result silently exceeds the portal cap.
-
-With `--input` or `--stdin`, BRC accepts one restaurant object or an array.
-If the cleaned database is missing, it builds it first. It preserves the input
-shape, order, and existing fields, adding
-`muis_check` evidence and setting `halal_certification` to `official` only for
-an outlet that matches the original MUIS listing. Gemini proposes matches;
-BRC Logic verifies the postal code, name, address, unit, and any supplied
-certificate validity details. Set `GEMINI_API_KEY` in `.env`; optionally set
-`BRC_GEMINI_MODEL`. To pass JSON between containers, use standard input and
-standard output:
-
-```bash
-cat restaurants.json | python3 -m BRC.main --stdin --stdout > checked_restaurants.json
-```
-
-Errors and status messages go to standard error. BRNS also calls BRC directly
-during halal searches and uses the returned certification evidence when it
-filters and displays results.
-
-## Code layout and development
-
-All three applications have a `main.py` and separate `io_manager.py`,
-`ai_manager.py`, `logic_manager.py`, and `data_manager.py` modules. BIS also has
-`sources/` for its profile schema and prompts, and `support/` for configuration,
-email delivery, and logging. BRNS's `io_manager.py` handles Google Places,
-geocoding, and routing; its `logic_manager.py` evaluates opening hours.
-
-To install the optional formatting checker and run it on BIS:
-
-```bash
-python3 -m pip install -r requirements-dev.txt
-cd BIS
-python3 -m pycodestyle *.py sources support
-```
-
-
-## Docker
-
-The root `Dockerfile` builds one BiteFinder image and starts BIS by default.
-BIS calls BRNS and BRC from the same image when the selected workflow needs
-them. The previous Compose deployment has been removed.
-
-### Build the image
-
-Install Docker Desktop or Docker Engine, open a terminal in the repository
-root, and run:
-
-```bash
-docker build -t bitefinder .
-```
-
-The build installs `requirements.txt` inside the image. No host Python packages
-are required.
-
-### Configure and run BiteFinder
-
-Copy the example environment file and fill in the services you intend to use:
-
-```bash
-cp .env.example .env
-docker run --rm -it --env-file .env bitefinder
-```
-
-PowerShell users can create the file with:
+On Windows PowerShell:
 
 ```powershell
 Copy-Item .env.example .env
-docker run --rm -it --env-file .env bitefinder
 ```
 
-The `.env` file is excluded from Git and the Docker image. Docker passes its
-values to the container at runtime. Common settings are:
+Open `.env` and configure the services needed for your run. The full list and
+comments are in [`.env.example`](.env.example).
 
 | Setting | Purpose |
 | --- | --- |
-| `OPENROUTER_API_KEY`, `GROQ_API_KEY`, or `GEMINI_API_KEY` | Provide an AI model for BIS, BRNS, and BRC processing |
-| `GOOGLE_MAPS_API_KEY` | Enable live geocoding, Places, routes, and restaurant facts |
-| `USE_LIVE_GOOGLE=true` | Use live Google restaurant and route data |
-| `SMTP_*` | Send signup, resume, and Maps-link emails |
-| `AI_BYPASS=true` | Run BIS profile testing without live AI or BRNS search |
+| `OPENROUTER_API_KEY` | OpenRouter model access for BIS and BRNS |
+| `GROQ_API_KEY` | Optional Groq models appended to each application's fallback chain |
+| `GEMINI_API_KEY` | Gemini fallback for BIS and BRNS, and the BRC provider |
+| `GOOGLE_MAPS_API_KEY` | Geocoding, Places, route matrices, and directions |
+| `USE_LIVE_GOOGLE=true` | Use current Google restaurant and route data |
+| `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL` | Email verification and Maps-link delivery |
 | `SMTP_BYPASS=true` | Skip SMTP delivery during local testing |
+| `AI_BYPASS=true` | Test BIS profile interaction without AI or BRNS search |
+| `DEBUG=true` | Mirror shared operational logs to the terminal |
 
-The `--rm` option deletes the stopped container, including data written only
-inside it. Remove `--rm` if you need to inspect that container afterward, or
-copy generated JSON and logs out before it is removed.
+`.env` is excluded from Git and the Docker build context. Never commit API keys
+or SMTP credentials.
 
-Run BRC's interactive menu from the same image:
+## Run the complete project with Docker Compose
 
-```bash
-docker run --rm -it --env-file .env bitefinder python -m BRC.main
-```
-
-### Run tests inside Docker
-
-The test directory is included in the image and the full suite does not use
-live APIs:
+Build and start the BRC and BIS-BRNS containers:
 
 ```bash
-docker run --rm --entrypoint python bitefinder -m unittest discover -s tests -v
+docker compose up -d --build
+docker compose ps
 ```
 
-Run the INF1103 production-source check inside the image with:
+The first official halal check needs a cleaned BRC database. Build or refresh
+it interactively and choose option `1`:
 
 ```bash
-docker run --rm --entrypoint python bitefinder tests/inf1103_compliance_check.py
+docker compose exec brc python -m BRC.main
 ```
 
-Expected results are `Ran 243 tests` followed by `OK`, and an INF1103
-production-source check pass. Run both commands after changing application,
-test, dependency, or Docker files.
+The initial MUIS build may take time because missing cuisine tags are processed
+in paced AI batches. Completed batches are cached, so a later run resumes
+instead of retagging every restaurant.
+
+Start the BiteFinder CLI:
+
+```bash
+docker compose exec bis-brns python BIS/main.py
+```
+
+Stop the containers while keeping saved accounts, restaurant facts, MUIS data,
+caches, and logs:
+
+```bash
+docker compose down
+```
+
+To remove both containers and their saved named volumes:
+
+```bash
+docker compose down -v
+```
+
+The containers communicate on the private `bitefinder-net` network. BRNS sends
+halal checks to the `brc` service; its port is not published to the host.
+
+## Run with local Python
+
+Create a virtual environment and install the dependencies:
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+On Windows PowerShell:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+Start the complete local BIS workflow from the repository root:
+
+```bash
+python main.py
+```
+
+Local BIS imports BRNS and BRC directly. Build or inspect BRC separately with:
+
+```bash
+python -m BRC.main
+```
+
+Run standalone BRNS by piping one validated BIS search JSON object to it:
+
+```bash
+python BRNS/main.py < search_request.json
+```
+
+## Use the CLI
+
+After signup or resume, incomplete profiles continue from the first unanswered
+field. A complete profile enters the command loop.
+
+| Command | Action |
+| --- | --- |
+| `/help` or `/help [command]` | Show commands or detailed help |
+| `/profile` | Show the saved account profile |
+| `/search` | Collect and confirm today's restaurant search |
+| `/edit` | Choose a profile field to replace |
+| `/add-location` | Add a saved location |
+| `/remove-location` | Remove a saved location while retaining at least one |
+| `/reset` | Clear profile preferences while retaining the account |
+| `/color off` or `/color on` | Save the user's terminal-color preference |
+| `/logout` | Return to the account menu |
+| `/quit` or `/exit` | Save and close BiteFinder |
+
+Natural messages such as `search for a restaurant`, `show my profile`, or
+`color off` can be interpreted as the equivalent supported command. `/help`
+and color commands also work while another prompt is active.
+
+The search summary shows location, travel limit, specific cuisine, budget,
+dietary restrictions, disliked cuisines, and special requests. Pressing Enter
+confirms the summary. After results, the menu can show details, sort, route,
+email a Maps link, reveal alternatives, change today's choices, repeat the same
+search, or return to commands.
+
+## Run the tests
+
+Normal tests use temporary project copies and local fixture servers. They do
+not call live AI, Google, or SMTP services.
+
+Run every test:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Run the readable BIS, BRNS, and combined black box report:
+
+```bash
+python -m tests.blackbox_support
+```
+
+Run one black box boundary:
+
+```bash
+python tests/test_blackbox_bis.py
+python tests/test_blackbox_brns.py
+python tests/test_blackbox_bis_to_brns.py
+```
+
+Run email tests or the INF1103 source check:
+
+```bash
+python tests/test_email_verification.py
+python tests/inf1103_compliance_check.py
+```
+
+Build the default `bis-brns` image and run the complete suite inside it:
+
+```bash
+docker build -t bitefinder .
+docker run --rm --entrypoint python bitefinder \
+  -m unittest discover -s tests -v
+```
+
+GitHub Actions performs the host tests, image build, and container tests for
+every push and pull request.
+
+## Saved data and logs
+
+| Path | Purpose |
+| --- | --- |
+| `BIS/data/users.json` | Accounts and profile preferences |
+| `BIS/data/profile_state.json` | Email, search, and display state |
+| `BRNS/data/restaurants.json` | Saved restaurant facts and offline fallback |
+| `BRNS/data/search_history.json` | Validated search summaries |
+| `BRC/data/muis_establishments.json` | Raw MUIS snapshot |
+| `BRC/data/halal_restaurants.json` | Cleaned official halal database |
+| `BRC/data/cuisine_tags_cache.json` | Resumable cuisine tags |
+| `BRC/data/checked_restaurants_cache.json` | Previous restaurant checks |
+| `data/geocode_cache.json` | Shared successful geocoding results |
+| `logs/bitefinder.log` | Shared BIS, BRNS, and BRC operational log |
+
+Docker stores these runtime files under the `bis-brns-data` and `brc-data`
+named volumes. Local runtime files and secrets are ignored by Git.
+
+Each search receives a trace ID. Logs record manager stages, provider attempts,
+candidate counts, rejected reason codes, and error types without logging API
+keys or raw provider responses.
+
+## Function visualizations
+
+Install the optional development packages and generate the static graphs:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python project_overview/visualise_functions.py
+```
+
+Capture an interactive BIS session and its real function calls with:
+
+```bash
+python project_overview/visualise_live_functions.py
+```
+
+Generated PNGs and live-session call data are written below
+`project_overview/function_graphs/` and remain local.
