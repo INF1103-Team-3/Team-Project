@@ -172,7 +172,9 @@ check with a clear error; completed cuisine batches remain cached.
 Docker Compose runs BRC as its own private service. It exposes internal health,
 status, and restaurant check endpoints to the BRNS container. BRNS uses a
 remote adapter and does not need to import the container's files. The named
-`brc-data` volume preserves the MUIS snapshot and caches across restarts.
+`bitefinder-brc-data` preserves the MUIS snapshot and caches across restarts.
+The separate `bitefinder-logs` volume is shared with BIS/BRNS so BRC service
+errors appear in the same `logs/bitefinder.log` file and search trace.
 
 Build the database inside the running service with:
 

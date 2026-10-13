@@ -53,6 +53,10 @@ nested BRNS or BRC calls reuse the identifier started by BIS. `end_trace()`
 clears only a trace created by that caller, which keeps one search connected in
 the log without mixing later commands.
 
+Docker Compose mounts the named `bitefinder-logs` volume at `/data/logs` in
+both containers. Their `/app/logs` links therefore resolve to the same physical
+log file.
+
 `configure_python_logging()` attaches existing Python loggers, including BRC
 logging, to the shared file. `configure(display=...)` may mirror records through
 an IO owned callback while debugging.

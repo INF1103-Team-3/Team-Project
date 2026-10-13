@@ -63,9 +63,10 @@ def verify_halal_candidates(candidates, request, recommendations):
         try:
             checked = brc_main.run(_brc_restaurant(candidates[index]))
         except Exception as error:
+            detail = log.safe_error_detail(error)
             log.debug_log(
                 f"BRC check failed for candidate {index}: "
-                f"{type(error).__name__}.", "ERROR",
+                f"{type(error).__name__}: {detail}", "ERROR",
                 "BRNS.main.verify_halal_candidates")
             summary["errors"] = len(order) - position
             summary["error_type"] = type(error).__name__

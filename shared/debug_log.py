@@ -8,12 +8,30 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 import logging
 from pathlib import Path
+import re
 from uuid import uuid4
 
 LOG_FILE = Path(__file__).resolve().parent.parent / "logs" / "bitefinder.log"
 DISPLAY = None
 _TRACE_ID = ContextVar("bitefinder_trace_id", default=None)
 _LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR"}
+
+
+def safe_error_detail(error, max_length=600):
+    """Return one useful exception line with common secret forms redacted."""
+    text = str(error).replace("\n", " ").replace("\r", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    substitutions = (
+        (r"(?i)(bearer\s+)[^\s,;}]+", r"\1<redacted>"),
+        (r"(?i)((?:api[_ -]?key|password|access[_ -]?token)\s*[:=]\s*)"
+         r"[^\s,;}]+", r"\1<redacted>"),
+        (r"(?i)([?&](?:key|token)=)[^&\s]+", r"\1<redacted>"),
+    )
+    for pattern, replacement in substitutions:
+        text = re.sub(pattern, replacement, text)
+    if not text:
+        return "No exception message was provided."
+    return text if len(text) <= max_length else text[:max_length - 3] + "..."
 
 
 def _emit_python_log(record):
@@ -50,6 +68,16 @@ def start_trace():
     if _TRACE_ID.get() is not None:
         return None
     return _TRACE_ID.set(uuid4().hex[:12])
+
+
+def adopt_trace(trace_id):
+    """Adopt a validated upstream trace when this process has no active one."""
+    if _TRACE_ID.get() is not None:
+        return None
+    if not isinstance(trace_id, str) or not re.fullmatch(
+            r"[0-9a-f]{12}", trace_id):
+        return start_trace()
+    return _TRACE_ID.set(trace_id)
 
 
 def end_trace(token):
