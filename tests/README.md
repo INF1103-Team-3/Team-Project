@@ -27,9 +27,9 @@ Run a smaller group by replacing `all` with one of the following names:
 | Group | Coverage |
 | --- | --- |
 | `bis` | BIS validation, preferences, travel, cuisine, and structured AI interpretation |
-| `brns` | BRNS eligibility, dietary rules, ranking, hours, and sorting |
+| `brns` | BRNS eligibility, dietary rules, ranking, opening hours, missing-data handling, sorting, and AI fallback |
 | `brc` | BRC MUIS halal verification and official restaurant outlet matching |
-| `core` | BIS and BRNS function tests together; this is the default group |
+| `core` | BIS,BRNS and BRC function tests together; this is the default group |
 | `blackbox` | Real BIS and BRNS processes with controlled HTTP fixtures |
 | `integration` | BIS-to-BRNS JSON contract and shared rules |
 | `deployment` | Image contents, writable volumes, imports, BRC networking, and core tests inside Docker |
