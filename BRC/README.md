@@ -143,10 +143,13 @@ an editor or scanner briefly holds the destination.
 
 ## AI use and caching
 
-The AI manager uses Gemini with deterministic JSON output. Database builds send
-uncached or unknown cuisine records in batches. Each completed batch is written
-to `cuisine_tags_cache.json`; a quota failure therefore resumes from saved work
-instead of tagging every restaurant again.
+The AI manager uses its own Gemini, OpenRouter, and Groq fallback chain with
+deterministic JSON output. Invalid JSON and schema responses advance to the
+next configured provider. Database builds send uncached or unknown cuisine
+records in batches. Each completed batch is written to
+`cuisine_tags_cache.json`; a quota failure therefore resumes from saved work
+instead of tagging every restaurant again. Exact MUIS outlet matches do not
+spend an AI request.
 
 Matching AI output is treated as a proposal. `logic_manager.py` still requires
 consistent outlet evidence, including brand similarity, address or postal
@@ -158,14 +161,22 @@ Relevant environment variables are:
 | Variable | Purpose |
 | --- | --- |
 | `GEMINI_API_KEY` | Gemini credential used by the BRC AI manager. |
-| `BRC_GEMINI_MODEL` | Model selected for BRC requests. |
+| `BRC_GEMINI_MODEL` | First Gemini model attempted by BRC. |
+| `BRC_GEMINI_FALLBACK_MODEL` | Second Gemini model attempted by BRC. |
+| `OPENROUTER_API_KEY` | Shared credential enabling BRC's OpenRouter fallback. |
+| `BRC_OPENROUTER_MODEL` | OpenRouter fallback model selected by BRC. |
+| `GROQ_API_KEY` | Shared credential enabling BRC's Groq fallback models. |
+| `BRC_GROQ_MODEL` | First Groq fallback model; discovered models follow it. |
 | `BRC_AI_REQUEST_INTERVAL_SECONDS` | Minimum pacing delay between requests. |
 | `BRC_AI_BATCH_SIZE` | Number of cuisine records sent in one tagging request. |
 | `BRC_AI_TIMEOUT_SECONDS` | Provider request timeout. |
+| `BRC_AI_CHAIN_TIMEOUT_SECONDS` | Maximum time allocated to one BRC fallback chain. |
 
-Rate limit responses are retried with provider delay information when
-available. Persistent provider failure stops the affected build or ambiguous
-check with a clear error; completed cuisine batches remain cached.
+Gemini rate limits advance immediately when another provider is configured. A
+Gemini-only setup retries with provider delay information when available.
+Persistent failure advances to OpenRouter and then Groq. If every configured
+provider fails, the affected build or ambiguous check returns a clear error;
+completed cuisine batches remain cached.
 
 ## Docker integration
 

@@ -7,8 +7,9 @@ import os
 import re
 import time
 
-from google import genai
-from google.genai import types
+import requests
+
+from shared import debug_log
 
 
 CUISINES = (
@@ -20,9 +21,7 @@ CUISINES = (
 
 
 def create_manager(api_key, model):
-    """Create mutable request state without defining an application class."""
-    if not api_key:
-        raise ValueError("Set GEMINI_API_KEY before running BRC.")
+    """Create BRC's independent Gemini, OpenRouter, and Groq chain."""
     try:
         interval = float(os.getenv("BRC_AI_REQUEST_INTERVAL_SECONDS", "4.2"))
     except ValueError:
@@ -31,12 +30,52 @@ def create_manager(api_key, model):
         timeout = float(os.getenv("BRC_AI_TIMEOUT_SECONDS", "20"))
     except ValueError:
         timeout = 20.0
+    try:
+        chain_timeout = float(os.getenv("BRC_AI_CHAIN_TIMEOUT_SECONDS", "45"))
+    except ValueError:
+        chain_timeout = 45.0
+    openrouter_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    groq_key = os.getenv("GROQ_API_KEY", "").strip()
+    providers = []
+    if api_key:
+        providers.append({"provider": "gemini", "model": model})
+        fallback = os.getenv(
+            "BRC_GEMINI_FALLBACK_MODEL", "gemini-3.6-flash").strip()
+        if fallback and fallback != model:
+            providers.append({"provider": "gemini", "model": fallback})
+    if openrouter_key:
+        providers.append({
+            "provider": "openrouter",
+            "model": os.getenv(
+                "BRC_OPENROUTER_MODEL",
+                "nvidia/nemotron-3-ultra-550b-a55b:free").strip(),
+        })
+    if groq_key:
+        configured = os.getenv(
+            "BRC_GROQ_MODEL", "openai/gpt-oss-20b").strip()
+        groq_models = [configured] if configured else []
+        from shared.groq_models import fetch_chat_models
+        for model_id in fetch_chat_models(groq_key):
+            if model_id not in groq_models:
+                groq_models.append(model_id)
+        providers.extend(
+            {"provider": "groq", "model": model_id}
+            for model_id in groq_models)
+    providers = [entry for entry in providers if entry["model"]]
+    if not providers:
+        raise ValueError(
+            "Set GEMINI_API_KEY, OPENROUTER_API_KEY, or GROQ_API_KEY "
+            "before running BRC.")
     return {
         "api_key": api_key,
         "model": model,
+        "openrouter_api_key": openrouter_key,
+        "groq_api_key": groq_key,
+        "providers": providers,
         "client": None,
         "request_interval": min(max(interval, 0.0), 60.0),
         "timeout_seconds": min(max(timeout, 1.0), 120.0),
+        "chain_timeout_seconds": min(max(chain_timeout, 1.0), 180.0),
         "last_request_at": None,
         "report": None,
     }
@@ -134,9 +173,27 @@ def _tag_cuisines(rows, report=None, cache=None, save_cache=None,
             + json.dumps([{"index": index, "name": row.get("name"),
                            "category": row.get("category")}
                           for index, row in batch]))
-        raw = request(prompt) if request else call_api(prompt, manager)
-        parsed = parse_response(raw)
         allowed = {index for index, _row in batch}
+
+        def valid_cuisine_reply(raw):
+            try:
+                proposed = parse_response(raw)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                return False
+            return (
+                validate_response(proposed, expected_ids=allowed)
+                and all(
+                    isinstance(item, dict)
+                    and set(item) == {"index", "cuisines"}
+                    and item["index"] in allowed
+                    and isinstance(item["cuisines"], list)
+                    for item in proposed
+                )
+            )
+
+        raw = (request(prompt) if request else
+               call_api(prompt, manager, validator=valid_cuisine_reply))
+        parsed = parse_response(raw)
         if not validate_response(parsed, expected_ids=allowed):
             raise ValueError("BRC AI omitted or duplicated cuisine rows.")
         for item in parsed:
@@ -179,13 +236,26 @@ def _match(records, groups, report=None, manager=None, request=None):
             "Select the exact same outlet or null. Branch and unit must agree. "
             "Return only {\"certificate_number\": string|null}.\n"
             + json.dumps({"restaurant": record, "candidates": candidates}))
-        raw = request(prompt) if request else call_api(prompt, manager)
+        allowed = {row["muis"]["certificate_number"] for row in candidates}
+
+        def valid_match_reply(raw):
+            try:
+                proposed = parse_response(raw, object_ok=True)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                return False
+            return (
+                validate_response(
+                    proposed, object_keys={"certificate_number"})
+                and proposed["certificate_number"] in allowed | {None}
+            )
+
+        raw = (request(prompt) if request else
+               call_api(prompt, manager, validator=valid_match_reply))
         item = parse_response(raw, object_ok=True)
         if not validate_response(item, object_keys={"certificate_number"}):
             raise ValueError(
                 f"BRC AI returned an invalid match for restaurant {index}.")
         certificate = item["certificate_number"]
-        allowed = {row["muis"]["certificate_number"] for row in candidates}
         if certificate not in allowed | {None}:
             raise ValueError(
                 f"BRC AI invented a match for restaurant {index}.")
@@ -210,10 +280,11 @@ def _retry_delay(error, attempt):
     return max(supplied, 4.2 * (attempt + 1))
 
 
-def call_api(prompt, manager):
-    """Call Gemini with pacing, timeout, and rate-limit recovery."""
-    if manager is None:
-        raise ValueError("BRC AI manager state is required.")
+def _call_gemini(prompt, manager, model):
+    """Call one Gemini model with rate-limit recovery."""
+    from google import genai
+    from google.genai import types
+
     if manager["client"] is None:
         manager["client"] = genai.Client(
             api_key=manager["api_key"],
@@ -224,11 +295,13 @@ def call_api(prompt, manager):
         manager["last_request_at"] = time.monotonic()
         try:
             response = manager["client"].models.generate_content(
-                model=manager["model"], contents=prompt,
+                model=model, contents=prompt,
                 config=types.GenerateContentConfig(
                     temperature=0, response_mime_type="application/json"))
         except Exception as error:
-            if getattr(error, "code", None) != 429 or attempt == 4:
+            alternatives_available = len(manager.get("providers", [])) > 1
+            if (getattr(error, "code", None) != 429 or attempt == 4
+                    or alternatives_available):
                 raise
             delay = _retry_delay(error, attempt)
             if manager["report"]:
@@ -241,3 +314,101 @@ def call_api(prompt, manager):
             raise RuntimeError("Gemini returned an empty response.")
         return response.text
     raise RuntimeError("Gemini rate-limit retries were exhausted.")
+
+
+def _call_chat_completions(prompt, manager, provider, model, timeout):
+    """Call one OpenAI-compatible OpenRouter or Groq model."""
+    if provider == "openrouter":
+        url = os.getenv(
+            "BITEFINDER_OPENROUTER_URL",
+            "https://openrouter.ai/api/v1/chat/completions")
+        key = manager["openrouter_api_key"]
+    else:
+        url = os.getenv(
+            "BITEFINDER_GROQ_URL",
+            "https://api.groq.com/openai/v1/chat/completions")
+        key = manager["groq_api_key"]
+    body = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0,
+        "max_tokens": 4096,
+    }
+    _pace_request(manager)
+    manager["last_request_at"] = time.monotonic()
+    try:
+        response = requests.post(
+            url,
+            headers={"Authorization": f"Bearer {key}",
+                     "Content-Type": "application/json"},
+            json=body,
+            timeout=(min(3, timeout), timeout),
+        )
+    except requests.RequestException as error:
+        raise RuntimeError(f"{provider} network error") from error
+    if response.status_code != 200:
+        raise RuntimeError(f"{provider} HTTP {response.status_code}")
+    try:
+        content = response.json()["choices"][0]["message"]["content"]
+    except (ValueError, KeyError, IndexError, TypeError) as error:
+        raise RuntimeError(
+            f"{provider} returned an unexpected response") from error
+    if not isinstance(content, str) or not content.strip():
+        raise RuntimeError(f"{provider} returned an empty response")
+    return content
+
+
+def _valid_json_text(raw):
+    """Require a JSON object or array before accepting a provider reply."""
+    try:
+        value = json.loads(re.sub(r"```(?:json)?", "", raw).strip())
+    except (TypeError, json.JSONDecodeError):
+        return False
+    return isinstance(value, (dict, list))
+
+
+def call_api(prompt, manager, validator=None):
+    """Try BRC's provider chain until valid structured output is returned."""
+    if manager is None:
+        raise ValueError("BRC AI manager state is required.")
+    deadline = time.monotonic() + manager["chain_timeout_seconds"]
+    failures = []
+    for entry in manager["providers"]:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            failures.append("provider chain deadline reached")
+            break
+        provider, model = entry["provider"], entry["model"]
+        debug_log.debug_log(
+            f"BRC trying {provider}/{model}.",
+            "INFO", "BRC.ai_manager.fallback")
+        try:
+            if provider == "gemini":
+                raw = _call_gemini(prompt, manager, model)
+            elif provider in {"openrouter", "groq"}:
+                raw = _call_chat_completions(
+                    prompt, manager, provider, model,
+                    min(manager["timeout_seconds"], remaining))
+            else:
+                continue
+        except Exception as error:
+            failures.append(f"{provider}/{model}: {type(error).__name__}")
+            debug_log.debug_log(
+                f"BRC {provider}/{model} failed with "
+                f"{type(error).__name__}; trying the next provider.",
+                "WARNING", "BRC.ai_manager.fallback")
+            continue
+        if not _valid_json_text(raw) or validator and not validator(raw):
+            failures.append(f"{provider}/{model}: invalid response")
+            debug_log.debug_log(
+                f"BRC {provider}/{model} returned invalid structured data; "
+                "trying the next provider.",
+                "WARNING", "BRC.ai_manager.fallback")
+            continue
+        debug_log.debug_log(
+            f"BRC accepted {provider}/{model} response.",
+            "INFO", "BRC.ai_manager.fallback")
+        return raw
+    raise RuntimeError(
+        "BRC AI providers are unavailable or returned invalid data: "
+        + "; ".join(failures))

@@ -58,7 +58,7 @@ def verify_halal_candidates(candidates, request, recommendations):
             candidate["dietary_requirements"].append("halal")
         checked_candidates.append(candidate)
     io_manager.show_halal_verification_start(len(order), database_missing)
-    for position, index in enumerate(order):
+    for index in order:
         candidate = checked_candidates[index]
         try:
             checked = brc_main.run(_brc_restaurant(candidates[index]))
@@ -68,9 +68,10 @@ def verify_halal_candidates(candidates, request, recommendations):
                 f"BRC check failed for candidate {index}: "
                 f"{type(error).__name__}: {detail}", "ERROR",
                 "BRNS.main.verify_halal_candidates")
-            summary["errors"] = len(order) - position
-            summary["error_type"] = type(error).__name__
-            break
+            summary["errors"] += 1
+            if summary["error_type"] is None:
+                summary["error_type"] = type(error).__name__
+            continue
         summary["checked"] += 1
         muis_check = checked.get("muis_check")
         verified = (
@@ -135,6 +136,8 @@ def search(bis_json, previous_restaurants=()):
         if not candidates:
             raise RuntimeError(
                 "No restaurants found, or restaurant search is unavailable.")
+        io_manager.show_ai_ranking_start(
+            len(candidates), config.AI_CHAIN_TIMEOUT_SECONDS)
         recommendations = (
             ai_manager.recommend_candidates(
                 request, candidates, previous_restaurants=previous_restaurants)

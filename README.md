@@ -185,9 +185,9 @@ comments are in [`.env.example`](.env.example).
 
 | Setting | Purpose |
 | --- | --- |
-| `OPENROUTER_API_KEY` | OpenRouter model access for BIS and BRNS |
+| `OPENROUTER_API_KEY` | OpenRouter model access for BIS, BRNS, and BRC |
 | `GROQ_API_KEY` | Optional Groq models appended to each application's fallback chain |
-| `GEMINI_API_KEY` | Gemini fallback for BIS and BRNS, and the BRC provider |
+| `GEMINI_API_KEY` | Gemini models used independently by BIS, BRNS, and BRC |
 | `GOOGLE_MAPS_API_KEY` | Geocoding, Places, route matrices, and directions |
 | `USE_LIVE_GOOGLE=true` | Use current Google restaurant and route data |
 | `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL` | Email verification and Maps-link delivery |

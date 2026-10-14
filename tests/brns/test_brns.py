@@ -1,6 +1,8 @@
 """Function tests for BiteFinder BRNS recommendation and ranking logic."""
 import json
+import importlib
 import sys
+import types
 from pathlib import Path
 
 
@@ -1145,6 +1147,152 @@ def test_all_ai_providers_can_fail_safely():
             original_sleep
         )
 
+
+def test_ai_ranking_accepts_all_grounded_reason_codes():
+    """A detailed result may legitimately carry more than four facts."""
+    original_chain = brns_ai.config.MODEL_CHAIN
+    original_key = brns_ai.config.GEMINI_API_KEY
+    original_gemini = brns_ai._call_gemini
+    reason_codes = [
+        "cuisine_match",
+        "within_budget",
+        "within_route",
+        "well_rated",
+        "vegetarian_options",
+        "halal_hint_unofficial",
+    ]
+
+    try:
+        brns_ai.config.MODEL_CHAIN = [
+            {"provider": "gemini", "model": "test-model"},
+        ]
+        brns_ai.config.GEMINI_API_KEY = "test-key"
+        brns_ai._call_gemini = lambda *_args: (
+            True,
+            json.dumps({
+                "recommendations": [
+                    {"id": 0, "reason_codes": reason_codes},
+                ],
+            }),
+        )
+
+        request = search_request()
+        request["dietary_requirements"] = ["halal", "vegetarian"]
+        candidate = restaurant()
+        candidate["dietary_requirements"] = ["vegetarian"]
+        candidate["halal_hint"] = True
+        recommendation = brns_ai.recommend_candidates(request, [candidate])
+        grounded = brns_logic._grounded_ai_reasons(
+            brns_logic.normalize_candidate(candidate),
+            request,
+            recommendation[0]["reason_codes"],
+            0,
+        )
+        actual = {
+            "recommendation": recommendation,
+            "grounded_reason_count": len(grounded),
+        }
+        expected = {
+            "recommendation": [{"id": 0, "reason_codes": reason_codes}],
+            "grounded_reason_count": 6,
+        }
+
+        show_case(
+            "BRNS-22: Detailed AI evidence is accepted",
+            "recommend_candidates()",
+            "Checks that a restaurant satisfying many search facts does not "
+            "invalidate the AI response and trigger unnecessary fallbacks.",
+            {"reason_codes": reason_codes},
+            expected,
+            actual,
+        )
+
+        assert actual == expected
+    finally:
+        brns_ai.config.MODEL_CHAIN = original_chain
+        brns_ai.config.GEMINI_API_KEY = original_key
+        brns_ai._call_gemini = original_gemini
+
+
+def test_brc_error_does_not_skip_later_candidates():
+    """One provider error must not prevent later exact MUIS checks."""
+    original_brns_main = sys.modules.pop("BRNS.main", None)
+    original_brc_main = sys.modules.get("BRC.main")
+    brc_stub = types.ModuleType("BRC.main")
+    brc_stub.data_manager = types.SimpleNamespace(
+        CLEAN_DATABASE_PATH=Path("missing-test-database.json"))
+    brc_stub.run = lambda _record: None
+    sys.modules["BRC.main"] = brc_stub
+    brns_main = importlib.import_module("BRNS.main")
+    candidates = []
+    for index, name in enumerate(("Error Cafe", "MUIS Cafe", "Other Cafe")):
+        candidate = restaurant()
+        candidate["name"] = name
+        candidate["halal_hint"] = True
+        candidate["address"] = f"{index + 1} Test Street, Singapore 10000{index}"
+        candidates.append(candidate)
+    calls = []
+
+    def fake_brc_run(record):
+        calls.append(record["name"])
+        if record["name"] == "Error Cafe":
+            raise RuntimeError("temporary provider failure")
+        checked = dict(record)
+        if record["name"] == "MUIS Cafe":
+            checked.update({
+                "halal_certification": "official",
+                "muis_check": {"status": "verified"},
+                "cuisines": ["chinese"],
+            })
+        else:
+            checked["muis_check"] = {"status": "not_verified"}
+        return checked
+
+    try:
+        brns_main.brc_main.run = fake_brc_run
+        request = search_request()
+        request["dietary_requirements"] = ["halal"]
+        recommendations = [
+            {"id": index, "reason_codes": []}
+            for index in range(len(candidates))
+        ]
+        checked, summary = brns_main.verify_halal_candidates(
+            candidates, request, recommendations)
+        actual = {
+            "calls": calls,
+            "errors": summary["errors"],
+            "checked": summary["checked"],
+            "verified": summary["verified"],
+            "later_candidate_status": checked[1]["halal_certification"],
+        }
+        expected = {
+            "calls": ["Error Cafe", "MUIS Cafe", "Other Cafe"],
+            "errors": 1,
+            "checked": 2,
+            "verified": 1,
+            "later_candidate_status": "official",
+        }
+
+        show_case(
+            "BRNS-23: BRC candidate failures are isolated",
+            "verify_halal_candidates()",
+            "Checks that one temporary BRC error does not skip later "
+            "restaurants that can still be matched to official MUIS data.",
+            {"candidate_names": [item["name"] for item in candidates]},
+            expected,
+            actual,
+        )
+
+        assert actual == expected
+    finally:
+        sys.modules.pop("BRNS.main", None)
+        if original_brns_main is not None:
+            sys.modules["BRNS.main"] = original_brns_main
+        if original_brc_main is None:
+            sys.modules.pop("BRC.main", None)
+        else:
+            sys.modules["BRC.main"] = original_brc_main
+
 TESTS = (
     test_explicit_minimum_rating_is_read,
     test_hard_cuisine_requirement_is_detected,
@@ -1167,6 +1315,8 @@ TESTS = (
     test_missing_restaurant_facts_are_not_invented,
     test_ai_falls_back_to_next_provider,
     test_all_ai_providers_can_fail_safely,
+    test_ai_ranking_accepts_all_grounded_reason_codes,
+    test_brc_error_does_not_skip_later_candidates,
 )
 
 

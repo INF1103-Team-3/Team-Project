@@ -20,9 +20,14 @@ def default_ai_manager():
     settings = (
         os.getenv("GEMINI_API_KEY"),
         os.getenv("BRC_GEMINI_MODEL", "gemini-3.5-flash-lite"),
+        os.getenv("BRC_GEMINI_FALLBACK_MODEL", "gemini-3.6-flash"),
+        os.getenv("OPENROUTER_API_KEY"),
+        os.getenv("BRC_OPENROUTER_MODEL"),
+        os.getenv("GROQ_API_KEY"),
+        os.getenv("BRC_GROQ_MODEL"),
     )
     if _DEFAULT_AI is None or settings != _DEFAULT_AI_SETTINGS:
-        _DEFAULT_AI = ai_manager.create_manager(*settings)
+        _DEFAULT_AI = ai_manager.create_manager(settings[0], settings[1])
         _DEFAULT_AI_SETTINGS = settings
     return _DEFAULT_AI
 

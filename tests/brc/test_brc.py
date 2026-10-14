@@ -1,5 +1,6 @@
 """Function tests for BiteFinder BRC halal verification logic."""
 
+import json
 import sys
 from pathlib import Path
 
@@ -12,6 +13,7 @@ sys.path.insert(0, str(TESTS_ROOT))
 
 
 from BRC import logic_manager as brc_logic
+from BRC import ai_manager as brc_ai
 from reporting import show_case, show_summary
 
 
@@ -240,9 +242,121 @@ def test_wrong_outlet_cannot_become_official_halal():
     assert actual == expected
 
 
+def test_brc_ai_falls_back_to_groq_after_invalid_gemini():
+    """BRC should continue when Gemini returns unusable structured data."""
+    original_gemini = brc_ai._call_gemini
+    original_chat = brc_ai._call_chat_completions
+    calls = []
+    manager = {
+        "providers": [
+            {"provider": "gemini", "model": "gemini-test"},
+            {"provider": "groq", "model": "groq-test"},
+        ],
+        "chain_timeout_seconds": 10,
+        "timeout_seconds": 2,
+    }
+
+    def fake_gemini(_prompt, _manager, model):
+        calls.append(f"gemini/{model}")
+        return "not json"
+
+    def fake_chat(_prompt, _manager, provider, model, _timeout):
+        calls.append(f"{provider}/{model}")
+        return json.dumps({"certificate_number": "TEST-123"})
+
+    try:
+        brc_ai._call_gemini = fake_gemini
+        brc_ai._call_chat_completions = fake_chat
+        raw = brc_ai.call_api(
+            "match this outlet",
+            manager,
+            validator=lambda text: (
+                json.loads(text).get("certificate_number") == "TEST-123"),
+        )
+        actual = {
+            "calls": calls,
+            "certificate_number": json.loads(raw)["certificate_number"],
+        }
+        expected = {
+            "calls": ["gemini/gemini-test", "groq/groq-test"],
+            "certificate_number": "TEST-123",
+        }
+
+        show_case(
+            "BRC-03: Invalid Gemini output falls back to Groq",
+            "call_api()",
+            "Checks that BRC rejects invalid structured output and obtains a "
+            "valid outlet decision from its next configured provider.",
+            {"providers": manager["providers"]},
+            expected,
+            actual,
+        )
+
+        assert actual == expected
+    finally:
+        brc_ai._call_gemini = original_gemini
+        brc_ai._call_chat_completions = original_chat
+
+
+def test_brc_ai_falls_back_after_gemini_provider_error():
+    """A Gemini service error should advance to OpenRouter."""
+    original_gemini = brc_ai._call_gemini
+    original_chat = brc_ai._call_chat_completions
+    calls = []
+    manager = {
+        "providers": [
+            {"provider": "gemini", "model": "gemini-test"},
+            {"provider": "openrouter", "model": "openrouter-test"},
+        ],
+        "chain_timeout_seconds": 10,
+        "timeout_seconds": 2,
+    }
+
+    def failed_gemini(_prompt, _manager, model):
+        calls.append(f"gemini/{model}")
+        raise RuntimeError("503 unavailable")
+
+    def successful_openrouter(_prompt, _manager, provider, model, _timeout):
+        calls.append(f"{provider}/{model}")
+        return json.dumps({"certificate_number": None})
+
+    try:
+        brc_ai._call_gemini = failed_gemini
+        brc_ai._call_chat_completions = successful_openrouter
+        raw = brc_ai.call_api("match this outlet", manager)
+        actual = {
+            "calls": calls,
+            "certificate_number": json.loads(raw)["certificate_number"],
+        }
+        expected = {
+            "calls": [
+                "gemini/gemini-test",
+                "openrouter/openrouter-test",
+            ],
+            "certificate_number": None,
+        }
+
+        show_case(
+            "BRC-04: Gemini service errors use OpenRouter fallback",
+            "call_api()",
+            "Checks that a provider error such as HTTP 503 does not stop an "
+            "ambiguous MUIS outlet check while another provider is available.",
+            {"providers": manager["providers"]},
+            expected,
+            actual,
+        )
+
+        assert actual == expected
+    finally:
+        brc_ai._call_gemini = original_gemini
+        brc_ai._call_chat_completions = original_chat
+
+
 TESTS = (
     test_correct_outlet_can_be_verified,
     test_wrong_outlet_cannot_become_official_halal,
+    test_brc_ai_falls_back_to_groq_after_invalid_gemini,
+    test_brc_ai_falls_back_after_gemini_provider_error,
 )
 
 
