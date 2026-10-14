@@ -93,6 +93,20 @@ def restaurant(**changes):
 
     return value
 
+def restaurant_with_missing_facts():
+    """Return a restaurant with important facts deliberately unavailable."""
+
+    return restaurant(
+        name="Unknown Facts Cafe",
+        avg_price=None,
+        price_start=None,
+        price_end=None,
+        rating=None,
+        rating_count=None,
+        walk_minutes=None,
+        walk_meters=None,
+        walk_source=None,
+    )
 
 def verified_halal_restaurant():
     """Return restaurant data with verified official MUIS evidence."""

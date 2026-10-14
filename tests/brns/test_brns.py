@@ -1,5 +1,5 @@
 """Function tests for BiteFinder BRNS recommendation and ranking logic."""
-
+import json
 import sys
 from pathlib import Path
 
@@ -15,6 +15,7 @@ sys.path.insert(0, str(TEST_DIR))
 
 
 from BRNS import logic_manager as brns_logic
+from BRNS import ai_manager as brns_ai
 from reporting import show_case, show_summary
 
 from sample_inputs import (
@@ -28,6 +29,7 @@ from sample_inputs import (
     search_request,
     valid_ai_recommendations,
     verified_halal_restaurant,
+    restaurant_with_missing_facts,
 )
 
 
@@ -789,7 +791,359 @@ def test_distance_sort_places_nearest_first():
     )
 
     assert actual == expected
+def test_missing_restaurant_facts_are_not_invented():
+    """Missing restaurant facts remain unavailable instead of being guessed."""
 
+    request = search_request(
+        other_preferences=[
+            "at least 4.5 stars"
+        ]
+    )
+
+    candidate = (
+        restaurant_with_missing_facts()
+    )
+
+    test_input = {
+        "request": request,
+        "restaurant": candidate,
+    }
+
+    expected = {
+        "status": "alternative",
+        "reasons": [
+            "matches your selected cuisine",
+            "! Google rating unavailable; requested at least 4.5/5",
+            "! price unavailable",
+            "! walk journey time unavailable",
+        ],
+    }
+
+    status, _, reasons = (
+        brns_logic.decide_outcome(
+            candidate,
+            request,
+        )
+    )
+
+    actual = {
+        "status": status,
+        "reasons": reasons,
+    }
+
+    show_case(
+        "BRNS-19: Missing facts are not invented",
+        "decide_outcome()",
+        "Checks that missing price, rating and route facts "
+        "remain unavailable instead of being guessed, so the "
+        "restaurant cannot become an exact match.",
+        test_input,
+        expected,
+        actual,
+    )
+
+    assert actual == expected
+def test_ai_falls_back_to_next_provider():
+    """If the first AI provider fails, BRNS tries the next provider."""
+
+    original_chain = brns_ai.config.MODEL_CHAIN
+    original_gemini = brns_ai._call_gemini
+    original_openrouter = brns_ai._call_openrouter
+    original_sleep = brns_ai.time.sleep
+
+    calls = []
+
+    valid_reply = {
+        "cuisine": "japanese",
+        "dietary": "none",
+        "budget_band": "any",
+        "budget_min": None,
+        "budget_max": 20,
+        "min_rating": None,
+        "max_walk_minutes": 30,
+        "max_drive_km": None,
+        "eat_time": "now",
+        "free_text_notes": "",
+    }
+
+    def fake_gemini(
+        model,
+        system_prompt,
+        user_text,
+    ):
+        calls.append(
+            f"gemini/{model}"
+        )
+
+        return (
+            False,
+            "network error",
+        )
+
+    def fake_openrouter(
+        model,
+        system_prompt,
+        user_text,
+    ):
+        calls.append(
+            f"openrouter/{model}"
+        )
+
+        return (
+            True,
+            json.dumps(
+                valid_reply
+            ),
+        )
+
+    try:
+        brns_ai.config.MODEL_CHAIN = [
+            {
+                "provider": "gemini",
+                "model": "primary-model",
+            },
+            {
+                "provider": "openrouter",
+                "model": "backup-model",
+            },
+        ]
+
+        brns_ai._call_gemini = (
+            fake_gemini
+        )
+
+        brns_ai._call_openrouter = (
+            fake_openrouter
+        )
+
+        brns_ai.time.sleep = (
+            lambda seconds: None
+        )
+
+        test_input = {
+            "first_provider":
+                "gemini/primary-model",
+
+            "fallback_provider":
+                "openrouter/backup-model",
+        }
+
+        expected = {
+            "ok":
+                True,
+
+            "model_used":
+                "openrouter/backup-model",
+
+            "cuisine":
+                "japanese",
+
+            "call_order": [
+                "gemini/primary-model",
+                "openrouter/backup-model",
+            ],
+        }
+
+        ok, result, model_used = (
+            brns_ai.call_ai(
+                {
+                    "cuisine":
+                        "japanese"
+                }
+            )
+        )
+
+        actual = {
+            "ok":
+                ok,
+
+            "model_used":
+                model_used,
+
+            "cuisine":
+                (
+                    result.get(
+                        "cuisine"
+                    )
+                    if ok
+                    else None
+                ),
+
+            "call_order":
+                calls,
+        }
+
+        show_case(
+            "BRNS-20: AI provider fallback works",
+            "call_ai()",
+            "Checks that BRNS continues to the next configured "
+            "AI provider when the first provider fails.",
+            test_input,
+            expected,
+            actual,
+        )
+
+        assert actual == expected
+
+    finally:
+        brns_ai.config.MODEL_CHAIN = (
+            original_chain
+        )
+
+        brns_ai._call_gemini = (
+            original_gemini
+        )
+
+        brns_ai._call_openrouter = (
+            original_openrouter
+        )
+
+        brns_ai.time.sleep = (
+            original_sleep
+        )
+
+
+def test_all_ai_providers_can_fail_safely():
+    """BRNS returns a controlled failure when every provider fails."""
+
+    original_chain = brns_ai.config.MODEL_CHAIN
+    original_gemini = brns_ai._call_gemini
+    original_openrouter = brns_ai._call_openrouter
+    original_sleep = brns_ai.time.sleep
+
+    calls = []
+
+    def fake_gemini(
+        model,
+        system_prompt,
+        user_text,
+    ):
+        calls.append(
+            f"gemini/{model}"
+        )
+
+        return (
+            False,
+            "network error",
+        )
+
+    def fake_openrouter(
+        model,
+        system_prompt,
+        user_text,
+    ):
+        calls.append(
+            f"openrouter/{model}"
+        )
+
+        return (
+            False,
+            "HTTP 503",
+        )
+
+    try:
+        brns_ai.config.MODEL_CHAIN = [
+            {
+                "provider": "gemini",
+                "model": "primary-model",
+            },
+            {
+                "provider": "openrouter",
+                "model": "backup-model",
+            },
+        ]
+
+        brns_ai._call_gemini = (
+            fake_gemini
+        )
+
+        brns_ai._call_openrouter = (
+            fake_openrouter
+        )
+
+        brns_ai.time.sleep = (
+            lambda seconds: None
+        )
+
+        test_input = {
+            "gemini":
+                "network failure",
+
+            "openrouter":
+                "HTTP 503",
+        }
+
+        expected = {
+            "ok":
+                False,
+
+            "model_used":
+                None,
+
+            "error_returned":
+                True,
+
+            "call_order": [
+                "gemini/primary-model",
+                "openrouter/backup-model",
+            ],
+        }
+
+        ok, result, model_used = (
+            brns_ai.call_ai(
+                {
+                    "cuisine":
+                        "japanese"
+                }
+            )
+        )
+
+        actual = {
+            "ok":
+                ok,
+
+            "model_used":
+                model_used,
+
+            "error_returned":
+                isinstance(
+                    result,
+                    str,
+                ),
+
+            "call_order":
+                calls,
+        }
+
+        show_case(
+            "BRNS-21: All AI providers fail safely",
+            "call_ai()",
+            "Checks that exhausting the AI fallback chain "
+            "returns a controlled failure instead of crashing "
+            "or inventing a recommendation.",
+            test_input,
+            expected,
+            actual,
+        )
+
+        assert actual == expected
+
+    finally:
+        brns_ai.config.MODEL_CHAIN = (
+            original_chain
+        )
+
+        brns_ai._call_gemini = (
+            original_gemini
+        )
+
+        brns_ai._call_openrouter = (
+            original_openrouter
+        )
+
+        brns_ai.time.sleep = (
+            original_sleep
+        )
 
 TESTS = (
     test_explicit_minimum_rating_is_read,
@@ -810,6 +1164,9 @@ TESTS = (
     test_weekly_hours_detect_closed_restaurant,
     test_rating_sort_places_highest_rated_first,
     test_distance_sort_places_nearest_first,
+    test_missing_restaurant_facts_are_not_invented,
+    test_ai_falls_back_to_next_provider,
+    test_all_ai_providers_can_fail_safely,
 )
 
 
