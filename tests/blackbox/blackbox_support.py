@@ -305,6 +305,28 @@ def _response_for(
             )
         )
 
+    if (
+        path in (
+            "/nearby",
+            "/text",
+        )
+        and fixture[
+            "places_failure"
+        ]
+    ):
+        raise RuntimeError(
+            "simulated Places service failure"
+        )
+
+    if (
+        path == "/chat/completions"
+        and fixture[
+            "openrouter_failure"
+        ]
+    ):
+        raise RuntimeError(
+            "simulated AI provider failure"
+        )
     if method == "GET":
 
         return {
@@ -505,7 +527,36 @@ def _response_for(
         )
 
     if path == "/matrix":
+        if fixture[
+            "matrix_no_route"
+        ]:
 
+            destinations = (
+                body.get(
+                    "destinations",
+                    [],
+                )
+                if isinstance(
+                    body,
+                    dict,
+                )
+                else []
+            )
+
+            return [
+                {
+                    "destinationIndex":
+                        index,
+
+                    "condition":
+                        "ROUTE_NOT_FOUND",
+                }
+
+                for index
+                in range(
+                    len(destinations)
+                )
+            ]
         matrix = [
             {
                 "destinationIndex":
@@ -580,6 +631,14 @@ def _response_for(
         return matrix
 
     if path == "/route":
+
+        if fixture[
+            "route_unavailable"
+        ]:
+
+            return {
+                "routes": []
+            }
 
         return {
             "routes": [
@@ -722,17 +781,29 @@ def start_fixture_server():
     )
 
     fixture = {
-        "calls":
-            [],
+    "calls":
+        [],
 
-        "lock":
-            threading.Lock(),
+    "lock":
+        threading.Lock(),
 
-        "invalid_brns_ai":
-            False,
+    "invalid_brns_ai":
+        False,
 
-        "six_matches":
-            False,
+    "places_failure":
+        False,
+
+    "matrix_no_route":
+        False,
+
+    "route_unavailable":
+        False,
+
+    "openrouter_failure":
+        False,
+
+    "six_matches":
+        False,
 
         "socket":
             server,
@@ -941,6 +1012,7 @@ def create_blackbox_context():
                 "AI_BYPASS",
                 "USE_LIVE_GOOGLE",
                 "DEBUG",
+                "BRC_SERVICE_URL",
             )
         ):
 

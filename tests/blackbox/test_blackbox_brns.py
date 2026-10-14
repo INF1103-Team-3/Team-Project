@@ -648,14 +648,244 @@ def test_brns_invalid_ai_reply_does_not_save_search():
         close_blackbox_context(
             context
         )
+def test_brns_places_failure_stops_safely():
+    """Places failure stops the search safely without saving history."""
+
+    context = create_blackbox_context()
+
+    try:
+        context[
+            "fixture"
+        ][
+            "places_failure"
+        ] = True
+
+        request = search_request()
+
+        output = run_cli(
+            context,
+            "BRNS",
+            json.dumps(request),
+        )
+
+        assert_shows(
+            context,
+            output,
+            "No restaurants found, or restaurant search is unavailable.",
+        )
+
+        actual = {
+            "nearby_calls":
+                fixture_paths(
+                    context["fixture"]
+                ).count(
+                    "/nearby"
+                ),
+
+            "history":
+                history(
+                    context
+                ),
+
+            "safe_error_shown":
+                (
+                    "No restaurants found, or restaurant search is unavailable."
+                    in output
+                ),
+        }
+
+        expected = {
+            "nearby_calls":
+                1,
+
+            "history":
+                [],
+
+            "safe_error_shown":
+                True,
+        }
+
+        show_case(
+            "BB-BRNS-06: Places failure stops safely",
+            "BRNS/main.py restaurant discovery flow",
+            "Simulates a failed Google Places request and checks "
+            "that BRNS reports the problem safely without saving "
+            "a false search result.",
+            request,
+            expected,
+            actual,
+        )
+
+        assert actual == expected
+
+    finally:
+        close_blackbox_context(
+            context
+        )
 
 
+def test_brns_missing_route_is_not_verified_as_match():
+    """A missing route must not be treated as verified travel evidence."""
+
+    context = create_blackbox_context()
+
+    try:
+        context[
+            "fixture"
+        ][
+            "matrix_no_route"
+        ] = True
+
+        request = search_request()
+
+        output = run_cli(
+            context,
+            "BRNS",
+            json.dumps(request),
+        )
+
+        actual = {
+            "matrix_calls":
+                fixture_paths(
+                    context["fixture"]
+                ).count(
+                    "/matrix"
+                ),
+
+            "estimate_warning_shown":
+                (
+                    "(estimate, unverified)"
+                    in output
+                ),
+
+            "alternatives_shown":
+                (
+                    "Alternatives (2)"
+                    in output
+                ),
+
+            "verified_match_heading_shown":
+                (
+                    "Matches ("
+                    in output
+                ),
+        }
+
+        expected = {
+            "matrix_calls":
+                1,
+
+            "estimate_warning_shown":
+                True,
+
+            "alternatives_shown":
+                True,
+
+            "verified_match_heading_shown":
+                False,
+        }
+
+        show_case(
+            "BB-BRNS-07: Missing route is not a verified match",
+            "BRNS/main.py route-matrix flow",
+            "Simulates Google Routes returning no valid route "
+            "and verifies that estimated travel information is "
+            "clearly marked unverified instead of being treated "
+            "as an exact match.",
+            request,
+            expected,
+            actual,
+        )
+
+        assert actual == expected
+
+    finally:
+        close_blackbox_context(
+            context
+        )
+def test_brns_ai_provider_failure_stops_safely():
+    """AI provider failure does not crash BRNS or save a false result."""
+
+    context = create_blackbox_context()
+
+    try:
+        context[
+            "fixture"
+        ][
+            "openrouter_failure"
+        ] = True
+
+        request = search_request()
+
+        output = run_cli(
+            context,
+            "BRNS",
+            json.dumps(request),
+        )
+
+        assert_shows(
+            context,
+            output,
+            "BRNS AI could not recommend restaurants",
+        )
+
+        actual = {
+            "ai_calls":
+                fixture_paths(
+                    context["fixture"]
+                ).count(
+                    "/chat/completions"
+                ),
+
+            "history":
+                history(
+                    context
+                ),
+
+            "safe_error_shown":
+                (
+                    "BRNS AI could not recommend restaurants"
+                    in output
+                ),
+        }
+
+        expected = {
+            "ai_calls":
+                1,
+
+            "history":
+                [],
+
+            "safe_error_shown":
+                True,
+        }
+
+        show_case(
+            "BB-BRNS-08: AI provider failure is handled safely",
+            "BRNS/main.py AI recommendation flow",
+            "Simulates the configured AI provider failing and "
+            "verifies that BRNS reports the failure safely "
+            "without saving a false recommendation.",
+            request,
+            expected,
+            actual,
+        )
+
+        assert actual == expected
+
+    finally:
+        close_blackbox_context(
+            context
+        )
 TESTS = (
     test_brns_valid_json_shows_match_and_alternative,
     test_brns_invalid_json_never_calls_places_or_saves_history,
     test_brns_driving_traffic_changes_matrix_request,
     test_brns_transit_time_uses_verified_minutes,
     test_brns_invalid_ai_reply_does_not_save_search,
+    test_brns_places_failure_stops_safely,
+    test_brns_missing_route_is_not_verified_as_match,
+    test_brns_ai_provider_failure_stops_safely,
 )
 
 

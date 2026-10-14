@@ -13,6 +13,7 @@ ROOT = TESTS_DIR.parent
 
 BIS_TEST = TESTS_DIR / "bis" / "test_bis.py"
 BRNS_TEST = TESTS_DIR / "brns" / "test_brns.py"
+BRC_TEST = TESTS_DIR / "brc" / "test_brc.py"
 BLACKBOX_TESTS = (
     TESTS_DIR / "blackbox" / "test_blackbox_bis.py",
     TESTS_DIR / "blackbox" / "test_blackbox_brns.py",
@@ -24,13 +25,24 @@ DEPLOYMENT_TEST = TESTS_DIR / "deployment" / "smoke.py"
 TEST_GROUPS = {
     "bis": (BIS_TEST,),
     "brns": (BRNS_TEST,),
-    "core": (BIS_TEST, BRNS_TEST),
+    "brc": (BRC_TEST,),
+
+    "core": (
+        BIS_TEST,
+        BRNS_TEST,
+        BRC_TEST,
+    ),
+
     "blackbox": BLACKBOX_TESTS,
+
     "integration": (INTEGRATION_TEST,),
+
     "deployment": (DEPLOYMENT_TEST,),
+
     "all": (
         BIS_TEST,
         BRNS_TEST,
+        BRC_TEST,
         *BLACKBOX_TESTS,
         INTEGRATION_TEST,
         DEPLOYMENT_TEST,
@@ -45,6 +57,9 @@ GROUP_DESCRIPTIONS = {
     "brns": (
         "Tests BRNS restaurant filtering, recommendation rules, dietary "
         "checks, ranking and hardcoded AI recommendations."
+    ),
+    "brc": (
+        "Tests MUIS halal verification and official outlet matching."
     ),
     "core": (
         "Runs the BIS and BRNS core function tests without calling a live "
