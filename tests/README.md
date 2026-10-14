@@ -67,7 +67,7 @@ The standard `NO_COLOR` environment variable also disables color.
 | `brc/` | BRC halal-verification and official outlet-matching tests |
 | `blackbox/` | CLI process tests and local HTTP fixture infrastructure |
 | `integration/` | BIS-to-BRNS contract tests |
-| `deployment/` | Docker packaging, volume, network, and import smoke tests |
+| `deployment/` | Smoke tests that verify the deployed Docker environment starts correctly and that the main services can import, communicate, and run basic checks |
 
 ## Isolation
 
