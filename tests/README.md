@@ -65,8 +65,8 @@ The standard `NO_COLOR` environment variable also disables color.
 | `bis/` | BIS function tests and fixed inputs |
 | `brns/` | BRNS function tests and fixed restaurant/search inputs |
 | `brc/` | BRC halal-verification and official outlet-matching tests |
-| `blackbox/` | CLI process tests and local HTTP fixture infrastructure |
-| `integration/` | BIS-to-BRNS contract tests |
+| `blackbox/` | End-to-end CLI tests that run BIS and BRNS as real processes using controlled local HTTP services instead of live APIs |
+| `integration/` | Tests that BIS output can be passed correctly into BRNS and that shared request fields and business rules remain consistent |
 | `deployment/` | Smoke tests that verify the deployed Docker environment starts correctly and that the main services can import, communicate, and run basic checks |
 
 ## Isolation
