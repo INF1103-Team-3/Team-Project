@@ -45,8 +45,10 @@ def colors_enabled():
 
 def _console():
     # Create a console at the point of use so stdout capture and redirection work.
+    interactive = _interactive()
     return Console(file=sys.stdout, highlight=False, markup=False,
-                   soft_wrap=True)
+                   soft_wrap=True, force_terminal=interactive,
+                   color_system="truecolor" if interactive else None)
 
 
 def _interactive():

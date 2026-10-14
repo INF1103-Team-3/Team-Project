@@ -279,6 +279,10 @@ import os
 import sys
 
 if os.environ.get("BRC_SERVICE_URL"):
+    # sitecustomize runs before Python adds the script directory to sys.path.
+    # Make application packages available while loading the BRC bridge.
+    if "/app" not in sys.path:
+        sys.path.insert(0, "/app")
     _spec = importlib.util.spec_from_file_location(
         "BRC.main", "/opt/bitefinder/brc_remote.py")
     _module = importlib.util.module_from_spec(_spec)
@@ -286,7 +290,7 @@ if os.environ.get("BRC_SERVICE_URL"):
     sys.modules["BRC.main"] = _module
 PYEOF
 
-ENV PYTHONPATH=/opt/bitefinder${PYTHONPATH:+:${PYTHONPATH}}
+ENV PYTHONPATH=/opt/bitefinder:/app
 
 
 VOLUME ["/data"]
