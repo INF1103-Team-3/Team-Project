@@ -49,6 +49,9 @@ def fetch_chat_models(api_key, timeout=(3, 10)):
     for entry in data:
         if not entry.get("active"):
             continue
+        model_id = (entry.get("id") or "").lower()
+        if "guard" in model_id or "safeguard" in model_id:
+            continue
         inputs = entry.get("input_modalities") or []
         outputs = entry.get("output_modalities") or []
         if "text" not in inputs or "text" not in outputs:
