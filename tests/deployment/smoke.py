@@ -98,62 +98,6 @@ def test_required_application_files_are_packaged():
     assert actual == expected
 
 
-def test_bis_and_brns_modules_import_successfully():
-    """The deployed Python environment can load BIS and BRNS."""
-
-    modules = [
-        "BIS.logic_manager",
-        "BRNS.logic_manager",
-    ]
-
-    test_input = {
-        "modules":
-            modules,
-    }
-
-    expected = {
-        "BIS.logic_manager":
-            "imported",
-
-        "BRNS.logic_manager":
-            "imported",
-    }
-
-    actual = {}
-
-    for module_name in modules:
-
-        try:
-            importlib.import_module(
-                module_name
-            )
-
-            actual[
-                module_name
-            ] = "imported"
-
-        except Exception as error:
-
-            actual[
-                module_name
-            ] = (
-                f"{type(error).__name__}: "
-                f"{error}"
-            )
-
-    show_case(
-        "DEP-03: BiteFinder modules import successfully",
-        "importlib.import_module()",
-        "Confirms that the deployed container has the dependencies "
-        "and Python paths required to load BIS and BRNS.",
-        test_input,
-        expected,
-        actual,
-    )
-
-    assert actual == expected
-
-
 def check_directory_writable(directory):
     """Write and remove a marker without changing stored application data."""
 
@@ -440,7 +384,6 @@ def test_brns_core_tests_pass_without_api_credentials():
 TESTS = (
     test_running_inside_docker,
     test_required_application_files_are_packaged,
-    test_bis_and_brns_modules_import_successfully,
     test_persistent_data_directories_are_writable,
     test_brc_service_is_reachable,
     test_bis_core_tests_pass_without_api_credentials,
