@@ -51,7 +51,8 @@ if [ ! -e /data/.seeded ]; then
 fi
 exec "$@"
 EOF
-RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
+    && chmod 0755 /usr/local/bin/docker-entrypoint.sh
 
 
 FROM base AS brc
