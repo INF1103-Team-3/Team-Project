@@ -28,6 +28,7 @@ Run a smaller group by replacing `all` with one of the following names:
 | --- | --- |
 | `bis` | BIS validation, preferences, travel, cuisine, and structured AI interpretation |
 | `brns` | BRNS eligibility, dietary rules, ranking, hours, and sorting |
+| `brc` | BRC MUIS halal verification and official restaurant outlet matching |
 | `core` | BIS and BRNS function tests together; this is the default group |
 | `blackbox` | Real BIS and BRNS processes with controlled HTTP fixtures |
 | `integration` | BIS-to-BRNS JSON contract and shared rules |
@@ -38,6 +39,7 @@ Examples:
 
 ```bash
 docker compose exec bis-brns python tests/run_tests.py core
+docker compose exec bis-brns python tests/run_tests.py brc
 docker compose exec bis-brns python tests/run_tests.py blackbox
 docker compose exec bis-brns python tests/run_tests.py integration
 ```
@@ -62,6 +64,7 @@ The standard `NO_COLOR` environment variable also disables color.
 | `reporting.py` | Colored case details and PASS/FAIL summaries |
 | `bis/` | BIS function tests and fixed inputs |
 | `brns/` | BRNS function tests and fixed restaurant/search inputs |
+| `brc/` | BRC halal-verification and official outlet-matching tests |
 | `blackbox/` | CLI process tests and local HTTP fixture infrastructure |
 | `integration/` | BIS-to-BRNS contract tests |
 | `deployment/` | Docker packaging, volume, network, and import smoke tests |
