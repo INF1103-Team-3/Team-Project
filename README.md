@@ -201,12 +201,16 @@ or SMTP credentials.
 ## Run the complete project with Docker Compose
 
 The commands shown at the top of `docker-compose.yml` are the canonical way to
-run BiteFinder:
+run BiteFinder. On Windows, open PowerShell in the repository root and run:
 
-```bash
+```powershell
 docker compose up -d --build
 docker compose exec bis-brns python main.py
 ```
+
+The same Docker commands also work in macOS and Linux terminals. Do not add
+`-T` to the interactive BiteFinder command because it disables the terminal
+used for prompts and colors.
 
 The first command builds and starts two containers on `bitefinder-net`:
 
@@ -222,7 +226,7 @@ the command can be run again without rebuilding it.
 
 Check container state at any time with:
 
-```bash
+```powershell
 docker compose ps
 ```
 
@@ -230,19 +234,19 @@ docker compose ps
 
 Check external internet access from the BIS/BRNS container:
 
-```bash
+```powershell
 docker compose exec bis-brns python -c "import urllib.request; r=urllib.request.urlopen('https://www.google.com/generate_204', timeout=10); print('Internet working, HTTP', r.status)"
 ```
 
 Check external internet access from the BRC container:
 
-```bash
+```powershell
 docker compose exec brc python -c "import urllib.request; r=urllib.request.urlopen('https://www.google.com/generate_204', timeout=10); print('Internet working, HTTP', r.status)"
 ```
 
 Check that BIS/BRNS can reach the BRC service over `bitefinder-net`:
 
-```bash
+```powershell
 docker compose exec bis-brns python -c "import urllib.request; print(urllib.request.urlopen('http://brc:8000/health', timeout=5).read().decode())"
 ```
 
@@ -251,10 +255,23 @@ BRC health check prints `{"status": "ok"}`.
 
 Inspect network and BRC errors with:
 
-```bash
+```powershell
 docker compose logs --tail=100 brc
 docker compose exec bis-brns tail -n 100 logs/bitefinder.log
 ```
+
+If a transferred Windows checkout reports an entrypoint `bad interpreter` or
+`exec format` error, rebuild the image after confirming Git uses LF endings:
+
+```powershell
+git ls-files --eol Dockerfile docker-compose.yml
+docker compose down
+docker compose up -d --build
+```
+
+Both files should show `w/lf`. The repository enforces LF through
+`.gitattributes`, and the Docker build also removes stray carriage returns
+from the generated entrypoint as a defensive check.
 
 ### First halal search
 
@@ -268,7 +285,7 @@ resume without retagging completed restaurants.
 To build or refresh the BRC database manually, open its menu and choose option
 `1`:
 
-```bash
+```powershell
 docker compose exec brc python -m BRC.main
 ```
 
@@ -282,14 +299,14 @@ to the same `logs/bitefinder.log` file and share search trace IDs.
 
 Stop both containers while keeping those named volumes:
 
-```bash
+```powershell
 docker compose down
 ```
 
 Delete the containers and all saved named-volume data only when a complete
 reset is intended:
 
-```bash
+```powershell
 docker compose down -v
 ```
 
@@ -302,7 +319,7 @@ services on the internet.
 
 Open a shell in the already running BIS/BRNS container:
 
-```bash
+```powershell
 docker compose exec bis-brns sh
 ```
 
@@ -362,7 +379,7 @@ check communication between the containers.
 
 Run every test:
 
-```bash
+```powershell
 docker compose exec bis-brns python tests/run_tests.py all
 ```
 
@@ -373,19 +390,19 @@ results in an interactive terminal. Set `BITEFINDER_TEST_COLOR=always` or
 
 Run only the BIS and BRNS function tests:
 
-```bash
+```powershell
 docker compose exec bis-brns python tests/run_tests.py core
 ```
 
 Run all process-level black-box tests:
 
-```bash
+```powershell
 docker compose exec bis-brns python tests/run_tests.py blackbox
 ```
 
 Run the BIS-to-BRNS integration tests or Docker deployment checks:
 
-```bash
+```powershell
 docker compose exec bis-brns python tests/run_tests.py integration
 docker compose exec bis-brns python tests/run_tests.py deployment
 ```
@@ -417,7 +434,7 @@ keys or raw provider responses.
 
 Follow the application logs from the host:
 
-```bash
+```powershell
 # Shared BIS, BRNS, and BRC file log
 docker compose exec bis-brns tail -f logs/bitefinder.log
 
