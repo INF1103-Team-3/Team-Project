@@ -1166,5 +1166,507 @@
     },
     "wheelchair_accessible": true,
     "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJ64zDXt4Z2jERpIEl937Y3gg",
+    "name": "AFANTI Chinese Halal Food 阿凡提丝路餐厅",
+    "postal_code": "199738",
+    "address": "39 Arab St, #01-01, Singapore 199738",
+    "number": "8796 0758",
+    "g_rating": "4.4",
+    "g_no_reviews": "251",
+    "cuisine": "chinese",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 70.0,
+    "opening_hours": {
+      "monday": ["1130", "2200"],
+      "tuesday": ["1130", "2200"],
+      "wednesday": ["1130", "2200"],
+      "thursday": ["1130", "2200"],
+      "friday": ["1130", "2200"],
+      "saturday": ["1130", "2200"],
+      "sunday": ["1130", "2200"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJEdY4dA0Z2jERa3NsfvP49s0",
+    "name": "Restaurant Aisyah Halal Chinese XinJiang Cuisine 西北香 中国新疆餐厅",
+    "postal_code": "199724",
+    "address": "25 Arab St, Singapore 199724",
+    "number": "8900 0783",
+    "g_rating": "4.5",
+    "g_no_reviews": "1940",
+    "cuisine": "chinese",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1130", "2100"],
+      "tuesday": ["1130", "2100"],
+      "wednesday": ["1130", "2100"],
+      "thursday": ["1130", "2100"],
+      "friday": ["1130", "2100"],
+      "saturday": ["1130", "2100"],
+      "sunday": ["1130", "2100"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJTUYVWUUZ2jERNZxObE3kl38",
+    "name": "Yi Zun Noodle - Joo Chiat",
+    "postal_code": "427726",
+    "address": "60 Joo Chiat Rd, #01-08/09 Champion Hotel Singapore, Singapore 427726",
+    "number": "6909 9287",
+    "g_rating": "4.5",
+    "g_no_reviews": "1080",
+    "cuisine": "chinese",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1100", "2200"],
+      "tuesday": ["1100", "2200"],
+      "wednesday": ["1100", "2200"],
+      "thursday": ["1100", "2200"],
+      "friday": ["1100", "2200"],
+      "saturday": ["1100", "2200"],
+      "sunday": ["1100", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJiWh8W6UX2jERDmzImQkKQT4",
+    "name": "Nature Vegetarian Delights (NVD) Restaurant",
+    "postal_code": "540171",
+    "address": "171 Sengkang E Dr, #01-12 Rivervale Shores, Singapore 540171",
+    "number": "6286 8028",
+    "g_rating": "4.4",
+    "g_no_reviews": "994",
+    "cuisine": "family",
+    "dietary": [
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": [["1100", "1500"], ["1630", "2100"]],
+      "tuesday": [["1100", "1500"], ["1630", "2100"]],
+      "wednesday": [["1100", "1500"], ["1630", "2100"]],
+      "thursday": [["1100", "1500"], ["1630", "2100"]],
+      "friday": [["1100", "1500"], ["1630", "2100"]],
+      "saturday": [["1000", "1500"], ["1630", "2100"]],
+      "sunday": [["1000", "1500"], ["1630", "2100"]]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJ80zdxLYZ2jERlN48yXA0hBA",
+    "name": "The Dim Sum Place @ North Bridge Road",
+    "postal_code": "198759",
+    "address": "791 N Bridge Rd, Singapore 198759",
+    "number": "6655 8787",
+    "g_rating": "4.7",
+    "g_no_reviews": "11179",
+    "cuisine": "chinese",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 30.0,
+    "opening_hours": {
+      "monday": ["1100", "2300"],
+      "tuesday": ["1100", "2300"],
+      "wednesday": ["1100", "2300"],
+      "thursday": ["1100", "2300"],
+      "friday": ["1100", "2359"],
+      "saturday": [["0000", "0030"], ["1100", "2359"]],
+      "sunday": [["0000", "0030"], ["1100", "2300"]]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJue3QPzsY2jERNukowLKc7HU",
+    "name": "Yes Natural Restaurant",
+    "postal_code": "388184",
+    "address": "57 Lor 27 Geylang, Singapore 388184",
+    "number": "6741 1580",
+    "g_rating": "4.4",
+    "g_no_reviews": "508",
+    "cuisine": "chinese",
+    "dietary": [
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": [["1100", "1500"], ["1645", "2130"]],
+      "tuesday": [["1100", "1500"], ["1645", "2130"]],
+      "wednesday": [["1100", "1500"], ["1645", "2130"]],
+      "thursday": [["1100", "1500"], ["1645", "2130"]],
+      "friday": [["1100", "1530"], ["1700", "2100"]],
+      "saturday": [["1100", "1530"], ["1645", "2130"]],
+      "sunday": [["1100", "1530"], ["1645", "2130"]]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJw7Bn0vYZ2jER7YWZKh57T4Y",
+    "name": "Lotus Vegetarian Restaurant",
+    "postal_code": "329926",
+    "address": "201 Balestier Rd, Level 2 Holiday Inn Express and Suites Singapore, Singapore 329926",
+    "number": "8668 0090",
+    "g_rating": "4.4",
+    "g_no_reviews": "864",
+    "cuisine": null,
+    "dietary": [
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 30.0,
+    "avg_price_high_sgd": 40.0,
+    "opening_hours": {
+      "monday": [["1130", "1500"], ["1730", "2130"]],
+      "tuesday": [["1130", "1500"], ["1730", "2130"]],
+      "wednesday": [["1130", "1500"], ["1730", "2130"]],
+      "thursday": [["1130", "1500"], ["1730", "2130"]],
+      "friday": [["1130", "1500"], ["1730", "2130"]],
+      "saturday": [["1130", "1500"], ["1730", "2130"]],
+      "sunday": [["1130", "1500"], ["1730", "2130"]]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJNd6qDbsZ2jERKHQ6CsS5ePI",
+    "name": "Su Shi Piao Xiang Vegetarian Food",
+    "postal_code": "188979",
+    "address": "190 Middle Rd, #01-01, Singapore 188979",
+    "number": "6610 9709",
+    "g_rating": "4.3",
+    "g_no_reviews": "163",
+    "cuisine": null,
+    "dietary": [
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0700", "2000"],
+      "tuesday": ["0700", "2000"],
+      "wednesday": ["0700", "2000"],
+      "thursday": ["0700", "2000"],
+      "friday": ["0700", "2000"],
+      "saturday": ["0700", "2000"],
+      "sunday": ["0700", "2000"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJgYFGglM92jERlYT219UyxXw",
+    "name": "JING | Halal Hotpot & Grill Buffet",
+    "postal_code": "437157",
+    "address": "11 Tanjong Katong Rd, #02-19/20 KINEX Mall, Singapore 437157",
+    "number": "6022 1926",
+    "g_rating": "4.6",
+    "g_no_reviews": "2128",
+    "cuisine": "buffet",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 50.0,
+    "avg_price_high_sgd": 60.0,
+    "opening_hours": {
+      "monday": ["1200", "2200"],
+      "tuesday": ["1200", "2200"],
+      "wednesday": ["1200", "2200"],
+      "thursday": ["1200", "2200"],
+      "friday": ["1200", "2200"],
+      "saturday": ["1200", "2200"],
+      "sunday": ["1200", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJr3YApn4W2jERpOoDzsTM4HM",
+    "name": "SHU Vegetarian",
+    "postal_code": "799488",
+    "address": "259 Jln Kayu, Singapore 799488",
+    "number": "6493 7265",
+    "g_rating": "4.2",
+    "g_no_reviews": "651",
+    "cuisine": null,
+    "dietary": [
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": [["0000", "0100"], ["1100", "2359"]],
+      "tuesday": [["0000", "0100"], ["1100", "2359"]],
+      "wednesday": [["0000", "0100"], ["1100", "2359"]],
+      "thursday": [["0000", "0100"], ["1100", "2359"]],
+      "friday": [["0000", "0100"], ["1100", "2359"]],
+      "saturday": [["0000", "0100"], ["1100", "2359"]],
+      "sunday": [["0000", "0100"], ["1100", "2359"]]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJeTuMoMgZ2jERtsDRxaQ73hM",
+    "name": "Saute san | City Square Mall | Farrer Park | Vegetarian Vegan Halal | Japanese Korean Western Fusion Cuisines",
+    "postal_code": "208539",
+    "address": "180 Kitchener Rd, #03 - 23 / 24, Singapore 208539",
+    "number": "8788 4284",
+    "g_rating": "4.3",
+    "g_no_reviews": "892",
+    "cuisine": null,
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1130", "2030"],
+      "tuesday": ["1130", "2030"],
+      "wednesday": ["1130", "2030"],
+      "thursday": ["1130", "2030"],
+      "friday": ["1130", "2030"],
+      "saturday": ["1130", "2030"],
+      "sunday": ["1130", "2130"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJxRY-geMZ2jER70EOqeirs8c",
+    "name": "First Bowl Rice Kitchen Funan Mall",
+    "postal_code": "179105",
+    "address": "107 #02-06 North Bridge Road, Mall, Funan, Singapore 179105",
+    "number": null,
+    "g_rating": "4.5",
+    "g_no_reviews": "1040",
+    "cuisine": "chinese",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1100", "2100"],
+      "tuesday": ["1100", "2100"],
+      "wednesday": ["1100", "2100"],
+      "thursday": ["1100", "2100"],
+      "friday": ["1100", "2130"],
+      "saturday": ["1100", "2130"],
+      "sunday": ["1100", "2130"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJoZLy4cYZ2jERqg86rJOMIdM",
+    "name": "RASAMALA @T3 Public",
+    "postal_code": "819663",
+    "address": "Airport Boulevard T3 Departure, #03-21 Singapore Changi Airport, Singapore 819663",
+    "number": "8869 7257",
+    "g_rating": "4.7",
+    "g_no_reviews": "459",
+    "cuisine": "chinese",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 60.0,
+    "opening_hours": {
+      "monday": [["1100", "1530"], ["1630", "2200"]],
+      "tuesday": [["1100", "1530"], ["1630", "2200"]],
+      "wednesday": [["1100", "1530"], ["1630", "2200"]],
+      "thursday": [["1100", "1530"], ["1630", "2200"]],
+      "friday": [["1100", "1530"], ["1630", "2200"]],
+      "saturday": ["1100", "2200"],
+      "sunday": ["1100", "2200"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJH5D8tn4W2jERDXBjrGme72g",
+    "name": "Tang Tea House (Jalan Kayu)",
+    "postal_code": "799466",
+    "address": "242 Jln Kayu, Singapore 799466",
+    "number": "6483 2298",
+    "g_rating": "4.3",
+    "g_no_reviews": "3134",
+    "cuisine": "chinese",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1100", "2359"],
+      "tuesday": ["1100", "2359"],
+      "wednesday": ["1100", "2359"],
+      "thursday": ["1100", "2359"],
+      "friday": ["1100", "2359"],
+      "saturday": [["0000", "0200"], ["1100", "2359"]],
+      "sunday": [["0000", "0200"], ["1100", "2359"]]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJ2zOiSwsZ2jER385x8pDtd8A",
+    "name": "Segar Restaurant",
+    "postal_code": "059413",
+    "address": "133 New Bridge Rd, #B2-39/40/41, Singapore 059413",
+    "number": "6444 1778",
+    "g_rating": "3.8",
+    "g_no_reviews": "369",
+    "cuisine": "chinese",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 30.0,
+    "opening_hours": {
+      "monday": ["1130", "2130"],
+      "tuesday": ["1130", "2130"],
+      "wednesday": ["1130", "2130"],
+      "thursday": ["1130", "2130"],
+      "friday": ["1130", "2130"],
+      "saturday": ["1130", "2130"],
+      "sunday": ["1130", "2130"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJe5TGTaUZ2jERLAswMbq_VNc",
+    "name": "Saute Sushi | Paya Lebar Square | Paya Lebar | Vegetarian Vegan Halal | Japanese Cuisines",
+    "postal_code": "409051",
+    "address": "60 Paya Lebar Rd, #B1-19 Paya Lebar Square, Singapore 409051",
+    "number": "8870 3565",
+    "g_rating": "4.8",
+    "g_no_reviews": "2089",
+    "cuisine": "japanese",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 20.0,
+    "avg_price_high_sgd": 30.0,
+    "opening_hours": {
+      "monday": ["1130", "2130"],
+      "tuesday": ["1130", "2130"],
+      "wednesday": ["1130", "2130"],
+      "thursday": ["1130", "2130"],
+      "friday": ["1130", "2130"],
+      "saturday": ["1130", "2130"],
+      "sunday": ["1130", "2130"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "official"
+  },
+  {
+    "google_place_id": "ChIJkQGWmbwZ2jERRuDwN6RisFk",
+    "name": "MacKenzie Rex Restaurant",
+    "postal_code": "188668",
+    "address": "66 Prinsep St, Singapore 188668",
+    "number": "6336 1702",
+    "g_rating": "4.2",
+    "g_no_reviews": "1041",
+    "cuisine": "chinese",
+    "dietary": [
+      "halal"
+    ],
+    "avg_price_low_sgd": 10.0,
+    "avg_price_high_sgd": 20.0,
+    "opening_hours": {
+      "monday": ["1100", "2200"],
+      "tuesday": ["1100", "2200"],
+      "wednesday": ["1100", "2200"],
+      "thursday": ["1100", "2200"],
+      "friday": ["1100", "2200"],
+      "saturday": ["1100", "2200"],
+      "sunday": ["1100", "2200"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJAdJ_1hQ92jEREl3XSdZR4tg",
+    "name": "Zi Zai Vegetarian (Tampines)",
+    "postal_code": "520801",
+    "address": "801 Tampines Ave 4, #01-281, Singapore 520801",
+    "number": "6781 1820",
+    "g_rating": "4",
+    "g_no_reviews": "1434",
+    "cuisine": null,
+    "dietary": [
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0800", "2215"],
+      "tuesday": ["0800", "2215"],
+      "wednesday": ["0800", "2215"],
+      "thursday": ["0800", "2215"],
+      "friday": ["0800", "2215"],
+      "saturday": ["0800", "2215"],
+      "sunday": ["0800", "2215"]
+    },
+    "wheelchair_accessible": null,
+    "halal_certification": "none"
+  },
+  {
+    "google_place_id": "ChIJdSXkPmM92jER1Ihaw0l172Q",
+    "name": "DaJie Makan Place @ Bedok | Halal Thai Mookata & Mala Hotpot",
+    "postal_code": "469528",
+    "address": "344 Bedok Rd, Singapore 469528",
+    "number": "8222 7845",
+    "g_rating": "4.7",
+    "g_no_reviews": "436",
+    "cuisine": "chinese",
+    "dietary": [
+      "halal",
+      "vegetarian"
+    ],
+    "avg_price_low_sgd": 30.0,
+    "avg_price_high_sgd": 40.0,
+    "opening_hours": {
+      "monday": [["0000", "0200"], ["1700", "2359"]],
+      "tuesday": [["0000", "0200"], ["1700", "2359"]],
+      "wednesday": [["0000", "0200"], ["1700", "2359"]],
+      "thursday": [["0000", "0200"], ["1700", "2359"]],
+      "friday": [["0000", "0200"], ["1700", "2359"]],
+      "saturday": [["0000", "0200"], ["1700", "2359"]],
+      "sunday": [["0000", "0200"], ["1700", "2359"]]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "unofficial"
   }
 ]

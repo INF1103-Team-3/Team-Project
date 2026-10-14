@@ -335,7 +335,7 @@ def _grounded_ai_reasons(restaurant, request, codes, candidate_id=None):
             and restaurant.get("spicy_options") is True,
             "has spicy options"),
     }
-    if (not isinstance(codes, list) or len(codes) > 4
+    if (not isinstance(codes, list)
             or any(not isinstance(code, str) or code not in checks
                    for code in codes)
             or len(codes) != len(set(codes))):

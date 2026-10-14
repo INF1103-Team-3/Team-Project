@@ -3,7 +3,11 @@ Multi-provider chain (OpenRouter + direct Gemini) with automatic fallback.
 Zero domain logic here. Never crashes: returns (ok, result_or_error, model_used_or_None)."""
 import json
 import re
+import signal
+import threading
 import time
+from contextlib import contextmanager
+
 import requests
 from BRNS import config, logic_manager
 from shared import debug_log as log
@@ -44,6 +48,7 @@ REQUIRED_KEYS = ["cuisine", "dietary", "budget_band",
                  "budget_min", "budget_max", "min_rating",
                  "max_walk_minutes", "max_drive_km", "eat_time", "free_text_notes"]
 VALID_BANDS = ("any", "inexpensive", "moderate", "expensive", "very_expensive")
+_ACTIVE_CHAIN_DEADLINE = None
 
 
 def validate_chain():
@@ -111,6 +116,56 @@ def _log_ai_event(context, detail, level="WARNING"):
     log.debug_log(detail, level, f"BRNS.ai_manager.{context}")
 
 
+@contextmanager
+def _hard_request_deadline(seconds):
+    """Enforce a total request deadline in the Linux application container.
+
+    Requests' read timeout resets whenever another response chunk arrives. A
+    provider can therefore keep a non-streaming request alive indefinitely by
+    sending occasional bytes. SIGALRM supplies a true wall-clock deadline in
+    the main thread; other platforms retain Requests' connect/read timeout.
+    """
+    supported = (
+        hasattr(signal, "SIGALRM")
+        and hasattr(signal, "setitimer")
+        and threading.current_thread() is threading.main_thread()
+    )
+    if not supported:
+        yield
+        return
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_timer = signal.getitimer(signal.ITIMER_REAL)
+    started = time.monotonic()
+
+    def expire(_signum, _frame):
+        raise requests.Timeout("AI provider exceeded its total deadline")
+
+    signal.signal(signal.SIGALRM, expire)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_timer[0] > 0:
+            elapsed = time.monotonic() - started
+            signal.setitimer(
+                signal.ITIMER_REAL,
+                max(0.001, previous_timer[0] - elapsed),
+                previous_timer[1],
+            )
+
+
+def _post(url, **kwargs):
+    """Post with both socket inactivity and total wall-clock limits."""
+    seconds = config.AI_REQUEST_TIMEOUT_SECONDS
+    if _ACTIVE_CHAIN_DEADLINE is not None:
+        seconds = min(seconds, max(0.05, _ACTIVE_CHAIN_DEADLINE - time.monotonic()))
+    kwargs["timeout"] = (min(3, seconds), seconds)
+    with _hard_request_deadline(seconds):
+        return requests.post(url, **kwargs)
+
+
 def _call_openrouter(model_id, system_prompt, user_text):
     """One OpenRouter attempt. Returns (True, reply_text) or (False, error)."""
     headers = {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
@@ -118,13 +173,17 @@ def _call_openrouter(model_id, system_prompt, user_text):
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_text}]
     for use_json_mode in (True, False):
-        payload = {"model": model_id, "messages": messages, "temperature": 0}
+        payload = {
+            "model": model_id,
+            "messages": messages,
+            "temperature": 0,
+            "max_tokens": 2048,
+        }
         if use_json_mode:
             payload["response_format"] = {"type": "json_object"}
         try:
-            resp = requests.post(
-                config.OPENROUTER_URL, headers=headers, json=payload,
-                timeout=(3, 12))
+            resp = _post(
+                config.OPENROUTER_URL, headers=headers, json=payload)
         except requests.RequestException as err:
             return False, f"network error: {err}"
         if resp.status_code == 429:
@@ -148,14 +207,14 @@ def _call_gemini(model_name, system_prompt, user_text):
         "systemInstruction": {"parts": [{"text": system_prompt}]},
         "contents": [{"role": "user", "parts": [{"text": user_text}]}],
         "generationConfig": {"temperature": 0,
+                             "maxOutputTokens": 2048,
                              "responseMimeType": "application/json"},
     }
     for use_json in (True, False):
         if not use_json:
             body.pop("generationConfig", None)
         try:
-            resp = requests.post(url, headers=headers, json=body,
-                                 timeout=(3, 12))
+            resp = _post(url, headers=headers, json=body)
         except requests.RequestException as err:
             return False, f"network error: {err}"
         if resp.status_code == 429:
@@ -179,13 +238,17 @@ def _call_groq(model_id, system_prompt, user_text):
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_text}]
     for use_json_mode in (True, False):
-        payload = {"model": model_id, "messages": messages, "temperature": 0}
+        payload = {
+            "model": model_id,
+            "messages": messages,
+            "temperature": 0,
+            "max_tokens": 2048,
+        }
         if use_json_mode:
             payload["response_format"] = {"type": "json_object"}
         try:
-            resp = requests.post(
-                config.GROQ_URL, headers=headers, json=payload,
-                timeout=(3, 12))
+            resp = _post(
+                config.GROQ_URL, headers=headers, json=payload)
         except requests.RequestException as err:
             return False, f"network error: {err}"
         if resp.status_code == 429:
@@ -306,7 +369,7 @@ def has_configured_provider():
     )
 
 
-def recommend_candidates(request, candidates, previous_restaurants=()):
+def _recommend_candidates(request, candidates, previous_restaurants=()):
     """Return a complete AI recommendation, or None if every model fails."""
     if not candidates:
         return None
@@ -356,7 +419,14 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
                             "candidates": facts,
                             "previous_restaurants": prior_names},
                            separators=(",", ":"))
+    chain_started = time.monotonic()
     for entry in config.MODEL_CHAIN:
+        if time.monotonic() - chain_started >= config.AI_CHAIN_TIMEOUT_SECONDS:
+            _log_ai_event(
+                "recommend_candidates",
+                f"AI fallback chain reached its "
+                f"{config.AI_CHAIN_TIMEOUT_SECONDS:g}s deadline.")
+            break
         provider, model = entry["provider"], entry["model"]
         if provider == "openrouter" and config.OPENROUTER_API_KEY:
             _log_ai_event("recommend_candidates",
@@ -395,7 +465,6 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
                        or type(item["id"]) is not int
                        or item["id"] < 0 or item["id"] >= len(candidates)
                        or not isinstance(item["reason_codes"], list)
-                       or len(item["reason_codes"]) > 4
                        or any(not isinstance(code, str)
                               or code not in REASON_CODES
                               for code in item["reason_codes"])
@@ -415,3 +484,15 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
         return recommendations
     _log_ai_event("recommend_candidates", "No model returned a valid order.")
     return None
+
+
+def recommend_candidates(request, candidates, previous_restaurants=()):
+    """Rank candidates while enforcing one deadline across all providers."""
+    global _ACTIVE_CHAIN_DEADLINE
+    previous_deadline = _ACTIVE_CHAIN_DEADLINE
+    _ACTIVE_CHAIN_DEADLINE = (
+        time.monotonic() + config.AI_CHAIN_TIMEOUT_SECONDS)
+    try:
+        return _recommend_candidates(request, candidates, previous_restaurants)
+    finally:
+        _ACTIVE_CHAIN_DEADLINE = previous_deadline

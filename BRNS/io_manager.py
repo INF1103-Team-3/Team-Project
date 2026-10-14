@@ -255,6 +255,13 @@ def show_halal_verification_start(candidate_count, database_missing=False):
             "take longer.", "warning")
 
 
+def show_ai_ranking_start(candidate_count, timeout_seconds):
+    """Tell the user what happens during the bounded AI ranking stage."""
+    ui.message(
+        f"BRNS found {candidate_count} candidate(s). AI is ranking them "
+        f"(up to {timeout_seconds:g} seconds).")
+
+
 def show_halal_verification_summary(summary):
     """Show how many candidates BRC accepted or rejected."""
     ui.message(
@@ -266,8 +273,11 @@ def show_halal_verification_summary(summary):
             "candidate(s) as unofficial fallback results.", "warning")
     if summary["errors"]:
         ui.message(
-            f"BRC stopped after a {summary['error_type']} error; "
-            "continuing with Google halal information where available. "
+            f"BRC encountered {summary['errors']} "
+            f"{summary['error_type']} error"
+            f"{'s' if summary['errors'] != 1 else ''} during individual "
+            "checks; it continued checking the other candidates and used "
+            "Google halal information where available. "
             f"{summary['excluded']} candidate(s) had no accepted halal "
             "evidence. Details: logs/bitefinder.log.", "warning")
 

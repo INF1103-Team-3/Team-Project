@@ -7,10 +7,23 @@ ENV_FILE = BASE_DIR.parent / ".env"
 load_dotenv(ENV_FILE)
 DEBUG = os.getenv("DEBUG", "false").strip().lower() == "true"
 
+
+def _bounded_seconds(name, default, maximum):
+    """Read a positive timeout while keeping accidental values reasonable."""
+    try:
+        value = float(os.getenv(name, str(default)))
+    except ValueError:
+        value = float(default)
+    return min(max(value, 1.0), float(maximum))
+
 # --- AI layer: OpenRouter + direct Gemini + Groq (separate quota pools) ---
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")   # from aistudio.google.com — free, no card
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+AI_REQUEST_TIMEOUT_SECONDS = _bounded_seconds(
+    "BRNS_AI_REQUEST_TIMEOUT_SECONDS", 12, 60)
+AI_CHAIN_TIMEOUT_SECONDS = _bounded_seconds(
+    "BRNS_AI_CHAIN_TIMEOUT_SECONDS", 45, 180)
 
 OPENROUTER_URL = os.getenv("BITEFINDER_OPENROUTER_URL",
                             "https://openrouter.ai/api/v1/chat/completions")
