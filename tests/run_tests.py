@@ -21,6 +21,12 @@ BLACKBOX_TESTS = (
 )
 INTEGRATION_TEST = TESTS_DIR / "integration" / "test_bis_brns_integration.py"
 DEPLOYMENT_TEST = TESTS_DIR / "deployment" / "smoke.py"
+API_AI_TEST = TESTS_DIR / "API testing" / "test_ai_keys_and_fallback.py"
+API_GOOGLE_TEST = TESTS_DIR / "API testing" / "test_google_api.py"
+API_TESTS = (
+    API_AI_TEST,
+    API_GOOGLE_TEST,
+)
 
 TEST_GROUPS = {
     "bis": (BIS_TEST,),
@@ -38,6 +44,8 @@ TEST_GROUPS = {
     "integration": (INTEGRATION_TEST,),
 
     "deployment": (DEPLOYMENT_TEST,),
+
+    "api": API_TESTS,
 
     "all": (
         BIS_TEST,
@@ -77,27 +85,32 @@ GROUP_DESCRIPTIONS = {
         "Checks that BiteFinder and its automated tests work inside the "
         "submitted Docker environment."
     ),
+    "api": (
+        "Validates live API key connectivity (OpenRouter, Gemini, Groq, "
+        "Google Maps), AI fallback cascades, and Google Maps services."
+    ),
     "all": "Runs every BiteFinder core, black-box, integration and deployment test.",
 }
 
 
-def safe_test_environment(use_brc_service=False):
-    """Return an importable test environment without live API credentials."""
+def safe_test_environment(use_brc_service=False, is_api_test=False):
+    """Return an importable test environment; retains credentials only for API tests."""
     environment = os.environ.copy()
     paths = [str(ROOT), str(TESTS_DIR)]
     if environment.get("PYTHONPATH"):
         paths.append(environment["PYTHONPATH"])
     environment["PYTHONPATH"] = os.pathsep.join(paths)
 
-    for key in (
-        "GEMINI_API_KEY",
-        "GROQ_API_KEY",
-        "OPENROUTER_API_KEY",
-        "OPENROUTER_API_KEYS",
-        "OPENROUTER_API_KEYS_FILE",
-        "GOOGLE_MAPS_API_KEY",
-    ):
-        environment.pop(key, None)
+    if not is_api_test:
+        for key in (
+            "GEMINI_API_KEY",
+            "GROQ_API_KEY",
+            "OPENROUTER_API_KEY",
+            "OPENROUTER_API_KEYS",
+            "OPENROUTER_API_KEYS_FILE",
+            "GOOGLE_MAPS_API_KEY",
+        ):
+            environment.pop(key, None)
     if not use_brc_service:
         environment.pop("BRC_SERVICE_URL", None)
     return environment
@@ -119,10 +132,14 @@ def run_test_file(test_file):
     print(style(f"Running: {relative}", "running"))
     print(style("-" * 72, "rule"), flush=True)
 
+    is_api = "API testing" in str(test_file)
     result = subprocess.run(
         [sys.executable, str(test_file)],
         cwd=ROOT,
-        env=safe_test_environment(test_file == DEPLOYMENT_TEST),
+        env=safe_test_environment(
+            use_brc_service=(test_file == DEPLOYMENT_TEST),
+            is_api_test=is_api,
+        ),
     )
     status = "PASS" if result.returncode == 0 else "FAIL"
     role = "pass" if result.returncode == 0 else "fail"

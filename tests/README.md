@@ -33,6 +33,7 @@ Run a smaller group by replacing `all` with one of the following names:
 | `blackbox` | Real BIS and BRNS processes with controlled HTTP fixtures |
 | `integration` | BIS-to-BRNS JSON contract and shared rules |
 | `deployment` | Image contents, writable volumes, imports, BRC networking, and core tests inside Docker |
+| `api` | Live API key connectivity (OpenRouter, Gemini, Groq, Google Maps), AI multi-tier fallback chains, and Google Maps services |
 | `all` | Every group above |
 
 Examples:
@@ -68,6 +69,7 @@ The standard `NO_COLOR` environment variable also disables color.
 | `blackbox/` | End-to-end CLI tests that run BIS and BRNS as real processes using controlled local HTTP services instead of live APIs |
 | `integration/` | Tests that BIS output can be passed correctly into BRNS and that shared request fields and business rules remain consistent |
 | `deployment/` | Smoke tests that verify the deployed Docker environment starts correctly and that the main services can import, communicate, and run basic checks |
+| `API testing/` | Live validation tests for AI keys (OpenRouter, Gemini, Groq), multi-tier fallback cascades, and Google Maps Platform services |
 
 ## Isolation
 
