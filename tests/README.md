@@ -69,7 +69,7 @@ The standard `NO_COLOR` environment variable also disables color.
 | `blackbox/` | End-to-end CLI tests that run BIS and BRNS as real processes using controlled local HTTP services instead of live APIs |
 | `integration/` | Tests that BIS output can be passed correctly into BRNS and that shared request fields and business rules remain consistent |
 | `deployment/` | Smoke tests that verify the deployed Docker environment starts correctly and that the main services can import, communicate, and run basic checks |
-| `API testing/` | Live validation tests for AI keys (OpenRouter, Gemini, Groq), multi-tier fallback cascades, and Google Maps Platform services |
+| `API/` | Live validation tests for AI keys (OpenRouter, Gemini, Groq), multi-tier fallback cascades, and Google Maps Platform services |
 
 ## Isolation
 

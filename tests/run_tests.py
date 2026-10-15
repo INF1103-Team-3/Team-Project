@@ -21,8 +21,8 @@ BLACKBOX_TESTS = (
 )
 INTEGRATION_TEST = TESTS_DIR / "integration" / "test_bis_brns_integration.py"
 DEPLOYMENT_TEST = TESTS_DIR / "deployment" / "smoke.py"
-API_AI_TEST = TESTS_DIR / "API testing" / "test_ai_keys_and_fallback.py"
-API_GOOGLE_TEST = TESTS_DIR / "API testing" / "test_google_api.py"
+API_AI_TEST = TESTS_DIR / "API" / "test_ai_keys_and_fallback.py"
+API_GOOGLE_TEST = TESTS_DIR / "API" / "test_google_api.py"
 API_TESTS = (
     API_AI_TEST,
     API_GOOGLE_TEST,
@@ -132,7 +132,7 @@ def run_test_file(test_file):
     print(style(f"Running: {relative}", "running"))
     print(style("-" * 72, "rule"), flush=True)
 
-    is_api = "API testing" in str(test_file)
+    is_api = test_file in API_TESTS
     result = subprocess.run(
         [sys.executable, str(test_file)],
         cwd=ROOT,
