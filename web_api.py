@@ -188,6 +188,41 @@ def _resolve_user_scope(authorization: str | None) -> str:
     return "guest"
 
 
+def _format_model_display(raw_model: str) -> str:
+    """Format 'provider/model' into a clean display label e.g. 'Gemini AI (gemini-3.5-flash-lite)'."""
+    clean = str(raw_model or "").strip()
+    if not clean:
+        return "Gemini AI"
+    if "/" in clean:
+        provider, model_name = clean.split("/", 1)
+        p_lower = provider.lower()
+        if p_lower == "gemini":
+            return f"Gemini AI ({model_name})"
+        if p_lower == "groq":
+            return f"Groq AI ({model_name})"
+        if p_lower == "openrouter":
+            return f"OpenRouter AI ({model_name})"
+    return clean
+
+
+def _get_default_active_model() -> str:
+    """Return the first configured AI model in BRNS MODEL_CHAIN."""
+    chain = getattr(brns_main.config, "MODEL_CHAIN", [])
+    for entry in chain:
+        prov = entry.get("provider", "")
+        mod = entry.get("model", "")
+        if prov == "gemini" and getattr(brns_main.config, "GEMINI_API_KEY", ""):
+            return _format_model_display(f"{prov}/{mod}")
+        if prov == "openrouter" and getattr(brns_main.config, "OPENROUTER_API_KEY", ""):
+            return _format_model_display(f"{prov}/{mod}")
+        if prov == "groq" and getattr(brns_main.config, "GROQ_API_KEY", ""):
+            return _format_model_display(f"{prov}/{mod}")
+    return "Gemini AI"
+
+
+_CURRENT_ACTIVE_MODEL: str = _get_default_active_model()
+
+
 # ---------- Health & Metadata Endpoints ----------
 
 @app.get("/api/health")
@@ -211,6 +246,12 @@ def health():
 def get_cuisines():
     """Return available cuisine tags."""
     return {"cuisines": sorted(list(CUISINES))}
+
+
+@app.get("/api/active-model")
+def get_active_model():
+    """Return the AI model currently being tried or most recently used by BRNS."""
+    return {"active_model": _CURRENT_ACTIVE_MODEL}
 
 
 # ---------- Authentication Endpoints ----------
@@ -511,12 +552,22 @@ def search_restaurants(req: SearchRequestModel, authorization: str | None = Head
         brns_main.config.MAX_ALTERNATIVES_SHOWN = 20
         serialized_payload = json.dumps(payload)
 
+        global _CURRENT_ACTIVE_MODEL
+        _CURRENT_ACTIVE_MODEL = _get_default_active_model()
         captured_models: list[str] = []
         orig_log_ai = getattr(brns_main.ai_manager, "_log_ai_event", None)
 
         def _tracking_log_ai(context: str, detail: str, level: str = "WARNING"):
-            if isinstance(detail, str) and detail.startswith("Accepted ") and detail.endswith(" response."):
-                captured_models.append(detail[len("Accepted "):-len(" response.")].strip())
+            global _CURRENT_ACTIVE_MODEL
+            if isinstance(detail, str):
+                if detail.startswith("Trying ") and detail.endswith("."):
+                    raw_trying = detail[len("Trying "):-1].strip()
+                    _CURRENT_ACTIVE_MODEL = _format_model_display(raw_trying)
+                elif detail.startswith("Accepted ") and detail.endswith(" response."):
+                    raw_accepted = detail[len("Accepted "):-len(" response.")].strip()
+                    formatted = _format_model_display(raw_accepted)
+                    _CURRENT_ACTIVE_MODEL = formatted
+                    captured_models.append(formatted)
             if orig_log_ai:
                 orig_log_ai(context, detail, level)
 
@@ -528,7 +579,7 @@ def search_restaurants(req: SearchRequestModel, authorization: str | None = Head
             if orig_log_ai:
                 brns_main.ai_manager._log_ai_event = orig_log_ai
 
-        model_used = captured_models[-1] if captured_models else (search_results.get("model_used") or "AI Fallback Chain")
+        model_used = captured_models[-1] if captured_models else _CURRENT_ACTIVE_MODEL
 
         # 3. Store search in MongoDB history if database is available
         if db.is_db_available():

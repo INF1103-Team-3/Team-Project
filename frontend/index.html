@@ -1261,10 +1261,32 @@
       searchBtn.disabled = true;
       searchBtn.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Analyzing & Ranking...`;
 
+      let activeModelLabel = "Gemini AI";
+      try {
+        const mRes = await fetch('/api/active-model');
+        if (mRes.ok) {
+          const mData = await mRes.json();
+          if (mData.active_model) activeModelLabel = mData.active_model;
+        }
+      } catch {}
+
       statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200";
       statusIcon.innerHTML = `<svg class="animate-spin w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
-      statusText.textContent = "Querying Google Places, computing routes, and ranking candidates with AI (Gemini / Groq / OpenRouter fallback chain)...";
+      statusText.textContent = `Querying Google Places, computing routes, and ranking candidates with ${activeModelLabel}...`;
       statusBanner.classList.remove('hidden');
+
+      const modelPollTimer = setInterval(async () => {
+        try {
+          const pRes = await fetch('/api/active-model');
+          if (pRes.ok) {
+            const pData = await pRes.json();
+            if (pData.active_model && pData.active_model !== activeModelLabel) {
+              activeModelLabel = pData.active_model;
+              statusText.textContent = `Querying Google Places, computing routes, and ranking candidates with ${activeModelLabel}...`;
+            }
+          }
+        } catch {}
+      }, 600);
 
       try {
         const response = await fetch('/api/search', {
@@ -1304,7 +1326,7 @@
 
         const matches = data.matches || [];
         const alternatives = data.alternatives || [];
-        const modelUsed = data.model_used || 'AI Fallback Chain';
+        const modelUsed = data.model_used || activeModelLabel;
         lastOrigin = data.origin || null;
         lastMatches = matches;
         lastAlternatives = alternatives;
@@ -1331,6 +1353,7 @@
         statusText.textContent = error.message;
         lucide.createIcons();
       } finally {
+        clearInterval(modelPollTimer);
         searchBtn.disabled = false;
         searchBtn.innerHTML = `<i data-lucide="search" class="w-4 h-4"></i> Find Matching Restaurants`;
         lucide.createIcons();
