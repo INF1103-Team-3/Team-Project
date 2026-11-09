@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BiteFinder — Singapore Smart Restaurant Discovery</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts & Lucide Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#fff7ed',
+              100: '#ffedd5',
+              500: '#f97316',
+              600: '#ea580c',
+              700: '#c2410c',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+          <i data-lucide="utensils" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <span class="text-xl font-extrabold tracking-tight bg-gradient-to-r from-brand-600 to-amber-600 bg-clip-text text-transparent">BiteFinder</span>
+          <span class="hidden sm:inline-block ml-2 text-xs font-semibold px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full border border-brand-200">Singapore</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button id="profileBtn" class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-700 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors border border-slate-200">
+          <i data-lucide="user" class="w-4 h-4"></i>
+          <span id="profileUsername">Profile</span>
+        </button>
+        <div class="flex items-center gap-1 text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="dbStatus">MongoDB Ready</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 w-full">
+
+    <!-- Left Column: Search & Filters (5 cols) -->
+    <div class="lg:col-span-5 flex flex-col gap-6">
+      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <h2 class="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+          <i data-lucide="sliders-horizontal" class="w-5 h-5 text-brand-600"></i>
+          Search Preferences
+        </h2>
+
+        <form id="searchForm" class="space-y-5">
+          <!-- Location Input -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Starting Location</label>
+            <div class="relative">
+              <i data-lucide="map-pin" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+              <input type="text" id="locationInput" required placeholder="Enter postal code, address, or landmark"
+                class="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition"
+                value="Compass One">
+            </div>
+            <!-- Quick preset pills -->
+            <div class="flex flex-wrap gap-1.5 mt-2">
+              <button type="button" class="preset-pill text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Compass One">Compass One</button>
+              <button type="button" class="preset-pill text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Rivervale Plaza">Rivervale Plaza</button>
+              <button type="button" class="preset-pill text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Bugis Junction">Bugis Junction</button>
+              <button type="button" class="preset-pill text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Jewel Changi">Jewel Changi</button>
+            </div>
+          </div>
+
+          <!-- Travel Mode & Max Limit -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Travel Mode</label>
+              <div class="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl">
+                <button type="button" class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 bg-white shadow-sm text-brand-600" data-mode="walk">
+                  <i data-lucide="footprints" class="w-4 h-4"></i> Walk
+                </button>
+                <button type="button" class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 text-slate-600 hover:text-slate-900" data-mode="drive">
+                  <i data-lucide="car" class="w-4 h-4"></i> Drive
+                </button>
+                <button type="button" class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 text-slate-600 hover:text-slate-900" data-mode="transit">
+                  <i data-lucide="train" class="w-4 h-4"></i> Transit
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between items-center mb-1.5">
+                <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Max Time</label>
+                <span id="timeDisplay" class="text-xs font-bold text-brand-600">30 mins</span>
+              </div>
+              <input type="range" id="timeSlider" min="5" max="90" step="5" value="30" class="w-full accent-brand-600 mt-2">
+            </div>
+          </div>
+
+          <!-- Budget per person -->
+          <div>
+            <div class="flex justify-between items-center mb-1.5">
+              <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Budget Per Person</label>
+              <span id="budgetDisplay" class="text-xs font-bold text-brand-600">SGD $30</span>
+            </div>
+            <input type="range" id="budgetSlider" min="5" max="100" step="5" value="30" class="w-full accent-brand-600">
+            <div class="flex justify-between text-[10px] text-slate-400 mt-1">
+              <span>$5 (Hawker)</span>
+              <span>$30 (Casual)</span>
+              <span>$100+ (Fine Dine)</span>
+            </div>
+          </div>
+
+          <!-- Dietary Requirements -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Dietary Requirements</label>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/50 transition">
+                <input type="checkbox" id="halalCheck" class="rounded text-emerald-600 focus:ring-emerald-500">
+                <div class="text-xs">
+                  <div class="font-bold text-slate-800">MUIS Halal</div>
+                  <div class="text-[10px] text-slate-400">Official verification</div>
+                </div>
+              </label>
+              <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 cursor-pointer hover:border-blue-500 hover:bg-blue-50/50 transition">
+                <input type="checkbox" id="vegCheck" class="rounded text-blue-600 focus:ring-blue-500">
+                <div class="text-xs">
+                  <div class="font-bold text-slate-800">Vegetarian</div>
+                  <div class="text-[10px] text-slate-400">Plant-based options</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Cuisines -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Preferred Cuisine (Optional)</label>
+            <select id="cuisineSelect" class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition bg-white">
+              <option value="">Any Cuisine</option>
+              <option value="chinese">Chinese</option>
+              <option value="malay">Malay</option>
+              <option value="indian">Indian</option>
+              <option value="japanese">Japanese</option>
+              <option value="korean">Korean</option>
+              <option value="western">Western</option>
+              <option value="italian">Italian</option>
+              <option value="thai">Thai</option>
+              <option value="vietnamese">Vietnamese</option>
+              <option value="peranakan">Peranakan</option>
+              <option value="indonesian">Indonesian</option>
+              <option value="middle eastern">Middle Eastern</option>
+            </select>
+          </div>
+
+          <!-- Special Request Text (Gemini AI interpretation) -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Special Requests (AI Interpreted)</label>
+            <input type="text" id="specialInput" placeholder="e.g. at least 4.5 stars, spicy food, quiet dinner"
+              class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+          </div>
+
+          <!-- Submit Button -->
+          <button type="submit" id="searchBtn"
+            class="w-full py-3 px-4 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-brand-600 to-amber-600 hover:from-brand-700 hover:to-amber-700 shadow-md shadow-brand-500/25 flex items-center justify-center gap-2 transition active:scale-[0.99]">
+            <i data-lucide="search" class="w-4 h-4"></i>
+            Find Matching Restaurants
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Right Column: Results & Interactive Display (7 cols) -->
+    <div class="lg:col-span-7 flex flex-col gap-6">
+
+      <!-- Status Banner -->
+      <div id="statusBanner" class="hidden p-4 rounded-2xl border text-sm flex items-center gap-3">
+        <div id="statusIcon"></div>
+        <div id="statusText" class="font-medium"></div>
+      </div>
+
+      <!-- Results Header -->
+      <div id="resultsHeader" class="hidden flex items-center justify-between">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900" id="resultsCount">Recommendations</h2>
+          <p class="text-xs text-slate-500" id="resultsSubtext">Verified with Google Places and official MUIS records.</p>
+        </div>
+      </div>
+
+      <!-- Results Container -->
+      <div id="resultsList" class="space-y-4">
+        <!-- Initial Empty State -->
+        <div id="emptyState" class="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center flex flex-col items-center justify-center">
+          <div class="w-16 h-16 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mb-4">
+            <i data-lucide="compass" class="w-8 h-8"></i>
+          </div>
+          <h3 class="text-base font-bold text-slate-800">Ready to explore Singapore dining</h3>
+          <p class="text-xs text-slate-500 max-w-sm mt-1">Select your starting location and dining criteria on the left, then click Find Matching Restaurants.</p>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <script>
+    // State
+    let currentMode = 'walk';
+
+    // Init Lucide Icons
+    lucide.createIcons();
+
+    // Mode buttons
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode-btn').forEach(b => {
+          b.classList.remove('bg-white', 'shadow-sm', 'text-brand-600');
+          b.classList.add('text-slate-600');
+        });
+        btn.classList.add('bg-white', 'shadow-sm', 'text-brand-600');
+        btn.classList.remove('text-slate-600');
+        currentMode = btn.dataset.mode;
+      });
+    });
+
+    // Preset pills
+    document.querySelectorAll('.preset-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        document.getElementById('locationInput').value = pill.dataset.loc;
+      });
+    });
+
+    // Sliders
+    const timeSlider = document.getElementById('timeSlider');
+    const timeDisplay = document.getElementById('timeDisplay');
+    timeSlider.addEventListener('input', (e) => {
+      timeDisplay.textContent = `${e.target.value} mins`;
+    });
+
+    const budgetSlider = document.getElementById('budgetSlider');
+    const budgetDisplay = document.getElementById('budgetDisplay');
+    budgetSlider.addEventListener('input', (e) => {
+      budgetDisplay.textContent = `SGD $${e.target.value}`;
+    });
+
+    // Load profile on start
+    async function loadProfile() {
+      try {
+        const res = await fetch('/api/profile');
+        if (res.ok) {
+          const profile = await res.json();
+          if (profile.username) {
+            document.getElementById('profileUsername').textContent = profile.username;
+          }
+          if (profile.location && profile.location.length) {
+            document.getElementById('locationInput').value = profile.location[0];
+          }
+          if (profile.budget_per_person) {
+            budgetSlider.value = profile.budget_per_person;
+            budgetDisplay.textContent = `SGD $${profile.budget_per_person}`;
+          }
+          if (profile.dietary_requirements && profile.dietary_requirements.includes('halal')) {
+            document.getElementById('halalCheck').checked = true;
+          }
+        }
+      } catch (err) {
+        console.warn('Profile load err:', err);
+      }
+    }
+    loadProfile();
+
+    // Search Handler
+    document.getElementById('searchForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const searchBtn = document.getElementById('searchBtn');
+      const resultsList = document.getElementById('resultsList');
+      const emptyState = document.getElementById('emptyState');
+      const statusBanner = document.getElementById('statusBanner');
+      const statusText = document.getElementById('statusText');
+      const statusIcon = document.getElementById('statusIcon');
+      const resultsHeader = document.getElementById('resultsHeader');
+      const resultsCount = document.getElementById('resultsCount');
+
+      // Dietary
+      const dietary = [];
+      if (document.getElementById('halalCheck').checked) dietary.push('halal');
+      if (document.getElementById('vegCheck').checked) dietary.push('vegetarian');
+
+      // Special request
+      const special = document.getElementById('specialInput').value.trim();
+      const otherPreferences = special ? [special] : [];
+
+      const payload = {
+        location: document.getElementById('locationInput').value.trim(),
+        mode: currentMode,
+        max_travel_minutes: parseFloat(timeSlider.value),
+        max_distance_km: null,
+        budget_per_person: parseFloat(budgetSlider.value),
+        dietary_requirements: dietary,
+        cuisine: document.getElementById('cuisineSelect').value || null,
+        liked_cuisines: [],
+        disliked_cuisines: [],
+        other_preferences: otherPreferences,
+        traffic_aware: false
+      };
+
+      // Loading state
+      searchBtn.disabled = true;
+      searchBtn.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Analyzing & Ranking...`;
+
+      statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 border-amber-200 text-amber-800";
+      statusIcon.innerHTML = `<svg class="animate-spin w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+      statusText.textContent = "Querying Google Places, computing routes, and ranking candidates with Gemini AI...";
+      statusBanner.classList.remove('hidden');
+
+      try {
+        const response = await fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const rawText = await response.text();
+        let data;
+        try {
+          data = JSON.parse(rawText);
+        } catch (parseErr) {
+          if (response.status === 504) {
+            throw new Error("Search timed out while BRC was warming up official MUIS records. Please retry your search now!");
+          }
+          throw new Error(`Server error (${response.status})`);
+        }
+
+        if (!response.ok) {
+          throw new Error(data.detail || data.error || 'Search failed');
+        }
+
+        if (data.message && (!data.matches || data.matches.length === 0)) {
+          statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 border-amber-200 text-amber-800";
+          statusIcon.innerHTML = `<i data-lucide="info" class="w-4 h-4 text-amber-600"></i>`;
+          statusText.textContent = data.message;
+          lucide.createIcons();
+          if (emptyState) emptyState.remove();
+          resultsHeader.classList.remove('hidden');
+          resultsCount.textContent = "0 Recommendations";
+          renderResults([], []);
+          return;
+        }
+
+        const matches = data.matches || [];
+        const alternatives = data.alternatives || [];
+        const totalFound = matches.length + alternatives.length;
+
+        statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-emerald-50 border-emerald-200 text-emerald-800";
+        statusIcon.innerHTML = `<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>`;
+        statusText.textContent = `Found ${matches.length} direct match${matches.length === 1 ? '' : 'es'} and ${alternatives.length} alternative${alternatives.length === 1 ? '' : 's'}.`;
+        lucide.createIcons();
+
+        if (emptyState) emptyState.remove();
+        resultsHeader.classList.remove('hidden');
+        resultsCount.textContent = `${totalFound} Restaurant Recommendation${totalFound === 1 ? '' : 's'}`;
+
+        renderResults(matches, alternatives);
+
+      } catch (error) {
+        statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-rose-50 border-rose-200 text-rose-800";
+        statusIcon.innerHTML = `<i data-lucide="alert-circle" class="w-4 h-4 text-rose-600"></i>`;
+        statusText.textContent = error.message;
+        lucide.createIcons();
+      } finally {
+        searchBtn.disabled = false;
+        searchBtn.innerHTML = `<i data-lucide="search" class="w-4 h-4"></i> Find Matching Restaurants`;
+        lucide.createIcons();
+      }
+    });
+
+    function renderResults(matches, alternatives) {
+      const container = document.getElementById('resultsList');
+      container.innerHTML = '';
+
+      const allItems = [
+        ...matches.map(m => ({ ...m, isMatch: true })),
+        ...alternatives.map(a => ({ ...a, isMatch: false }))
+      ];
+
+      if (allItems.length === 0) {
+        container.innerHTML = `
+          <div class="bg-white p-8 rounded-2xl border border-slate-200 text-center">
+            <p class="text-sm font-semibold text-slate-700">No restaurants matched all constraints.</p>
+            <p class="text-xs text-slate-400 mt-1">Try expanding your travel time limit or budget.</p>
+          </div>
+        `;
+        return;
+      }
+
+      allItems.forEach(item => {
+        const r = item.restaurant || {};
+        const reasons = item.reasons || [];
+        const isOfficialHalal = r.halal_certification === 'official' || (r.muis_check && r.muis_check.status === 'verified');
+        const isGoogleHalal = r.halal_hint || (r.dietary_requirements && r.dietary_requirements.includes('halal'));
+
+        const card = document.createElement('div');
+        card.className = "bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition flex flex-col gap-3";
+
+        // Route string
+        let routeStr = '';
+        if (r.walk_minutes) routeStr = `🚶 ${Math.round(r.walk_minutes)} mins walk`;
+        else if (r.drive_minutes) routeStr = `🚗 ${Math.round(r.drive_minutes)} mins drive`;
+        else if (r.transit_minutes) routeStr = `🚆 ${Math.round(r.transit_minutes)} mins transit`;
+
+        // Maps URL
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name + ' ' + (r.address || 'Singapore'))}`;
+
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-base font-bold text-slate-900">${r.name || 'Restaurant'}</h3>
+                ${item.isMatch
+                  ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">Match</span>`
+                  : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">Alternative</span>`}
+              </div>
+              <p class="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                <i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-400"></i>
+                ${r.address || 'Singapore'}
+              </p>
+            </div>
+
+            <!-- Rating badge -->
+            <div class="flex flex-col items-end">
+              <div class="flex items-center gap-1 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200">
+                <i data-lucide="star" class="w-3.5 h-3.5 text-amber-500 fill-amber-500"></i>
+                <span class="text-xs font-bold text-amber-800">${r.rating || r.g_rating || 'N/A'}</span>
+              </div>
+              ${r.rating_count ? `<span class="text-[10px] text-slate-400 mt-0.5">${r.rating_count} reviews</span>` : ''}
+            </div>
+          </div>
+
+          <!-- Badges Bar -->
+          <div class="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
+            ${isOfficialHalal
+              ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                   <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600"></i> Official MUIS Halal
+                 </span>`
+              : isGoogleHalal
+              ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+                   <i data-lucide="info" class="w-3.5 h-3.5 text-amber-600"></i> Halal (Google Indicated)
+                 </span>`
+              : ''}
+
+            ${r.serves_vegetarian_food
+              ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
+                   <i data-lucide="leaf" class="w-3.5 h-3.5 text-blue-600"></i> Vegetarian
+                 </span>`
+              : ''}
+
+            ${routeStr ? `<span class="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700">${routeStr}</span>` : ''}
+
+            ${r.price_range ? `<span class="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700">💰 ${r.price_range}</span>` : ''}
+
+            ${r.open_now ? `<span class="text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700">🟢 Open Now</span>` : ''}
+          </div>
+
+          <!-- AI Grounded Reasons -->
+          ${reasons && reasons.length ? `
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-600">
+              <span class="font-bold text-slate-700 block mb-1">Why this matches:</span>
+              <ul class="list-disc list-inside space-y-0.5 text-slate-600">
+                ${reasons.map(res => `<li>${res}</li>`).join('')}
+              </ul>
+            </div>
+          ` : ''}
+
+          <!-- Footer Actions -->
+          <div class="flex items-center justify-end pt-2">
+            <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer"
+              class="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1 hover:underline">
+              Get Directions on Google Maps <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+            </a>
+          </div>
+        `;
+
+        container.appendChild(card);
+      });
+
+      lucide.createIcons();
+    }
+  </script>
+</body>
+</html>
+

@@ -1668,5 +1668,29 @@
     },
     "wheelchair_accessible": true,
     "halal_certification": "unofficial"
+  },
+  {
+    "google_place_id": "ChIJ53w1GTgX2jERTtRBk2kxirQ",
+    "name": "Pig's Organ Soup",
+    "postal_code": "540118",
+    "address": "118 Rivervale Dr, Singapore 540118",
+    "number": null,
+    "g_rating": "3.4",
+    "g_no_reviews": "11",
+    "cuisine": null,
+    "dietary": [],
+    "avg_price_low_sgd": 1.0,
+    "avg_price_high_sgd": 10.0,
+    "opening_hours": {
+      "monday": ["0000", "2359"],
+      "tuesday": ["0000", "2359"],
+      "wednesday": ["0000", "2359"],
+      "thursday": ["0000", "2359"],
+      "friday": ["0000", "2359"],
+      "saturday": ["0000", "2359"],
+      "sunday": ["0000", "2359"]
+    },
+    "wheelchair_accessible": true,
+    "halal_certification": "none"
   }
 ]

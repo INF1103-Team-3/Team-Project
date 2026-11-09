@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BiteFinder Architecture Diagram Export</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen p-8 flex flex-col items-center justify-center font-sans">
+  <div class="max-w-4xl w-full bg-white p-8 rounded-2xl shadow-lg border border-slate-200">
+    <div class="flex items-center justify-between border-b pb-4 mb-6">
+      <div>
+        <h1 class="text-xl font-bold text-slate-900">BiteFinder System Architecture</h1>
+        <p class="text-xs text-slate-500">Docker Containerization, Nginx Reverse Proxy, FastAPI, and MongoDB NoSQL</p>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="downloadSVG()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition border border-slate-300">
+          Download SVG
+        </button>
+        <button onclick="downloadPNG()" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow transition">
+          Download PNG (for Slides)
+        </button>
+      </div>
+    </div>
+
+    <!-- Diagram Render Area -->
+    <div id="diagramContainer" class="flex justify-center p-6 bg-slate-50 rounded-xl border border-slate-200">
+      <pre class="mermaid" id="mermaidGraph">
+flowchart TD
+    User([User Browser])
+    
+    subgraph Docker ["Docker Network: bitefinder-test-net"]
+        Nginx["Nginx Reverse Proxy<br/>Port 80 (External Entrypoint)"]
+        
+        API["Python Backend (FastAPI)<br/>web_api.py (Port 8000 Internal)"]
+        BRC["BRC Halal Microservice<br/>brc_service.py (Port 8000 Internal)"]
+        DB[("MongoDB 7.0 NoSQL<br/>Port 27017 Internal")]
+        
+        Nginx -->|"Serves static HTML/Tailwind"| User
+        Nginx -->|"Proxies /api/* requests"| API
+        API <-->|"Reads/Writes Users & Restaurants"| DB
+        API -->|"Verifies Halal Certification"| BRC
+        BRC <-->|"Cached MUIS Database"| DB
+    end
+
+    User -->|"HTTP Requests (http://localhost)"| Nginx
+      </pre>
+    </div>
+  </div>
+
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'default' });
+
+    function downloadSVG() {
+      const svg = document.querySelector("#diagramContainer svg");
+      if (!svg) return alert("Diagram is still rendering, please wait a moment.");
+      const serializer = new XMLSerializer();
+      const source = serializer.serializeToString(svg);
+      const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "bitefinder-architecture.svg";
+      a.click();
+    }
+
+    function downloadPNG() {
+      const svg = document.querySelector("#diagramContainer svg");
+      if (!svg) return alert("Diagram is still rendering, please wait a moment.");
+      const serializer = new XMLSerializer();
+      const source = serializer.serializeToString(svg);
+      const img = new Image();
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(source);
+      img.onload = function() {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width * 2;
+        canvas.height = img.height * 2;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const a = document.createElement("a");
+        a.href = canvas.toDataURL("image/png");
+        a.download = "bitefinder-architecture.png";
+        a.click();
+      };
+    }
+  </script>
+</body>
+</html>
+

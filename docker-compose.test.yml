@@ -1,0 +1,136 @@
+# Test Docker Compose file for NoSQL database, web server, and webpage testing.
+# Run with:
+#   docker compose -f docker-compose.test.yml up -d
+#
+name: bitefinder-test
+
+services:
+  # 1. NoSQL Database
+  mongodb:
+    image: mongo:7.0
+    container_name: bitefinder-test-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: bitefinder
+    volumes:
+      - mongo-test-data:/data/db
+    networks:
+      - bitefinder-test-net
+
+  # 2. Halal checker microservice
+  brc:
+    build:
+      context: .
+      target: brc
+    image: bitefinder-brc
+    container_name: bitefinder-test-brc
+    hostname: brc
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - brc-test-data:/data
+      - bitefinder-test-logs:/data/logs
+    networks:
+      - bitefinder-test-net
+
+  # 3. FastAPI Web API Server
+  api:
+    build:
+      context: .
+      target: bis-brns
+      args:
+        SEED_ACCOUNTS: ${SEED_ACCOUNTS:-yes}
+    image: bitefinder-api
+    container_name: bitefinder-test-api
+    hostname: api
+    restart: unless-stopped
+    command: ["uvicorn", "web_api:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      BRC_SERVICE_URL: http://brc:8000
+      MONGO_URI: mongodb://mongodb:27017/bitefinder
+      TERM: xterm-256color
+      COLORTERM: truecolor
+    depends_on:
+      brc:
+        condition: service_healthy
+      mongodb:
+        condition: service_started
+    volumes:
+      - ./web_api.py:/app/web_api.py
+      - bis-brns-test-data:/data
+      - bitefinder-test-logs:/data/logs
+    networks:
+      - bitefinder-test-net
+
+  # 4. Nginx Web Server (Reverse Proxy + Static Frontend)
+  web:
+    image: nginx:alpine
+    container_name: bitefinder-test-web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+    networks:
+      - bitefinder-test-net
+
+  # 5. BIS + BRNS CLI container (optional, kept running)
+  bis-brns:
+    build:
+      context: .
+      target: bis-brns
+      args:
+        SEED_ACCOUNTS: ${SEED_ACCOUNTS:-yes}
+    image: bitefinder
+    container_name: bitefinder-test-bis-brns
+    hostname: bis-brns
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    command: ["sleep", "infinity"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      BRC_SERVICE_URL: http://brc:8000
+      MONGO_URI: mongodb://mongodb:27017/bitefinder
+      TERM: xterm-256color
+      COLORTERM: truecolor
+    depends_on:
+      brc:
+        condition: service_healthy
+      mongodb:
+        condition: service_started
+    volumes:
+      - ./web_api.py:/app/web_api.py
+      - bis-brns-test-data:/data
+      - bitefinder-test-logs:/data/logs
+    networks:
+      - bitefinder-test-net
+
+networks:
+  bitefinder-test-net:
+    name: bitefinder-test-net
+    driver: bridge
+    internal: false
+
+volumes:
+  mongo-test-data:
+    name: bitefinder-mongo-test-data
+  brc-test-data:
+    name: bitefinder-brc-test-data
+  bis-brns-test-data:
+    name: bitefinder-bis-brns-test-data
+  bitefinder-test-logs:
+    name: bitefinder-test-logs
+
