@@ -573,6 +573,76 @@ def test_turn_by_turn_route_endpoint():
         web_api.brns_main.route_to = orig_route_to
 
 
+def test_multi_cuisine_and_custom_cuisine_division():
+    """WEB-09: Selecting multiple cuisines (including custom typed cuisines) divides outputs equally."""
+    orig_resolve = web_api.bis_data.resolve_location
+    orig_search = web_api.brns_main.search
+    seen_payloads = []
+
+    def fake_resolve(loc, key):
+        return {"query": loc, "label": "Compass One", "latitude": 1.392, "longitude": 103.895}
+
+    def fake_search(serialized):
+        p = json.loads(serialized)
+        seen_payloads.append(p)
+        tag = p["cuisine"] if p["cuisine"] != "none" else "ramen"
+        return {
+            "matches": [
+                {"restaurant": {"name": f"{tag.title()} Spot {i}", "address": f"{i} Rd"}, "reasons": ["Match"]}
+                for i in range(1, 5)
+            ],
+            "alternatives": [
+                {"restaurant": {"name": f"{tag.title()} Alt {i}", "address": f"{i} Ave"}, "reasons": ["Alt"]}
+                for i in range(1, 3)
+            ],
+            "exclusions": [],
+        }
+
+    try:
+        web_api.bis_data.resolve_location = fake_resolve
+        web_api.brns_main.search = fake_search
+
+        res = client.post(
+            "/api/search",
+            json={
+                "location": "Compass One",
+                "mode": "walk",
+                "max_travel_minutes": 20.0,
+                "budget_per_person": 25.0,
+                "liked_cuisines": ["chinese", "ramen"],
+            },
+        )
+        data = res.json()
+
+        actual = {
+            "status_code": res.status_code,
+            "sub_searches_executed": len(seen_payloads),
+            "custom_cuisine_in_other_prefs": "ramen cuisine" in seen_payloads[1].get("other_preferences", []),
+            "cuisines_breakdown": data.get("cuisines_breakdown"),
+            "total_divided_outputs": len(data.get("matches", [])) + len(data.get("alternatives", [])),
+        }
+        expected = {
+            "status_code": 200,
+            "sub_searches_executed": 2,
+            "custom_cuisine_in_other_prefs": True,
+            "cuisines_breakdown": {"chinese": 3, "ramen": 3},
+            "total_divided_outputs": 6,
+        }
+
+        show_case(
+            "WEB-09: Multi-Cuisine Division & Custom Cuisine Search",
+            "POST /api/search",
+            "Verifies that selecting multiple cuisines (including custom non-dropdown cuisines) divides outputs by the number of cuisines selected.",
+            {"liked_cuisines": ["chinese", "ramen"], "raw_per_cuisine": 6},
+            expected,
+            actual,
+        )
+        assert actual == expected
+    finally:
+        web_api.bis_data.resolve_location = orig_resolve
+        web_api.brns_main.search = orig_search
+
+
 TESTS = (
     test_health_and_cuisines,
     test_authentication_lifecycle,
@@ -582,6 +652,7 @@ TESTS = (
     test_search_graceful_late_night_empty_message,
     test_search_history_and_recent_searches,
     test_turn_by_turn_route_endpoint,
+    test_multi_cuisine_and_custom_cuisine_division,
 )
 
 

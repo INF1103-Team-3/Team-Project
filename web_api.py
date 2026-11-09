@@ -15,6 +15,7 @@ Exposes REST endpoints for the dynamic webpage:
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import os
 import secrets
 import sys
@@ -116,7 +117,7 @@ def _sync_from_cli_users_file() -> None:
         debug_log.debug_log(f"CLI->Mongo sync warning: {exc}", "WARNING", "web_api.sync")
 
 
-def _normalize_cli_list_items(items: list[str] | None, is_location: bool = False) -> list[str] | None:
+def _normalize_cli_list_items(items: list[str] | None, is_location: bool = False, lowercase: bool = False) -> list[str] | None:
     """Ensure list items contain at least one letter so BIS profile_schema.normalize_list accepts them."""
     if items is None:
         return None
@@ -124,11 +125,14 @@ def _normalize_cli_list_items(items: list[str] | None, is_location: bool = False
         return None
     cleaned: list[str] = []
     for raw in items:
-        val = str(raw or "").strip().lower()
+        val = str(raw or "").strip()
+        if lowercase:
+            val = val.lower()
         if not val:
             continue
         if not any(c.isalpha() for c in val):
-            val = f"singapore {val}" if is_location else f"pref {val}"
+            prefix = "singapore" if lowercase else "Singapore"
+            val = f"{prefix} {val}" if is_location else f"pref {val}"
         if val not in cleaned:
             cleaned.append(val)
     return cleaned
@@ -149,8 +153,12 @@ def _sync_to_cli_users_file(doc: dict[str, Any]) -> None:
                     cli_users = loaded
         uid = str(doc.get("userID") or doc.get("_id"))
         pref = doc.get("preferences") or {}
-        locs = _normalize_cli_list_items(pref.get("location"), is_location=True)
-        other_prefs = _normalize_cli_list_items(pref.get("other_preferences"), is_location=False)
+        locs = _normalize_cli_list_items(pref.get("location"), is_location=True, lowercase=True)
+        other_prefs = _normalize_cli_list_items(pref.get("other_preferences"), is_location=False, lowercase=True)
+        raw_liked = pref.get("liked_cuisines")
+        cli_liked = [str(c).strip().lower() for c in raw_liked if str(c).strip().lower() in CUISINES] if isinstance(raw_liked, list) else None
+        raw_disliked = pref.get("disliked_cuisines")
+        cli_disliked = [str(c).strip().lower() for c in raw_disliked if str(c).strip().lower() in CUISINES] if isinstance(raw_disliked, list) else None
         cli_users[uid] = {
             "userID": uid,
             "email": email,
@@ -162,8 +170,8 @@ def _sync_to_cli_users_file(doc: dict[str, Any]) -> None:
                 "max_travel_time_minutes": pref.get("max_travel_time_minutes"),
                 "budget_per_person": pref.get("budget_per_person"),
                 "dietary_requirements": pref.get("dietary_requirements"),
-                "liked_cuisines": pref.get("liked_cuisines"),
-                "disliked_cuisines": pref.get("disliked_cuisines"),
+                "liked_cuisines": cli_liked,
+                "disliked_cuisines": cli_disliked,
                 "other_preferences": other_prefs,
             },
         }
@@ -623,25 +631,50 @@ def search_restaurants(req: SearchRequestModel, authorization: str | None = Head
         if minutes is None and distance is None:
             minutes = 20.0
 
-        # Construct the validated 10-field BRNS search payload
-        cuisine_val = req.cuisine.lower() if req.cuisine and req.cuisine.lower() in CUISINES else "none"
-        payload = {
-            "origin": origin,
-            "mode": req.mode if req.mode in ("walk", "drive", "transit") else "walk",
-            "max_distance_km": distance,
-            "max_travel_minutes": minutes,
-            "traffic_aware": req.traffic_aware if req.mode == "drive" else False,
-            "cuisine": cuisine_val,
-            "budget_per_person": req.budget_per_person,
-            "other_preferences": req.other_preferences,
-            "dietary_requirements": [d.lower() for d in req.dietary_requirements],
-            "disliked_cuisines": [c.lower() for c in req.disliked_cuisines],
-        }
+        # Collect all selected preferred cuisines (supports multiple + custom typed cuisines)
+        selected_cuisines: list[str] = []
+        for raw_c in (req.liked_cuisines or []):
+            for part in str(raw_c or "").split(","):
+                c_clean = part.strip().lower()
+                if c_clean and c_clean not in ("none", "any", "any cuisine") and c_clean not in selected_cuisines:
+                    selected_cuisines.append(c_clean)
+        if req.cuisine:
+            for part in str(req.cuisine).split(","):
+                c_clean = part.strip().lower()
+                if c_clean and c_clean not in ("none", "any", "any cuisine") and c_clean not in selected_cuisines:
+                    selected_cuisines.append(c_clean)
+
+        base_other_prefs = _normalize_cli_list_items(list(req.other_preferences), is_location=False) or []
+        base_disliked = [c.strip().lower() for c in req.disliked_cuisines if c and c.strip().lower() in CUISINES]
+
+        def _build_payload_for_cuisine(c_target: str | None) -> dict[str, Any]:
+            if not c_target:
+                c_val = "none"
+                other_p = list(base_other_prefs)
+            elif c_target in CUISINES:
+                c_val = c_target
+                other_p = list(base_other_prefs)
+            else:
+                # Custom typed cuisine not in standard 20 CUISINES list
+                c_val = "none"
+                custom_wish = _normalize_cli_list_items([f"{c_target} cuisine"], is_location=False) or []
+                other_p = list(base_other_prefs) + [w for w in custom_wish if w not in base_other_prefs]
+            return {
+                "origin": origin,
+                "mode": req.mode if req.mode in ("walk", "drive", "transit") else "walk",
+                "max_distance_km": distance,
+                "max_travel_minutes": minutes,
+                "traffic_aware": req.traffic_aware if req.mode == "drive" else False,
+                "cuisine": c_val,
+                "budget_per_person": req.budget_per_person,
+                "other_preferences": other_p,
+                "dietary_requirements": [d.lower() for d in req.dietary_requirements],
+                "disliked_cuisines": base_disliked,
+            }
 
         # 2. Execute BRNS search (Places + Routes + AI Ranking + Halal check)
         brns_main.config.MAX_MATCHES_SHOWN = 20
         brns_main.config.MAX_ALTERNATIVES_SHOWN = 20
-        serialized_payload = json.dumps(payload)
 
         global _CURRENT_ACTIVE_MODEL
         _CURRENT_ACTIVE_MODEL = _get_default_active_model()
@@ -662,15 +695,86 @@ def search_restaurants(req: SearchRequestModel, authorization: str | None = Head
             if orig_log_ai:
                 orig_log_ai(context, detail, level)
 
+        cuisines_breakdown: dict[str, int] = {}
+
         if orig_log_ai:
             brns_main.ai_manager._log_ai_event = _tracking_log_ai
         try:
-            search_results = brns_main.search(serialized_payload)
+            if len(selected_cuisines) <= 1:
+                single_c = selected_cuisines[0] if selected_cuisines else None
+                payload = _build_payload_for_cuisine(single_c)
+                search_results = brns_main.search(json.dumps(payload))
+                if single_c:
+                    for item in search_results.get("matches", []) + search_results.get("alternatives", []):
+                        if isinstance(item, dict):
+                            item["matched_cuisine"] = single_c
+                    cuisines_breakdown[single_c] = len(search_results.get("matches", [])) + len(search_results.get("alternatives", []))
+            else:
+                # Multiple preferred cuisines selected: divide outputs by the number of cuisines selected
+                num_cuisines = len(selected_cuisines)
+                combined_matches: list[dict[str, Any]] = []
+                combined_alternatives: list[dict[str, Any]] = []
+                combined_exclusions: list[Any] = []
+                seen_keys: set[str] = set()
+                last_empty_error: Exception | None = None
+
+                for c_target in selected_cuisines:
+                    sub_payload = _build_payload_for_cuisine(c_target)
+                    try:
+                        sub_res = brns_main.search(json.dumps(sub_payload))
+                    except Exception as sub_exc:
+                        sub_msg = str(sub_exc)
+                        if "No restaurants found" in sub_msg or "no confirmed open" in sub_msg.lower():
+                            last_empty_error = sub_exc
+                            cuisines_breakdown[c_target] = 0
+                            continue
+                        raise
+
+                    raw_m = [
+                        dict(m, matched_cuisine=c_target)
+                        for m in sub_res.get("matches", [])
+                        if _make_place_key(m.get("restaurant") or {}) not in seen_keys
+                    ]
+                    raw_a = [
+                        dict(a, matched_cuisine=c_target)
+                        for a in sub_res.get("alternatives", [])
+                        if _make_place_key(a.get("restaurant") or {}) not in seen_keys
+                    ]
+                    total_for_c = len(raw_m) + len(raw_a)
+                    if total_for_c == 0:
+                        cuisines_breakdown[c_target] = 0
+                        continue
+
+                    # Divide this cuisine's outputs by the number of cuisines selected
+                    quota_for_c = min(
+                        max(1, 20 // num_cuisines),
+                        max(1, math.ceil(total_for_c / num_cuisines)),
+                    )
+                    taken_m = raw_m[:quota_for_c]
+                    rem_slots = max(0, quota_for_c - len(taken_m))
+                    taken_a = raw_a[:rem_slots]
+
+                    for item in taken_m + taken_a:
+                        seen_keys.add(_make_place_key(item.get("restaurant") or {}))
+                    combined_matches.extend(taken_m)
+                    combined_alternatives.extend(taken_a)
+                    combined_exclusions.extend(sub_res.get("exclusions", []))
+                    cuisines_breakdown[c_target] = len(taken_m) + len(taken_a)
+
+                if not combined_matches and not combined_alternatives and last_empty_error is not None:
+                    raise last_empty_error
+
+                search_results = {
+                    "matches": combined_matches,
+                    "alternatives": combined_alternatives,
+                    "exclusions": combined_exclusions,
+                }
         finally:
             if orig_log_ai:
                 brns_main.ai_manager._log_ai_event = orig_log_ai
 
         model_used = captured_models[-1] if captured_models else _CURRENT_ACTIVE_MODEL
+        cuisine_summary_str = ", ".join(selected_cuisines)
 
         # 3. Store search in MongoDB history if database is available
         if db.is_db_available():
@@ -690,7 +794,8 @@ def search_restaurants(req: SearchRequestModel, authorization: str | None = Head
                     "traffic_aware": bool(req.traffic_aware and req.mode == "drive"),
                     "budget_per_person": req.budget_per_person,
                     "dietary_requirements": [d.lower() for d in req.dietary_requirements],
-                    "cuisine": req.cuisine or "",
+                    "cuisine": cuisine_summary_str,
+                    "liked_cuisines": selected_cuisines,
                     "disliked_cuisines": [c.lower() for c in req.disliked_cuisines],
                     "other_preferences": req.other_preferences,
                     "model_used": model_used,
@@ -705,6 +810,8 @@ def search_restaurants(req: SearchRequestModel, authorization: str | None = Head
             "success": True,
             "origin": origin,
             "model_used": model_used,
+            "selected_cuisines": selected_cuisines,
+            "cuisines_breakdown": cuisines_breakdown,
             "matches": search_results.get("matches", []),
             "alternatives": search_results.get("alternatives", []),
             "exclusions_count": len(search_results.get("exclusions", [])),

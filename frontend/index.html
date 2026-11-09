@@ -256,24 +256,37 @@
             </div>
           </div>
 
-          <!-- Cuisines -->
+          <!-- Preferred Cuisines (Multi-Select + Custom Input) -->
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Preferred Cuisine (Optional)</label>
-            <select id="cuisineSelect" class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100">
-              <option value="">Any Cuisine</option>
-              <option value="chinese">Chinese</option>
-              <option value="malay">Malay</option>
-              <option value="indian">Indian</option>
-              <option value="japanese">Japanese</option>
-              <option value="korean">Korean</option>
-              <option value="western">Western</option>
-              <option value="italian">Italian</option>
-              <option value="thai">Thai</option>
-              <option value="vietnamese">Vietnamese</option>
-              <option value="peranakan">Peranakan</option>
-              <option value="indonesian">Indonesian</option>
-              <option value="middle eastern">Middle Eastern</option>
-            </select>
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Preferred Cuisines (Select Multiple or Type)</label>
+              <div class="flex items-center gap-2">
+                <span id="preferredQuotaHint" class="hidden text-[10px] font-bold text-emerald-600 dark:text-emerald-400"></span>
+                <button type="button" id="clearPreferredBtn" class="hidden text-[10px] font-bold text-brand-600 dark:text-brand-400 hover:underline">Clear</button>
+              </div>
+            </div>
+            <div id="preferredChipsContainer" class="flex flex-wrap gap-1.5 mb-2">
+              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="chinese">Chinese</button>
+              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="malay">Malay</button>
+              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="indian">Indian</button>
+              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="japanese">Japanese</button>
+              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="korean">Korean</button>
+              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="western">Western</button>
+              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="italian">Italian</button>
+              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="thai">Thai</button>
+              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="vietnamese">Vietnamese</button>
+              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="peranakan">Peranakan</button>
+              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="indonesian">Indonesian</button>
+              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="middle eastern">Middle Eastern</button>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <input type="text" id="customCuisineInput" placeholder="Not listed? Type cuisine (e.g. Mexican, Ramen, Spanish) & press +"
+                class="flex-1 px-3 py-1.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+              <button type="button" id="addCustomCuisineBtn"
+                class="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 hover:text-emerald-700 dark:hover:text-emerald-300 border border-slate-200 dark:border-slate-700 transition shrink-0">
+                + Add
+              </button>
+            </div>
           </div>
 
           <!-- Disliked Cuisines (Exclude) -->
@@ -539,22 +552,9 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Preferred Cuisine</label>
-            <select id="profCuisineSelect" class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
-              <option value="">Any Cuisine</option>
-              <option value="chinese">Chinese</option>
-              <option value="malay">Malay</option>
-              <option value="indian">Indian</option>
-              <option value="japanese">Japanese</option>
-              <option value="korean">Korean</option>
-              <option value="western">Western</option>
-              <option value="italian">Italian</option>
-              <option value="thai">Thai</option>
-              <option value="vietnamese">Vietnamese</option>
-              <option value="peranakan">Peranakan</option>
-              <option value="indonesian">Indonesian</option>
-              <option value="middle eastern">Middle Eastern</option>
-            </select>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Preferred Cuisines</label>
+            <input type="text" id="profLikedInput" placeholder="e.g. chinese, japanese, ramen"
+              class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div>
             <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Disliked Cuisines</label>
@@ -829,6 +829,110 @@
       budgetDisplay.textContent = `SGD $${e.target.value}`;
     });
 
+    // Preferred Cuisines Multi-Select Chips + Custom Cuisine Input
+    let preferredCuisines = new Set();
+    const preferredChipsContainer = document.getElementById('preferredChipsContainer');
+    const clearPreferredBtn = document.getElementById('clearPreferredBtn');
+    const preferredQuotaHint = document.getElementById('preferredQuotaHint');
+    const customCuisineInput = document.getElementById('customCuisineInput');
+    const addCustomCuisineBtn = document.getElementById('addCustomCuisineBtn');
+
+    function formatCuisineLabel(c) {
+      return String(c || '').split(' ').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+
+    function ensurePreferredChipExists(c) {
+      const clean = String(c || '').trim().toLowerCase();
+      if (!clean) return;
+      let existing = preferredChipsContainer.querySelector(`.prefer-chip[data-cuisine="${CSS.escape(clean)}"]`);
+      if (!existing) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.dataset.cuisine = clean;
+        btn.dataset.custom = 'true';
+        btn.className = "prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition";
+        btn.textContent = formatCuisineLabel(clean);
+        btn.addEventListener('click', () => togglePreferredCuisine(clean));
+        preferredChipsContainer.appendChild(btn);
+      }
+    }
+
+    function togglePreferredCuisine(c) {
+      const clean = String(c || '').trim().toLowerCase();
+      if (!clean) return;
+      if (preferredCuisines.has(clean)) {
+        preferredCuisines.delete(clean);
+      } else {
+        preferredCuisines.add(clean);
+        if (dislikedCuisines.has(clean)) {
+          dislikedCuisines.delete(clean);
+          updateDislikedChipsUI();
+        }
+      }
+      updatePreferredChipsUI();
+    }
+
+    function updatePreferredChipsUI() {
+      preferredChipsContainer.querySelectorAll('.prefer-chip').forEach(chip => {
+        const c = chip.dataset.cuisine;
+        const label = formatCuisineLabel(c);
+        if (preferredCuisines.has(c)) {
+          chip.className = "prefer-chip text-[11px] font-bold px-2.5 py-1 rounded-lg border border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 transition";
+          chip.textContent = `✓ ${label}`;
+        } else {
+          chip.className = "prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition";
+          chip.textContent = label;
+        }
+      });
+      if (preferredCuisines.size > 0) {
+        clearPreferredBtn.classList.remove('hidden');
+      } else {
+        clearPreferredBtn.classList.add('hidden');
+      }
+      if (preferredCuisines.size > 1) {
+        preferredQuotaHint.textContent = `${preferredCuisines.size} selected (Outputs ÷ ${preferredCuisines.size})`;
+        preferredQuotaHint.classList.remove('hidden');
+      } else {
+        preferredQuotaHint.classList.add('hidden');
+      }
+    }
+
+    preferredChipsContainer.querySelectorAll('.prefer-chip').forEach(chip => {
+      chip.addEventListener('click', () => togglePreferredCuisine(chip.dataset.cuisine));
+    });
+
+    function addCustomCuisinesFromInput() {
+      const raw = customCuisineInput.value.trim();
+      if (!raw) return;
+      raw.split(',').forEach(part => {
+        const clean = part.trim().toLowerCase();
+        if (clean) {
+          ensurePreferredChipExists(clean);
+          preferredCuisines.add(clean);
+          if (dislikedCuisines.has(clean)) {
+            dislikedCuisines.delete(clean);
+          }
+        }
+      });
+      customCuisineInput.value = '';
+      updateDislikedChipsUI();
+      updatePreferredChipsUI();
+    }
+
+    addCustomCuisineBtn.addEventListener('click', addCustomCuisinesFromInput);
+    customCuisineInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addCustomCuisinesFromInput();
+      }
+    });
+
+    clearPreferredBtn.addEventListener('click', () => {
+      preferredCuisines.clear();
+      customCuisineInput.value = '';
+      updatePreferredChipsUI();
+    });
+
     // Disliked Cuisines Multi-Select Chips
     let dislikedCuisines = new Set();
     const clearDislikedBtn = document.getElementById('clearDislikedBtn');
@@ -855,8 +959,15 @@
     document.querySelectorAll('.dislike-chip').forEach(chip => {
       chip.addEventListener('click', () => {
         const c = chip.dataset.cuisine;
-        if (dislikedCuisines.has(c)) dislikedCuisines.delete(c);
-        else dislikedCuisines.add(c);
+        if (dislikedCuisines.has(c)) {
+          dislikedCuisines.delete(c);
+        } else {
+          dislikedCuisines.add(c);
+          if (preferredCuisines.has(c)) {
+            preferredCuisines.delete(c);
+            updatePreferredChipsUI();
+          }
+        }
         updateDislikedChipsUI();
       });
     });
@@ -913,8 +1024,15 @@
       const diet = user.dietary_requirements || [];
       document.getElementById('halalCheck').checked = diet.includes('halal');
       document.getElementById('vegCheck').checked = diet.includes('vegetarian');
-      // Always start each search on "Any Cuisine" unless the user chooses a specific cuisine for this search
-      document.getElementById('cuisineSelect').value = '';
+      preferredCuisines.clear();
+      (user.liked_cuisines || []).forEach(c => {
+        const clean = String(c || '').trim().toLowerCase();
+        if (clean) {
+          ensurePreferredChipExists(clean);
+          preferredCuisines.add(clean);
+        }
+      });
+      updatePreferredChipsUI();
       dislikedCuisines = new Set((user.disliked_cuisines || []).map(c => String(c).toLowerCase()));
       updateDislikedChipsUI();
       document.getElementById('specialInput').value = (user.other_preferences && user.other_preferences.length)
@@ -1085,9 +1203,7 @@
       const diet = currentUser.dietary_requirements || [];
       document.getElementById('profHalalCheck').checked = diet.includes('halal');
       document.getElementById('profVegCheck').checked = diet.includes('vegetarian');
-      document.getElementById('profCuisineSelect').value = (currentUser.liked_cuisines && currentUser.liked_cuisines.length)
-        ? currentUser.liked_cuisines[0]
-        : '';
+      document.getElementById('profLikedInput').value = (currentUser.liked_cuisines || []).join(', ');
       document.getElementById('profDislikedInput').value = (currentUser.disliked_cuisines || []).join(', ');
       document.getElementById('profOtherInput').value = (currentUser.other_preferences || []).join(', ');
       profileModal.classList.remove('hidden');
@@ -1110,8 +1226,8 @@
       const diet = [];
       if (document.getElementById('profHalalCheck').checked) diet.push('halal');
       if (document.getElementById('profVegCheck').checked) diet.push('vegetarian');
-      const prefCuisine = document.getElementById('profCuisineSelect').value;
-      const likedList = prefCuisine ? [prefCuisine] : [];
+      const likedRaw = document.getElementById('profLikedInput').value.trim();
+      const likedList = likedRaw ? likedRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];
       const dislikedRaw = document.getElementById('profDislikedInput').value.trim();
       const dislikedList = dislikedRaw ? dislikedRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];
       const otherRaw = document.getElementById('profOtherInput').value.trim();
@@ -1264,6 +1380,12 @@
       const special = document.getElementById('specialInput').value.trim();
       const otherPreferences = special ? [special] : [];
 
+      // Include any pending text typed into the custom cuisine input
+      if (customCuisineInput && customCuisineInput.value.trim()) {
+        addCustomCuisinesFromInput();
+      }
+      const selectedLiked = Array.from(preferredCuisines);
+
       const payload = {
         location: document.getElementById('locationInput').value.trim(),
         mode: currentMode,
@@ -1271,8 +1393,8 @@
         max_distance_km: currentLimitType === 'distance' ? parseFloat(distanceSlider.value) : null,
         budget_per_person: parseFloat(budgetSlider.value),
         dietary_requirements: dietary,
-        cuisine: document.getElementById('cuisineSelect').value || null,
-        liked_cuisines: [],
+        cuisine: selectedLiked.length === 1 ? selectedLiked[0] : (selectedLiked.length > 1 ? selectedLiked.join(', ') : null),
+        liked_cuisines: selectedLiked,
         disliked_cuisines: Array.from(dislikedCuisines),
         other_preferences: otherPreferences,
         traffic_aware: currentMode === 'drive' && trafficAwareCheck.checked
@@ -1351,6 +1473,15 @@
         const matches = data.matches || [];
         const alternatives = data.alternatives || [];
         const modelUsed = data.model_used || activeModelLabel;
+        const breakdown = data.cuisines_breakdown || {};
+        const breakdownKeys = Object.keys(breakdown);
+        let breakdownStr = '';
+        if (breakdownKeys.length > 1) {
+          const parts = breakdownKeys.map(k => `${formatCuisineLabel(k)}: ${breakdown[k]}`);
+          breakdownStr = ` • Divided across ${breakdownKeys.length} cuisines (${parts.join(', ')})`;
+        } else if (breakdownKeys.length === 1) {
+          breakdownStr = ` • Cuisine: ${formatCuisineLabel(breakdownKeys[0])}`;
+        }
         lastOrigin = data.origin || null;
         lastMatches = matches;
         lastAlternatives = alternatives;
@@ -1358,7 +1489,7 @@
 
         statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200";
         statusIcon.innerHTML = `<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>`;
-        statusText.textContent = `Found ${matches.length} direct match${matches.length === 1 ? '' : 'es'} and ${alternatives.length} alternative${alternatives.length === 1 ? '' : 's'} • Ranked by ${modelUsed}`;
+        statusText.textContent = `Found ${matches.length} direct match${matches.length === 1 ? '' : 'es'} and ${alternatives.length} alternative${alternatives.length === 1 ? '' : 's'}${breakdownStr} • Ranked by ${modelUsed}`;
         lucide.createIcons();
 
         if (emptyState) emptyState.remove();
@@ -1656,12 +1787,15 @@
         card.innerHTML = `
           <div class="flex items-start justify-between gap-4">
             <div>
-              <div class="flex items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2">
                 <span class="w-6 h-6 rounded-full text-xs font-extrabold flex items-center justify-center text-white shrink-0 ${item.isMatch ? 'bg-emerald-600' : 'bg-amber-600'}">${rankNumber}</span>
                 <h3 class="text-base font-bold text-slate-900 dark:text-white">${r.name || 'Restaurant'}</h3>
                 ${item.isMatch
                   ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">Match</span>`
                   : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">Alternative</span>`}
+                ${item.matched_cuisine
+                  ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-950/80 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800 capitalize">🍽️ ${formatCuisineLabel(item.matched_cuisine)}</span>`
+                  : ''}
               </div>
               <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
                 <i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-400"></i>
@@ -2237,7 +2371,18 @@
       const diet = item.dietary_requirements || [];
       document.getElementById('halalCheck').checked = diet.includes('halal');
       document.getElementById('vegCheck').checked = diet.includes('vegetarian');
-      document.getElementById('cuisineSelect').value = item.cuisine || '';
+      preferredCuisines.clear();
+      const histLiked = Array.isArray(item.liked_cuisines) && item.liked_cuisines.length
+        ? item.liked_cuisines
+        : (item.cuisine ? String(item.cuisine).split(',').map(s => s.trim()).filter(Boolean) : []);
+      histLiked.forEach(c => {
+        const clean = String(c || '').trim().toLowerCase();
+        if (clean) {
+          ensurePreferredChipExists(clean);
+          preferredCuisines.add(clean);
+        }
+      });
+      updatePreferredChipsUI();
       dislikedCuisines = new Set((item.disliked_cuisines || []).map(c => String(c).toLowerCase()));
       updateDislikedChipsUI();
       document.getElementById('specialInput').value = (item.other_preferences || []).join(', ');
