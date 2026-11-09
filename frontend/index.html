@@ -60,12 +60,26 @@
           <span id="themeLabel" class="text-xs font-semibold">Dark Mode</span>
         </button>
 
-        <!-- Profile Button -->
-        <button id="profileBtn" type="button"
-          class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-brand-50 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700">
-          <i data-lucide="user" class="w-4 h-4"></i>
-          <span id="profileUsername">Profile</span>
+        <!-- Signed-Out Button: Sign In / Sign Up -->
+        <button id="authOpenBtn" type="button"
+          class="flex items-center gap-2 px-3.5 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-brand-600 to-amber-600 hover:from-brand-700 hover:to-amber-700 rounded-lg shadow-sm transition">
+          <i data-lucide="log-in" class="w-4 h-4"></i>
+          <span>Sign In / Sign Up</span>
         </button>
+
+        <!-- Signed-In Buttons: Profile & Log Out -->
+        <div id="userNavGroup" class="hidden items-center gap-2">
+          <button id="profileBtn" type="button" title="Edit Profile & Saved Preferences"
+            class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-brand-50 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700">
+            <i data-lucide="user-check" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>
+            <span id="profileUsername" class="font-semibold">Profile</span>
+          </button>
+          <button id="logoutBtn" type="button" title="Sign Out"
+            class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors border border-rose-200 dark:border-rose-800/60">
+            <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Sign Out</span>
+          </button>
+        </div>
       </div>
     </div>
   </header>
@@ -264,6 +278,160 @@
 
   </main>
 
+  <!-- Authentication Modal (Sign In / Sign Up) -->
+  <div id="authModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white">
+            <i data-lucide="shield-check" class="w-4 h-4"></i>
+          </div>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white">BiteFinder Account</h3>
+        </div>
+        <button type="button" id="closeAuthModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="grid grid-cols-2 bg-slate-100 dark:bg-slate-800 p-1 mx-6 mt-4 rounded-xl">
+        <button type="button" id="tabLoginBtn" class="py-2 text-xs font-bold rounded-lg bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm transition">
+          Sign In
+        </button>
+        <button type="button" id="tabRegisterBtn" class="py-2 text-xs font-bold rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition">
+          Create Account
+        </button>
+      </div>
+
+      <!-- Alert Box -->
+      <div id="authAlert" class="hidden mx-6 mt-4 p-3 rounded-xl text-xs font-medium border"></div>
+
+      <!-- Sign In Form -->
+      <form id="loginForm" class="p-6 space-y-4">
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Email Address</label>
+          <input type="email" id="loginEmail" required placeholder="you@example.com"
+            class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Password</label>
+          <input type="password" id="loginPassword" required minlength="6" placeholder="••••••••"
+            class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+        </div>
+        <button type="submit" id="loginSubmitBtn"
+          class="w-full py-2.5 px-4 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-brand-600 to-amber-600 hover:from-brand-700 hover:to-amber-700 shadow-md transition">
+          Sign In to BiteFinder
+        </button>
+        <p class="text-[11px] text-slate-400 text-center">
+          Existing CLI account (e.g. <code class="text-brand-600 dark:text-brand-400">test@gmail.com</code>)? Enter your email and a 6+ character password to set your web password.
+        </p>
+      </form>
+
+      <!-- Create Account Form -->
+      <form id="registerForm" class="p-6 space-y-4 hidden">
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Display Username</label>
+          <input type="text" id="registerUsername" required maxlength="50" placeholder="e.g. Zephyr"
+            class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Email Address</label>
+          <input type="email" id="registerEmail" required placeholder="you@example.com"
+            class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Password (Min. 6 Characters)</label>
+          <input type="password" id="registerPassword" required minlength="6" placeholder="••••••••"
+            class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+        </div>
+        <button type="submit" id="registerSubmitBtn"
+          class="w-full py-2.5 px-4 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-brand-600 to-amber-600 hover:from-brand-700 hover:to-amber-700 shadow-md transition">
+          Create Account
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Profile & Saved Preferences Modal -->
+  <div id="profileModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
+        <div>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i data-lucide="user-cog" class="w-5 h-5 text-brand-600"></i>
+            My Profile & Saved Preferences
+          </h3>
+          <p id="profileEmailDisplay" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5"></p>
+        </div>
+        <button type="button" id="closeProfileModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div id="profileAlert" class="hidden mx-6 mt-4 p-3 rounded-xl text-xs font-medium border"></div>
+
+      <form id="profileForm" class="p-6 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Username</label>
+            <input type="text" id="profUsernameInput" required maxlength="50"
+              class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Location</label>
+            <input type="text" id="profLocationInput" required placeholder="e.g. Compass One"
+              class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Max Time (Mins)</label>
+            <input type="number" id="profTimeInput" min="5" max="120" step="5" value="30"
+              class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Budget (SGD)</label>
+            <input type="number" id="profBudgetInput" min="5" max="200" step="5" value="30"
+              class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Default Dietary Requirements</label>
+          <div class="flex items-center gap-4">
+            <label class="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
+              <input type="checkbox" id="profHalalCheck" class="rounded text-emerald-600 focus:ring-emerald-500">
+              <span>MUIS Halal</span>
+            </label>
+            <label class="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
+              <input type="checkbox" id="profVegCheck" class="rounded text-blue-600 focus:ring-blue-500">
+              <span>Vegetarian</span>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Special Wishes</label>
+          <input type="text" id="profOtherInput" placeholder="e.g. at least 4 stars, cozy dinner spot"
+            class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+          <button type="button" id="cancelProfileBtn"
+            class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+            Close
+          </button>
+          <button type="submit" id="saveProfileBtn"
+            class="px-5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-brand-600 to-amber-600 hover:from-brand-700 hover:to-amber-700 shadow-md transition">
+            Save & Apply Preferences
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
     // State
     let currentMode = 'walk';
@@ -327,31 +495,290 @@
       budgetDisplay.textContent = `SGD $${e.target.value}`;
     });
 
-    // Load profile on start
-    async function loadProfile() {
+    // Auth & Profile Management
+    const TOKEN_KEY = 'bitefinder_auth_token';
+    let currentUser = null;
+
+    function getAuthToken() {
       try {
-        const res = await fetch('/api/profile');
-        if (res.ok) {
-          const profile = await res.json();
-          if (profile.username) {
-            document.getElementById('profileUsername').textContent = profile.username;
-          }
-          if (profile.location && profile.location.length) {
-            document.getElementById('locationInput').value = profile.location[0];
-          }
-          if (profile.budget_per_person) {
-            budgetSlider.value = profile.budget_per_person;
-            budgetDisplay.textContent = `SGD $${profile.budget_per_person}`;
-          }
-          if (profile.dietary_requirements && profile.dietary_requirements.includes('halal')) {
-            document.getElementById('halalCheck').checked = true;
-          }
-        }
-      } catch (err) {
-        console.warn('Profile load err:', err);
+        return localStorage.getItem(TOKEN_KEY) || '';
+      } catch {
+        return '';
       }
     }
-    loadProfile();
+
+    function setAuthToken(token) {
+      try {
+        if (token) localStorage.setItem(TOKEN_KEY, token);
+        else localStorage.removeItem(TOKEN_KEY);
+      } catch {}
+    }
+
+    function authHeaders(extra = {}) {
+      const token = getAuthToken();
+      return token ? { ...extra, 'Authorization': `Bearer ${token}` } : extra;
+    }
+
+    function applyUserToSearchForm(user) {
+      if (!user) return;
+      if (user.location && user.location.length) {
+        document.getElementById('locationInput').value = user.location[0];
+      }
+      if (user.max_travel_time_minutes) {
+        const mins = Math.min(90, Math.max(5, Math.round(user.max_travel_time_minutes / 5) * 5));
+        timeSlider.value = mins;
+        timeDisplay.textContent = `${mins} mins`;
+      }
+      if (user.budget_per_person) {
+        const bud = Math.min(100, Math.max(5, Math.round(user.budget_per_person / 5) * 5));
+        budgetSlider.value = bud;
+        budgetDisplay.textContent = `SGD $${bud}`;
+      }
+      const diet = user.dietary_requirements || [];
+      document.getElementById('halalCheck').checked = diet.includes('halal');
+      document.getElementById('vegCheck').checked = diet.includes('vegetarian');
+      if (user.liked_cuisines && user.liked_cuisines.length) {
+        document.getElementById('cuisineSelect').value = user.liked_cuisines[0];
+      }
+      if (user.other_preferences && user.other_preferences.length) {
+        document.getElementById('specialInput').value = user.other_preferences.join(', ');
+      }
+    }
+
+    function updateAuthUI() {
+      const authOpenBtn = document.getElementById('authOpenBtn');
+      const userNavGroup = document.getElementById('userNavGroup');
+      const profileUsername = document.getElementById('profileUsername');
+
+      if (currentUser) {
+        authOpenBtn.classList.add('hidden');
+        userNavGroup.classList.remove('hidden');
+        userNavGroup.classList.add('flex');
+        profileUsername.textContent = currentUser.username || 'User';
+      } else {
+        authOpenBtn.classList.remove('hidden');
+        userNavGroup.classList.add('hidden');
+        userNavGroup.classList.remove('flex');
+      }
+      lucide.createIcons();
+    }
+
+    // Auth Modal Controls
+    const authModal = document.getElementById('authModal');
+    const authAlert = document.getElementById('authAlert');
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+    const tabLoginBtn = document.getElementById('tabLoginBtn');
+    const tabRegisterBtn = document.getElementById('tabRegisterBtn');
+
+    function showAuthAlert(msg, isError = true) {
+      authAlert.textContent = msg;
+      authAlert.className = isError
+        ? "mx-6 mt-4 p-3 rounded-xl text-xs font-medium border bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300"
+        : "mx-6 mt-4 p-3 rounded-xl text-xs font-medium border bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300";
+    }
+
+    function switchAuthTab(mode) {
+      authAlert.classList.add('hidden');
+      if (mode === 'login') {
+        loginForm.classList.remove('hidden');
+        registerForm.classList.add('hidden');
+        tabLoginBtn.className = "py-2 text-xs font-bold rounded-lg bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm transition";
+        tabRegisterBtn.className = "py-2 text-xs font-bold rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition";
+      } else {
+        loginForm.classList.add('hidden');
+        registerForm.classList.remove('hidden');
+        tabRegisterBtn.className = "py-2 text-xs font-bold rounded-lg bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm transition";
+        tabLoginBtn.className = "py-2 text-xs font-bold rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition";
+      }
+    }
+
+    document.getElementById('authOpenBtn').addEventListener('click', () => {
+      switchAuthTab('login');
+      authModal.classList.remove('hidden');
+      authModal.classList.add('flex');
+    });
+
+    document.getElementById('closeAuthModalBtn').addEventListener('click', () => {
+      authModal.classList.add('hidden');
+      authModal.classList.remove('flex');
+    });
+
+    tabLoginBtn.addEventListener('click', () => switchAuthTab('login'));
+    tabRegisterBtn.addEventListener('click', () => switchAuthTab('register'));
+
+    // Sign In Submit
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      authAlert.classList.add('hidden');
+      const email = document.getElementById('loginEmail').value.trim();
+      const password = document.getElementById('loginPassword').value;
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Sign in failed');
+
+        setAuthToken(data.token);
+        currentUser = data.user;
+        updateAuthUI();
+        applyUserToSearchForm(currentUser);
+        initRecentSearches();
+        authModal.classList.add('hidden');
+        authModal.classList.remove('flex');
+        loginForm.reset();
+      } catch (err) {
+        showAuthAlert(err.message, true);
+      }
+    });
+
+    // Sign Up Submit
+    registerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      authAlert.classList.add('hidden');
+      const username = document.getElementById('registerUsername').value.trim();
+      const email = document.getElementById('registerEmail').value.trim();
+      const password = document.getElementById('registerPassword').value;
+
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, password })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Registration failed');
+
+        setAuthToken(data.token);
+        currentUser = data.user;
+        updateAuthUI();
+        applyUserToSearchForm(currentUser);
+        initRecentSearches();
+        authModal.classList.add('hidden');
+        authModal.classList.remove('flex');
+        registerForm.reset();
+      } catch (err) {
+        showAuthAlert(err.message, true);
+      }
+    });
+
+    // Sign Out
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: authHeaders()
+        });
+      } catch {}
+      setAuthToken('');
+      currentUser = null;
+      updateAuthUI();
+    });
+
+    // Profile Modal Controls
+    const profileModal = document.getElementById('profileModal');
+    const profileAlert = document.getElementById('profileAlert');
+
+    function openProfileModal() {
+      if (!currentUser) return;
+      profileAlert.classList.add('hidden');
+      document.getElementById('profileEmailDisplay').textContent = `Signed in as ${currentUser.email}`;
+      document.getElementById('profUsernameInput').value = currentUser.username || '';
+      document.getElementById('profLocationInput').value = (currentUser.location && currentUser.location[0]) || 'Compass One';
+      document.getElementById('profTimeInput').value = currentUser.max_travel_time_minutes || 30;
+      document.getElementById('profBudgetInput').value = currentUser.budget_per_person || 30;
+      const diet = currentUser.dietary_requirements || [];
+      document.getElementById('profHalalCheck').checked = diet.includes('halal');
+      document.getElementById('profVegCheck').checked = diet.includes('vegetarian');
+      document.getElementById('profOtherInput').value = (currentUser.other_preferences || []).join(', ');
+      profileModal.classList.remove('hidden');
+      profileModal.classList.add('flex');
+    }
+
+    document.getElementById('profileBtn').addEventListener('click', openProfileModal);
+    document.getElementById('closeProfileModalBtn').addEventListener('click', () => {
+      profileModal.classList.add('hidden');
+      profileModal.classList.remove('flex');
+    });
+    document.getElementById('cancelProfileBtn').addEventListener('click', () => {
+      profileModal.classList.add('hidden');
+      profileModal.classList.remove('flex');
+    });
+
+    document.getElementById('profileForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!currentUser) return;
+      const diet = [];
+      if (document.getElementById('profHalalCheck').checked) diet.push('halal');
+      if (document.getElementById('profVegCheck').checked) diet.push('vegetarian');
+      const otherRaw = document.getElementById('profOtherInput').value.trim();
+      const otherList = otherRaw ? otherRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+      const body = {
+        user_id: currentUser.user_id,
+        username: document.getElementById('profUsernameInput').value.trim(),
+        email: currentUser.email,
+        location: [document.getElementById('profLocationInput').value.trim()],
+        max_distance_km: currentUser.max_distance_km || 1.5,
+        max_travel_time_minutes: parseFloat(document.getElementById('profTimeInput').value) || 30,
+        budget_per_person: parseFloat(document.getElementById('profBudgetInput').value) || 30,
+        dietary_requirements: diet,
+        liked_cuisines: currentUser.liked_cuisines || [],
+        disliked_cuisines: currentUser.disliked_cuisines || [],
+        other_preferences: otherList
+      };
+
+      try {
+        const res = await fetch('/api/profile', {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Could not save profile');
+        currentUser = data.user || body;
+        updateAuthUI();
+        applyUserToSearchForm(currentUser);
+        profileAlert.textContent = "Preferences saved to MongoDB and applied to your search!";
+        profileAlert.className = "mx-6 mt-4 p-3 rounded-xl text-xs font-medium border bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300";
+        setTimeout(() => {
+          profileModal.classList.add('hidden');
+          profileModal.classList.remove('flex');
+        }, 900);
+      } catch (err) {
+        profileAlert.textContent = err.message;
+        profileAlert.className = "mx-6 mt-4 p-3 rounded-xl text-xs font-medium border bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300";
+      }
+    });
+
+    // Check existing session token on startup
+    async function checkSession() {
+      const token = getAuthToken();
+      if (!token) {
+        updateAuthUI();
+        return;
+      }
+      try {
+        const res = await fetch('/api/auth/me', { headers: authHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          currentUser = data.user;
+          updateAuthUI();
+          applyUserToSearchForm(currentUser);
+        } else {
+          setAuthToken('');
+          currentUser = null;
+          updateAuthUI();
+        }
+      } catch (err) {
+        console.warn('Session check err:', err);
+      }
+    }
+    checkSession();
 
     // Recent Searches Management
     const RECENT_KEY = 'bitefinder_recent_searches';
@@ -400,7 +827,7 @@
     async function initRecentSearches() {
       let list = getLocalRecent();
       try {
-        const res = await fetch('/api/recent-searches');
+        const res = await fetch('/api/recent-searches', { headers: authHeaders() });
         if (res.ok) {
           const data = await res.json();
           if (data.recent && data.recent.length > 0) {
@@ -463,7 +890,7 @@
       try {
         const response = await fetch('/api/search', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(payload)
         });
 
