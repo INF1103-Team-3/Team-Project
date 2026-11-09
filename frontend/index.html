@@ -216,11 +216,35 @@
         <div id="statusText" class="font-medium"></div>
       </div>
 
-      <!-- Results Header -->
-      <div id="resultsHeader" class="hidden flex items-center justify-between">
+      <!-- Results Header & Sorting Controls -->
+      <div id="resultsHeader" class="hidden flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div>
-          <h2 class="text-xl font-bold text-slate-900 dark:text-white" id="resultsCount">Recommendations</h2>
+          <h2 class="text-lg font-bold text-slate-900 dark:text-white" id="resultsCount">Recommendations</h2>
           <p class="text-xs text-slate-500 dark:text-slate-400" id="resultsSubtext">Verified with Google Places and official MUIS records.</p>
+        </div>
+
+        <!-- Sort Controls -->
+        <div class="flex flex-wrap items-center gap-2.5">
+          <label class="flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer select-none" title="Keep Direct Matches above Alternatives when sorting">
+            <input type="checkbox" id="matchesFirstCheck" checked class="rounded text-brand-600 focus:ring-brand-500">
+            <span>Matches First</span>
+          </label>
+
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+              <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-brand-600 dark:text-brand-400"></i>
+              Sort:
+            </span>
+            <select id="sortSelect" class="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition cursor-pointer">
+              <option value="ai">✨ AI Best Match (Default)</option>
+              <option value="travel_asc">🚶 Shortest Travel Time</option>
+              <option value="rating_desc">⭐ Highest Rating (High → Low)</option>
+              <option value="reviews_desc">🔥 Most Popular (Most Reviews)</option>
+              <option value="price_asc">💰 Price: Low → High</option>
+              <option value="price_desc">💎 Price: High → Low</option>
+              <option value="name_asc">🔤 Name: A → Z</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -243,6 +267,8 @@
   <script>
     // State
     let currentMode = 'walk';
+    let lastMatches = [];
+    let lastAlternatives = [];
 
     // Theme Management
     function updateThemeUI() {
@@ -464,12 +490,16 @@
           if (emptyState) emptyState.remove();
           resultsHeader.classList.remove('hidden');
           resultsCount.textContent = "0 Recommendations";
+          lastMatches = [];
+          lastAlternatives = [];
           renderResults([], []);
           return;
         }
 
         const matches = data.matches || [];
         const alternatives = data.alternatives || [];
+        lastMatches = matches;
+        lastAlternatives = alternatives;
         const totalFound = matches.length + alternatives.length;
 
         statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200";
@@ -481,7 +511,7 @@
         resultsHeader.classList.remove('hidden');
         resultsCount.textContent = `${totalFound} Restaurant Recommendation${totalFound === 1 ? '' : 's'}`;
 
-        renderResults(matches, alternatives);
+        renderResults(lastMatches, lastAlternatives);
 
       } catch (error) {
         statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200";
@@ -602,14 +632,112 @@
       return todayPairs.map(p => `${to12Hour(p[0])} – ${to12Hour(p[1])}`).join(', ');
     }
 
+    // Sorting helpers
+    function getTravelMinutes(r) {
+      const val = r.walk_minutes ?? r.drive_minutes ?? r.transit_minutes;
+      return typeof val === 'number' && !isNaN(val) ? val : null;
+    }
+
+    function getRatingValue(r) {
+      const raw = r.rating ?? r.g_rating;
+      const num = parseFloat(raw);
+      return !isNaN(num) && num > 0 ? num : null;
+    }
+
+    function getReviewsValue(r) {
+      const raw = r.rating_count ?? r.g_no_reviews;
+      const num = parseInt(raw, 10);
+      return !isNaN(num) && num >= 0 ? num : 0;
+    }
+
+    function getPriceValue(r) {
+      if (typeof r.avg_price === 'number' && !isNaN(r.avg_price)) return r.avg_price;
+      const s = typeof r.price_start === 'number' ? r.price_start : null;
+      const e = typeof r.price_end === 'number' ? r.price_end : null;
+      if (s !== null && e !== null) return (s + e) / 2;
+      if (s !== null) return s;
+      if (e !== null) return e;
+      return null;
+    }
+
+    function compareItems(a, b, sortBy, matchesFirst) {
+      if (matchesFirst && a.isMatch !== b.isMatch) {
+        return a.isMatch ? -1 : 1;
+      }
+      if (sortBy === 'ai') {
+        return a.originalIndex - b.originalIndex;
+      }
+
+      const rA = a.restaurant || {};
+      const rB = b.restaurant || {};
+
+      if (sortBy === 'travel_asc') {
+        const tA = getTravelMinutes(rA);
+        const tB = getTravelMinutes(rB);
+        if (tA === null && tB === null) return a.originalIndex - b.originalIndex;
+        if (tA === null) return 1;
+        if (tB === null) return -1;
+        if (tA !== tB) return tA - tB;
+        return (getRatingValue(rB) || 0) - (getRatingValue(rA) || 0);
+      }
+
+      if (sortBy === 'rating_desc') {
+        const ratA = getRatingValue(rA);
+        const ratB = getRatingValue(rB);
+        if (ratA === null && ratB === null) return a.originalIndex - b.originalIndex;
+        if (ratA === null) return 1;
+        if (ratB === null) return -1;
+        if (ratB !== ratA) return ratB - ratA;
+        return getReviewsValue(rB) - getReviewsValue(rA);
+      }
+
+      if (sortBy === 'reviews_desc') {
+        const revA = getReviewsValue(rA);
+        const revB = getReviewsValue(rB);
+        if (revB !== revA) return revB - revA;
+        return (getRatingValue(rB) || 0) - (getRatingValue(rA) || 0);
+      }
+
+      if (sortBy === 'price_asc' || sortBy === 'price_desc') {
+        const pA = getPriceValue(rA);
+        const pB = getPriceValue(rB);
+        if (pA === null && pB === null) return a.originalIndex - b.originalIndex;
+        if (pA === null) return 1;
+        if (pB === null) return -1;
+        if (pA !== pB) return sortBy === 'price_asc' ? pA - pB : pB - pA;
+        return (getRatingValue(rB) || 0) - (getRatingValue(rA) || 0);
+      }
+
+      if (sortBy === 'name_asc') {
+        const nA = String(rA.name || '').toLowerCase();
+        const nB = String(rB.name || '').toLowerCase();
+        return nA.localeCompare(nB);
+      }
+
+      return a.originalIndex - b.originalIndex;
+    }
+
+    document.getElementById('sortSelect').addEventListener('change', () => {
+      renderResults(lastMatches, lastAlternatives);
+    });
+
+    document.getElementById('matchesFirstCheck').addEventListener('change', () => {
+      renderResults(lastMatches, lastAlternatives);
+    });
+
     function renderResults(matches, alternatives) {
       const container = document.getElementById('resultsList');
       container.innerHTML = '';
 
+      const sortBy = document.getElementById('sortSelect') ? document.getElementById('sortSelect').value : 'ai';
+      const matchesFirst = document.getElementById('matchesFirstCheck') ? document.getElementById('matchesFirstCheck').checked : true;
+
       const allItems = [
-        ...matches.map(m => ({ ...m, isMatch: true })),
-        ...alternatives.map(a => ({ ...a, isMatch: false }))
+        ...matches.map((m, idx) => ({ ...m, isMatch: true, originalIndex: idx })),
+        ...alternatives.map((a, idx) => ({ ...a, isMatch: false, originalIndex: matches.length + idx }))
       ];
+
+      allItems.sort((a, b) => compareItems(a, b, sortBy, matchesFirst));
 
       if (allItems.length === 0) {
         container.innerHTML = `
