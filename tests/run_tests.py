@@ -21,6 +21,7 @@ BLACKBOX_TESTS = (
 )
 INTEGRATION_TEST = TESTS_DIR / "integration" / "test_bis_brns_integration.py"
 DEPLOYMENT_TEST = TESTS_DIR / "deployment" / "smoke.py"
+WEB_API_TEST = TESTS_DIR / "web" / "test_web_api.py"
 API_AI_TEST = TESTS_DIR / "API" / "test_ai_keys_and_fallback.py"
 API_GOOGLE_TEST = TESTS_DIR / "API" / "test_google_api.py"
 API_TESTS = (
@@ -32,6 +33,7 @@ TEST_GROUPS = {
     "bis": (BIS_TEST,),
     "brns": (BRNS_TEST,),
     "brc": (BRC_TEST,),
+    "web": (WEB_API_TEST,),
 
     "core": (
         BIS_TEST,
@@ -68,6 +70,10 @@ GROUP_DESCRIPTIONS = {
     ),
     "brc": (
         "Tests MUIS halal verification and official outlet matching."
+    ),
+    "web": (
+        "Tests the FastAPI Web Server, MongoDB persistence, authentication, "
+        "favorites, search history, and route directions endpoints."
     ),
     "core": (
         "Runs the BIS and BRNS core function tests without calling a live "
@@ -195,7 +201,7 @@ def show_usage():
     """Display the available BiteFinder test commands."""
     print(style("BiteFinder automated test runner", "heading"))
     print("\nUsage:")
-    for group in ("bis", "brns", "core", "blackbox", "integration",
+    for group in ("bis", "brns", "brc", "web", "core", "blackbox", "integration",
                   "deployment", "all"):
         print(style(f"  python tests/run_tests.py {group}", "command"))
     print("\nWith no group, the runner uses core.")

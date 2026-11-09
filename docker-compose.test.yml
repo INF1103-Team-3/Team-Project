@@ -66,6 +66,7 @@ services:
       - ./web_api.py:/app/web_api.py
       - ./BRNS/io_manager.py:/app/BRNS/io_manager.py
       - ./shared/seed_mongo.py:/app/shared/seed_mongo.py
+      - ./tests:/app/tests
       - bis-brns-test-data:/data
       - bitefinder-test-logs:/data/logs
     networks:
@@ -117,6 +118,7 @@ services:
       - ./web_api.py:/app/web_api.py
       - ./BRNS/io_manager.py:/app/BRNS/io_manager.py
       - ./shared/seed_mongo.py:/app/shared/seed_mongo.py
+      - ./tests:/app/tests
       - bis-brns-test-data:/data
       - bitefinder-test-logs:/data/logs
     networks:
