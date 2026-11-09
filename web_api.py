@@ -99,6 +99,31 @@ def get_cuisines():
     return {"cuisines": sorted(list(CUISINES))}
 
 
+@app.get("/api/recent-searches")
+def get_recent_searches():
+    """Return recently searched locations from MongoDB."""
+    if not db.is_db_available():
+        return {"recent": []}
+    try:
+        docs = list(db.get_db().search_history.find(
+            {"query": {"$exists": True, "$ne": ""}},
+            {"query": 1, "_id": 0}
+        ).sort("_id", -1).limit(25))
+        seen = set()
+        recent = []
+        for d in docs:
+            q = d.get("query", "").strip()
+            if q and q.lower() not in seen:
+                seen.add(q.lower())
+                recent.append(q)
+            if len(recent) >= 6:
+                break
+        return {"recent": recent}
+    except Exception as e:
+        debug_log.debug_log(f"Failed to fetch recent searches: {e}", "WARNING", "web_api.get_recent_searches")
+        return {"recent": []}
+
+
 @app.get("/api/profile")
 def get_profile(user_id: str = "default_user"):
     """Load user preferences from MongoDB or fall back to default profile."""

@@ -87,11 +87,20 @@
                 value="Compass One">
             </div>
             <!-- Quick preset pills -->
-            <div class="flex flex-wrap gap-1.5 mt-2">
-              <button type="button" class="preset-pill text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Compass One">Compass One</button>
-              <button type="button" class="preset-pill text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Rivervale Plaza">Rivervale Plaza</button>
-              <button type="button" class="preset-pill text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Bugis Junction">Bugis Junction</button>
-              <button type="button" class="preset-pill text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Jewel Changi">Jewel Changi</button>
+            <div class="flex flex-wrap items-center gap-1.5 mt-2">
+              <span class="text-[10px] font-semibold text-slate-400">Popular:</span>
+              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Compass One">Compass One</button>
+              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Rivervale Plaza">Rivervale Plaza</button>
+              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Bugis Junction">Bugis Junction</button>
+              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Jewel Changi">Jewel Changi</button>
+            </div>
+
+            <!-- Recent location searches -->
+            <div id="recentSearches" class="mt-2.5 flex flex-wrap items-center gap-1.5 hidden">
+              <span class="text-[10px] font-bold text-brand-600 flex items-center gap-1">
+                <i data-lucide="history" class="w-3 h-3"></i> Recent:
+              </span>
+              <div id="recentList" class="flex flex-wrap gap-1.5"></div>
             </div>
           </div>
 
@@ -292,6 +301,66 @@
     }
     loadProfile();
 
+    // Recent Searches Management
+    const RECENT_KEY = 'bitefinder_recent_searches';
+
+    function getLocalRecent() {
+      try {
+        return JSON.parse(localStorage.getItem(RECENT_KEY)) || [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveLocalRecent(query) {
+      if (!query) return;
+      let list = getLocalRecent().filter(q => q.toLowerCase() !== query.toLowerCase());
+      list.unshift(query);
+      if (list.length > 5) list = list.slice(0, 5);
+      try {
+        localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+      } catch {}
+      renderRecentSearches(list);
+    }
+
+    function renderRecentSearches(list) {
+      const container = document.getElementById('recentSearches');
+      const listEl = document.getElementById('recentList');
+      if (!list || list.length === 0) {
+        container.classList.add('hidden');
+        return;
+      }
+      container.classList.remove('hidden');
+      listEl.innerHTML = '';
+      list.forEach(q => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'text-xs px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-700 hover:bg-brand-100 border border-brand-200 transition font-medium';
+        btn.textContent = q;
+        btn.addEventListener('click', () => {
+          document.getElementById('locationInput').value = q;
+        });
+        listEl.appendChild(btn);
+      });
+      lucide.createIcons();
+    }
+
+    async function initRecentSearches() {
+      let list = getLocalRecent();
+      try {
+        const res = await fetch('/api/recent-searches');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.recent && data.recent.length > 0) {
+            const merged = [...new Set([...list, ...data.recent])].slice(0, 5);
+            list = merged;
+          }
+        }
+      } catch {}
+      renderRecentSearches(list);
+    }
+    initRecentSearches();
+
     // Search Handler
     document.getElementById('searchForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -327,6 +396,9 @@
         other_preferences: otherPreferences,
         traffic_aware: false
       };
+
+      // Save recent location search
+      saveLocalRecent(payload.location);
 
       // Loading state
       searchBtn.disabled = true;
@@ -398,6 +470,39 @@
       }
     });
 
+    function formatHours(r) {
+      if (r.today_hours) return r.today_hours;
+      if (!r.opening_hours || typeof r.opening_hours !== 'object') {
+        return r.open_now ? 'Open (Regular hours unlisted)' : 'Check with store';
+      }
+      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const today = days[new Date().getDay()];
+      const slots = r.opening_hours[today];
+
+      if (!slots || slots.length === 0) {
+        return 'Closed today';
+      }
+
+      const parseTime = (t) => {
+        if (!t || typeof t !== 'string' || t.length !== 4) return t || '';
+        const h = parseInt(t.slice(0, 2), 10);
+        const m = t.slice(2);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12 = h % 12 === 0 ? 12 : h % 12;
+        return `${h12}:${m} ${ampm}`;
+      };
+
+      if (Array.isArray(slots[0])) {
+        return slots.map(s => `${parseTime(s[0])} – ${parseTime(s[1])}`).join(', ');
+      } else if (slots.length === 2 && typeof slots[0] === 'string') {
+        if (slots[0] === '0000' && (slots[1] === '2359' || slots[1] === '2400')) {
+          return 'Open 24 Hours';
+        }
+        return `${parseTime(slots[0])} – ${parseTime(slots[1])}`;
+      }
+      return 'Available on store inquiry';
+    }
+
     function renderResults(matches, alternatives) {
       const container = document.getElementById('resultsList');
       container.innerHTML = '';
@@ -422,6 +527,7 @@
         const reasons = item.reasons || [];
         const isOfficialHalal = r.halal_certification === 'official' || (r.muis_check && r.muis_check.status === 'verified');
         const isGoogleHalal = r.halal_hint || (r.dietary_requirements && r.dietary_requirements.includes('halal'));
+        const hoursText = formatHours(r);
 
         const card = document.createElement('div');
         card.className = "bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition flex flex-col gap-3";
@@ -460,6 +566,16 @@
             </div>
           </div>
 
+          <!-- Operating Hours Row -->
+          <div class="flex items-center gap-2 text-xs text-slate-700 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
+            <i data-lucide="clock" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+            <span class="font-bold text-slate-800">Hours Today:</span>
+            <span class="text-slate-600 font-medium">${hoursText}</span>
+            ${r.open_now
+              ? `<span class="ml-auto text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-300 shrink-0">Open Now</span>`
+              : `<span class="ml-auto text-[10px] font-bold text-rose-700 bg-rose-100 px-2.5 py-0.5 rounded-full border border-rose-300 shrink-0">Closed</span>`}
+          </div>
+
           <!-- Badges Bar -->
           <div class="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
             ${isOfficialHalal
@@ -481,8 +597,6 @@
             ${routeStr ? `<span class="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700">${routeStr}</span>` : ''}
 
             ${r.price_range ? `<span class="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700">💰 ${r.price_range}</span>` : ''}
-
-            ${r.open_now ? `<span class="text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700">🟢 Open Now</span>` : ''}
           </div>
 
           <!-- AI Grounded Reasons -->
