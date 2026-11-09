@@ -116,6 +116,24 @@ def _sync_from_cli_users_file() -> None:
         debug_log.debug_log(f"CLI->Mongo sync warning: {exc}", "WARNING", "web_api.sync")
 
 
+def _normalize_cli_list_items(items: list[str] | None, is_location: bool = False) -> list[str] | None:
+    """Ensure list items contain at least one letter so BIS profile_schema.normalize_list accepts them."""
+    if items is None:
+        return None
+    if not isinstance(items, list):
+        return None
+    cleaned: list[str] = []
+    for raw in items:
+        val = str(raw or "").strip().lower()
+        if not val:
+            continue
+        if not any(c.isalpha() for c in val):
+            val = f"singapore {val}" if is_location else f"pref {val}"
+        if val not in cleaned:
+            cleaned.append(val)
+    return cleaned
+
+
 def _sync_to_cli_users_file(doc: dict[str, Any]) -> None:
     """Sync a Web UI user profile update back to BIS/data/users.json for the CLI."""
     email = str(doc.get("email") or "")
@@ -131,7 +149,8 @@ def _sync_to_cli_users_file(doc: dict[str, Any]) -> None:
                     cli_users = loaded
         uid = str(doc.get("userID") or doc.get("_id"))
         pref = doc.get("preferences") or {}
-        locs = pref.get("location")
+        locs = _normalize_cli_list_items(pref.get("location"), is_location=True)
+        other_prefs = _normalize_cli_list_items(pref.get("other_preferences"), is_location=False)
         cli_users[uid] = {
             "userID": uid,
             "email": email,
@@ -145,7 +164,7 @@ def _sync_to_cli_users_file(doc: dict[str, Any]) -> None:
                 "dietary_requirements": pref.get("dietary_requirements"),
                 "liked_cuisines": pref.get("liked_cuisines"),
                 "disliked_cuisines": pref.get("disliked_cuisines"),
-                "other_preferences": pref.get("other_preferences"),
+                "other_preferences": other_prefs,
             },
         }
         users_path.parent.mkdir(parents=True, exist_ok=True)
@@ -536,7 +555,8 @@ def save_profile(profile: ProfileModel, authorization: str | None = Header(defau
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err))
 
-    clean_locs = [loc.strip() for loc in profile.location if loc and loc.strip()]
+    clean_locs = _normalize_cli_list_items([loc.strip() for loc in profile.location if loc and loc.strip()], is_location=True) or []
+    other_prefs = _normalize_cli_list_items([p.strip() for p in profile.other_preferences if p.strip()], is_location=False) or []
     preferences = {
         "location": clean_locs if clean_locs else None,
         "max_distance_km": profile.max_distance_km,
@@ -545,7 +565,7 @@ def save_profile(profile: ProfileModel, authorization: str | None = Header(defau
         "dietary_requirements": [d.lower() for d in profile.dietary_requirements],
         "liked_cuisines": [c.lower() for c in profile.liked_cuisines if c],
         "disliked_cuisines": [c.lower() for c in profile.disliked_cuisines if c],
-        "other_preferences": [p.strip() for p in profile.other_preferences if p.strip()],
+        "other_preferences": other_prefs,
     }
 
     existing = database.users.find_one({"_id": target_id})
