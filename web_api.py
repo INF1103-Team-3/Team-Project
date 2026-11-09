@@ -83,10 +83,83 @@ def _extract_token(authorization: str | None = None, token_param: str | None = N
     return None
 
 
+def _sync_from_cli_users_file() -> None:
+    """Sync any profile updates made via the BIS CLI (users.json) into MongoDB."""
+    if not db.is_db_available():
+        return
+    try:
+        users_path = getattr(bis_data, "USERS_FILE", ROOT / "BIS" / "data" / "users.json")
+        if not users_path.exists():
+            return
+        with users_path.open("r", encoding="utf-8") as f:
+            cli_users = json.load(f)
+        if not isinstance(cli_users, dict):
+            return
+        database = db.get_db()
+        for uid, udata in cli_users.items():
+            if not isinstance(udata, dict):
+                continue
+            database.users.update_one(
+                {"_id": uid},
+                {
+                    "$set": {
+                        "userID": uid,
+                        "email": udata.get("email", ""),
+                        "email_verified": bool(udata.get("email_verified", False)),
+                        "username": udata.get("username", "BiteFinder User"),
+                        "preferences": udata.get("preferences") or {},
+                    }
+                },
+                upsert=True,
+            )
+    except Exception as exc:
+        debug_log.debug_log(f"CLI->Mongo sync warning: {exc}", "WARNING", "web_api.sync")
+
+
+def _sync_to_cli_users_file(doc: dict[str, Any]) -> None:
+    """Sync a Web UI user profile update back to BIS/data/users.json for the CLI."""
+    email = str(doc.get("email") or "")
+    if email == "webtest_suite_user@example.com":
+        return
+    try:
+        users_path = getattr(bis_data, "USERS_FILE", ROOT / "BIS" / "data" / "users.json")
+        cli_users: dict[str, Any] = {}
+        if users_path.exists():
+            with users_path.open("r", encoding="utf-8") as f:
+                loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    cli_users = loaded
+        uid = str(doc.get("userID") or doc.get("_id"))
+        pref = doc.get("preferences") or {}
+        cli_users[uid] = {
+            "userID": uid,
+            "email": email,
+            "email_verified": bool(doc.get("email_verified", False)),
+            "username": doc.get("username", "BiteFinder User"),
+            "preferences": {
+                "location": pref.get("location") or ["compass one"],
+                "max_distance_km": pref.get("max_distance_km", 1.5),
+                "max_travel_time_minutes": pref.get("max_travel_time_minutes", 30.0),
+                "budget_per_person": pref.get("budget_per_person", 30.0),
+                "dietary_requirements": pref.get("dietary_requirements") or [],
+                "liked_cuisines": pref.get("liked_cuisines") or [],
+                "disliked_cuisines": pref.get("disliked_cuisines") or [],
+                "other_preferences": pref.get("other_preferences") or [],
+            },
+        }
+        users_path.parent.mkdir(parents=True, exist_ok=True)
+        with users_path.open("w", encoding="utf-8") as f:
+            json.dump(cli_users, f, indent=4, ensure_ascii=False)
+            f.write("\n")
+    except Exception as exc:
+        debug_log.debug_log(f"Mongo->CLI sync warning: {exc}", "WARNING", "web_api.sync")
+
+
 def _get_user_by_token(token: str | None) -> dict[str, Any] | None:
     if not token or not db.is_db_available():
         return None
     try:
+        _sync_from_cli_users_file()
         database = db.get_db()
         session = database.sessions.find_one({"token": token})
         if not session:
@@ -301,6 +374,7 @@ def register_user(req: RegisterModel):
         },
     }
     database.users.insert_one(user_doc)
+    _sync_to_cli_users_file(user_doc)
 
     token = secrets.token_urlsafe(32)
     database.sessions.insert_one({
@@ -328,6 +402,7 @@ def login_user(req: LoginModel):
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err))
 
+    _sync_from_cli_users_file()
     database = db.get_db()
     user_doc = database.users.find_one({"email": email})
     if not user_doc:
@@ -487,6 +562,8 @@ def save_profile(profile: ProfileModel, authorization: str | None = Header(defau
             {"$set": {"username": clean_username, "preferences": preferences}},
         )
         updated = database.users.find_one({"_id": target_id})
+        if updated:
+            _sync_to_cli_users_file(updated)
         return {
             "success": True,
             "message": "Profile preferences saved to your account.",
@@ -501,6 +578,7 @@ def save_profile(profile: ProfileModel, authorization: str | None = Header(defau
         "preferences": preferences,
     }
     database.users.replace_one({"_id": target_id}, doc, upsert=True)
+    _sync_to_cli_users_file(doc)
     return {
         "success": True,
         "message": "Profile preferences saved.",

@@ -505,14 +505,19 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-3 gap-3">
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Max Time (Mins)</label>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max Distance (km)</label>
+            <input type="number" id="profDistInput" min="0.5" max="15" step="0.5" value="1.5"
+              class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max Time (Mins)</label>
             <input type="number" id="profTimeInput" min="5" max="120" step="5" value="30"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Budget (SGD)</label>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Budget (SGD)</label>
             <input type="number" id="profBudgetInput" min="5" max="200" step="5" value="30"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
@@ -890,6 +895,11 @@
       if (user.location && user.location.length) {
         document.getElementById('locationInput').value = user.location[0];
       }
+      if (user.max_distance_km) {
+        const dist = Math.min(15.0, Math.max(0.5, Math.round(user.max_distance_km * 2) / 2));
+        distanceSlider.value = dist;
+        distanceDisplay.textContent = `${dist.toFixed(1)} km`;
+      }
       if (user.max_travel_time_minutes) {
         const mins = Math.min(90, Math.max(5, Math.round(user.max_travel_time_minutes / 5) * 5));
         timeSlider.value = mins;
@@ -903,9 +913,8 @@
       const diet = user.dietary_requirements || [];
       document.getElementById('halalCheck').checked = diet.includes('halal');
       document.getElementById('vegCheck').checked = diet.includes('vegetarian');
-      document.getElementById('cuisineSelect').value = (user.liked_cuisines && user.liked_cuisines.length)
-        ? user.liked_cuisines[0]
-        : '';
+      // Always start each search on "Any Cuisine" unless the user chooses a specific cuisine for this search
+      document.getElementById('cuisineSelect').value = '';
       dislikedCuisines = new Set((user.disliked_cuisines || []).map(c => String(c).toLowerCase()));
       updateDislikedChipsUI();
       document.getElementById('specialInput').value = (user.other_preferences && user.other_preferences.length)
@@ -1054,12 +1063,23 @@
     const profileModal = document.getElementById('profileModal');
     const profileAlert = document.getElementById('profileAlert');
 
-    function openProfileModal() {
+    async function openProfileModal() {
       if (!currentUser) return;
       profileAlert.classList.add('hidden');
+      try {
+        const res = await fetch('/api/auth/me', { headers: authHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user) {
+            currentUser = data.user;
+            applyUserToSearchForm(currentUser);
+          }
+        }
+      } catch {}
       document.getElementById('profileEmailDisplay').textContent = `Signed in as ${currentUser.email}`;
       document.getElementById('profUsernameInput').value = currentUser.username || '';
       document.getElementById('profLocationInput').value = (currentUser.location && currentUser.location[0]) || 'Compass One';
+      document.getElementById('profDistInput').value = currentUser.max_distance_km || 1.5;
       document.getElementById('profTimeInput').value = currentUser.max_travel_time_minutes || 30;
       document.getElementById('profBudgetInput').value = currentUser.budget_per_person || 30;
       const diet = currentUser.dietary_requirements || [];
@@ -1102,7 +1122,7 @@
         username: document.getElementById('profUsernameInput').value.trim(),
         email: currentUser.email,
         location: [document.getElementById('profLocationInput').value.trim()],
-        max_distance_km: currentUser.max_distance_km || 1.5,
+        max_distance_km: parseFloat(document.getElementById('profDistInput').value) || 1.5,
         max_travel_time_minutes: parseFloat(document.getElementById('profTimeInput').value) || 30,
         budget_per_person: parseFloat(document.getElementById('profBudgetInput').value) || 30,
         dietary_requirements: diet,
