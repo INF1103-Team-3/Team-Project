@@ -19,6 +19,23 @@ services:
     networks:
       - bitefinder-test-net
 
+  # 1b. MongoDB Web GUI (Mongo Express — open http://localhost:8081 in browser)
+  mongo-express:
+    image: mongo-express:1.0.2-20-alpine3.19
+    container_name: bitefinder-test-mongo-gui
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_SERVER: mongodb
+      ME_CONFIG_MONGODB_PORT: 27017
+      ME_CONFIG_MONGODB_URL: mongodb://mongodb:27017/
+      ME_CONFIG_BASICAUTH: "false"
+    depends_on:
+      - mongodb
+    networks:
+      - bitefinder-test-net
+
   # 2. Halal checker microservice
   brc:
     build:
