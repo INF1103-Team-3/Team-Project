@@ -218,6 +218,9 @@ def search_restaurants(req: SearchRequestModel):
         }
 
         # 2. Execute BRNS search (Places + Routes + AI Ranking + Halal check)
+        # Allow the Web UI to display up to 20 matches and 20 alternatives
+        brns_main.config.MAX_MATCHES_SHOWN = 20
+        brns_main.config.MAX_ALTERNATIVES_SHOWN = 20
         serialized_payload = json.dumps(payload)
         search_results = brns_main.search(serialized_payload)
 

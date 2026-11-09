@@ -64,6 +64,7 @@ services:
         condition: service_started
     volumes:
       - ./web_api.py:/app/web_api.py
+      - ./BRNS/io_manager.py:/app/BRNS/io_manager.py
       - bis-brns-test-data:/data
       - bitefinder-test-logs:/data/logs
     networks:
@@ -113,6 +114,7 @@ services:
         condition: service_started
     volumes:
       - ./web_api.py:/app/web_api.py
+      - ./BRNS/io_manager.py:/app/BRNS/io_manager.py
       - bis-brns-test-data:/data
       - bitefinder-test-logs:/data/logs
     networks:
