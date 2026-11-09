@@ -1,302 +1,277 @@
-"""Persist BRC raw, cleaned, and checked JSON without partial writes."""
+"""Data Manager: reads and writes every BRC file safely.
 
-from __future__ import annotations
+Files (in BRC/data/ by default):
+    muis_establishments.json         raw MUIS download
+    halal_restaurants.json           cleaned database (read by BRNS)
+    cuisine_tags_cache.json          cuisine tags already decided
+    checked_restaurant(s).json       latest check result(s)
+    checked_restaurants_cache.json   every restaurant ever checked
+    scrape_progress.json, onemap_cache.json   scraper working files
+"""
 
 import json
 import os
 import re
 import tempfile
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
+from BRC.models import CuisineCache, HalalDatabase, HalalOutlet, MuisSnapshot, SOURCE_URL
 
-BRC_DIR = Path(__file__).resolve().parent
-DATA_DIR = BRC_DIR / "data"
+DATA_DIR = Path(__file__).resolve().parent / "data"
 RAW_MUIS_PATH = DATA_DIR / "muis_establishments.json"
 CLEAN_DATABASE_PATH = DATA_DIR / "halal_restaurants.json"
-CUISINE_CACHE_PATH = DATA_DIR / "cuisine_tags_cache.json"
-CHECK_CACHE_PATH = DATA_DIR / "checked_restaurants_cache.json"
-SINGLE_RESULT_PATH = DATA_DIR / "checked_restaurant.json"
-BATCH_RESULT_PATH = DATA_DIR / "checked_restaurants.json"
-SCRAPE_PROGRESS_PATH = DATA_DIR / "scrape_progress.json"
-ONEMAP_CACHE_PATH = DATA_DIR / "onemap_cache.json"
-SOURCE_URL = "https://halal.muis.gov.sg/halal/establishments"
-MAX_SOURCE_AGE = timedelta(days=7)
 
 
-def format_json(value, *, compact_hours=False) -> str:
-    """Return readable JSON with compact opening-hour ranges when requested."""
-    text = json.dumps(value, ensure_ascii=False, indent=2)
-    if compact_hours:
-        text = re.sub(
-            r'\[\n[ \t]*"(\d{4})",\n[ \t]*"(\d{4})"\n[ \t]*\]',
-            r'["\1", "\2"]', text)
-        text = re.sub(
-            r'\[\n(?:[ \t]*\["\d{4}", "\d{4}"\],?\n)+[ \t]*\]',
-            lambda match: "[" + ", ".join(re.findall(
-                r'\["\d{4}", "\d{4}"\]', match.group(0))) + "]",
-            text)
-    return text + "\n"
+class DataUnavailableError(ValueError):
+    """A JSON file is missing, unreadable, invalid, or too old to use."""
 
 
-def write_json_atomic(value, path: Path, *, compact_hours=False) -> None:
-    """Write JSON atomically, retrying transient Windows file locks."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            "w", encoding="utf-8", dir=path.parent,
-            prefix=f".{path.name}.", suffix=".tmp", delete=False,
-        ) as stream:
-            temporary = Path(stream.name)
-            stream.write(format_json(value, compact_hours=compact_hours))
-            stream.flush()
-            os.fsync(stream.fileno())
+class JsonFile:
+    """One JSON file. Writes go to a temporary file first, so a crash never
+    leaves a half-written file behind."""
+
+    def __init__(self, path):
+        self._path = Path(path)
+
+    @property
+    def path(self):
+        return self._path
+
+    def exists(self):
+        return self._path.exists()
+
+    def read(self):
+        try:
+            return json.loads(self._path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise DataUnavailableError(f"Cannot read valid JSON from {self._path}.") from exc
+
+    def write(self, value, compact_hours=False):
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                    "w", encoding="utf-8", dir=self._path.parent,
+                    prefix=f".{self._path.name}.", suffix=".tmp", delete=False) as stream:
+                temporary = Path(stream.name)
+                stream.write(self.format_json(value, compact_hours))
+                stream.flush()
+                os.fsync(stream.fileno())
+            self._replace(temporary)
+            temporary = None
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+
+    def delete(self):
+        self._path.unlink(missing_ok=True)
+
+    def _replace(self, temporary):
+        # Windows may briefly lock the file (antivirus, editors), so retry a few times.
         for attempt in range(8):
             try:
-                os.replace(temporary, path)
-                temporary = None
+                os.replace(temporary, self._path)
                 return
             except PermissionError:
                 if attempt == 7:
                     raise
                 time.sleep(0.05 * (attempt + 1))
-    finally:
-        if temporary is not None:
-            try:
-                temporary.unlink(missing_ok=True)
-            except OSError:
-                pass
+
+    @staticmethod
+    def format_json(value, compact_hours=False):
+        """Indented JSON. With compact_hours, ["0900", "1700"] pairs stay on one line."""
+        text = json.dumps(value, ensure_ascii=False, indent=2)
+        if compact_hours:
+            text = re.sub(r'\[\n[ \t]*"(\d{4})",\n[ \t]*"(\d{4})"\n[ \t]*\]',
+                          r'["\1", "\2"]', text)
+            text = re.sub(r'\[\n(?:[ \t]*\["\d{4}", "\d{4}"\],?\n)+[ \t]*\]',
+                          lambda match: "[" + ", ".join(re.findall(
+                              r'\["\d{4}", "\d{4}"\]', match.group(0))) + "]",
+                          text)
+        return text + "\n"
 
 
-def _read_json(path: Path):
-    try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Cannot read valid JSON from {path}.") from exc
+class DataManager:
+    """Loads and saves BRC data, turning missing or corrupt files into
+    DataUnavailableError (or an empty result where that is safe).
 
+    Composition: the manager creates and owns one JsonFile per data file.
+    """
 
-def _covers_all_postals(prefixes) -> bool:
-    if (not isinstance(prefixes, list)
-            or any(not isinstance(item, str) or not item.isdigit()
-                   or not 1 <= len(item) <= 6 for item in prefixes)):
-        return False
-    terminals = set(prefixes)
+    def __init__(self, folder=DATA_DIR, raw_path=None, clean_path=None,
+                 cuisine_cache_path=None):
+        folder = Path(folder)
+        self._raw = JsonFile(raw_path or folder / RAW_MUIS_PATH.name)
+        self._clean = JsonFile(clean_path or folder / CLEAN_DATABASE_PATH.name)
+        if cuisine_cache_path:
+            cache_path = Path(cuisine_cache_path)
+        elif raw_path and Path(raw_path) != RAW_MUIS_PATH:
+            # A custom raw file keeps its cuisine cache next to its database.
+            cache_path = self._clean.path.with_name("cuisine_tags_cache.json")
+        else:
+            cache_path = folder / "cuisine_tags_cache.json"
+        self._cuisine_cache = JsonFile(cache_path)
+        self._checked_cache = JsonFile(folder / "checked_restaurants_cache.json")
+        self._single_result = folder / "checked_restaurant.json"
+        self._batch_result = folder / "checked_restaurants.json"
+        self._scrape_progress = JsonFile(folder / "scrape_progress.json")
+        self._geocode_cache = JsonFile(folder / "onemap_cache.json")
 
-    def covered(prefix=""):
-        if prefix in terminals:
-            return True
-        if len(prefix) == 6:
-            return False
-        return all(covered(prefix + digit) for digit in "0123456789")
+    @property
+    def clean_path(self):
+        return self._clean.path
 
-    return covered()
+    @property
+    def checked_cache_path(self):
+        return self._checked_cache.path
 
+    @property
+    def scrape_progress_file(self):
+        return self._scrape_progress
 
-def validate_raw_snapshot(snapshot: dict, *, current=True) -> dict:
-    """Require a complete official snapshot and its postal-prefix proof."""
-    if (not isinstance(snapshot, dict)
-            or snapshot.get("complete") is not True
-            or snapshot.get("coverage") != "all_eating_establishments"
-            or snapshot.get("source_url") != SOURCE_URL
-            or not _covers_all_postals(snapshot.get("postal_prefixes"))
-            or not isinstance(snapshot.get("listings"), list)
-            or not snapshot["listings"]
-            or snapshot.get("listing_count") != len(snapshot["listings"])
-            or not isinstance(snapshot.get("fetched_at"), str)):
-        raise ValueError("MUIS raw data is incomplete or invalid.")
-    for row in snapshot["listings"]:
-        if (not isinstance(row, dict)
-                or any(not isinstance(row.get(field), str) or not row[field]
-                       for field in ("certificate_number", "name", "address",
-                                     "postal_code", "scheme"))
-                or not re.fullmatch(r"\d{6}", row["postal_code"])):
-            raise ValueError("MUIS raw data contains an invalid outlet.")
-    try:
-        fetched = datetime.fromisoformat(snapshot["fetched_at"])
-    except ValueError as exc:
-        raise ValueError("MUIS raw data has an invalid retrieval time.") from exc
-    now = datetime.now(timezone.utc)
-    if fetched.tzinfo is None or fetched > now + timedelta(minutes=5):
-        raise ValueError("MUIS raw data has an invalid retrieval time.")
-    if current and now - fetched > MAX_SOURCE_AGE:
-        raise ValueError("MUIS raw data is older than seven days.")
-    return snapshot
+    @property
+    def geocode_cache_file(self):
+        return self._geocode_cache
 
+    def result_path(self, single, output=None):
+        if output:
+            return Path(output)
+        return self._single_result if single else self._batch_result
 
-def load_raw_snapshot(path: Path = RAW_MUIS_PATH, *, current=True) -> dict:
-    return validate_raw_snapshot(_read_json(path), current=current)
+    # Raw MUIS download
 
-
-def save_raw_snapshot(snapshot: dict, path: Path = RAW_MUIS_PATH) -> None:
-    validate_raw_snapshot(snapshot, current=False)
-    write_json_atomic(snapshot, path)
-
-
-def _valid_clean_row(row) -> bool:
-    return (isinstance(row, dict)
-            and isinstance(row.get("name"), str) and bool(row["name"])
-            and isinstance(row.get("address"), str) and bool(row["address"])
-            and isinstance(row.get("postal_code"), str)
-            and bool(re.fullmatch(r"\d{6}", row["postal_code"]))
-            and isinstance(row.get("cuisine"), list)
-            and isinstance(row.get("dietary"), list)
-            and row.get("halal_certification") == "official"
-            and isinstance(row.get("muis"), dict)
-            and isinstance(row["muis"].get("certificate_number"), str))
-
-
-def load_clean_database(path: Path = CLEAN_DATABASE_PATH) -> list[dict]:
-    value = _read_json(path)
-    if (not isinstance(value, dict)
-            or not isinstance(value.get("restaurants"), list)
-            or not value["restaurants"]
-            or value.get("restaurant_count") != len(value["restaurants"])
-            or not isinstance(value.get("source_fetched_at"), str)
-            or any(not _valid_clean_row(row) for row in value["restaurants"])):
-        raise ValueError("The cleaned halal restaurant database is invalid.")
-    return value["restaurants"]
-
-
-def save_clean_database(restaurants: list[dict], source: dict,
-                        path: Path = CLEAN_DATABASE_PATH) -> dict:
-    if not restaurants or any(not _valid_clean_row(row) for row in restaurants):
-        raise ValueError("Refusing to save an incomplete cleaned database.")
-    value = {
-        "source_url": source["source_url"],
-        "source_fetched_at": source["fetched_at"],
-        "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "restaurant_count": len(restaurants),
-        "restaurants": restaurants,
-    }
-    write_json_atomic(value, path)
-    return value
-
-
-def cuisine_cache_key(row: dict) -> str:
-    """Build a stable key that changes when identifying cuisine text changes."""
-    identity = row.get("listing_id") or row.get("certificate_number") or "unknown"
-    name = " ".join(re.findall(
-        r"[a-z0-9]+", str(row.get("name") or "").casefold()))
-    category = " ".join(re.findall(
-        r"[a-z0-9]+", str(row.get("category") or "").casefold()))
-    return f"{identity}|{name}|{category}"
-
-
-def load_cuisine_cache(path: Path = CUISINE_CACHE_PATH) -> dict[str, list[str]]:
-    """Load saved cuisine tags; an invalid cache is treated as empty."""
-    try:
-        value = _read_json(path)
-    except ValueError:
-        return {}
-    tags = value.get("tags") if isinstance(value, dict) else None
-    if (value.get("version") != 1 or not isinstance(tags, dict)
-            or any(not isinstance(key, str) or not isinstance(items, list)
-                   or any(not isinstance(item, str) for item in items)
-                   for key, items in tags.items())):
-        return {}
-    return tags
-
-
-def bootstrap_cuisine_cache(snapshot: dict, clean_path: Path,
-                            cache: dict[str, list[str]]) -> int:
-    """Reuse cuisines from an existing cleaned database when possible."""
-    try:
-        database = load_clean_database(clean_path)
-    except (ValueError, OSError):
-        return 0
-    by_certificate = {
-        row["muis"]["certificate_number"]: row["cuisine"]
-        for row in database
-    }
-    added = 0
-    for row in snapshot["listings"]:
-        key = cuisine_cache_key(row)
-        if key in cache:
-            continue
-        certificate = row.get("certificate_number")
-        if certificate in by_certificate:
-            cache[key] = list(by_certificate[certificate])
-            added += 1
-    return added
-
-
-def save_cuisine_cache(tags: dict[str, list[str]],
-                       path: Path = CUISINE_CACHE_PATH) -> None:
-    """Persist completed cuisine tags after each successful AI batch."""
-    if (not isinstance(tags, dict)
-            or any(not isinstance(key, str) or not isinstance(items, list)
-                   or any(not isinstance(item, str) for item in items)
-                   for key, items in tags.items())):
-        raise ValueError("Refusing to save an invalid cuisine tag cache.")
-    write_json_atomic({
-        "version": 1,
-        "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "entry_count": len(tags),
-        "tags": tags,
-    }, path)
-
-
-def _cache_key(row: dict) -> str:
-    place_id = row.get("google_place_id") or row.get("place_id")
-    if isinstance(place_id, str) and place_id:
-        return "google:" + place_id
-    check = row.get("muis_check")
-    if isinstance(check, dict) and check.get("certificate_number"):
-        return "muis:" + str(check["certificate_number"])
-    postal = str(row.get("postal_code") or "")
-    address = " ".join(re.findall(r"[a-z0-9]+", str(
-        row.get("address") or "").casefold()))
-    name = " ".join(re.findall(r"[a-z0-9]+", str(
-        row.get("name") or "").casefold()))
-    return f"outlet:{postal}:{address}:{name}"
-
-
-def update_checked_cache(records: list[dict], path: Path = CHECK_CACHE_PATH) -> None:
-    cached = []
-    if path.exists():
+    def load_raw_snapshot(self, current=True):
+        """The saved MUIS download; with current=True it must be under 7 days old."""
+        value = self._raw.read()
         try:
-            value = _read_json(path)
-            cached = value.get("restaurants", []) if isinstance(value, dict) else []
-        except ValueError:
-            cached = []
-    merged = {_cache_key(row): row for row in cached if isinstance(row, dict)}
-    for row in records:
-        merged[_cache_key(row)] = row
-    write_json_atomic({
-        "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "restaurant_count": len(merged),
-        "restaurants": list(merged.values()),
-    }, path, compact_hours=True)
+            return MuisSnapshot.from_dict(value).validate(current)
+        except ValueError as exc:
+            raise DataUnavailableError(str(exc)) from exc
 
+    def save_raw_snapshot(self, snapshot):
+        snapshot.validate(current=False)
+        self._raw.write(snapshot.to_dict())
 
-def save_checked_result(result, *, single: bool,
-                        output: Path | None = None):
-    records = [result] if single else result
-    update_checked_cache(records)
-    destination = output or (SINGLE_RESULT_PATH if single else BATCH_RESULT_PATH)
-    write_json_atomic(result, destination, compact_hours=True)
-    return result
+    # Cleaned database
 
+    def load_clean_database(self):
+        value = self._clean.read()
+        try:
+            return self._database_from_json(value)
+        except ValueError as exc:
+            raise DataUnavailableError(str(exc)) from exc
 
-def save(record):
-    """Persist one evaluated BRC restaurant record."""
-    return save_checked_result(record, single=True)
+    def save_clean_database(self, database):
+        if len(database) == 0:
+            raise DataUnavailableError("Refusing to save an incomplete cleaned database.")
+        self._clean.write({
+            "source_url": database.source_url,
+            "source_fetched_at": database.source_fetched_at,
+            "built_at": self._now(),
+            "restaurant_count": len(database),
+            "restaurants": database.to_list(),
+        })
 
+    def load(self):
+        """All cleaned outlets, or [] if the database file is unusable."""
+        try:
+            return list(self.load_clean_database())
+        except (DataUnavailableError, OSError):
+            from shared.debug_log import debug_log
+            debug_log("Cleaned BRC database is unavailable; returning no records.",
+                      "ERROR", "BRC.data.load")
+            return []
 
-def load():
-    """Load cleaned BRC records, returning [] for missing or corrupt data."""
-    try:
-        return load_clean_database()
-    except (ValueError, OSError):
-        from shared.debug_log import debug_log
-        debug_log("Cleaned BRC database is unavailable; returning no records.",
-                  "ERROR", "BRC.data.load")
-        return []
+    def query(self, keep):
+        """Cleaned outlets for which keep(outlet) is True."""
+        return [outlet for outlet in self.load() if keep(outlet)]
 
+    # Cuisine cache
 
-def query(filter_fn):
-    """Return persisted BRC records accepted by a caller filter."""
-    return [record for record in load() if filter_fn(record)]
+    def load_cuisine_cache(self):
+        """Saved cuisine tags; an unreadable or invalid cache starts empty."""
+        try:
+            value = self._cuisine_cache.read()
+        except DataUnavailableError:
+            return CuisineCache()
+        tags = value.get("tags") if isinstance(value, dict) else None
+        valid = (isinstance(tags, dict) and value.get("version") == 1
+                 and all(isinstance(items, list) and all(isinstance(t, str) for t in items)
+                         for items in tags.values()))
+        return CuisineCache(tags) if valid else CuisineCache()
+
+    def save_cuisine_cache(self, cache):
+        tags = cache.to_dict()
+        self._cuisine_cache.write({"version": 1, "updated_at": self._now(),
+                                   "entry_count": len(tags), "tags": tags})
+
+    def bootstrap_cuisine_cache(self, snapshot, cache):
+        """Copy tags from the previous cleaned database for listings not yet cached.
+
+        Empty tags are not copied: they may come from a failed AI batch.
+        """
+        try:
+            database = self.load_clean_database()
+        except (DataUnavailableError, OSError):
+            return 0
+        added = 0
+        for listing in snapshot.listings:
+            outlet = database.get(listing.certificate_number)
+            if listing not in cache and outlet is not None and outlet.cuisines:
+                cache.put(listing, outlet.cuisines)
+                added += 1
+        return added
+
+    # Check results
+
+    def save_checked_result(self, result, single, output=None):
+        """Save the latest result(s) and merge them into the long-term cache."""
+        merged = {self._restaurant_key(row): row for row in self._load_checked_cache()}
+        for row in ([result] if single else result):
+            merged[self._restaurant_key(row)] = row
+        self._checked_cache.write({"updated_at": self._now(), "restaurant_count": len(merged),
+                                   "restaurants": list(merged.values())}, compact_hours=True)
+        JsonFile(self.result_path(single, output)).write(result, compact_hours=True)
+        return result
+
+    def _load_checked_cache(self):
+        if not self._checked_cache.exists():
+            return []
+        try:
+            value = self._checked_cache.read()
+        except DataUnavailableError:
+            return []
+        rows = value.get("restaurants", []) if isinstance(value, dict) else []
+        return [row for row in rows if isinstance(row, dict)]
+
+    # Helpers
+
+    @staticmethod
+    def _database_from_json(value):
+        restaurants = value.get("restaurants") if isinstance(value, dict) else None
+        if (not isinstance(restaurants, list) or not restaurants
+                or value.get("restaurant_count") != len(restaurants)
+                or not isinstance(value.get("source_fetched_at"), str)):
+            raise ValueError("The cleaned halal restaurant database is invalid.")
+        outlets = [HalalOutlet.from_dict(row) for row in restaurants]
+        return HalalDatabase(outlets, value.get("source_url", SOURCE_URL),
+                             value["source_fetched_at"])
+
+    @staticmethod
+    def _restaurant_key(row):
+        """Identify a restaurant by Google place id, then certificate, then name/address."""
+        place_id = row.get("google_place_id") or row.get("place_id")
+        if isinstance(place_id, str) and place_id:
+            return "google:" + place_id
+        check = row.get("muis_check")
+        if isinstance(check, dict) and check.get("certificate_number"):
+            return "muis:" + str(check["certificate_number"])
+        address = " ".join(re.findall(r"[a-z0-9]+", str(row.get("address") or "").casefold()))
+        name = " ".join(re.findall(r"[a-z0-9]+", str(row.get("name") or "").casefold()))
+        return f"outlet:{row.get('postal_code') or ''}:{address}:{name}"
+
+    @staticmethod
+    def _now():
+        return datetime.now(timezone.utc).isoformat(timespec="seconds")
