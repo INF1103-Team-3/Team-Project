@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,7 +10,8 @@
   <!-- Google Fonts & Lucide Icons -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Leaflet Interactive Map CSS & JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -27,19 +29,24 @@
       box-shadow: 0 4px 10px rgba(0, 0, 0, 0.28);
       transition: transform 0.15s ease;
     }
+
     .bf-pin:hover {
       transform: scale(1.18);
     }
+
     .bf-pin-origin {
       background: #2563eb;
       box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.25), 0 4px 10px rgba(0, 0, 0, 0.3);
     }
+
     .bf-pin-match {
       background: #059669;
     }
+
     .bf-pin-alt {
       background: #d97706;
     }
+
     .leaflet-popup-content-wrapper {
       border-radius: 14px !important;
       font-family: "Plus Jakarta Sans", sans-serif !important;
@@ -72,18 +79,24 @@
     }
   </script>
 </head>
-<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col font-sans transition-colors duration-200">
+
+<body
+  class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col font-sans transition-colors duration-200">
 
   <!-- Header -->
-  <header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 shadow-sm transition-colors duration-200">
+  <header
+    class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 shadow-sm transition-colors duration-200">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+        <div
+          class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
           <i data-lucide="utensils" class="w-5 h-5"></i>
         </div>
         <div>
-          <span class="text-xl font-extrabold tracking-tight bg-gradient-to-r from-brand-600 to-amber-600 bg-clip-text text-transparent">BiteFinder</span>
-          <span class="hidden sm:inline-block ml-2 text-xs font-semibold px-2 py-0.5 bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-400 rounded-full border border-brand-200 dark:border-brand-500/30">Singapore</span>
+          <span
+            class="text-xl font-extrabold tracking-tight bg-gradient-to-r from-brand-600 to-amber-600 bg-clip-text text-transparent">BiteFinder</span>
+          <span
+            class="hidden sm:inline-block ml-2 text-xs font-semibold px-2 py-0.5 bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-400 rounded-full border border-brand-200 dark:border-brand-500/30">Singapore</span>
         </div>
       </div>
       <div class="flex items-center gap-2">
@@ -92,7 +105,8 @@
           class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700">
           <i data-lucide="heart" class="w-4 h-4 text-rose-500"></i>
           <span class="hidden sm:inline">Saved</span>
-          <span id="favoritesCountBadge" class="px-1.5 py-0.2 text-[10px] font-extrabold rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300">0</span>
+          <span id="favoritesCountBadge"
+            class="px-1.5 py-0.2 text-[10px] font-extrabold rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300">0</span>
         </button>
 
         <!-- Search History Button -->
@@ -138,29 +152,53 @@
 
     <!-- Left Column: Search & Filters (5 cols) -->
     <div class="lg:col-span-5 flex flex-col gap-6">
-      <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors duration-200">
+      <div
+        class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors duration-200">
         <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
           <i data-lucide="sliders-horizontal" class="w-5 h-5 text-brand-600"></i>
           Search Preferences
         </h2>
 
         <form id="searchForm" class="space-y-5">
-          <!-- Location Input -->
+          <!-- Location Input (Single or Meet-in-the-Middle Multi-Location) -->
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Starting Location</label>
+            <div class="flex items-center justify-between mb-1.5">
+              <label
+                class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Starting
+                Location(s)</label>
+              <button type="button" id="addLocationRowBtn"
+                class="text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 flex items-center gap-1 transition">
+                <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+                <span>Add Friend's Location (Meet in Middle)</span>
+              </button>
+            </div>
             <div class="relative">
               <i data-lucide="map-pin" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
-              <input type="text" id="locationInput" required placeholder="Enter postal code, address, or landmark"
+              <input type="text" id="locationInput" required placeholder="Enter postal code, address, or landmark (e.g. Hougang)"
                 class="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition"
                 value="Compass One">
+            </div>
+            <!-- Additional Locations for "Meet in the Middle" -->
+            <div id="extraLocationsContainer" class="space-y-2 mt-2"></div>
+            <div id="midpointHintBadge" class="hidden mt-2 px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+              <span>🎯</span>
+              <span id="midpointHintText">Finding restaurants in-between 2 locations</span>
             </div>
             <!-- Quick preset pills -->
             <div class="flex flex-wrap items-center gap-1.5 mt-2">
               <span class="text-[10px] font-semibold text-slate-400">Popular:</span>
-              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-100 dark:hover:bg-brand-500/20 hover:text-brand-700 dark:hover:text-brand-300 transition" data-loc="Compass One">Compass One</button>
-              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-100 dark:hover:bg-brand-500/20 hover:text-brand-700 dark:hover:text-brand-300 transition" data-loc="Rivervale Plaza">Rivervale Plaza</button>
-              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-100 dark:hover:bg-brand-500/20 hover:text-brand-700 dark:hover:text-brand-300 transition" data-loc="Bugis Junction">Bugis Junction</button>
-              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-100 dark:hover:bg-brand-500/20 hover:text-brand-700 dark:hover:text-brand-300 transition" data-loc="Jewel Changi">Jewel Changi</button>
+              <button type="button"
+                class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-100 dark:hover:bg-brand-500/20 hover:text-brand-700 dark:hover:text-brand-300 transition"
+                data-loc="Compass One">Compass One</button>
+              <button type="button"
+                class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-100 dark:hover:bg-brand-500/20 hover:text-brand-700 dark:hover:text-brand-300 transition"
+                data-loc="Rivervale Plaza">Rivervale Plaza</button>
+              <button type="button"
+                class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-100 dark:hover:bg-brand-500/20 hover:text-brand-700 dark:hover:text-brand-300 transition"
+                data-loc="Bugis Junction">Bugis Junction</button>
+              <button type="button"
+                class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-100 dark:hover:bg-brand-500/20 hover:text-brand-700 dark:hover:text-brand-300 transition"
+                data-loc="Jewel Changi">Jewel Changi</button>
             </div>
 
             <!-- Recent location searches -->
@@ -175,15 +213,23 @@
           <!-- Travel Mode & Max Limit -->
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Travel Mode</label>
+              <label
+                class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Travel
+                Mode</label>
               <div class="grid grid-cols-3 gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-                <button type="button" class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 bg-white dark:bg-slate-700 shadow-sm text-brand-600 dark:text-brand-400" data-mode="walk">
+                <button type="button"
+                  class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 bg-white dark:bg-slate-700 shadow-sm text-brand-600 dark:text-brand-400"
+                  data-mode="walk">
                   <i data-lucide="footprints" class="w-4 h-4"></i> Walk
                 </button>
-                <button type="button" class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" data-mode="drive">
+                <button type="button"
+                  class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  data-mode="drive">
                   <i data-lucide="car" class="w-4 h-4"></i> Drive
                 </button>
-                <button type="button" class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" data-mode="transit">
+                <button type="button"
+                  class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  data-mode="transit">
                   <i data-lucide="train" class="w-4 h-4"></i> Transit
                 </button>
               </div>
@@ -191,30 +237,38 @@
 
             <div>
               <div class="flex justify-between items-center mb-1.5">
-                <div class="inline-flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
-                  <button type="button" id="limitTypeTimeBtn" class="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm transition">
+                <div
+                  class="inline-flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <button type="button" id="limitTypeTimeBtn"
+                    class="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm transition">
                     Max Time
                   </button>
-                  <button type="button" id="limitTypeDistBtn" class="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition">
+                  <button type="button" id="limitTypeDistBtn"
+                    class="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition">
                     Distance
                   </button>
                 </div>
                 <span id="timeDisplay" class="text-xs font-bold text-brand-600 dark:text-brand-400">30 mins</span>
-                <span id="distanceDisplay" class="hidden text-xs font-bold text-brand-600 dark:text-brand-400">2.0 km</span>
+                <span id="distanceDisplay" class="hidden text-xs font-bold text-brand-600 dark:text-brand-400">2.0
+                  km</span>
               </div>
-              <input type="range" id="timeSlider" min="5" max="90" step="5" value="30" class="w-full accent-brand-600 mt-2">
-              <input type="range" id="distanceSlider" min="0.5" max="15.0" step="0.5" value="2.0" class="hidden w-full accent-brand-600 mt-2">
+              <input type="range" id="timeSlider" min="5" max="90" step="5" value="30"
+                class="w-full accent-brand-600 mt-2">
+              <input type="range" id="distanceSlider" min="0.5" max="15.0" step="0.5" value="2.0"
+                class="hidden w-full accent-brand-600 mt-2">
             </div>
           </div>
 
           <!-- Real-Time Traffic Option (Shown when Drive mode is active) -->
-          <div id="trafficAwareBox" class="hidden p-2.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60">
+          <div id="trafficAwareBox"
+            class="hidden p-2.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60">
             <label class="flex items-center justify-between gap-2 cursor-pointer">
               <div class="flex items-center gap-2 text-xs">
                 <i data-lucide="gauge" class="w-4 h-4 text-brand-600 dark:text-brand-400"></i>
                 <div>
                   <span class="font-bold text-slate-800 dark:text-slate-100">Real-Time Traffic Routing</span>
-                  <span class="block text-[10px] text-slate-500 dark:text-slate-400">Adjust driving durations using live Singapore traffic conditions</span>
+                  <span class="block text-[10px] text-slate-500 dark:text-slate-400">Adjust driving durations using live
+                    Singapore traffic conditions</span>
                 </div>
               </div>
               <input type="checkbox" id="trafficAwareCheck" class="rounded text-brand-600 focus:ring-brand-500">
@@ -224,7 +278,8 @@
           <!-- Budget per person -->
           <div>
             <div class="flex justify-between items-center mb-1.5">
-              <label class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Budget Per Person</label>
+              <label class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Budget Per
+                Person</label>
               <span id="budgetDisplay" class="text-xs font-bold text-brand-600 dark:text-brand-400">SGD $30</span>
             </div>
             <input type="range" id="budgetSlider" min="5" max="100" step="5" value="30" class="w-full accent-brand-600">
@@ -237,16 +292,20 @@
 
           <!-- Dietary Requirements -->
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Dietary Requirements</label>
+            <label
+              class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Dietary
+              Requirements</label>
             <div class="grid grid-cols-2 gap-2">
-              <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 transition">
+              <label
+                class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 transition">
                 <input type="checkbox" id="halalCheck" class="rounded text-emerald-600 focus:ring-emerald-500">
                 <div class="text-xs">
                   <div class="font-bold text-slate-800 dark:text-slate-200">MUIS Halal</div>
                   <div class="text-[10px] text-slate-400">Official verification</div>
                 </div>
               </label>
-              <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-950/30 transition">
+              <label
+                class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-950/30 transition">
                 <input type="checkbox" id="vegCheck" class="rounded text-blue-600 focus:ring-blue-500">
                 <div class="text-xs">
                   <div class="font-bold text-slate-800 dark:text-slate-200">Vegetarian</div>
@@ -259,28 +318,57 @@
           <!-- Preferred Cuisines (Multi-Select + Custom Input) -->
           <div>
             <div class="flex items-center justify-between mb-1.5">
-              <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Preferred Cuisines (Select Multiple or Type)</label>
+              <label
+                class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Preferred
+                Cuisines (Select Multiple or Type)</label>
               <div class="flex items-center gap-2">
-                <span id="preferredQuotaHint" class="hidden text-[10px] font-bold text-emerald-600 dark:text-emerald-400"></span>
-                <button type="button" id="clearPreferredBtn" class="hidden text-[10px] font-bold text-brand-600 dark:text-brand-400 hover:underline">Clear</button>
+                <span id="preferredQuotaHint"
+                  class="hidden text-[10px] font-bold text-emerald-600 dark:text-emerald-400"></span>
+                <button type="button" id="clearPreferredBtn"
+                  class="hidden text-[10px] font-bold text-brand-600 dark:text-brand-400 hover:underline">Clear</button>
               </div>
             </div>
             <div id="preferredChipsContainer" class="flex flex-wrap gap-1.5 mb-2">
-              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="chinese">Chinese</button>
-              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="malay">Malay</button>
-              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="indian">Indian</button>
-              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="japanese">Japanese</button>
-              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="korean">Korean</button>
-              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="western">Western</button>
-              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="italian">Italian</button>
-              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="thai">Thai</button>
-              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="vietnamese">Vietnamese</button>
-              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="peranakan">Peranakan</button>
-              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="indonesian">Indonesian</button>
-              <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="middle eastern">Middle Eastern</button>
+              <button type="button"
+                class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                data-cuisine="chinese">Chinese</button>
+              <button type="button"
+                class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                data-cuisine="malay">Malay</button>
+              <button type="button"
+                class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                data-cuisine="indian">Indian</button>
+              <button type="button"
+                class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                data-cuisine="japanese">Japanese</button>
+              <button type="button"
+                class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                data-cuisine="korean">Korean</button>
+              <button type="button"
+                class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                data-cuisine="western">Western</button>
+              <button type="button"
+                class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                data-cuisine="italian">Italian</button>
+              <button type="button"
+                class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                data-cuisine="thai">Thai</button>
+              <button type="button"
+                class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                data-cuisine="vietnamese">Vietnamese</button>
+              <button type="button"
+                class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                data-cuisine="peranakan">Peranakan</button>
+              <button type="button"
+                class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                data-cuisine="indonesian">Indonesian</button>
+              <button type="button"
+                class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                data-cuisine="middle eastern">Middle Eastern</button>
             </div>
             <div class="flex items-center gap-1.5">
-              <input type="text" id="customCuisineInput" placeholder="Not listed? Type cuisine (e.g. Mexican, Ramen, Spanish) & press +"
+              <input type="text" id="customCuisineInput"
+                placeholder="Not listed? Type cuisine (e.g. Mexican, Spanish) & press +"
                 class="flex-1 px-3 py-1.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
               <button type="button" id="addCustomCuisineBtn"
                 class="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 hover:text-emerald-700 dark:hover:text-emerald-300 border border-slate-200 dark:border-slate-700 transition shrink-0">
@@ -292,28 +380,57 @@
           <!-- Disliked Cuisines (Exclude) -->
           <div>
             <div class="flex items-center justify-between mb-1.5">
-              <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Disliked Cuisines (Click to Exclude)</label>
-              <button type="button" id="clearDislikedBtn" class="hidden text-[10px] font-bold text-rose-600 dark:text-rose-400 hover:underline">Clear</button>
+              <label
+                class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Disliked
+                Cuisines (Click to Exclude)</label>
+              <button type="button" id="clearDislikedBtn"
+                class="hidden text-[10px] font-bold text-rose-600 dark:text-rose-400 hover:underline">Clear</button>
             </div>
             <div id="dislikedChipsContainer" class="flex flex-wrap gap-1.5">
-              <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="chinese">Chinese</button>
-              <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="malay">Malay</button>
-              <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="indian">Indian</button>
-              <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="japanese">Japanese</button>
-              <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="korean">Korean</button>
-              <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="western">Western</button>
-              <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="italian">Italian</button>
-              <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="thai">Thai</button>
-              <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="vietnamese">Vietnamese</button>
-              <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="peranakan">Peranakan</button>
-              <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="indonesian">Indonesian</button>
-              <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="middle eastern">Middle Eastern</button>
+              <button type="button"
+                class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                data-cuisine="chinese">Chinese</button>
+              <button type="button"
+                class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                data-cuisine="malay">Malay</button>
+              <button type="button"
+                class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                data-cuisine="indian">Indian</button>
+              <button type="button"
+                class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                data-cuisine="japanese">Japanese</button>
+              <button type="button"
+                class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                data-cuisine="korean">Korean</button>
+              <button type="button"
+                class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                data-cuisine="western">Western</button>
+              <button type="button"
+                class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                data-cuisine="italian">Italian</button>
+              <button type="button"
+                class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                data-cuisine="thai">Thai</button>
+              <button type="button"
+                class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                data-cuisine="vietnamese">Vietnamese</button>
+              <button type="button"
+                class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                data-cuisine="peranakan">Peranakan</button>
+              <button type="button"
+                class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                data-cuisine="indonesian">Indonesian</button>
+              <button type="button"
+                class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                data-cuisine="middle eastern">Middle Eastern</button>
             </div>
           </div>
 
           <!-- Special Request Text (Gemini AI interpretation) -->
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Special Requests (AI Interpreted)</label>
+            <label
+              class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Special
+              Requests (AI Interpreted)</label>
             <input type="text" id="specialInput" placeholder="e.g. at least 4.5 stars, spicy food, quiet dinner"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
           </div>
@@ -338,15 +455,19 @@
       </div>
 
       <!-- Results Header & Sorting Controls -->
-      <div id="resultsHeader" class="hidden flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div id="resultsHeader"
+        class="hidden flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div>
           <h2 class="text-lg font-bold text-slate-900 dark:text-white" id="resultsCount">Recommendations</h2>
-          <p class="text-xs text-slate-500 dark:text-slate-400" id="resultsSubtext">Verified with Google Places and official MUIS records.</p>
+          <p class="text-xs text-slate-500 dark:text-slate-400" id="resultsSubtext">Verified with Google Places and
+            official MUIS records.</p>
         </div>
 
         <!-- Sort Controls -->
         <div class="flex flex-wrap items-center gap-2.5">
-          <label class="flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer select-none" title="Keep Direct Matches above Alternatives when sorting">
+          <label
+            class="flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer select-none"
+            title="Keep Direct Matches above Alternatives when sorting">
             <input type="checkbox" id="matchesFirstCheck" checked class="rounded text-brand-600 focus:ring-brand-500">
             <span>Matches First</span>
           </label>
@@ -356,7 +477,8 @@
               <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-brand-600 dark:text-brand-400"></i>
               Sort:
             </span>
-            <select id="sortSelect" class="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition cursor-pointer">
+            <select id="sortSelect"
+              class="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition cursor-pointer">
               <option value="ai">✨ AI Best Match (Default)</option>
               <option value="travel_asc">🚶 Shortest Travel Time</option>
               <option value="rating_desc">⭐ Highest Rating (High → Low)</option>
@@ -370,15 +492,20 @@
       </div>
 
       <!-- Interactive Map Section -->
-      <div id="mapSection" class="hidden bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-3">
+      <div id="mapSection"
+        class="hidden bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2">
             <i data-lucide="map" class="w-4 h-4 text-brand-600 dark:text-brand-400"></i>
             <span class="text-sm font-bold text-slate-900 dark:text-white">Interactive Restaurant Map</span>
-            <div class="hidden sm:flex items-center gap-3 ml-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block"></span> You</span>
-              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block"></span> Match</span>
-              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-600 inline-block"></span> Alternative</span>
+            <div
+              class="hidden sm:flex items-center gap-3 ml-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              <span class="flex items-center gap-1"><span
+                  class="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block"></span> You</span>
+              <span class="flex items-center gap-1"><span
+                  class="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block"></span> Match</span>
+              <span class="flex items-center gap-1"><span
+                  class="w-2.5 h-2.5 rounded-full bg-amber-600 inline-block"></span> Alternative</span>
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -392,18 +519,22 @@
             </button>
           </div>
         </div>
-        <div id="resultsMap" class="w-full h-80 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 z-10"></div>
+        <div id="resultsMap"
+          class="w-full h-80 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 z-10"></div>
       </div>
 
       <!-- Results Container -->
       <div id="resultsList" class="space-y-4">
         <!-- Initial Empty State -->
-        <div id="emptyState" class="bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-12 text-center flex flex-col items-center justify-center transition-colors duration-200">
-          <div class="w-16 h-16 rounded-2xl bg-brand-50 dark:bg-brand-500/15 text-brand-600 dark:text-brand-400 flex items-center justify-center mb-4">
+        <div id="emptyState"
+          class="bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-12 text-center flex flex-col items-center justify-center transition-colors duration-200">
+          <div
+            class="w-16 h-16 rounded-2xl bg-brand-50 dark:bg-brand-500/15 text-brand-600 dark:text-brand-400 flex items-center justify-center mb-4">
             <i data-lucide="compass" class="w-8 h-8"></i>
           </div>
           <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">Ready to explore Singapore dining</h3>
-          <p class="text-xs text-slate-500 dark:text-slate-400 max-w-sm mt-1">Select your starting location and dining criteria on the left, then click Find Matching Restaurants.</p>
+          <p class="text-xs text-slate-500 dark:text-slate-400 max-w-sm mt-1">Select your starting location and dining
+            criteria on the left, then click Find Matching Restaurants.</p>
         </div>
       </div>
 
@@ -412,27 +543,33 @@
   </main>
 
   <!-- Authentication Modal (Sign In / Sign Up) -->
-  <div id="authModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+  <div id="authModal"
+    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+    <div
+      class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
       <!-- Modal Header -->
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
         <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white">
+          <div
+            class="w-8 h-8 rounded-lg bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white">
             <i data-lucide="shield-check" class="w-4 h-4"></i>
           </div>
           <h3 class="text-base font-bold text-slate-900 dark:text-white">BiteFinder Account</h3>
         </div>
-        <button type="button" id="closeAuthModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
+        <button type="button" id="closeAuthModalBtn"
+          class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
 
       <!-- Tabs -->
       <div class="grid grid-cols-2 bg-slate-100 dark:bg-slate-800 p-1 mx-6 mt-4 rounded-xl">
-        <button type="button" id="tabLoginBtn" class="py-2 text-xs font-bold rounded-lg bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm transition">
+        <button type="button" id="tabLoginBtn"
+          class="py-2 text-xs font-bold rounded-lg bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm transition">
           Sign In
         </button>
-        <button type="button" id="tabRegisterBtn" class="py-2 text-xs font-bold rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition">
+        <button type="button" id="tabRegisterBtn"
+          class="py-2 text-xs font-bold rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition">
           Create Account
         </button>
       </div>
@@ -443,12 +580,15 @@
       <!-- Sign In Form -->
       <form id="loginForm" class="p-6 space-y-4">
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Email Address</label>
+          <label
+            class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Email
+            Address</label>
           <input type="email" id="loginEmail" required placeholder="you@example.com"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
         </div>
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Password</label>
+          <label
+            class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Password</label>
           <input type="password" id="loginPassword" required minlength="6" placeholder="••••••••"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
         </div>
@@ -457,24 +597,31 @@
           Sign In to BiteFinder
         </button>
         <p class="text-[11px] text-slate-400 text-center">
-          Existing CLI account (e.g. <code class="text-brand-600 dark:text-brand-400">test@gmail.com</code>)? Enter your email and a 6+ character password to set your web password.
+          Existing CLI account (e.g. <code class="text-brand-600 dark:text-brand-400">test@gmail.com</code>)? Enter your
+          email and a 6+ character password to set your web password.
         </p>
       </form>
 
       <!-- Create Account Form -->
       <form id="registerForm" class="p-6 space-y-4 hidden">
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Display Username</label>
+          <label
+            class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Display
+            Username</label>
           <input type="text" id="registerUsername" required maxlength="50" placeholder="e.g. Zephyr"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
         </div>
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Email Address</label>
+          <label
+            class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Email
+            Address</label>
           <input type="email" id="registerEmail" required placeholder="you@example.com"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
         </div>
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Password (Min. 6 Characters)</label>
+          <label
+            class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Password
+            (Min. 6 Characters)</label>
           <input type="password" id="registerPassword" required minlength="6" placeholder="••••••••"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
         </div>
@@ -487,8 +634,10 @@
   </div>
 
   <!-- Profile & Saved Preferences Modal -->
-  <div id="profileModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+  <div id="profileModal"
+    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+    <div
+      class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
         <div>
           <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -497,7 +646,8 @@
           </h3>
           <p id="profileEmailDisplay" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5"></p>
         </div>
-        <button type="button" id="closeProfileModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
+        <button type="button" id="closeProfileModalBtn"
+          class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
@@ -507,12 +657,15 @@
       <form id="profileForm" class="p-6 space-y-4">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Username</label>
+            <label
+              class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Username</label>
             <input type="text" id="profUsernameInput" required maxlength="50"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Location</label>
+            <label
+              class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
+              Location</label>
             <input type="text" id="profLocationInput" placeholder="e.g. Compass One"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
@@ -520,30 +673,38 @@
 
         <div class="grid grid-cols-3 gap-3">
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max Distance (km)</label>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max
+              Distance (km)</label>
             <input type="number" id="profDistInput" min="0.5" max="15" step="0.5" placeholder="e.g. 1.5"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max Time (Mins)</label>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max
+              Time (Mins)</label>
             <input type="number" id="profTimeInput" min="5" max="120" step="5" placeholder="e.g. 30"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Budget (SGD)</label>
+            <label
+              class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Budget
+              (SGD)</label>
             <input type="number" id="profBudgetInput" min="5" max="200" step="5" placeholder="e.g. 20"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
         </div>
 
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Default Dietary Requirements</label>
+          <label
+            class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Default
+            Dietary Requirements</label>
           <div class="flex items-center gap-4">
-            <label class="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
+            <label
+              class="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
               <input type="checkbox" id="profHalalCheck" class="rounded text-emerald-600 focus:ring-emerald-500">
               <span>MUIS Halal</span>
             </label>
-            <label class="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
+            <label
+              class="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
               <input type="checkbox" id="profVegCheck" class="rounded text-blue-600 focus:ring-blue-500">
               <span>Vegetarian</span>
             </label>
@@ -552,19 +713,25 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Preferred Cuisines</label>
-            <input type="text" id="profLikedInput" placeholder="e.g. chinese, japanese, ramen"
+            <label
+              class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
+              Preferred Cuisines</label>
+            <input type="text" id="profLikedInput" placeholder="e.g. chinese, japanese"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Disliked Cuisines</label>
+            <label
+              class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
+              Disliked Cuisines</label>
             <input type="text" id="profDislikedInput" placeholder="e.g. western, italian"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
         </div>
 
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Special Wishes</label>
+          <label
+            class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
+            Special Wishes</label>
           <input type="text" id="profOtherInput" placeholder="e.g. at least 4 stars, cozy dinner spot"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
         </div>
@@ -584,29 +751,37 @@
   </div>
 
   <!-- Turn-by-Turn Route Drawer / Modal -->
-  <div id="routeModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-lg max-h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
+  <div id="routeModal"
+    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+    <div
+      class="bg-white dark:bg-slate-900 w-full max-w-lg max-h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
       <!-- Header -->
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
         <div class="flex items-center gap-2.5">
-          <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white shadow-sm">
+          <div
+            class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white shadow-sm">
             <i data-lucide="navigation" class="w-4 h-4"></i>
           </div>
           <div>
-            <h3 id="routeModalTitle" class="text-base font-bold text-slate-900 dark:text-white">Turn-by-Turn Directions</h3>
-            <p id="routeModalSubtitle" class="text-xs text-slate-500 dark:text-slate-400">Verified via Google Routes API</p>
+            <h3 id="routeModalTitle" class="text-base font-bold text-slate-900 dark:text-white">Turn-by-Turn Directions
+            </h3>
+            <p id="routeModalSubtitle" class="text-xs text-slate-500 dark:text-slate-400">Verified via Google Routes API
+            </p>
           </div>
         </div>
-        <button type="button" id="closeRouteModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
+        <button type="button" id="closeRouteModalBtn"
+          class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
 
       <!-- Summary Metrics -->
-      <div id="routeSummaryBar" class="grid grid-cols-3 gap-2 px-6 py-3 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 shrink-0">
+      <div id="routeSummaryBar"
+        class="grid grid-cols-3 gap-2 px-6 py-3 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 shrink-0">
         <div class="text-center">
           <div class="text-[10px] font-bold uppercase text-slate-400">Travel Mode</div>
-          <div id="routeModeBadge" class="text-xs font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 capitalize">—</div>
+          <div id="routeModeBadge" class="text-xs font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 capitalize">—
+          </div>
         </div>
         <div class="text-center border-x border-slate-200 dark:border-slate-700">
           <div class="text-[10px] font-bold uppercase text-slate-400">Est. Duration</div>
@@ -623,7 +798,8 @@
       </div>
 
       <!-- Footer -->
-      <div class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between shrink-0">
+      <div
+        class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between shrink-0">
         <button type="button" id="closeRouteFooterBtn"
           class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition">
           Close
@@ -638,8 +814,10 @@
   </div>
 
   <!-- Saved Favorites Modal -->
-  <div id="favoritesModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-xl max-h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
+  <div id="favoritesModal"
+    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+    <div
+      class="bg-white dark:bg-slate-900 w-full max-w-xl max-h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
         <div class="flex items-center gap-2.5">
           <div class="w-9 h-9 rounded-xl bg-rose-500 flex items-center justify-center text-white shadow-sm">
@@ -650,13 +828,15 @@
             <p class="text-xs text-slate-500 dark:text-slate-400">Stored in MongoDB • Accessible anytime</p>
           </div>
         </div>
-        <button type="button" id="closeFavoritesModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
+        <button type="button" id="closeFavoritesModalBtn"
+          class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
       <div id="favoritesListContainer" class="p-6 overflow-y-auto flex-1 space-y-3 text-xs">
       </div>
-      <div class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-end shrink-0">
+      <div
+        class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-end shrink-0">
         <button type="button" id="closeFavoritesFooterBtn"
           class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition">
           Close
@@ -666,11 +846,14 @@
   </div>
 
   <!-- Search History Drawer / Modal -->
-  <div id="historyModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-xl max-h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
+  <div id="historyModal"
+    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+    <div
+      class="bg-white dark:bg-slate-900 w-full max-w-xl max-h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
         <div class="flex items-center gap-2.5">
-          <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white shadow-sm">
+          <div
+            class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white shadow-sm">
             <i data-lucide="history" class="w-4 h-4"></i>
           </div>
           <div>
@@ -678,13 +861,15 @@
             <p class="text-xs text-slate-500 dark:text-slate-400">Past searches in MongoDB • One-click Re-Run</p>
           </div>
         </div>
-        <button type="button" id="closeHistoryModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
+        <button type="button" id="closeHistoryModalBtn"
+          class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
       <div id="historyListContainer" class="p-6 overflow-y-auto flex-1 space-y-3 text-xs">
       </div>
-      <div class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between shrink-0">
+      <div
+        class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between shrink-0">
         <button type="button" id="clearHistoryBtn"
           class="px-3.5 py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 border border-rose-200 dark:border-rose-800/60 transition flex items-center gap-1.5">
           <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
@@ -702,6 +887,7 @@
     // State
     let currentMode = 'walk';
     let lastOrigin = null;
+    let lastInputOrigins = [];
     let lastMatches = [];
     let lastAlternatives = [];
     let displayedItems = [];
@@ -746,7 +932,7 @@
       const isDark = document.documentElement.classList.toggle('dark');
       try {
         localStorage.setItem('bitefinder_theme', isDark ? 'dark' : 'light');
-      } catch {}
+      } catch { }
       updateThemeUI();
       refreshMapTheme();
     });
@@ -777,7 +963,69 @@
       });
     });
 
-    // Preset pills
+    // Preset pills & Multi-Location ("Meet in the Middle") Management
+    const extraLocationsContainer = document.getElementById('extraLocationsContainer');
+    const midpointHintBadge = document.getElementById('midpointHintBadge');
+    const midpointHintText = document.getElementById('midpointHintText');
+    const addLocationRowBtn = document.getElementById('addLocationRowBtn');
+
+    function updateMidpointHint() {
+      const extraRows = extraLocationsContainer.querySelectorAll('.extra-location-input');
+      const totalCount = 1 + extraRows.length;
+      if (totalCount > 1) {
+        midpointHintText.textContent = `Finding restaurants at the midpoint in-between ${totalCount} locations`;
+        midpointHintBadge.classList.remove('hidden');
+      } else {
+        midpointHintBadge.classList.add('hidden');
+      }
+      extraRows.forEach((inp, idx) => {
+        inp.placeholder = `Location ${idx + 2} (e.g. Punggol, Bugis, Jurong East)`;
+      });
+    }
+
+    function addExtraLocationInput(initialValue = '') {
+      const row = document.createElement('div');
+      row.className = "relative flex items-center gap-1.5";
+      row.innerHTML = `
+        <div class="relative flex-1">
+          <i data-lucide="users" class="w-4 h-4 absolute left-3 top-2.5 text-indigo-500"></i>
+          <input type="text" class="extra-location-input w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+            placeholder="Location 2 (e.g. Punggol)">
+        </div>
+        <button type="button" class="remove-loc-btn p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-rose-500 hover:border-rose-300 transition" title="Remove this location">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      `;
+      const inp = row.querySelector('.extra-location-input');
+      inp.value = initialValue;
+      row.querySelector('.remove-loc-btn').addEventListener('click', () => {
+        row.remove();
+        updateMidpointHint();
+      });
+      extraLocationsContainer.appendChild(row);
+      lucide.createIcons();
+      updateMidpointHint();
+      if (!initialValue) inp.focus();
+    }
+
+    function getAllEnteredLocations() {
+      const primary = document.getElementById('locationInput').value.trim();
+      const extras = Array.from(extraLocationsContainer.querySelectorAll('.extra-location-input'))
+        .map(el => el.value.trim())
+        .filter(Boolean);
+      return [primary, ...extras].filter(Boolean);
+    }
+
+    function setEnteredLocations(locArray) {
+      const list = Array.isArray(locArray) && locArray.length ? locArray : [''];
+      document.getElementById('locationInput').value = list[0] || '';
+      extraLocationsContainer.innerHTML = '';
+      list.slice(1).forEach(val => addExtraLocationInput(val));
+      updateMidpointHint();
+    }
+
+    addLocationRowBtn.addEventListener('click', () => addExtraLocationInput(''));
+
     document.querySelectorAll('.preset-pill').forEach(pill => {
       pill.addEventListener('click', () => {
         document.getElementById('locationInput').value = pill.dataset.loc;
@@ -993,7 +1241,7 @@
       try {
         if (token) localStorage.setItem(TOKEN_KEY, token);
         else localStorage.removeItem(TOKEN_KEY);
-      } catch {}
+      } catch { }
     }
 
     function authHeaders(extra = {}) {
@@ -1170,7 +1418,7 @@
           method: 'POST',
           headers: authHeaders()
         });
-      } catch {}
+      } catch { }
       setAuthToken('');
       currentUser = null;
       updateAuthUI();
@@ -1193,7 +1441,7 @@
             applyUserToSearchForm(currentUser);
           }
         }
-      } catch {}
+      } catch { }
       document.getElementById('profileEmailDisplay').textContent = `Signed in as ${currentUser.email}`;
       document.getElementById('profUsernameInput').value = currentUser.username || '';
       document.getElementById('profLocationInput').value = (currentUser.location && currentUser.location.length) ? currentUser.location[0] : '';
@@ -1317,7 +1565,7 @@
       if (list.length > 5) list = list.slice(0, 5);
       try {
         localStorage.setItem(RECENT_KEY, JSON.stringify(list));
-      } catch {}
+      } catch { }
       renderRecentSearches(list);
     }
 
@@ -1354,7 +1602,7 @@
             list = merged;
           }
         }
-      } catch {}
+      } catch { }
       renderRecentSearches(list);
     }
     initRecentSearches();
@@ -1385,9 +1633,12 @@
         addCustomCuisinesFromInput();
       }
       const selectedLiked = Array.from(preferredCuisines);
+      const allLocations = getAllEnteredLocations();
+      const primaryLoc = allLocations[0] || document.getElementById('locationInput').value.trim();
 
       const payload = {
-        location: document.getElementById('locationInput').value.trim(),
+        location: primaryLoc,
+        locations: allLocations,
         mode: currentMode,
         max_travel_minutes: currentLimitType === 'time' ? parseFloat(timeSlider.value) : null,
         max_distance_km: currentLimitType === 'distance' ? parseFloat(distanceSlider.value) : null,
@@ -1401,7 +1652,7 @@
       };
 
       // Save recent location search
-      saveLocalRecent(payload.location);
+      saveLocalRecent(allLocations.length > 1 ? allLocations.join(' + ') : payload.location);
 
       // Loading state
       searchBtn.disabled = true;
@@ -1414,7 +1665,7 @@
           const mData = await mRes.json();
           if (mData.active_model) activeModelLabel = mData.active_model;
         }
-      } catch {}
+      } catch { }
 
       statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200";
       statusIcon.innerHTML = `<svg class="animate-spin w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
@@ -1431,7 +1682,7 @@
               statusText.textContent = `Querying Google Places, computing routes, and ranking candidates with ${activeModelLabel}...`;
             }
           }
-        } catch {}
+        } catch { }
       }, 600);
 
       try {
@@ -1483,13 +1734,17 @@
           breakdownStr = ` • Cuisine: ${formatCuisineLabel(breakdownKeys[0])}`;
         }
         lastOrigin = data.origin || null;
+        lastInputOrigins = data.input_origins || [];
         lastMatches = matches;
         lastAlternatives = alternatives;
         const totalFound = matches.length + alternatives.length;
+        const midpointNote = lastInputOrigins.length > 1
+          ? ` • 🎯 In-between ${lastInputOrigins.map(o => o.query).join(' & ')}`
+          : '';
 
         statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200";
         statusIcon.innerHTML = `<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>`;
-        statusText.textContent = `Found ${matches.length} direct match${matches.length === 1 ? '' : 'es'} and ${alternatives.length} alternative${alternatives.length === 1 ? '' : 's'}${breakdownStr} • Ranked by ${modelUsed}`;
+        statusText.textContent = `Found ${matches.length} direct match${matches.length === 1 ? '' : 'es'} and ${alternatives.length} alternative${alternatives.length === 1 ? '' : 's'}${midpointNote}${breakdownStr} • Ranked by ${modelUsed}`;
         lucide.createIcons();
 
         if (emptyState) emptyState.remove();
@@ -1791,11 +2046,11 @@
                 <span class="w-6 h-6 rounded-full text-xs font-extrabold flex items-center justify-center text-white shrink-0 ${item.isMatch ? 'bg-emerald-600' : 'bg-amber-600'}">${rankNumber}</span>
                 <h3 class="text-base font-bold text-slate-900 dark:text-white">${r.name || 'Restaurant'}</h3>
                 ${item.isMatch
-                  ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">Match</span>`
-                  : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">Alternative</span>`}
+            ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">Match</span>`
+            : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">Alternative</span>`}
                 ${item.matched_cuisine
-                  ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-950/80 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800 capitalize">🍽️ ${formatCuisineLabel(item.matched_cuisine)}</span>`
-                  : ''}
+            ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-950/80 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800 capitalize">🍽️ ${formatCuisineLabel(item.matched_cuisine)}</span>`
+            : ''}
               </div>
               <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
                 <i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-400"></i>
@@ -1819,27 +2074,27 @@
             <span class="font-bold text-slate-800 dark:text-slate-100">Hours Today:</span>
             <span class="text-slate-600 dark:text-slate-300 font-medium">${hoursText}</span>
             ${r.open_now
-              ? `<span class="ml-auto text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800 shrink-0">Open Now</span>`
-              : `<span class="ml-auto text-[10px] font-bold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-950 px-2.5 py-0.5 rounded-full border border-rose-300 dark:border-rose-800 shrink-0">Closed</span>`}
+            ? `<span class="ml-auto text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800 shrink-0">Open Now</span>`
+            : `<span class="ml-auto text-[10px] font-bold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-950 px-2.5 py-0.5 rounded-full border border-rose-300 dark:border-rose-800 shrink-0">Closed</span>`}
           </div>
 
           <!-- Badges Bar -->
           <div class="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
             ${isOfficialHalal
-              ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+            ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
                    <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"></i> Official MUIS Halal
                  </span>`
-              : isGoogleHalal
+            : isGoogleHalal
               ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
                    <i data-lucide="info" class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400"></i> Halal (Google Indicated)
                  </span>`
               : ''}
 
             ${r.serves_vegetarian_food
-              ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1">
+            ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1">
                    <i data-lucide="leaf" class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400"></i> Vegetarian
                  </span>`
-              : ''}
+            : ''}
 
             ${routeStr ? `<span class="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">${routeStr}</span>` : ''}
 
@@ -1870,19 +2125,18 @@
                 Step-by-Step Route
               </button>
               ${(() => {
-                const isFav = favoriteKeys.has(getPlaceKey(r));
-                return `
+            const isFav = favoriteKeys.has(getPlaceKey(r));
+            return `
                   <button type="button" id="favBtn-${displayIdx}" onclick="toggleFavoriteByIndex(${displayIdx})"
-                    class="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
-                      isFav
-                        ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-300 border-rose-200 dark:border-rose-800'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-slate-700 hover:text-rose-600 border-slate-200 dark:border-slate-700'
-                    }">
+                    class="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${isFav
+                ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-slate-700 hover:text-rose-600 border-slate-200 dark:border-slate-700'
+              }">
                     <i data-lucide="heart" class="w-3.5 h-3.5 ${isFav ? 'text-rose-500 fill-rose-500' : 'text-rose-500'}"></i>
                     <span>${isFav ? 'Saved' : 'Save'}</span>
                   </button>
                 `;
-              })()}
+          })()}
             </div>
             <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer"
               class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 flex items-center gap-1 hover:underline">
@@ -1924,15 +2178,50 @@
       itemMarkers = [];
       mapBoundsPoints = [];
 
-      // 1. Origin Pin
+      // 1. Origin / Midpoint Pin + Individual Friend Location Pins
       if (lastOrigin && typeof lastOrigin.latitude === 'number' && typeof lastOrigin.longitude === 'number') {
         const oLat = lastOrigin.latitude;
         const oLng = lastOrigin.longitude;
         mapBoundsPoints.push([oLat, oLng]);
 
+        if (lastInputOrigins && lastInputOrigins.length > 1) {
+          lastInputOrigins.forEach((personOrigin, pIdx) => {
+            if (typeof personOrigin.latitude !== 'number' || typeof personOrigin.longitude !== 'number') return;
+            const pLat = personOrigin.latitude;
+            const pLng = personOrigin.longitude;
+            mapBoundsPoints.push([pLat, pLng]);
+
+            const personIcon = L.divIcon({
+              className: '',
+              html: `<div class="bf-pin" style="width:28px;height:28px;background:#6366f1;font-size:12px;" title="Address ${pIdx + 1}">👤</div>`,
+              iconSize: [28, 28],
+              iconAnchor: [14, 14],
+              popupAnchor: [0, -14]
+            });
+
+            const personMarker = L.marker([pLat, pLng], { icon: personIcon, zIndexOffset: 950 })
+              .bindPopup(`
+                <div class="text-xs">
+                  <div class="font-extrabold text-indigo-600">Location ${pIdx + 1}: ${personOrigin.query || 'Address'}</div>
+                  <div class="text-slate-600 mt-0.5">${personOrigin.label || ''}</div>
+                </div>
+              `);
+            mapMarkersLayer.addLayer(personMarker);
+
+            const midConnector = L.polyline([[pLat, pLng], [oLat, oLng]], {
+              color: '#6366f1',
+              weight: 2.5,
+              dashArray: '5, 6',
+              opacity: 0.75
+            });
+            mapMarkersLayer.addLayer(midConnector);
+          });
+        }
+
+        const isMidpoint = lastInputOrigins && lastInputOrigins.length > 1;
         const originIcon = L.divIcon({
           className: '',
-          html: `<div class="bf-pin bf-pin-origin" style="width:30px;height:30px;">📍</div>`,
+          html: `<div class="bf-pin bf-pin-origin" style="width:30px;height:30px;">${isMidpoint ? '🎯' : '📍'}</div>`,
           iconSize: [30, 30],
           iconAnchor: [15, 15],
           popupAnchor: [0, -15]
@@ -1941,7 +2230,7 @@
         const originMarker = L.marker([oLat, oLng], { icon: originIcon, zIndexOffset: 1000 })
           .bindPopup(`
             <div class="text-xs">
-              <div class="font-extrabold text-blue-600">Starting Location</div>
+              <div class="font-extrabold text-blue-600">${isMidpoint ? '🎯 Meet-in-the-Middle Center' : 'Starting Location'}</div>
               <div class="text-slate-600 mt-0.5">${lastOrigin.label || lastOrigin.query || 'Your Origin'}</div>
             </div>
           `);
@@ -2008,7 +2297,7 @@
       ).addTo(mapInstance);
     }
 
-    window.focusRestaurantOnMap = function(idx) {
+    window.focusRestaurantOnMap = function (idx) {
       const item = displayedItems[idx];
       const marker = itemMarkers[idx];
       if (!item || !marker || !mapInstance) return;
@@ -2052,7 +2341,7 @@
     document.getElementById('closeRouteModalBtn').addEventListener('click', closeRouteModal);
     document.getElementById('closeRouteFooterBtn').addEventListener('click', closeRouteModal);
 
-    window.openRouteDrawer = async function(idx) {
+    window.openRouteDrawer = async function (idx) {
       const item = displayedItems[idx];
       if (!item || !lastOrigin) return;
       const r = item.restaurant || {};
@@ -2176,7 +2465,7 @@
     }
     loadFavorites();
 
-    window.toggleFavoriteByIndex = async function(displayIdx) {
+    window.toggleFavoriteByIndex = async function (displayIdx) {
       const item = displayedItems[displayIdx];
       if (!item || !item.restaurant) return;
       const r = item.restaurant;
@@ -2193,7 +2482,7 @@
       }
     };
 
-    window.removeFavoriteByKey = async function(placeKey) {
+    window.removeFavoriteByKey = async function (placeKey) {
       try {
         const res = await fetch(`/api/favorites?place_key=${encodeURIComponent(placeKey)}`, {
           method: 'DELETE',
@@ -2337,10 +2626,13 @@
       }
     }
 
-    window.rerunHistoryItem = function(idx) {
+    window.rerunHistoryItem = function (idx) {
       const item = searchHistoryEntries[idx];
       if (!item) return;
-      document.getElementById('locationInput').value = item.query || 'Compass One';
+      const savedLocs = Array.isArray(item.locations) && item.locations.length
+        ? item.locations
+        : (item.query ? String(item.query).split(' + ').map(s => s.trim()).filter(Boolean) : ['Compass One']);
+      setEnteredLocations(savedLocs);
 
       // Set mode
       const targetMode = item.mode || 'walk';
@@ -2402,7 +2694,7 @@
     document.getElementById('clearHistoryBtn').addEventListener('click', async () => {
       try {
         await fetch('/api/history', { method: 'DELETE', headers: authHeaders() });
-        try { localStorage.removeItem(RECENT_KEY); } catch {}
+        try { localStorage.removeItem(RECENT_KEY); } catch { }
         renderRecentSearches([]);
         loadAndRenderHistory();
       } catch (err) {
@@ -2411,4 +2703,5 @@
     });
   </script>
 </body>
+
 </html>

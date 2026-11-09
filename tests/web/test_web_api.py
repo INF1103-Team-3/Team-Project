@@ -643,6 +643,76 @@ def test_multi_cuisine_and_custom_cuisine_division():
         web_api.brns_main.search = orig_search
 
 
+def test_multi_location_midpoint_search():
+    """WEB-10: Providing 2 or more locations calculates the exact geographic midpoint origin."""
+    orig_resolve = web_api.bis_data.resolve_location
+    orig_search = web_api.brns_main.search
+    captured_origin = {}
+
+    coords = {
+        "Hougang": {"query": "Hougang", "label": "Hougang, Singapore", "latitude": 1.3700, "longitude": 103.8800},
+        "Punggol": {"query": "Punggol", "label": "Punggol, Singapore", "latitude": 1.4000, "longitude": 103.9000},
+    }
+
+    def fake_resolve(loc, key):
+        return coords[loc]
+
+    def fake_search(serialized):
+        payload = json.loads(serialized)
+        captured_origin.update(payload.get("origin") or {})
+        return {
+            "matches": [
+                {"restaurant": {"name": "Midpoint Cafe", "address": "Sengkang Square"}, "reasons": ["Near midpoint"]}
+            ],
+            "alternatives": [],
+            "exclusions": [],
+        }
+
+    try:
+        web_api.bis_data.resolve_location = fake_resolve
+        web_api.brns_main.search = fake_search
+
+        res = client.post(
+            "/api/search",
+            json={
+                "location": "Hougang",
+                "locations": ["Hougang", "Punggol"],
+                "mode": "transit",
+                "max_travel_minutes": 20.0,
+                "budget_per_person": 25.0,
+            },
+        )
+        data = res.json()
+
+        actual = {
+            "status_code": res.status_code,
+            "midpoint_lat": captured_origin.get("latitude"),
+            "midpoint_lng": captured_origin.get("longitude"),
+            "input_origins_count": len(data.get("input_origins", [])),
+            "label_mentions_both": "Hougang" in captured_origin.get("label", "") and "Punggol" in captured_origin.get("label", ""),
+        }
+        expected = {
+            "status_code": 200,
+            "midpoint_lat": 1.385,
+            "midpoint_lng": 103.89,
+            "input_origins_count": 2,
+            "label_mentions_both": True,
+        }
+
+        show_case(
+            "WEB-10: Multi-Location 'Meet in the Middle' Midpoint Search",
+            "POST /api/search",
+            "Verifies that providing 2 or more addresses computes their geographic midpoint in Singapore and searches around it.",
+            {"locations": ["Hougang", "Punggol"]},
+            expected,
+            actual,
+        )
+        assert actual == expected
+    finally:
+        web_api.bis_data.resolve_location = orig_resolve
+        web_api.brns_main.search = orig_search
+
+
 TESTS = (
     test_health_and_cuisines,
     test_authentication_lifecycle,
@@ -653,6 +723,7 @@ TESTS = (
     test_search_history_and_recent_searches,
     test_turn_by_turn_route_endpoint,
     test_multi_cuisine_and_custom_cuisine_division,
+    test_multi_location_midpoint_search,
 )
 
 

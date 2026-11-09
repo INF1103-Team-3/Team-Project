@@ -230,7 +230,8 @@ class LoginModel(BaseModel):
 
 
 class SearchRequestModel(BaseModel):
-    location: str = Field(..., description="Singapore postal code, address, or landmark")
+    location: str = Field("", description="Singapore postal code, address, or landmark")
+    locations: list[str] = Field(default_factory=list, description="Multiple Singapore addresses to find restaurants in between (Meet in the Middle)")
     mode: str = Field("walk", description="Travel mode: walk, drive, or transit")
     max_travel_minutes: float | None = Field(20.0, description="Maximum travel time in minutes")
     max_distance_km: float | None = Field(None, description="Maximum travel distance in kilometers")
@@ -617,11 +618,44 @@ def search_restaurants(req: SearchRequestModel, authorization: str | None = Head
     debug_log.debug_log(f"Web API search request for location: {req.location}", "INFO", "web_api.search")
 
     try:
-        # 1. Resolve origin
-        try:
-            origin = bis_data.resolve_location(req.location, api_key)
-        except Exception as err:
-            raise HTTPException(status_code=400, detail=f"Location could not be resolved: {err}")
+        # 1. Collect and resolve one or more starting locations (supports "Meet in the Middle")
+        raw_locations: list[str] = []
+        for item in (req.locations or []):
+            clean_loc = str(item or "").strip()
+            if clean_loc and clean_loc not in raw_locations:
+                raw_locations.append(clean_loc)
+        if req.location and req.location.strip():
+            primary_loc = req.location.strip()
+            if primary_loc not in raw_locations:
+                raw_locations.insert(0, primary_loc)
+
+        if not raw_locations:
+            raise HTTPException(status_code=400, detail="Please enter at least one starting location.")
+
+        resolved_origins: list[dict[str, Any]] = []
+        for loc_str in raw_locations:
+            try:
+                resolved_origins.append(bis_data.resolve_location(loc_str, api_key))
+            except Exception as err:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Location '{loc_str}' could not be resolved: {err}",
+                )
+
+        if len(resolved_origins) == 1:
+            origin = resolved_origins[0]
+            history_query = raw_locations[0]
+        else:
+            mid_lat = round(sum(o["latitude"] for o in resolved_origins) / len(resolved_origins), 6)
+            mid_lng = round(sum(o["longitude"] for o in resolved_origins) / len(resolved_origins), 6)
+            short_names = [o["query"] for o in resolved_origins]
+            history_query = " + ".join(short_names)[:200]
+            origin = {
+                "query": history_query,
+                "label": f"Midpoint between {', '.join(short_names)}"[:500],
+                "latitude": mid_lat,
+                "longitude": mid_lng,
+            }
 
         # Ensure travel limit conforms to BRNS rules: exactly one of distance or minutes
         minutes = req.max_travel_minutes
@@ -786,8 +820,10 @@ def search_restaurants(req: SearchRequestModel, authorization: str | None = Head
                 db.get_db().search_history.insert_one({
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "user_id": uid,
-                    "query": req.location,
+                    "query": history_query,
+                    "locations": raw_locations,
                     "origin": origin,
+                    "input_origins": resolved_origins,
                     "mode": req.mode,
                     "max_travel_minutes": minutes,
                     "max_distance_km": distance,
@@ -809,6 +845,7 @@ def search_restaurants(req: SearchRequestModel, authorization: str | None = Head
         return {
             "success": True,
             "origin": origin,
+            "input_origins": resolved_origins,
             "model_used": model_used,
             "selected_cuisines": selected_cuisines,
             "cuisines_breakdown": cuisines_breakdown,
