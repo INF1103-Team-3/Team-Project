@@ -946,6 +946,7 @@
   <script>
     // State
     let currentMode = 'walk';
+    let activeSearchMode = 'walk';
     let lastOrigin = null;
     let lastInputOrigins = [];
     let lastMatches = [];
@@ -1014,11 +1015,15 @@
         btn.classList.add('bg-white', 'dark:bg-slate-700', 'shadow-sm', 'text-brand-600', 'dark:text-brand-400');
         btn.classList.remove('text-slate-600', 'dark:text-slate-400');
         currentMode = btn.dataset.mode;
+        activeSearchMode = currentMode;
         if (currentMode === 'drive') {
           trafficAwareBox.classList.remove('hidden');
         } else {
           trafficAwareBox.classList.add('hidden');
           trafficAwareCheck.checked = false;
+        }
+        if (lastMatches && (lastMatches.length > 0 || lastAlternatives.length > 0)) {
+          renderResults(lastMatches, lastAlternatives);
         }
       });
     });
@@ -1857,6 +1862,7 @@
       const selectedLiked = Array.from(preferredCuisines);
       const allLocations = getAllEnteredLocations();
       const primaryLoc = allLocations[0] || document.getElementById('locationInput').value.trim();
+      activeSearchMode = currentMode;
 
       const payload = {
         location: primaryLoc,
@@ -2099,10 +2105,59 @@
       return todayPairs.map(p => `${to12Hour(p[0])} – ${to12Hour(p[1])}`).join(', ');
     }
 
-    // Sorting helpers
-    function getTravelMinutes(r) {
-      const val = r.walk_minutes ?? r.drive_minutes ?? r.transit_minutes;
+    // Dynamic Travel Mode and Route Helpers
+    function getModeTravelMinutes(r, mode = activeSearchMode) {
+      if (!r) return null;
+      let val = null;
+      if (mode === 'drive') {
+        val = r.drive_minutes ?? r.transit_minutes ?? r.walk_minutes;
+      } else if (mode === 'transit') {
+        val = r.transit_minutes ?? r.walk_minutes ?? r.drive_minutes;
+      } else {
+        val = r.walk_minutes ?? r.transit_minutes ?? r.drive_minutes;
+      }
       return typeof val === 'number' && !isNaN(val) ? val : null;
+    }
+
+    function formatRouteBadge(r, mode = activeSearchMode) {
+      if (!r) return '';
+      if (mode === 'drive') {
+        if (typeof r.drive_minutes === 'number' && !isNaN(r.drive_minutes)) {
+          return `🚗 ${Math.round(r.drive_minutes)} mins drive`;
+        }
+        if (typeof r.transit_minutes === 'number' && !isNaN(r.transit_minutes)) {
+          return `🚆 ${Math.round(r.transit_minutes)} mins transit`;
+        }
+        if (typeof r.walk_minutes === 'number' && !isNaN(r.walk_minutes)) {
+          return `🚶 ${Math.round(r.walk_minutes)} mins walk`;
+        }
+      } else if (mode === 'transit') {
+        if (typeof r.transit_minutes === 'number' && !isNaN(r.transit_minutes)) {
+          return `🚆 ${Math.round(r.transit_minutes)} mins transit`;
+        }
+        if (typeof r.drive_minutes === 'number' && !isNaN(r.drive_minutes)) {
+          return `🚗 ${Math.round(r.drive_minutes)} mins drive`;
+        }
+        if (typeof r.walk_minutes === 'number' && !isNaN(r.walk_minutes)) {
+          return `🚶 ${Math.round(r.walk_minutes)} mins walk`;
+        }
+      } else {
+        if (typeof r.walk_minutes === 'number' && !isNaN(r.walk_minutes)) {
+          return `🚶 ${Math.round(r.walk_minutes)} mins walk`;
+        }
+        if (typeof r.drive_minutes === 'number' && !isNaN(r.drive_minutes)) {
+          return `🚗 ${Math.round(r.drive_minutes)} mins drive`;
+        }
+        if (typeof r.transit_minutes === 'number' && !isNaN(r.transit_minutes)) {
+          return `🚆 ${Math.round(r.transit_minutes)} mins transit`;
+        }
+      }
+      return '';
+    }
+
+    // Sorting helpers
+    function getTravelMinutes(r, mode = activeSearchMode) {
+      return getModeTravelMinutes(r, mode);
     }
 
     function getRatingValue(r) {
@@ -2311,11 +2366,8 @@
           }
         }
 
-        // Route string
-        let routeStr = '';
-        if (r.walk_minutes) routeStr = `🚶 ${Math.round(r.walk_minutes)} mins walk`;
-        else if (r.drive_minutes) routeStr = `🚗 ${Math.round(r.drive_minutes)} mins drive`;
-        else if (r.transit_minutes) routeStr = `🚆 ${Math.round(r.transit_minutes)} mins transit`;
+        // Dynamic route badge depending on travel mode (walk, drive, or transit)
+        const routeStr = formatRouteBadge(r, activeSearchMode);
 
         // Maps URL
         const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name + ' ' + (r.address || 'Singapore'))}`;
@@ -2559,8 +2611,9 @@
           popupAnchor: [0, -14]
         });
 
-        const travelMins = getTravelMinutes(r);
-        const travelLabel = travelMins !== null ? `${Math.round(travelMins)} mins (${currentMode})` : '';
+        const travelMins = getTravelMinutes(r, activeSearchMode);
+        const modeLabel = activeSearchMode === 'drive' ? 'drive' : activeSearchMode === 'transit' ? 'transit' : 'walk';
+        const travelLabel = travelMins !== null ? `${Math.round(travelMins)} mins (${modeLabel})` : '';
 
         const marker = L.marker([r.lat, r.lng], { icon })
           .bindPopup(`
@@ -2688,13 +2741,14 @@
         }
       }
 
+      const effectiveMode = activeSearchMode || currentMode || 'walk';
       document.getElementById('routeModalTitle').textContent = r.name || 'Restaurant Route';
       document.getElementById('routeModalSubtitle').textContent = `From ${selectedOrigin.label || selectedOrigin.query || 'Starting Location'}`;
-      document.getElementById('routeModeBadge').textContent = currentMode;
+      document.getElementById('routeModeBadge').textContent = effectiveMode;
 
-      const estMins = originIndex === -1 ? getTravelMinutes(r) : null;
+      const estMins = originIndex === -1 ? getTravelMinutes(r, effectiveMode) : null;
       document.getElementById('routeDurationBadge').textContent = estMins !== null ? `${Math.round(estMins)} mins` : '...';
-      const estMeters = originIndex === -1 ? r[`${currentMode}_meters`] : null;
+      const estMeters = originIndex === -1 ? r[`${effectiveMode}_meters`] : null;
       document.getElementById('routeDistanceBadge').textContent = estMeters
         ? (estMeters >= 1000 ? `${(estMeters / 1000).toFixed(2)} km` : `${estMeters} m`)
         : '...';
@@ -2707,7 +2761,7 @@
         </div>
       `;
 
-      const fallbackMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${selectedOrigin.latitude},${selectedOrigin.longitude}&destination=${r.lat},${r.lng}&travelmode=${currentMode === 'drive' ? 'driving' : currentMode === 'transit' ? 'transit' : 'walking'}`;
+      const fallbackMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${selectedOrigin.latitude},${selectedOrigin.longitude}&destination=${r.lat},${r.lng}&travelmode=${effectiveMode === 'drive' ? 'driving' : effectiveMode === 'transit' ? 'transit' : 'walking'}`;
       document.getElementById('routeGoogleMapsBtn').href = fallbackMapsUrl;
 
       routeModal.classList.remove('hidden');
@@ -2724,8 +2778,8 @@
             dest_lat: r.lat,
             dest_lng: r.lng,
             name: r.name || 'Restaurant',
-            mode: currentMode,
-            traffic_aware: currentMode === 'drive' && trafficAwareCheck.checked
+            mode: effectiveMode,
+            traffic_aware: effectiveMode === 'drive' && trafficAwareCheck.checked
           })
         });
         const data = await res.json();
