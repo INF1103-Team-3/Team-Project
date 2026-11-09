@@ -565,8 +565,8 @@
     function getTileUrl() {
       const isDark = document.documentElement.classList.contains('dark');
       return isDark
-        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+        ? 'https://www.onemap.gov.sg/maps/tiles/Night/{z}/{x}/{y}.png'
+        : 'https://www.onemap.gov.sg/maps/tiles/Default/{z}/{x}/{y}.png';
     }
 
     function refreshMapTheme() {
@@ -1463,10 +1463,12 @@
       mapSection.classList.remove('hidden');
 
       if (!mapInstance) {
-        mapInstance = L.map('resultsMap', { zoomControl: true }).setView([1.3521, 103.8198], 13);
+        mapInstance = L.map('resultsMap', { zoomControl: true, maxBoundsViscosity: 1.0 }).setView([1.3521, 103.8198], 13);
         mapTileLayer = L.tileLayer(getTileUrl(), {
-          attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-          maxZoom: 19
+          attribution: '&copy; <a href="https://www.onemap.gov.sg" target="_blank">OneMap</a> &copy; SLA &copy; OpenStreetMap',
+          maxZoom: 19,
+          minZoom: 11,
+          detectRetina: true
         }).addTo(mapInstance);
         mapMarkersLayer = L.layerGroup().addTo(mapInstance);
       }
