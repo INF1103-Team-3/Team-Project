@@ -7,7 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from shared.db import get_db
+from shared.db import get_db, is_db_available
+
 USERS_FILE = ROOT / "BIS" / "data" / "users.json"
 RESTAURANTS_FILE = ROOT / "BRNS" / "data" / "restaurants.json"
 GEOCODE_FILE = ROOT / "data" / "geocode_cache.json"
@@ -15,10 +16,14 @@ HALAL_FILE = ROOT / "BRC" / "data" / "halal_restaurants.json"
 
 
 def seed():
-    db = get_db()
-    print("Connecting to MongoDB...")
+    if not is_db_available():
+        print("MongoDB is not reachable; skipping seed.")
+        return
 
-    # 1. Seed Users
+    db = get_db()
+    print("Connecting to MongoDB for seeding...")
+
+    # 1. Seed Users (preserve existing web passwords/updates via $setOnInsert)
     if USERS_FILE.exists():
         try:
             users_data = json.loads(USERS_FILE.read_text(encoding="utf-8"))
@@ -26,9 +31,13 @@ def seed():
                 count = 0
                 for user_id, doc in users_data.items():
                     doc["_id"] = user_id
-                    db.users.replace_one({"_id": user_id}, doc, upsert=True)
+                    db.users.update_one(
+                        {"_id": user_id},
+                        {"$setOnInsert": doc},
+                        upsert=True,
+                    )
                     count += 1
-                print(f"Seeded {count} user(s) into 'users' collection.")
+                print(f"Verified/seeded {count} user(s) in 'users' collection.")
         except Exception as e:
             print(f"Failed to seed users: {e}")
 
@@ -44,7 +53,6 @@ def seed():
                         r["_id"] = place_id
                         db.restaurants.replace_one({"_id": place_id}, r, upsert=True)
                         count += 1
-                # Create index on name and cuisines for faster search
                 db.restaurants.create_index("name")
                 db.restaurants.create_index("cuisines")
                 print(f"Seeded {count} restaurant(s) into 'restaurants' collection.")
@@ -61,7 +69,7 @@ def seed():
                     db.geocode_cache.replace_one(
                         {"_id": key},
                         {"_id": key, "query": key, "data": val},
-                        upsert=True
+                        upsert=True,
                     )
                     count += 1
                 print(f"Seeded {count} geocode entry/entries into 'geocode_cache' collection.")
@@ -83,7 +91,29 @@ def seed():
         except Exception as e:
             print(f"Failed to seed halal restaurants: {e}")
 
+    # 5. Ensure indexes on favorites and search_history
+    try:
+        db.favorites.create_index([("user_id", 1), ("place_key", 1)], unique=True)
+        db.search_history.create_index([("user_id", 1), ("timestamp", -1)])
+    except Exception:
+        pass
+
     print("Database seeding completed.")
+
+
+def seed_if_empty():
+    """Automatically seed MongoDB on API startup if collections are empty."""
+    if not is_db_available():
+        return
+    try:
+        db = get_db()
+        if db.restaurants.count_documents({}) == 0 or db.users.count_documents({}) == 0:
+            seed()
+        else:
+            db.favorites.create_index([("user_id", 1), ("place_key", 1)], unique=True)
+            db.search_history.create_index([("user_id", 1), ("timestamp", -1)])
+    except Exception as e:
+        print(f"Auto-seed check warning: {e}")
 
 
 if __name__ == "__main__":

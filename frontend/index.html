@@ -86,12 +86,27 @@
           <span class="hidden sm:inline-block ml-2 text-xs font-semibold px-2 py-0.5 bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-400 rounded-full border border-brand-200 dark:border-brand-500/30">Singapore</span>
         </div>
       </div>
-      <div class="flex items-center gap-2.5">
+      <div class="flex items-center gap-2">
+        <!-- Saved Favorites Button -->
+        <button id="favoritesOpenBtn" type="button" title="View Saved Restaurants"
+          class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700">
+          <i data-lucide="heart" class="w-4 h-4 text-rose-500"></i>
+          <span class="hidden sm:inline">Saved</span>
+          <span id="favoritesCountBadge" class="px-1.5 py-0.2 text-[10px] font-extrabold rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300">0</span>
+        </button>
+
+        <!-- Search History Button -->
+        <button id="historyOpenBtn" type="button" title="View Search History & Re-run Past Searches"
+          class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700">
+          <i data-lucide="history" class="w-4 h-4 text-brand-600 dark:text-brand-400"></i>
+          <span class="hidden sm:inline">History</span>
+        </button>
+
         <!-- Light / Dark Mode Toggle -->
         <button id="themeToggleBtn" type="button" title="Toggle Light/Dark Mode"
           class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700">
           <i id="themeIcon" data-lucide="moon" class="w-4 h-4"></i>
-          <span id="themeLabel" class="text-xs font-semibold">Dark Mode</span>
+          <span id="themeLabel" class="hidden md:inline text-xs font-semibold">Dark Mode</span>
         </button>
 
         <!-- Signed-Out Button: Sign In / Sign Up -->
@@ -546,6 +561,67 @@
     </div>
   </div>
 
+  <!-- Saved Favorites Modal -->
+  <div id="favoritesModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-xl max-h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-rose-500 flex items-center justify-center text-white shadow-sm">
+            <i data-lucide="heart" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900 dark:text-white">Saved Favorite Restaurants</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Stored in MongoDB • Accessible anytime</p>
+          </div>
+        </div>
+        <button type="button" id="closeFavoritesModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div id="favoritesListContainer" class="p-6 overflow-y-auto flex-1 space-y-3 text-xs">
+      </div>
+      <div class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-end shrink-0">
+        <button type="button" id="closeFavoritesFooterBtn"
+          class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search History Drawer / Modal -->
+  <div id="historyModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-xl max-h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white shadow-sm">
+            <i data-lucide="history" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900 dark:text-white">Search History</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Past searches in MongoDB • One-click Re-Run</p>
+          </div>
+        </div>
+        <button type="button" id="closeHistoryModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div id="historyListContainer" class="p-6 overflow-y-auto flex-1 space-y-3 text-xs">
+      </div>
+      <div class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between shrink-0">
+        <button type="button" id="clearHistoryBtn"
+          class="px-3.5 py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 border border-rose-200 dark:border-rose-800/60 transition flex items-center gap-1.5">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          <span>Clear History</span>
+        </button>
+        <button type="button" id="closeHistoryFooterBtn"
+          class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // State
     let currentMode = 'walk';
@@ -553,6 +629,9 @@
     let lastMatches = [];
     let lastAlternatives = [];
     let displayedItems = [];
+    let favoriteKeys = new Set();
+    let favoritesList = [];
+    let searchHistoryEntries = [];
 
     // Leaflet Map State
     let mapInstance = null;
@@ -766,6 +845,7 @@
         updateAuthUI();
         applyUserToSearchForm(currentUser);
         initRecentSearches();
+        loadFavorites();
         authModal.classList.add('hidden');
         authModal.classList.remove('flex');
         loginForm.reset();
@@ -796,6 +876,7 @@
         updateAuthUI();
         applyUserToSearchForm(currentUser);
         initRecentSearches();
+        loadFavorites();
         authModal.classList.add('hidden');
         authModal.classList.remove('flex');
         registerForm.reset();
@@ -815,6 +896,7 @@
       setAuthToken('');
       currentUser = null;
       updateAuthUI();
+      loadFavorites();
     });
 
     // Profile Modal Controls
@@ -1431,7 +1513,7 @@
 
           <!-- Footer Actions -->
           <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <button type="button" onclick="focusRestaurantOnMap(${displayIdx})"
                 class="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-brand-50 dark:hover:bg-slate-700 hover:text-brand-600 dark:hover:text-brand-400 border border-slate-200 dark:border-slate-700 transition flex items-center gap-1.5">
                 <i data-lucide="map-pin" class="w-3.5 h-3.5 text-brand-600 dark:text-brand-400"></i>
@@ -1442,6 +1524,20 @@
                 <i data-lucide="navigation" class="w-3.5 h-3.5"></i>
                 Step-by-Step Route
               </button>
+              ${(() => {
+                const isFav = favoriteKeys.has(getPlaceKey(r));
+                return `
+                  <button type="button" id="favBtn-${displayIdx}" onclick="toggleFavoriteByIndex(${displayIdx})"
+                    class="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
+                      isFav
+                        ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-slate-700 hover:text-rose-600 border-slate-200 dark:border-slate-700'
+                    }">
+                    <i data-lucide="heart" class="w-3.5 h-3.5 ${isFav ? 'text-rose-500 fill-rose-500' : 'text-rose-500'}"></i>
+                    <span>${isFav ? 'Saved' : 'Save'}</span>
+                  </button>
+                `;
+              })()}
             </div>
             <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer"
               class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 flex items-center gap-1 hover:underline">
@@ -1699,6 +1795,251 @@
         `;
       }
     };
+
+    // ---------- Saved Favorites / Bookmarks & Search History Drawer ----------
+
+    function getPlaceKey(r) {
+      if (!r) return '';
+      const pid = String(r.google_place_id || '').trim();
+      if (pid) return pid;
+      const name = String(r.name || 'restaurant').trim().toLowerCase();
+      const addr = String(r.address || 'singapore').trim().toLowerCase();
+      return `${name}|${addr}`;
+    }
+
+    function updateFavoritesBadge() {
+      const badge = document.getElementById('favoritesCountBadge');
+      if (badge) {
+        badge.textContent = String(favoriteKeys.size);
+      }
+    }
+
+    async function loadFavorites() {
+      try {
+        const res = await fetch('/api/favorites', { headers: authHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        favoritesList = data.favorites || [];
+        favoriteKeys = new Set(favoritesList.map(f => f.place_key));
+        updateFavoritesBadge();
+        if (lastMatches.length || lastAlternatives.length) {
+          renderResults(lastMatches, lastAlternatives);
+        }
+      } catch (err) {
+        console.warn('Favorites load error:', err);
+      }
+    }
+    loadFavorites();
+
+    window.toggleFavoriteByIndex = async function(displayIdx) {
+      const item = displayedItems[displayIdx];
+      if (!item || !item.restaurant) return;
+      const r = item.restaurant;
+      try {
+        const res = await fetch('/api/favorites', {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ restaurant: r })
+        });
+        if (!res.ok) return;
+        await loadFavorites();
+      } catch (err) {
+        console.warn('Toggle favorite failed:', err);
+      }
+    };
+
+    window.removeFavoriteByKey = async function(placeKey) {
+      try {
+        const res = await fetch(`/api/favorites?place_key=${encodeURIComponent(placeKey)}`, {
+          method: 'DELETE',
+          headers: authHeaders()
+        });
+        if (res.ok) {
+          await loadFavorites();
+          renderFavoritesModalList();
+        }
+      } catch (err) {
+        console.warn('Remove favorite failed:', err);
+      }
+    };
+
+    const favoritesModal = document.getElementById('favoritesModal');
+
+    function closeFavoritesModal() {
+      favoritesModal.classList.add('hidden');
+      favoritesModal.classList.remove('flex');
+    }
+
+    function renderFavoritesModalList() {
+      const container = document.getElementById('favoritesListContainer');
+      if (!favoritesList || favoritesList.length === 0) {
+        container.innerHTML = `
+          <div class="p-8 text-center text-slate-500 dark:text-slate-400">
+            <i data-lucide="heart" class="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
+            <p class="font-bold text-slate-700 dark:text-slate-200">No saved restaurants yet</p>
+            <p class="mt-1">Click the <strong>Save</strong> button on any restaurant recommendation card to bookmark it here.</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      container.innerHTML = favoritesList.map((fav) => {
+        const r = fav.restaurant || {};
+        const keyEscaped = String(fav.place_key || '').replace(/'/g, "\\'");
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((r.name || 'Restaurant') + ' ' + (r.address || 'Singapore'))}`;
+        const hours = formatHours(r);
+        return `
+          <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex flex-col gap-2">
+            <div class="flex items-start justify-between gap-2">
+              <div>
+                <h4 class="text-sm font-bold text-slate-900 dark:text-white">${r.name || 'Restaurant'}</h4>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400">${r.address || 'Singapore'}</p>
+              </div>
+              <span class="px-2 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold border border-amber-200 dark:border-amber-800 shrink-0">
+                ★ ${r.rating || r.g_rating || 'N/A'}
+              </span>
+            </div>
+            <div class="text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-2">
+              <span>🕒 ${hours}</span>
+              ${r.price_range ? `<span>• 💰 ${r.price_range}</span>` : ''}
+            </div>
+            <div class="flex items-center justify-between pt-2 border-t border-slate-200/70 dark:border-slate-700/70">
+              <button type="button" onclick="removeFavoriteByKey('${keyEscaped}')"
+                class="text-rose-600 dark:text-rose-400 hover:underline font-bold flex items-center gap-1">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Remove
+              </button>
+              <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer"
+                class="text-brand-600 dark:text-brand-400 hover:underline font-bold flex items-center gap-1">
+                Open in Google Maps <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+              </a>
+            </div>
+          </div>
+        `;
+      }).join('');
+      lucide.createIcons();
+    }
+
+    document.getElementById('favoritesOpenBtn').addEventListener('click', async () => {
+      await loadFavorites();
+      renderFavoritesModalList();
+      favoritesModal.classList.remove('hidden');
+      favoritesModal.classList.add('flex');
+    });
+    document.getElementById('closeFavoritesModalBtn').addEventListener('click', closeFavoritesModal);
+    document.getElementById('closeFavoritesFooterBtn').addEventListener('click', closeFavoritesModal);
+
+    // Search History Modal
+    const historyModal = document.getElementById('historyModal');
+
+    function closeHistoryModal() {
+      historyModal.classList.add('hidden');
+      historyModal.classList.remove('flex');
+    }
+
+    async function loadAndRenderHistory() {
+      const container = document.getElementById('historyListContainer');
+      container.innerHTML = `<div class="py-6 text-center text-slate-400">Loading search history from MongoDB...</div>`;
+      try {
+        const res = await fetch('/api/history', { headers: authHeaders() });
+        const data = await res.json();
+        searchHistoryEntries = data.history || [];
+
+        if (searchHistoryEntries.length === 0) {
+          container.innerHTML = `
+            <div class="p-8 text-center text-slate-500 dark:text-slate-400">
+              <i data-lucide="history" class="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
+              <p class="font-bold text-slate-700 dark:text-slate-200">No search history recorded yet</p>
+              <p class="mt-1">Every restaurant search is automatically logged in MongoDB so you can re-run it with one click.</p>
+            </div>
+          `;
+          lucide.createIcons();
+          return;
+        }
+
+        container.innerHTML = searchHistoryEntries.map((item, idx) => {
+          const ts = item.timestamp ? new Date(item.timestamp).toLocaleString('en-SG', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+          const dietBadges = (item.dietary_requirements || []).map(d =>
+            `<span class="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold uppercase text-[10px]">${d}</span>`
+          ).join(' ');
+          return `
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-bold text-slate-900 dark:text-white">📍 ${item.query || 'Singapore'}</span>
+                  <span class="px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 text-[10px] font-bold">${item.results_count || 0} found</span>
+                </div>
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2">
+                  <span class="capitalize">🚶 Mode: <strong>${item.mode || 'walk'}</strong></span>
+                  <span>• ⏱️ Max ${item.max_travel_minutes || 30}m</span>
+                  <span>• 💰 SGD $${item.budget_per_person || 30}</span>
+                  ${item.cuisine ? `<span>• 🍽️ ${item.cuisine}</span>` : ''}
+                  ${dietBadges}
+                </div>
+                ${ts ? `<div class="text-[10px] text-slate-400">${ts}</div>` : ''}
+              </div>
+              <button type="button" onclick="rerunHistoryItem(${idx})"
+                class="px-3 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-brand-600 to-amber-600 hover:from-brand-700 hover:to-amber-700 shadow-sm shrink-0 flex items-center gap-1.5 transition">
+                <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                <span>Re-Run</span>
+              </button>
+            </div>
+          `;
+        }).join('');
+        lucide.createIcons();
+      } catch (err) {
+        container.innerHTML = `<div class="p-4 text-rose-500 text-center">Failed to load history: ${err.message}</div>`;
+      }
+    }
+
+    window.rerunHistoryItem = function(idx) {
+      const item = searchHistoryEntries[idx];
+      if (!item) return;
+      document.getElementById('locationInput').value = item.query || 'Compass One';
+
+      // Set mode
+      const targetMode = item.mode || 'walk';
+      document.querySelectorAll('.mode-btn').forEach(btn => {
+        if (btn.dataset.mode === targetMode) btn.click();
+      });
+
+      // Set sliders
+      const mins = Math.min(90, Math.max(5, Math.round((item.max_travel_minutes || 30) / 5) * 5));
+      timeSlider.value = mins;
+      timeDisplay.textContent = `${mins} mins`;
+
+      const bud = Math.min(100, Math.max(5, Math.round((item.budget_per_person || 30) / 5) * 5));
+      budgetSlider.value = bud;
+      budgetDisplay.textContent = `SGD $${bud}`;
+
+      const diet = item.dietary_requirements || [];
+      document.getElementById('halalCheck').checked = diet.includes('halal');
+      document.getElementById('vegCheck').checked = diet.includes('vegetarian');
+      document.getElementById('cuisineSelect').value = item.cuisine || '';
+      document.getElementById('specialInput').value = (item.other_preferences || []).join(', ');
+
+      closeHistoryModal();
+      document.getElementById('searchForm').requestSubmit();
+    };
+
+    document.getElementById('historyOpenBtn').addEventListener('click', () => {
+      loadAndRenderHistory();
+      historyModal.classList.remove('hidden');
+      historyModal.classList.add('flex');
+    });
+    document.getElementById('closeHistoryModalBtn').addEventListener('click', closeHistoryModal);
+    document.getElementById('closeHistoryFooterBtn').addEventListener('click', closeHistoryModal);
+
+    document.getElementById('clearHistoryBtn').addEventListener('click', async () => {
+      try {
+        await fetch('/api/history', { method: 'DELETE', headers: authHeaders() });
+        try { localStorage.removeItem(RECENT_KEY); } catch {}
+        renderRecentSearches([]);
+        loadAndRenderHistory();
+      } catch (err) {
+        console.warn('Clear history error:', err);
+      }
+    });
   </script>
 </body>
 </html>

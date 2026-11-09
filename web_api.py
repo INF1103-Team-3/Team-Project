@@ -36,6 +36,7 @@ load_dotenv(ROOT / ".env")
 from shared import db
 from shared import debug_log
 from shared import geocode_cache
+from shared.seed_mongo import seed_if_empty
 from BIS import data_manager as bis_data
 from BIS.sources.profile_schema import CUISINES, normalize_email, normalize_username
 from BRNS import main as brns_main
@@ -44,7 +45,7 @@ from BRNS import io_manager as brns_io
 app = FastAPI(
     title="BiteFinder API",
     description="Dynamic Web API for BiteFinder Singapore Restaurant Recommendation",
-    version="1.1.0",
+    version="1.2.0",
 )
 
 # Enable CORS for local development
@@ -55,6 +56,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def on_startup_seed():
+    """Auto-seed MongoDB collections and indexes on container startup if empty."""
+    try:
+        seed_if_empty()
+    except Exception as exc:
+        debug_log.debug_log(f"Startup MongoDB auto-seed warning: {exc}", "WARNING", "web_api.startup")
 
 
 # ---------- Password & Session Helpers ----------
@@ -154,6 +164,28 @@ class RouteRequestModel(BaseModel):
     name: str = "Restaurant"
     mode: str = "walk"
     traffic_aware: bool = False
+
+
+class FavoriteToggleModel(BaseModel):
+    restaurant: dict[str, Any]
+
+
+def _make_place_key(restaurant: dict[str, Any]) -> str:
+    """Create a deterministic unique key for a restaurant document."""
+    pid = str(restaurant.get("google_place_id") or "").strip()
+    if pid:
+        return pid
+    name = str(restaurant.get("name") or "restaurant").strip().lower()
+    addr = str(restaurant.get("address") or "singapore").strip().lower()
+    return f"{name}|{addr}"
+
+
+def _resolve_user_scope(authorization: str | None) -> str:
+    """Return the signed-in user's ID or 'guest' when unauthenticated."""
+    user_doc = _get_user_by_token(_extract_token(authorization))
+    if user_doc:
+        return str(user_doc.get("userID") or user_doc.get("_id") or "guest")
+    return "guest"
 
 
 # ---------- Health & Metadata Endpoints ----------
@@ -484,14 +516,23 @@ def search_restaurants(req: SearchRequestModel, authorization: str | None = Head
         if db.is_db_available():
             try:
                 auth_user = _get_user_by_token(_extract_token(authorization))
-                uid = (auth_user.get("userID") or auth_user.get("_id")) if auth_user else None
+                uid = (auth_user.get("userID") or auth_user.get("_id")) if auth_user else "guest"
+                matches_list = search_results.get("matches", [])
+                alt_list = search_results.get("alternatives", [])
                 db.get_db().search_history.insert_one({
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "user_id": uid,
                     "query": req.location,
                     "origin": origin,
                     "mode": req.mode,
-                    "results_count": len(search_results.get("matches", [])) + len(search_results.get("alternatives", [])),
+                    "max_travel_minutes": minutes,
+                    "budget_per_person": req.budget_per_person,
+                    "dietary_requirements": [d.lower() for d in req.dietary_requirements],
+                    "cuisine": req.cuisine or "",
+                    "other_preferences": req.other_preferences,
+                    "matches_count": len(matches_list),
+                    "alternatives_count": len(alt_list),
+                    "results_count": len(matches_list) + len(alt_list),
                 })
             except Exception:
                 pass
@@ -556,6 +597,130 @@ def get_restaurant_route(req: RouteRequestModel):
         }
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Could not fetch route: {exc}")
+
+
+# ---------- Saved Favorites / Bookmarks Endpoints ----------
+
+@app.get("/api/favorites")
+def get_favorites(authorization: str | None = Header(default=None)):
+    """Return bookmarked restaurants from MongoDB for the current user (or guest)."""
+    if not db.is_db_available():
+        return {"favorites": [], "count": 0}
+    user_scope = _resolve_user_scope(authorization)
+    try:
+        docs = list(
+            db.get_db().favorites.find(
+                {"user_id": user_scope},
+                {"_id": 0},
+            ).sort("saved_at", -1)
+        )
+        return {"favorites": docs, "count": len(docs)}
+    except Exception as exc:
+        debug_log.debug_log(f"Failed to fetch favorites: {exc}", "WARNING", "web_api.get_favorites")
+        return {"favorites": [], "count": 0}
+
+
+@app.post("/api/favorites")
+def toggle_favorite(req: FavoriteToggleModel, authorization: str | None = Header(default=None)):
+    """Toggle a restaurant bookmark in MongoDB (add if not saved, remove if already saved)."""
+    if not db.is_db_available():
+        raise HTTPException(status_code=503, detail="Database is not available")
+    user_scope = _resolve_user_scope(authorization)
+    place_key = _make_place_key(req.restaurant)
+    database = db.get_db()
+
+    existing = database.favorites.find_one({"user_id": user_scope, "place_key": place_key})
+    if existing:
+        database.favorites.delete_one({"user_id": user_scope, "place_key": place_key})
+        count = database.favorites.count_documents({"user_id": user_scope})
+        return {
+            "success": True,
+            "action": "removed",
+            "place_key": place_key,
+            "count": count,
+        }
+
+    doc = {
+        "user_id": user_scope,
+        "place_key": place_key,
+        "restaurant": req.restaurant,
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+    }
+    database.favorites.insert_one(doc)
+    count = database.favorites.count_documents({"user_id": user_scope})
+    return {
+        "success": True,
+        "action": "added",
+        "place_key": place_key,
+        "count": count,
+    }
+
+
+@app.delete("/api/favorites")
+def remove_favorite(place_key: str, authorization: str | None = Header(default=None)):
+    """Remove a specific bookmarked restaurant from MongoDB by place_key."""
+    if not db.is_db_available():
+        raise HTTPException(status_code=503, detail="Database is not available")
+    user_scope = _resolve_user_scope(authorization)
+    database = db.get_db()
+    database.favorites.delete_one({"user_id": user_scope, "place_key": place_key})
+    count = database.favorites.count_documents({"user_id": user_scope})
+    return {"success": True, "place_key": place_key, "count": count}
+
+
+# ---------- Full Search History Endpoints ----------
+
+@app.get("/api/history")
+def get_search_history(authorization: str | None = Header(default=None)):
+    """Return recent search history entries from MongoDB with full filter parameters."""
+    if not db.is_db_available():
+        return {"history": []}
+    try:
+        user_doc = _get_user_by_token(_extract_token(authorization))
+        database = db.get_db()
+        if user_doc:
+            uid = str(user_doc.get("userID") or user_doc.get("_id"))
+            raw_docs = list(database.search_history.find({"user_id": uid}).sort("_id", -1).limit(20))
+            if not raw_docs:
+                raw_docs = list(database.search_history.find({"query": {"$exists": True}}).sort("_id", -1).limit(20))
+        else:
+            raw_docs = list(database.search_history.find({"query": {"$exists": True}}).sort("_id", -1).limit(20))
+
+        history = []
+        for d in raw_docs:
+            history.append({
+                "id": str(d.get("_id", "")),
+                "timestamp": d.get("timestamp", ""),
+                "query": d.get("query", ""),
+                "mode": d.get("mode", "walk"),
+                "max_travel_minutes": d.get("max_travel_minutes", 30),
+                "budget_per_person": d.get("budget_per_person", 30),
+                "dietary_requirements": d.get("dietary_requirements") or [],
+                "cuisine": d.get("cuisine") or "",
+                "other_preferences": d.get("other_preferences") or [],
+                "matches_count": d.get("matches_count"),
+                "alternatives_count": d.get("alternatives_count"),
+                "results_count": d.get("results_count", 0),
+            })
+        return {"history": history}
+    except Exception as exc:
+        debug_log.debug_log(f"Failed to fetch search history: {exc}", "WARNING", "web_api.get_search_history")
+        return {"history": []}
+
+
+@app.delete("/api/history")
+def clear_search_history(authorization: str | None = Header(default=None)):
+    """Clear search history in MongoDB for the current user (or guest)."""
+    if not db.is_db_available():
+        raise HTTPException(status_code=503, detail="Database is not available")
+    user_doc = _get_user_by_token(_extract_token(authorization))
+    database = db.get_db()
+    if user_doc:
+        uid = str(user_doc.get("userID") or user_doc.get("_id"))
+        database.search_history.delete_many({"user_id": uid})
+    else:
+        database.search_history.delete_many({"user_id": {"$in": [None, "guest"]}})
+    return {"success": True, "message": "Search history cleared."}
 
 
 if __name__ == "__main__":
