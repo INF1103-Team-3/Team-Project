@@ -494,28 +494,18 @@ def logout_user(authorization: str | None = Header(default=None), token: str | N
 
 @app.get("/api/recent-searches")
 def get_recent_searches(authorization: str | None = Header(default=None)):
-    """Return recently searched locations from MongoDB (scoped to user if signed in)."""
+    """Return recently searched locations from MongoDB strictly for the signed-in user."""
     if not db.is_db_available():
         return {"recent": []}
     try:
         user_doc = _get_user_by_token(_extract_token(authorization))
-        query_filter: dict[str, Any] = {"query": {"$exists": True, "$ne": ""}}
-        if user_doc:
-            uid = user_doc.get("userID") or user_doc.get("_id")
-            user_docs = list(db.get_db().search_history.find(
-                {"query": {"$exists": True, "$ne": ""}, "user_id": uid},
-                {"query": 1, "_id": 0}
-            ).sort("_id", -1).limit(25))
-            if user_docs:
-                docs = user_docs
-            else:
-                docs = list(db.get_db().search_history.find(
-                    query_filter, {"query": 1, "_id": 0}
-                ).sort("_id", -1).limit(25))
-        else:
-            docs = list(db.get_db().search_history.find(
-                query_filter, {"query": 1, "_id": 0}
-            ).sort("_id", -1).limit(25))
+        if not user_doc:
+            return {"recent": []}
+        uid = str(user_doc.get("userID") or user_doc.get("_id"))
+        docs = list(db.get_db().search_history.find(
+            {"query": {"$exists": True, "$ne": ""}, "user_id": uid},
+            {"query": 1, "_id": 0}
+        ).sort("_id", -1).limit(25))
 
         seen = set()
         recent = []
@@ -981,19 +971,16 @@ def remove_favorite(place_key: str, authorization: str | None = Header(default=N
 
 @app.get("/api/history")
 def get_search_history(authorization: str | None = Header(default=None)):
-    """Return recent search history entries from MongoDB with full filter parameters."""
+    """Return recent search history entries from MongoDB strictly for the signed-in user."""
     if not db.is_db_available():
         return {"history": []}
     try:
         user_doc = _get_user_by_token(_extract_token(authorization))
+        if not user_doc:
+            return {"history": []}
         database = db.get_db()
-        if user_doc:
-            uid = str(user_doc.get("userID") or user_doc.get("_id"))
-            raw_docs = list(database.search_history.find({"user_id": uid}).sort("_id", -1).limit(20))
-            if not raw_docs:
-                raw_docs = list(database.search_history.find({"query": {"$exists": True}}).sort("_id", -1).limit(20))
-        else:
-            raw_docs = list(database.search_history.find({"query": {"$exists": True}}).sort("_id", -1).limit(20))
+        uid = str(user_doc.get("userID") or user_doc.get("_id"))
+        raw_docs = list(database.search_history.find({"user_id": uid}).sort("_id", -1).limit(20))
 
         history = []
         for d in raw_docs:
@@ -1001,6 +988,7 @@ def get_search_history(authorization: str | None = Header(default=None)):
                 "id": str(d.get("_id", "")),
                 "timestamp": d.get("timestamp", ""),
                 "query": d.get("query", ""),
+                "locations": d.get("locations") or [],
                 "mode": d.get("mode", "walk"),
                 "max_travel_minutes": d.get("max_travel_minutes"),
                 "max_distance_km": d.get("max_distance_km"),
@@ -1008,6 +996,7 @@ def get_search_history(authorization: str | None = Header(default=None)):
                 "budget_per_person": d.get("budget_per_person", 30),
                 "dietary_requirements": d.get("dietary_requirements") or [],
                 "cuisine": d.get("cuisine") or "",
+                "liked_cuisines": d.get("liked_cuisines") or [],
                 "disliked_cuisines": d.get("disliked_cuisines") or [],
                 "other_preferences": d.get("other_preferences") or [],
                 "matches_count": d.get("matches_count"),

@@ -1421,7 +1421,9 @@
       } catch { }
       setAuthToken('');
       currentUser = null;
+      searchHistoryEntries = [];
       updateAuthUI();
+      initRecentSearches();
       loadFavorites();
     });
 
@@ -1527,6 +1529,7 @@
       const token = getAuthToken();
       if (!token) {
         updateAuthUI();
+        initRecentSearches();
         return;
       }
       try {
@@ -1536,10 +1539,13 @@
           currentUser = data.user;
           updateAuthUI();
           applyUserToSearchForm(currentUser);
+          initRecentSearches();
+          loadFavorites();
         } else {
           setAuthToken('');
           currentUser = null;
           updateAuthUI();
+          initRecentSearches();
         }
       } catch (err) {
         console.warn('Session check err:', err);
@@ -1547,24 +1553,32 @@
     }
     checkSession();
 
-    // Recent Searches Management
+    // Recent Searches Management (Strictly Scoped to Signed-In User)
     const RECENT_KEY = 'bitefinder_recent_searches';
 
+    function getUserRecentKey() {
+      if (!currentUser || !currentUser.user_id) return null;
+      return `${RECENT_KEY}_${currentUser.user_id}`;
+    }
+
     function getLocalRecent() {
+      const key = getUserRecentKey();
+      if (!key) return [];
       try {
-        return JSON.parse(localStorage.getItem(RECENT_KEY)) || [];
+        return JSON.parse(localStorage.getItem(key)) || [];
       } catch {
         return [];
       }
     }
 
     function saveLocalRecent(query) {
-      if (!query) return;
+      const key = getUserRecentKey();
+      if (!query || !key) return;
       let list = getLocalRecent().filter(q => q.toLowerCase() !== query.toLowerCase());
       list.unshift(query);
       if (list.length > 5) list = list.slice(0, 5);
       try {
-        localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+        localStorage.setItem(key, JSON.stringify(list));
       } catch { }
       renderRecentSearches(list);
     }
@@ -1572,7 +1586,7 @@
     function renderRecentSearches(list) {
       const container = document.getElementById('recentSearches');
       const listEl = document.getElementById('recentList');
-      if (!list || list.length === 0) {
+      if (!currentUser || !list || list.length === 0) {
         container.classList.add('hidden');
         return;
       }
@@ -1584,7 +1598,8 @@
         btn.className = 'text-xs px-2.5 py-0.5 rounded-full bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-500/25 border border-brand-200 dark:border-brand-500/30 transition font-medium';
         btn.textContent = q;
         btn.addEventListener('click', () => {
-          document.getElementById('locationInput').value = q;
+          const parts = q.split(' + ').map(s => s.trim()).filter(Boolean);
+          setEnteredLocations(parts.length ? parts : [q]);
         });
         listEl.appendChild(btn);
       });
@@ -1592,6 +1607,10 @@
     }
 
     async function initRecentSearches() {
+      if (!currentUser) {
+        renderRecentSearches([]);
+        return;
+      }
       let list = getLocalRecent();
       try {
         const res = await fetch('/api/recent-searches', { headers: authHeaders() });
@@ -1605,7 +1624,6 @@
       } catch { }
       renderRecentSearches(list);
     }
-    initRecentSearches();
 
     // Search Handler
     document.getElementById('searchForm').addEventListener('submit', async (e) => {
@@ -2573,6 +2591,21 @@
 
     async function loadAndRenderHistory() {
       const container = document.getElementById('historyListContainer');
+      const clearBtn = document.getElementById('clearHistoryBtn');
+      if (!currentUser) {
+        searchHistoryEntries = [];
+        if (clearBtn) clearBtn.classList.add('hidden');
+        container.innerHTML = `
+          <div class="p-8 text-center text-slate-500 dark:text-slate-400">
+            <i data-lucide="lock" class="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
+            <p class="font-bold text-slate-700 dark:text-slate-200">Sign in to view your search history</p>
+            <p class="mt-1">Search history is privately tied to your BiteFinder account so each user only sees their own past searches.</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+      if (clearBtn) clearBtn.classList.remove('hidden');
       container.innerHTML = `<div class="py-6 text-center text-slate-400">Loading search history from MongoDB...</div>`;
       try {
         const res = await fetch('/api/history', { headers: authHeaders() });
@@ -2694,6 +2727,10 @@
     document.getElementById('clearHistoryBtn').addEventListener('click', async () => {
       try {
         await fetch('/api/history', { method: 'DELETE', headers: authHeaders() });
+        const key = getUserRecentKey();
+        if (key) {
+          try { localStorage.removeItem(key); } catch { }
+        }
         try { localStorage.removeItem(RECENT_KEY); } catch { }
         renderRecentSearches([]);
         loadAndRenderHistory();
