@@ -510,7 +510,25 @@ def search_restaurants(req: SearchRequestModel, authorization: str | None = Head
         brns_main.config.MAX_MATCHES_SHOWN = 20
         brns_main.config.MAX_ALTERNATIVES_SHOWN = 20
         serialized_payload = json.dumps(payload)
-        search_results = brns_main.search(serialized_payload)
+
+        captured_models: list[str] = []
+        orig_log_ai = getattr(brns_main.ai_manager, "_log_ai_event", None)
+
+        def _tracking_log_ai(context: str, detail: str, level: str = "WARNING"):
+            if isinstance(detail, str) and detail.startswith("Accepted ") and detail.endswith(" response."):
+                captured_models.append(detail[len("Accepted "):-len(" response.")].strip())
+            if orig_log_ai:
+                orig_log_ai(context, detail, level)
+
+        if orig_log_ai:
+            brns_main.ai_manager._log_ai_event = _tracking_log_ai
+        try:
+            search_results = brns_main.search(serialized_payload)
+        finally:
+            if orig_log_ai:
+                brns_main.ai_manager._log_ai_event = orig_log_ai
+
+        model_used = captured_models[-1] if captured_models else (search_results.get("model_used") or "AI Fallback Chain")
 
         # 3. Store search in MongoDB history if database is available
         if db.is_db_available():
@@ -533,6 +551,7 @@ def search_restaurants(req: SearchRequestModel, authorization: str | None = Head
                     "cuisine": req.cuisine or "",
                     "disliked_cuisines": [c.lower() for c in req.disliked_cuisines],
                     "other_preferences": req.other_preferences,
+                    "model_used": model_used,
                     "matches_count": len(matches_list),
                     "alternatives_count": len(alt_list),
                     "results_count": len(matches_list) + len(alt_list),
@@ -543,6 +562,7 @@ def search_restaurants(req: SearchRequestModel, authorization: str | None = Head
         return {
             "success": True,
             "origin": origin,
+            "model_used": model_used,
             "matches": search_results.get("matches", []),
             "alternatives": search_results.get("alternatives", []),
             "exclusions_count": len(search_results.get("exclusions", [])),

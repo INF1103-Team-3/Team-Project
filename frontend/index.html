@@ -532,10 +532,30 @@
           </div>
         </div>
 
-        <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Disliked Cuisines (Comma-Separated)</label>
-          <input type="text" id="profDislikedInput" placeholder="e.g. western, italian"
-            class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Preferred Cuisine</label>
+            <select id="profCuisineSelect" class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+              <option value="">Any Cuisine</option>
+              <option value="chinese">Chinese</option>
+              <option value="malay">Malay</option>
+              <option value="indian">Indian</option>
+              <option value="japanese">Japanese</option>
+              <option value="korean">Korean</option>
+              <option value="western">Western</option>
+              <option value="italian">Italian</option>
+              <option value="thai">Thai</option>
+              <option value="vietnamese">Vietnamese</option>
+              <option value="peranakan">Peranakan</option>
+              <option value="indonesian">Indonesian</option>
+              <option value="middle eastern">Middle Eastern</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Disliked Cuisines</label>
+            <input type="text" id="profDislikedInput" placeholder="e.g. western, italian"
+              class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+          </div>
         </div>
 
         <div>
@@ -883,14 +903,14 @@
       const diet = user.dietary_requirements || [];
       document.getElementById('halalCheck').checked = diet.includes('halal');
       document.getElementById('vegCheck').checked = diet.includes('vegetarian');
-      if (user.liked_cuisines && user.liked_cuisines.length) {
-        document.getElementById('cuisineSelect').value = user.liked_cuisines[0];
-      }
+      document.getElementById('cuisineSelect').value = (user.liked_cuisines && user.liked_cuisines.length)
+        ? user.liked_cuisines[0]
+        : '';
       dislikedCuisines = new Set((user.disliked_cuisines || []).map(c => String(c).toLowerCase()));
       updateDislikedChipsUI();
-      if (user.other_preferences && user.other_preferences.length) {
-        document.getElementById('specialInput').value = user.other_preferences.join(', ');
-      }
+      document.getElementById('specialInput').value = (user.other_preferences && user.other_preferences.length)
+        ? user.other_preferences.join(', ')
+        : '';
     }
 
     function updateAuthUI() {
@@ -1045,6 +1065,9 @@
       const diet = currentUser.dietary_requirements || [];
       document.getElementById('profHalalCheck').checked = diet.includes('halal');
       document.getElementById('profVegCheck').checked = diet.includes('vegetarian');
+      document.getElementById('profCuisineSelect').value = (currentUser.liked_cuisines && currentUser.liked_cuisines.length)
+        ? currentUser.liked_cuisines[0]
+        : '';
       document.getElementById('profDislikedInput').value = (currentUser.disliked_cuisines || []).join(', ');
       document.getElementById('profOtherInput').value = (currentUser.other_preferences || []).join(', ');
       profileModal.classList.remove('hidden');
@@ -1067,6 +1090,8 @@
       const diet = [];
       if (document.getElementById('profHalalCheck').checked) diet.push('halal');
       if (document.getElementById('profVegCheck').checked) diet.push('vegetarian');
+      const prefCuisine = document.getElementById('profCuisineSelect').value;
+      const likedList = prefCuisine ? [prefCuisine] : [];
       const dislikedRaw = document.getElementById('profDislikedInput').value.trim();
       const dislikedList = dislikedRaw ? dislikedRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];
       const otherRaw = document.getElementById('profOtherInput').value.trim();
@@ -1081,7 +1106,7 @@
         max_travel_time_minutes: parseFloat(document.getElementById('profTimeInput').value) || 30,
         budget_per_person: parseFloat(document.getElementById('profBudgetInput').value) || 30,
         dietary_requirements: diet,
-        liked_cuisines: currentUser.liked_cuisines || [],
+        liked_cuisines: likedList,
         disliked_cuisines: dislikedList,
         other_preferences: otherList
       };
@@ -1238,7 +1263,7 @@
 
       statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200";
       statusIcon.innerHTML = `<svg class="animate-spin w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
-      statusText.textContent = "Querying Google Places, computing routes, and ranking candidates with Gemini AI...";
+      statusText.textContent = "Querying Google Places, computing routes, and ranking candidates with AI (Gemini / Groq / OpenRouter fallback chain)...";
       statusBanner.classList.remove('hidden');
 
       try {
@@ -1279,6 +1304,7 @@
 
         const matches = data.matches || [];
         const alternatives = data.alternatives || [];
+        const modelUsed = data.model_used || 'AI Fallback Chain';
         lastOrigin = data.origin || null;
         lastMatches = matches;
         lastAlternatives = alternatives;
@@ -1286,12 +1312,16 @@
 
         statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200";
         statusIcon.innerHTML = `<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>`;
-        statusText.textContent = `Found ${matches.length} direct match${matches.length === 1 ? '' : 'es'} and ${alternatives.length} alternative${alternatives.length === 1 ? '' : 's'}.`;
+        statusText.textContent = `Found ${matches.length} direct match${matches.length === 1 ? '' : 'es'} and ${alternatives.length} alternative${alternatives.length === 1 ? '' : 's'} • Ranked by ${modelUsed}`;
         lucide.createIcons();
 
         if (emptyState) emptyState.remove();
         resultsHeader.classList.remove('hidden');
         resultsCount.textContent = `${totalFound} Restaurant Recommendation${totalFound === 1 ? '' : 's'}`;
+        const subtextEl = document.getElementById('resultsSubtext');
+        if (subtextEl) {
+          subtextEl.textContent = `Verified with Google Places & official MUIS records • Ranked by ${modelUsed}`;
+        }
 
         renderResults(lastMatches, lastAlternatives);
 
