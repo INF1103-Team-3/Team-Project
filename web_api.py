@@ -146,6 +146,16 @@ class ProfileModel(BaseModel):
     other_preferences: list[str] = Field(default_factory=list)
 
 
+class RouteRequestModel(BaseModel):
+    origin_lat: float
+    origin_lng: float
+    dest_lat: float
+    dest_lng: float
+    name: str = "Restaurant"
+    mode: str = "walk"
+    traffic_aware: bool = False
+
+
 # ---------- Health & Metadata Endpoints ----------
 
 @app.get("/api/health")
@@ -515,6 +525,37 @@ def search_restaurants(req: SearchRequestModel, authorization: str | None = Head
         raise HTTPException(status_code=500, detail=f"Search execution failed: {str(exc)}")
     finally:
         debug_log.end_trace(token)
+
+
+@app.post("/api/route")
+def get_restaurant_route(req: RouteRequestModel):
+    """Fetch turn-by-turn directions from Google Routes API via BRNS.main.route_to."""
+    mode = req.mode if req.mode in ("walk", "drive", "transit") else "walk"
+    restaurant_arg = {
+        "name": req.name,
+        "lat": req.dest_lat,
+        "lng": req.dest_lng,
+    }
+    request_arg = {
+        "origin": {
+            "latitude": req.origin_lat,
+            "longitude": req.origin_lng,
+        },
+        "mode": mode,
+        "traffic_aware": req.traffic_aware if mode == "drive" else False,
+    }
+    try:
+        result = brns_main.route_to(restaurant_arg, request_arg)
+        return {
+            "success": True,
+            "name": result.get("name", req.name),
+            "mode": result.get("mode", mode),
+            "traffic_aware": result.get("traffic_aware", False),
+            "route": result.get("route"),
+            "link": result.get("link"),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not fetch route: {exc}")
 
 
 if __name__ == "__main__":
