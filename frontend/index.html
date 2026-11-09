@@ -13,6 +13,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <script>
     tailwind.config = {
+      darkMode: 'class',
       theme: {
         extend: {
           fontFamily: {
@@ -29,19 +30,18 @@
           }
         }
       }
+    };
+
+    // Apply saved theme immediately to prevent flash
+    if (localStorage.getItem('bitefinder_theme') === 'dark') {
+      document.documentElement.classList.add('dark');
     }
   </script>
-  <style>
-    .glass {
-      background: rgba(255, 255, 255, 0.95);
-      backdrop-filter: blur(10px);
-    }
-  </style>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col font-sans transition-colors duration-200">
 
   <!-- Header -->
-  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+  <header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 shadow-sm transition-colors duration-200">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
@@ -49,18 +49,23 @@
         </div>
         <div>
           <span class="text-xl font-extrabold tracking-tight bg-gradient-to-r from-brand-600 to-amber-600 bg-clip-text text-transparent">BiteFinder</span>
-          <span class="hidden sm:inline-block ml-2 text-xs font-semibold px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full border border-brand-200">Singapore</span>
+          <span class="hidden sm:inline-block ml-2 text-xs font-semibold px-2 py-0.5 bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-400 rounded-full border border-brand-200 dark:border-brand-500/30">Singapore</span>
         </div>
       </div>
-      <div class="flex items-center gap-3">
-        <button id="profileBtn" class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-700 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors border border-slate-200">
+      <div class="flex items-center gap-2.5">
+        <!-- Light / Dark Mode Toggle -->
+        <button id="themeToggleBtn" type="button" title="Toggle Light/Dark Mode"
+          class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700">
+          <i id="themeIcon" data-lucide="moon" class="w-4 h-4"></i>
+          <span id="themeLabel" class="text-xs font-semibold">Dark Mode</span>
+        </button>
+
+        <!-- Profile Button -->
+        <button id="profileBtn" type="button"
+          class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-brand-50 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700">
           <i data-lucide="user" class="w-4 h-4"></i>
           <span id="profileUsername">Profile</span>
         </button>
-        <div class="flex items-center gap-1 text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200">
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span id="dbStatus">MongoDB Ready</span>
-        </div>
       </div>
     </div>
   </header>
@@ -70,8 +75,8 @@
 
     <!-- Left Column: Search & Filters (5 cols) -->
     <div class="lg:col-span-5 flex flex-col gap-6">
-      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-        <h2 class="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+      <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors duration-200">
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
           <i data-lucide="sliders-horizontal" class="w-5 h-5 text-brand-600"></i>
           Search Preferences
         </h2>
@@ -79,25 +84,25 @@
         <form id="searchForm" class="space-y-5">
           <!-- Location Input -->
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Starting Location</label>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Starting Location</label>
             <div class="relative">
               <i data-lucide="map-pin" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
               <input type="text" id="locationInput" required placeholder="Enter postal code, address, or landmark"
-                class="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition"
+                class="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition"
                 value="Compass One">
             </div>
             <!-- Quick preset pills -->
             <div class="flex flex-wrap items-center gap-1.5 mt-2">
               <span class="text-[10px] font-semibold text-slate-400">Popular:</span>
-              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Compass One">Compass One</button>
-              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Rivervale Plaza">Rivervale Plaza</button>
-              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Bugis Junction">Bugis Junction</button>
-              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 hover:bg-brand-100 hover:text-brand-700 transition" data-loc="Jewel Changi">Jewel Changi</button>
+              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-100 dark:hover:bg-brand-500/20 hover:text-brand-700 dark:hover:text-brand-300 transition" data-loc="Compass One">Compass One</button>
+              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-100 dark:hover:bg-brand-500/20 hover:text-brand-700 dark:hover:text-brand-300 transition" data-loc="Rivervale Plaza">Rivervale Plaza</button>
+              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-100 dark:hover:bg-brand-500/20 hover:text-brand-700 dark:hover:text-brand-300 transition" data-loc="Bugis Junction">Bugis Junction</button>
+              <button type="button" class="preset-pill text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-100 dark:hover:bg-brand-500/20 hover:text-brand-700 dark:hover:text-brand-300 transition" data-loc="Jewel Changi">Jewel Changi</button>
             </div>
 
             <!-- Recent location searches -->
             <div id="recentSearches" class="mt-2.5 flex flex-wrap items-center gap-1.5 hidden">
-              <span class="text-[10px] font-bold text-brand-600 flex items-center gap-1">
+              <span class="text-[10px] font-bold text-brand-600 dark:text-brand-400 flex items-center gap-1">
                 <i data-lucide="history" class="w-3 h-3"></i> Recent:
               </span>
               <div id="recentList" class="flex flex-wrap gap-1.5"></div>
@@ -107,15 +112,15 @@
           <!-- Travel Mode & Max Limit -->
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Travel Mode</label>
-              <div class="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl">
-                <button type="button" class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 bg-white shadow-sm text-brand-600" data-mode="walk">
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Travel Mode</label>
+              <div class="grid grid-cols-3 gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                <button type="button" class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 bg-white dark:bg-slate-700 shadow-sm text-brand-600 dark:text-brand-400" data-mode="walk">
                   <i data-lucide="footprints" class="w-4 h-4"></i> Walk
                 </button>
-                <button type="button" class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 text-slate-600 hover:text-slate-900" data-mode="drive">
+                <button type="button" class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" data-mode="drive">
                   <i data-lucide="car" class="w-4 h-4"></i> Drive
                 </button>
-                <button type="button" class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 text-slate-600 hover:text-slate-900" data-mode="transit">
+                <button type="button" class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" data-mode="transit">
                   <i data-lucide="train" class="w-4 h-4"></i> Transit
                 </button>
               </div>
@@ -123,8 +128,8 @@
 
             <div>
               <div class="flex justify-between items-center mb-1.5">
-                <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Max Time</label>
-                <span id="timeDisplay" class="text-xs font-bold text-brand-600">30 mins</span>
+                <label class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Max Time</label>
+                <span id="timeDisplay" class="text-xs font-bold text-brand-600 dark:text-brand-400">30 mins</span>
               </div>
               <input type="range" id="timeSlider" min="5" max="90" step="5" value="30" class="w-full accent-brand-600 mt-2">
             </div>
@@ -133,8 +138,8 @@
           <!-- Budget per person -->
           <div>
             <div class="flex justify-between items-center mb-1.5">
-              <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Budget Per Person</label>
-              <span id="budgetDisplay" class="text-xs font-bold text-brand-600">SGD $30</span>
+              <label class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Budget Per Person</label>
+              <span id="budgetDisplay" class="text-xs font-bold text-brand-600 dark:text-brand-400">SGD $30</span>
             </div>
             <input type="range" id="budgetSlider" min="5" max="100" step="5" value="30" class="w-full accent-brand-600">
             <div class="flex justify-between text-[10px] text-slate-400 mt-1">
@@ -146,19 +151,19 @@
 
           <!-- Dietary Requirements -->
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Dietary Requirements</label>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Dietary Requirements</label>
             <div class="grid grid-cols-2 gap-2">
-              <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/50 transition">
+              <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 transition">
                 <input type="checkbox" id="halalCheck" class="rounded text-emerald-600 focus:ring-emerald-500">
                 <div class="text-xs">
-                  <div class="font-bold text-slate-800">MUIS Halal</div>
+                  <div class="font-bold text-slate-800 dark:text-slate-200">MUIS Halal</div>
                   <div class="text-[10px] text-slate-400">Official verification</div>
                 </div>
               </label>
-              <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 cursor-pointer hover:border-blue-500 hover:bg-blue-50/50 transition">
+              <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-950/30 transition">
                 <input type="checkbox" id="vegCheck" class="rounded text-blue-600 focus:ring-blue-500">
                 <div class="text-xs">
-                  <div class="font-bold text-slate-800">Vegetarian</div>
+                  <div class="font-bold text-slate-800 dark:text-slate-200">Vegetarian</div>
                   <div class="text-[10px] text-slate-400">Plant-based options</div>
                 </div>
               </label>
@@ -167,8 +172,8 @@
 
           <!-- Cuisines -->
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Preferred Cuisine (Optional)</label>
-            <select id="cuisineSelect" class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition bg-white">
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Preferred Cuisine (Optional)</label>
+            <select id="cuisineSelect" class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100">
               <option value="">Any Cuisine</option>
               <option value="chinese">Chinese</option>
               <option value="malay">Malay</option>
@@ -187,9 +192,9 @@
 
           <!-- Special Request Text (Gemini AI interpretation) -->
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Special Requests (AI Interpreted)</label>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Special Requests (AI Interpreted)</label>
             <input type="text" id="specialInput" placeholder="e.g. at least 4.5 stars, spicy food, quiet dinner"
-              class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+              class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
           </div>
 
           <!-- Submit Button -->
@@ -214,20 +219,20 @@
       <!-- Results Header -->
       <div id="resultsHeader" class="hidden flex items-center justify-between">
         <div>
-          <h2 class="text-xl font-bold text-slate-900" id="resultsCount">Recommendations</h2>
-          <p class="text-xs text-slate-500" id="resultsSubtext">Verified with Google Places and official MUIS records.</p>
+          <h2 class="text-xl font-bold text-slate-900 dark:text-white" id="resultsCount">Recommendations</h2>
+          <p class="text-xs text-slate-500 dark:text-slate-400" id="resultsSubtext">Verified with Google Places and official MUIS records.</p>
         </div>
       </div>
 
       <!-- Results Container -->
       <div id="resultsList" class="space-y-4">
         <!-- Initial Empty State -->
-        <div id="emptyState" class="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center flex flex-col items-center justify-center">
-          <div class="w-16 h-16 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mb-4">
+        <div id="emptyState" class="bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-12 text-center flex flex-col items-center justify-center transition-colors duration-200">
+          <div class="w-16 h-16 rounded-2xl bg-brand-50 dark:bg-brand-500/15 text-brand-600 dark:text-brand-400 flex items-center justify-center mb-4">
             <i data-lucide="compass" class="w-8 h-8"></i>
           </div>
-          <h3 class="text-base font-bold text-slate-800">Ready to explore Singapore dining</h3>
-          <p class="text-xs text-slate-500 max-w-sm mt-1">Select your starting location and dining criteria on the left, then click Find Matching Restaurants.</p>
+          <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">Ready to explore Singapore dining</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 max-w-sm mt-1">Select your starting location and dining criteria on the left, then click Find Matching Restaurants.</p>
         </div>
       </div>
 
@@ -239,18 +244,39 @@
     // State
     let currentMode = 'walk';
 
-    // Init Lucide Icons
+    // Theme Management
+    function updateThemeUI() {
+      const isDark = document.documentElement.classList.contains('dark');
+      const iconEl = document.getElementById('themeIcon');
+      const labelEl = document.getElementById('themeLabel');
+      if (iconEl && labelEl) {
+        iconEl.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
+        labelEl.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+        lucide.createIcons();
+      }
+    }
+
+    document.getElementById('themeToggleBtn').addEventListener('click', () => {
+      const isDark = document.documentElement.classList.toggle('dark');
+      try {
+        localStorage.setItem('bitefinder_theme', isDark ? 'dark' : 'light');
+      } catch {}
+      updateThemeUI();
+    });
+
+    // Init Lucide Icons & Theme UI
     lucide.createIcons();
+    updateThemeUI();
 
     // Mode buttons
     document.querySelectorAll('.mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.mode-btn').forEach(b => {
-          b.classList.remove('bg-white', 'shadow-sm', 'text-brand-600');
-          b.classList.add('text-slate-600');
+          b.classList.remove('bg-white', 'dark:bg-slate-700', 'shadow-sm', 'text-brand-600', 'dark:text-brand-400');
+          b.classList.add('text-slate-600', 'dark:text-slate-400');
         });
-        btn.classList.add('bg-white', 'shadow-sm', 'text-brand-600');
-        btn.classList.remove('text-slate-600');
+        btn.classList.add('bg-white', 'dark:bg-slate-700', 'shadow-sm', 'text-brand-600', 'dark:text-brand-400');
+        btn.classList.remove('text-slate-600', 'dark:text-slate-400');
         currentMode = btn.dataset.mode;
       });
     });
@@ -335,7 +361,7 @@
       list.forEach(q => {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'text-xs px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-700 hover:bg-brand-100 border border-brand-200 transition font-medium';
+        btn.className = 'text-xs px-2.5 py-0.5 rounded-full bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-500/25 border border-brand-200 dark:border-brand-500/30 transition font-medium';
         btn.textContent = q;
         btn.addEventListener('click', () => {
           document.getElementById('locationInput').value = q;
@@ -366,7 +392,6 @@
       e.preventDefault();
 
       const searchBtn = document.getElementById('searchBtn');
-      const resultsList = document.getElementById('resultsList');
       const emptyState = document.getElementById('emptyState');
       const statusBanner = document.getElementById('statusBanner');
       const statusText = document.getElementById('statusText');
@@ -404,8 +429,8 @@
       searchBtn.disabled = true;
       searchBtn.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Analyzing & Ranking...`;
 
-      statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 border-amber-200 text-amber-800";
-      statusIcon.innerHTML = `<svg class="animate-spin w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+      statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200";
+      statusIcon.innerHTML = `<svg class="animate-spin w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
       statusText.textContent = "Querying Google Places, computing routes, and ranking candidates with Gemini AI...";
       statusBanner.classList.remove('hidden');
 
@@ -432,8 +457,8 @@
         }
 
         if (data.message && (!data.matches || data.matches.length === 0)) {
-          statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 border-amber-200 text-amber-800";
-          statusIcon.innerHTML = `<i data-lucide="info" class="w-4 h-4 text-amber-600"></i>`;
+          statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200";
+          statusIcon.innerHTML = `<i data-lucide="info" class="w-4 h-4 text-amber-600 dark:text-amber-400"></i>`;
           statusText.textContent = data.message;
           lucide.createIcons();
           if (emptyState) emptyState.remove();
@@ -447,8 +472,8 @@
         const alternatives = data.alternatives || [];
         const totalFound = matches.length + alternatives.length;
 
-        statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-emerald-50 border-emerald-200 text-emerald-800";
-        statusIcon.innerHTML = `<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>`;
+        statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200";
+        statusIcon.innerHTML = `<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>`;
         statusText.textContent = `Found ${matches.length} direct match${matches.length === 1 ? '' : 'es'} and ${alternatives.length} alternative${alternatives.length === 1 ? '' : 's'}.`;
         lucide.createIcons();
 
@@ -459,8 +484,8 @@
         renderResults(matches, alternatives);
 
       } catch (error) {
-        statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-rose-50 border-rose-200 text-rose-800";
-        statusIcon.innerHTML = `<i data-lucide="alert-circle" class="w-4 h-4 text-rose-600"></i>`;
+        statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200";
+        statusIcon.innerHTML = `<i data-lucide="alert-circle" class="w-4 h-4 text-rose-600 dark:text-rose-400"></i>`;
         statusText.textContent = error.message;
         lucide.createIcons();
       } finally {
@@ -470,37 +495,111 @@
       }
     });
 
-    function formatHours(r) {
-      if (r.today_hours) return r.today_hours;
-      if (!r.opening_hours || typeof r.opening_hours !== 'object') {
-        return r.open_now ? 'Open (Regular hours unlisted)' : 'Check with store';
+    // Convert "HH:MM" or "HHMM" into 12-hour "5:00 PM"
+    function to12Hour(timeStr) {
+      if (!timeStr) return '';
+      const clean = timeStr.replace(':', '').trim();
+      if (clean.length !== 4 || isNaN(parseInt(clean, 10))) return timeStr;
+      let h = parseInt(clean.slice(0, 2), 10);
+      const m = clean.slice(2, 4);
+      if (h === 24 || (h === 23 && m === '59')) {
+        return '12:00 AM';
       }
-      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-      const today = days[new Date().getDay()];
-      const slots = r.opening_hours[today];
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 === 0 ? 12 : h % 12;
+      return `${h12}:${m} ${ampm}`;
+    }
 
-      if (!slots || slots.length === 0) {
-        return 'Closed today';
-      }
-
-      const parseTime = (t) => {
-        if (!t || typeof t !== 'string' || t.length !== 4) return t || '';
-        const h = parseInt(t.slice(0, 2), 10);
-        const m = t.slice(2);
-        const ampm = h >= 12 ? 'PM' : 'AM';
-        const h12 = h % 12 === 0 ? 12 : h % 12;
-        return `${h12}:${m} ${ampm}`;
+    // Normalize a day's slots from r.opening_hours into [["HH:MM", "HH:MM"], ...]
+    function getNormalizedDayPairs(openingHours, dayName) {
+      if (!openingHours || typeof openingHours !== 'object') return [];
+      const raw = openingHours[dayName];
+      if (!raw || !Array.isArray(raw) || raw.length === 0) return [];
+      const toHHMM = (s) => {
+        if (!s || typeof s !== 'string') return '';
+        const c = s.replace(':', '').trim();
+        if (c === '2359') return '24:00';
+        return c.length === 4 ? `${c.slice(0, 2)}:${c.slice(2)}` : s;
       };
-
-      if (Array.isArray(slots[0])) {
-        return slots.map(s => `${parseTime(s[0])} – ${parseTime(s[1])}`).join(', ');
-      } else if (slots.length === 2 && typeof slots[0] === 'string') {
-        if (slots[0] === '0000' && (slots[1] === '2359' || slots[1] === '2400')) {
-          return 'Open 24 Hours';
-        }
-        return `${parseTime(slots[0])} – ${parseTime(slots[1])}`;
+      if (Array.isArray(raw[0])) {
+        return raw.map(pair => [toHHMM(pair[0]), toHHMM(pair[1])]);
       }
-      return 'Available on store inquiry';
+      if (raw.length === 2 && typeof raw[0] === 'string') {
+        return [[toHHMM(raw[0]), toHHMM(raw[1])]];
+      }
+      return [];
+    }
+
+    // Merge midnight-split segments (e.g. ["00:00","02:30"] + ["17:00","24:00"] -> ["17:00","02:30"])
+    function formatHours(r) {
+      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const nowSG = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Singapore' }));
+      const todayIdx = nowSG.getDay();
+      const yesterdayName = days[(todayIdx + 6) % 7];
+      const todayName = days[todayIdx];
+      const tomorrowName = days[(todayIdx + 1) % 7];
+
+      if (r.today_hours) {
+        const raw = r.today_hours.trim();
+        if (raw.toLowerCase() === 'open 24 hours') return 'Open 24 Hours';
+        if (raw.toLowerCase() === 'closed today') return 'Closed today';
+        if (raw.toLowerCase() === 'hours unavailable') {
+          return r.open_now ? 'Open Now (Hours unlisted)' : 'Hours unavailable';
+        }
+
+        // Parse segments like "00:00–02:30, 17:00–24:00"
+        let pairs = raw.split(',').map(part => {
+          const pieces = part.trim().split(/\s*[–-]\s*/);
+          return pieces.length === 2 ? [pieces[0].trim(), pieces[1].trim()] : null;
+        }).filter(Boolean);
+
+        if (pairs.length > 0) {
+          // Case 1: Both a morning continuation ("00:00" -> X) and an evening shift (Y -> "24:00") exist today
+          const morningIdx = pairs.findIndex(p => p[0] === '00:00');
+          const eveningIdx = pairs.findIndex(p => p[1] === '24:00' || p[1] === '23:59');
+
+          if (morningIdx !== -1 && eveningIdx !== -1 && morningIdx !== eveningIdx) {
+            const overnightStart = pairs[eveningIdx][0];
+            const overnightEnd = pairs[morningIdx][1];
+            const merged = [];
+            pairs.forEach((p, idx) => {
+              if (idx === morningIdx) return;
+              if (idx === eveningIdx) {
+                merged.push([overnightStart, overnightEnd]);
+              } else {
+                merged.push(p);
+              }
+            });
+            pairs = merged;
+          } else if (eveningIdx !== -1 && morningIdx === -1) {
+            // Case 2: Evening shift reaches midnight ("17:00" -> "24:00"); check tomorrow's 00:00 continuation
+            const tomorrowPairs = getNormalizedDayPairs(r.opening_hours, tomorrowName);
+            const tomMorning = tomorrowPairs.find(p => p[0] === '00:00');
+            if (tomMorning) {
+              pairs[eveningIdx] = [pairs[eveningIdx][0], tomMorning[1]];
+            }
+          } else if (morningIdx !== -1 && eveningIdx === -1 && pairs.length === 1) {
+            // Case 3: Only an early-morning tail ("00:00" -> "02:30"); check yesterday's evening start
+            const yesterdayPairs = getNormalizedDayPairs(r.opening_hours, yesterdayName);
+            const yestEvening = yesterdayPairs.find(p => p[1] === '24:00' || p[1] === '23:59');
+            if (yestEvening) {
+              pairs[0] = [yestEvening[0], pairs[0][1]];
+            }
+          }
+
+          return pairs.map(p => `${to12Hour(p[0])} – ${to12Hour(p[1])}`).join(', ');
+        }
+      }
+
+      // Fallback to weekly opening_hours if today_hours is absent
+      const todayPairs = getNormalizedDayPairs(r.opening_hours, todayName);
+      if (todayPairs.length === 0) {
+        return r.open_now ? 'Open Now (Hours unlisted)' : 'Closed today';
+      }
+      if (todayPairs.length === 1 && todayPairs[0][0] === '00:00' && todayPairs[0][1] === '24:00') {
+        return 'Open 24 Hours';
+      }
+      return todayPairs.map(p => `${to12Hour(p[0])} – ${to12Hour(p[1])}`).join(', ');
     }
 
     function renderResults(matches, alternatives) {
@@ -514,8 +613,8 @@
 
       if (allItems.length === 0) {
         container.innerHTML = `
-          <div class="bg-white p-8 rounded-2xl border border-slate-200 text-center">
-            <p class="text-sm font-semibold text-slate-700">No restaurants matched all constraints.</p>
+          <div class="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 text-center">
+            <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">No restaurants matched all constraints.</p>
             <p class="text-xs text-slate-400 mt-1">Try expanding your travel time limit or budget.</p>
           </div>
         `;
@@ -530,7 +629,7 @@
         const hoursText = formatHours(r);
 
         const card = document.createElement('div');
-        card.className = "bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition flex flex-col gap-3";
+        card.className = "bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition flex flex-col gap-3";
 
         // Route string
         let routeStr = '';
@@ -541,16 +640,37 @@
         // Maps URL
         const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name + ' ' + (r.address || 'Singapore'))}`;
 
+        // Render each reason highlighted in green (matches requirement) or red (does not match / warning)
+        const reasonsHtml = reasons.map(rawReason => {
+          const trimmed = String(rawReason || '').trim();
+          const isUnmet = trimmed.startsWith('!');
+          const cleanText = isUnmet ? trimmed.replace(/^!\s*/, '') : trimmed;
+          if (isUnmet) {
+            return `
+              <li class="flex items-start gap-2 px-2.5 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800/70 text-rose-700 dark:text-rose-300 font-medium">
+                <i data-lucide="x-circle" class="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5"></i>
+                <span>${cleanText}</span>
+              </li>
+            `;
+          }
+          return `
+            <li class="flex items-start gap-2 px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/70 text-emerald-700 dark:text-emerald-300 font-medium">
+              <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5"></i>
+              <span>${cleanText}</span>
+            </li>
+          `;
+        }).join('');
+
         card.innerHTML = `
           <div class="flex items-start justify-between gap-4">
             <div>
               <div class="flex items-center gap-2">
-                <h3 class="text-base font-bold text-slate-900">${r.name || 'Restaurant'}</h3>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white">${r.name || 'Restaurant'}</h3>
                 ${item.isMatch
-                  ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">Match</span>`
-                  : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">Alternative</span>`}
+                  ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">Match</span>`
+                  : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">Alternative</span>`}
               </div>
-              <p class="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
                 <i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-400"></i>
                 ${r.address || 'Singapore'}
               </p>
@@ -558,53 +678,53 @@
 
             <!-- Rating badge -->
             <div class="flex flex-col items-end">
-              <div class="flex items-center gap-1 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200">
+              <div class="flex items-center gap-1 bg-amber-50 dark:bg-amber-950/70 px-2 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
                 <i data-lucide="star" class="w-3.5 h-3.5 text-amber-500 fill-amber-500"></i>
-                <span class="text-xs font-bold text-amber-800">${r.rating || r.g_rating || 'N/A'}</span>
+                <span class="text-xs font-bold text-amber-800 dark:text-amber-300">${r.rating || r.g_rating || 'N/A'}</span>
               </div>
               ${r.rating_count ? `<span class="text-[10px] text-slate-400 mt-0.5">${r.rating_count} reviews</span>` : ''}
             </div>
           </div>
 
           <!-- Operating Hours Row -->
-          <div class="flex items-center gap-2 text-xs text-slate-700 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
+          <div class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/70 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700">
             <i data-lucide="clock" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
-            <span class="font-bold text-slate-800">Hours Today:</span>
-            <span class="text-slate-600 font-medium">${hoursText}</span>
+            <span class="font-bold text-slate-800 dark:text-slate-100">Hours Today:</span>
+            <span class="text-slate-600 dark:text-slate-300 font-medium">${hoursText}</span>
             ${r.open_now
-              ? `<span class="ml-auto text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-300 shrink-0">Open Now</span>`
-              : `<span class="ml-auto text-[10px] font-bold text-rose-700 bg-rose-100 px-2.5 py-0.5 rounded-full border border-rose-300 shrink-0">Closed</span>`}
+              ? `<span class="ml-auto text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800 shrink-0">Open Now</span>`
+              : `<span class="ml-auto text-[10px] font-bold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-950 px-2.5 py-0.5 rounded-full border border-rose-300 dark:border-rose-800 shrink-0">Closed</span>`}
           </div>
 
           <!-- Badges Bar -->
-          <div class="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
+          <div class="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
             ${isOfficialHalal
-              ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                   <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600"></i> Official MUIS Halal
+              ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                   <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"></i> Official MUIS Halal
                  </span>`
               : isGoogleHalal
-              ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
-                   <i data-lucide="info" class="w-3.5 h-3.5 text-amber-600"></i> Halal (Google Indicated)
+              ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                   <i data-lucide="info" class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400"></i> Halal (Google Indicated)
                  </span>`
               : ''}
 
             ${r.serves_vegetarian_food
-              ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
-                   <i data-lucide="leaf" class="w-3.5 h-3.5 text-blue-600"></i> Vegetarian
+              ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1">
+                   <i data-lucide="leaf" class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400"></i> Vegetarian
                  </span>`
               : ''}
 
-            ${routeStr ? `<span class="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700">${routeStr}</span>` : ''}
+            ${routeStr ? `<span class="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">${routeStr}</span>` : ''}
 
-            ${r.price_range ? `<span class="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700">💰 ${r.price_range}</span>` : ''}
+            ${r.price_range ? `<span class="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">💰 ${r.price_range}</span>` : ''}
           </div>
 
           <!-- AI Grounded Reasons -->
           ${reasons && reasons.length ? `
-            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-600">
-              <span class="font-bold text-slate-700 block mb-1">Why this matches:</span>
-              <ul class="list-disc list-inside space-y-0.5 text-slate-600">
-                ${reasons.map(res => `<li>${res}</li>`).join('')}
+            <div class="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-xs">
+              <span class="font-bold text-slate-700 dark:text-slate-200 block mb-2">Why this matches:</span>
+              <ul class="space-y-1.5">
+                ${reasonsHtml}
               </ul>
             </div>
           ` : ''}
@@ -612,7 +732,7 @@
           <!-- Footer Actions -->
           <div class="flex items-center justify-end pt-2">
             <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer"
-              class="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1 hover:underline">
+              class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 flex items-center gap-1 hover:underline">
               Get Directions on Google Maps <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
             </a>
           </div>
@@ -626,4 +746,3 @@
   </script>
 </body>
 </html>
-
