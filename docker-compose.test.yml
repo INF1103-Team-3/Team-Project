@@ -67,6 +67,7 @@ services:
       - ./BRNS/io_manager.py:/app/BRNS/io_manager.py
       - ./shared/seed_mongo.py:/app/shared/seed_mongo.py
       - ./tests:/app/tests
+      - ./BIS/data:/data/bis
       - bis-brns-test-data:/data
       - bitefinder-test-logs:/data/logs
     networks:
@@ -119,6 +120,7 @@ services:
       - ./BRNS/io_manager.py:/app/BRNS/io_manager.py
       - ./shared/seed_mongo.py:/app/shared/seed_mongo.py
       - ./tests:/app/tests
+      - ./BIS/data:/data/bis
       - bis-brns-test-data:/data
       - bitefinder-test-logs:/data/logs
     networks:

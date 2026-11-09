@@ -23,6 +23,18 @@ TEST_EMAIL = "webtest_suite_user@example.com"
 
 def _cleanup_test_user():
     """Remove test user, sessions, favorites, and history created by the test suite."""
+    try:
+        from BIS import data_manager as bis_data
+        if bis_data.USERS_FILE.exists():
+            raw = json.loads(bis_data.USERS_FILE.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                to_del = [k for k, v in raw.items() if isinstance(v, dict) and v.get("email") == TEST_EMAIL]
+                if to_del:
+                    for k in to_del:
+                        raw.pop(k, None)
+                    bis_data._atomic_write(bis_data.USERS_FILE, raw)
+    except Exception:
+        pass
     if not db.is_db_available():
         return
     database = db.get_db()
@@ -589,3 +601,4 @@ def run_tests():
 
 if __name__ == "__main__":
     run_tests()
+
