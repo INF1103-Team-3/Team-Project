@@ -1,108 +1,109 @@
-"""Validate AI proposals against exact MUIS evidence."""
-from __future__ import annotations
+"""Logic Manager: BRC's business rules.
+
+  OutletMatcher - is a restaurant the same place as a MUIS outlet?
+  LogicManager  - builds the cleaned database and accepts or rejects AI matches.
+"""
+
 import re
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from difflib import SequenceMatcher
 
-def _key(text): return " ".join(re.findall(r"[a-z0-9]+", str(text).casefold()))
-def _brand(text): return _key(re.split(r"\s*(?:\(|@|\|)\s*",str(text),maxsplit=1)[0])
-def _postal(row):
-    value=str(row.get("postal_code") or "")
-    if re.fullmatch(r"\d{6}",value): return value
-    found=re.findall(r"\b\d{6}\b",str(row.get("address") or ""))
-    return found[-1] if found else None
-_UNIT=re.compile(r"(?:#\s*|\b)((?:B\d{1,2}|\d{2})[-/]\d{2,3}(?:/\d{2,3})?[A-Z]?)\b",re.I)
-def _unit(text):
-    match=_UNIT.search(str(text))
-    return re.sub(r"[^A-Z0-9]","",match.group(1).upper()) if match else None
-def _address(text):
-    text=_UNIT.sub(" ",str(text))
-    text=re.sub(r"\b(?:singapore|\d{6})\b"," ",text,flags=re.I)
-    return _key(text)
-
-def _active(row):
-    expiry=row.get("valid_until")
-    if not expiry: return True
-    for fmt in ("%Y-%m-%d","%d/%m/%Y","%d-%m-%Y"):
-        try: return datetime.strptime(str(expiry)[:10],fmt).date() >= date.today()
-        except ValueError: pass
-    return False
-
-def build_database(snapshot,cuisines):
-    if len(snapshot["listings"]) != len(cuisines):
-        raise ValueError("BRC AI did not return cuisine data for every listing.")
-    output=[]; seen=set()
-    for row,tags in zip(snapshot["listings"],cuisines):
-        if row.get("scheme")!="Eating Establishment" or not _active(row): continue
-        certificate=row["certificate_number"]
-        identity=(str(row.get("listing_id") or certificate),
-                  row["postal_code"],_address(row["address"]),
-                  _unit(row["address"]))
-        if identity in seen: continue
-        seen.add(identity)
-        output.append({
-            "name":row["name"],"postal_code":row["postal_code"],"address":row["address"],
-            "latitude":row.get("latitude"),"longitude":row.get("longitude"),
-            "cuisine":tags,"dietary":["halal"],"halal_certification":"official",
-            "muis":{"certificate_number":certificate,"listing_id":row.get("listing_id"),
-                    "scheme":row["scheme"],"category":row.get("category"),
-                    "valid_until":row.get("valid_until"),"source_url":snapshot["source_url"],
-                    "raw_fetched_at":snapshot["fetched_at"]}})
-    if not output: raise ValueError("No current MUIS restaurants remain after validation.")
-    return output
-
-def _same(record,listing):
-    if _postal(record)!=listing["postal_code"] or not _active(listing["muis"]): return False
-    if SequenceMatcher(None,_brand(record["name"]),_brand(listing["name"])).ratio()<.72:
-        return False
-    left,right=_unit(record.get("address")),_unit(listing["address"])
-    if bool(left)!=bool(right) or (left and left!=right): return False
-    return SequenceMatcher(None,_address(record.get("address")),_address(listing["address"])).ratio()>=.55
-
-def check_restaurants(records,database,matches):
-    if len(records)!=len(matches): raise ValueError("BRC AI omitted restaurant matches.")
-    by_cert={row["muis"]["certificate_number"]:row for row in database}
-    checked_at=datetime.now(timezone.utc).isoformat(timespec="seconds")
-    output=[]
-    for record,certificate in zip(records,matches):
-        result=dict(record); listing=by_cert.get(certificate) if certificate else None
-        if listing and _same(record,listing):
-            dietary=list(dict.fromkeys([*(record.get("dietary") or []),"halal"]))
-            result.update({"dietary":dietary,"halal_certification":"official",
-                           "cuisines":listing["cuisine"]})
-            if not result.get("cuisine") and listing["cuisine"]:
-                result["cuisine"]=listing["cuisine"][0]
-            result["muis_check"]={"status":"verified","checked_at":checked_at,
-                "certificate_number":certificate,"listing_id":listing["muis"].get("listing_id"),
-                "source_url":listing["muis"]["source_url"],
-                "valid_until":listing["muis"].get("valid_until")}
-        else:
-            if result.get("halal_certification")=="official":
-                result["halal_certification"]="none"
-                result["dietary"]=[x for x in result.get("dietary",[]) if x!="halal"]
-            result["muis_check"]={"status":"not_verified","checked_at":checked_at}
-        output.append(result)
-    return output
-
-def process(context,ai_output):
-    if context["scenario"]=="build_database":
-        return build_database(context["raw_snapshot"],ai_output["cuisines"])
-    return check_restaurants(context["records"],context["database"],ai_output["matches"])
+from BRC.models import EATING_ESTABLISHMENT, Address, CheckedRestaurant, HalalDatabase, HalalOutlet
 
 
-def evaluate(record):
-    """Apply BRC business rules to one AI-enriched workflow record."""
-    if not isinstance(record, dict) or set(record) != {"context", "ai_output"}:
-        raise ValueError("BRC evaluation needs context and AI output.")
-    return process(record["context"], record["ai_output"])
+class OutletMatcher:
+    """A restaurant and a MUIS outlet are the same place when all of these hold:
+
+      1. same postal code, and the certificate is still valid
+      2. brand names are at least 72% alike (branch names in brackets ignored)
+      3. unit numbers agree (both missing, or both the same)
+      4. street addresses are at least 55% alike
+    """
+
+    BRAND_SIMILARITY = 0.72
+    ADDRESS_SIMILARITY = 0.55
+
+    def same(self, record, outlet):
+        if record.address.postal != outlet.postal_code:
+            return False
+        if not outlet.certificate.is_active():
+            return False
+        if self._similarity(self.brand(record.name), self.brand(outlet.name)) \
+                < self.BRAND_SIMILARITY:
+            return False
+        if record.address.unit != outlet.address.unit:
+            return False
+        return record.address.street_similarity(outlet.address) >= self.ADDRESS_SIMILARITY
+
+    @staticmethod
+    def brand(name):
+        """The name before any '(branch)', '@ place' or '| tagline' part."""
+        return Address.normalise(re.split(r"\s*(?:\(|@|\|)\s*", str(name), maxsplit=1)[0])
+
+    @staticmethod
+    def _similarity(first, second):
+        return SequenceMatcher(None, first, second).ratio()
 
 
-def score(record):
-    """Return 1 for official MUIS verification and 0 otherwise."""
-    return int(isinstance(record, dict)
-               and record.get("halal_certification") == "official")
+class LogicManager:
+    """Applies BRC's business rules to MUIS data and AI answers.
 
+    Association: it uses an OutletMatcher, which can be replaced with a
+    different rule without changing this class.
+    """
 
-def route(record):
-    """Route a checked restaurant to its verification outcome."""
-    return "verified" if score(record) else "not_verified"
+    def __init__(self, matcher=None):
+        self._matcher = matcher or OutletMatcher()
+
+    def build_database(self, snapshot, cuisines):
+        """Keep each current eating establishment once, with its cuisine tags."""
+        listings = snapshot.listings
+        if len(listings) != len(cuisines):
+            raise ValueError("BRC AI did not return cuisine data for every listing.")
+        outlets, seen = [], set()
+        for listing, tags in zip(listings, cuisines):
+            outlet = HalalOutlet.from_listing(listing, tags, snapshot)
+            if listing.scheme != EATING_ESTABLISHMENT or not outlet.certificate.is_active():
+                continue
+            # Two listings with this identity are the same physical outlet.
+            identity = (str(listing.listing_id or listing.certificate_number),
+                        listing.postal_code, outlet.address.street_key, outlet.address.unit)
+            if identity not in seen:
+                seen.add(identity)
+                outlets.append(outlet)
+        if not outlets:
+            raise ValueError("No current MUIS restaurants remain after validation.")
+        return HalalDatabase(outlets, snapshot.source_url, snapshot.fetched_at)
+
+    def exact_matches(self, records, candidate_groups):
+        """For each restaurant, the certificate of its only matching candidate, else None.
+
+        These restaurants are certain enough that the AI is not asked about them.
+        """
+        results = []
+        for record, candidates in zip(records, candidate_groups):
+            matches = [outlet for outlet in candidates if self._matcher.same(record, outlet)]
+            results.append(matches[0].certificate.number if len(matches) == 1 else None)
+        return results
+
+    def check_restaurants(self, records, database, chosen_certificates):
+        """Accept each AI choice only if the MUIS evidence agrees with it."""
+        if len(records) != len(chosen_certificates):
+            raise ValueError("BRC AI omitted restaurant matches.")
+        checked_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        results = []
+        for record, certificate in zip(records, chosen_certificates):
+            outlet = database.get(certificate)
+            if outlet is not None and not self._matcher.same(record, outlet):
+                outlet = None
+            results.append(CheckedRestaurant(record, outlet, checked_at).to_dict())
+        return results
+
+    @staticmethod
+    def score(record):
+        """1 if the restaurant is officially MUIS-verified, otherwise 0."""
+        return int(isinstance(record, dict) and record.get("halal_certification") == "official")
+
+    def route(self, record):
+        """'verified' or 'not_verified'."""
+        return "verified" if self.score(record) else "not_verified"
