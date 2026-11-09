@@ -575,7 +575,7 @@
       </div>
 
       <!-- Tabs -->
-      <div class="grid grid-cols-2 bg-slate-100 dark:bg-slate-800 p-1 mx-6 mt-4 rounded-xl">
+      <div id="authTabsContainer" class="grid grid-cols-2 bg-slate-100 dark:bg-slate-800 p-1 mx-6 mt-4 rounded-xl">
         <button type="button" id="tabLoginBtn"
           class="py-2 text-xs font-bold rounded-lg bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm transition">
           Sign In
@@ -642,6 +642,49 @@
           Create Account
         </button>
       </form>
+
+      <!-- Email OTP Verification Step -->
+      <div id="otpVerificationView" class="p-6 space-y-4 hidden">
+        <div class="text-center space-y-1">
+          <div
+            class="w-12 h-12 mx-auto rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shadow-sm mb-2">
+            <i data-lucide="mail-check" class="w-6 h-6"></i>
+          </div>
+          <h4 class="text-base font-extrabold text-slate-900 dark:text-white">Verify Your Email</h4>
+          <p class="text-xs text-slate-500 dark:text-slate-400">
+            A 6-digit verification code was emailed to<br>
+            <span id="otpTargetEmail" class="font-bold text-indigo-600 dark:text-indigo-400"></span>
+          </p>
+        </div>
+
+        <form id="otpForm" class="space-y-4 pt-1">
+          <div>
+            <label
+              class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 text-center">
+              Enter Verification Code
+            </label>
+            <input type="text" id="otpCodeInput" required maxlength="6" pattern="[0-9]{6}" inputmode="numeric"
+              placeholder="123456"
+              class="w-full py-2.5 px-3 text-2xl tracking-[0.35em] font-extrabold text-center font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none transition" />
+          </div>
+
+          <button type="submit" id="verifyOtpSubmitBtn"
+            class="w-full py-2.5 px-4 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-brand-600 to-amber-600 hover:from-brand-700 hover:to-amber-700 shadow-md transition flex items-center justify-center gap-1.5">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            <span>Verify & Continue</span>
+          </button>
+        </form>
+
+        <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+          <button type="button" id="cancelOtpBtn"
+            class="text-slate-500 dark:text-slate-400 hover:underline font-semibold flex items-center gap-1">
+            <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Back
+          </button>
+          <button type="button" id="resendOtpBtn" class="text-brand-600 dark:text-brand-400 hover:underline font-bold">
+            Resend Code
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1355,10 +1398,16 @@
     // Auth Modal Controls
     const authModal = document.getElementById('authModal');
     const authAlert = document.getElementById('authAlert');
+    const authTabsContainer = document.getElementById('authTabsContainer');
     const loginForm = document.getElementById('loginForm');
     const registerForm = document.getElementById('registerForm');
+    const otpVerificationView = document.getElementById('otpVerificationView');
+    const otpForm = document.getElementById('otpForm');
     const tabLoginBtn = document.getElementById('tabLoginBtn');
     const tabRegisterBtn = document.getElementById('tabRegisterBtn');
+
+    let pendingAuthEmail = '';
+    let resendCooldownTimer = null;
 
     function showAuthAlert(msg, isError = true) {
       authAlert.textContent = msg;
@@ -1369,6 +1418,8 @@
 
     function switchAuthTab(mode) {
       authAlert.classList.add('hidden');
+      if (authTabsContainer) authTabsContainer.classList.remove('hidden');
+      if (otpVerificationView) otpVerificationView.classList.add('hidden');
       if (mode === 'login') {
         loginForm.classList.remove('hidden');
         registerForm.classList.add('hidden');
@@ -1380,6 +1431,20 @@
         tabRegisterBtn.className = "py-2 text-xs font-bold rounded-lg bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm transition";
         tabLoginBtn.className = "py-2 text-xs font-bold rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition";
       }
+    }
+
+    function showOtpView(email, message) {
+      pendingAuthEmail = email;
+      if (authTabsContainer) authTabsContainer.classList.add('hidden');
+      loginForm.classList.add('hidden');
+      registerForm.classList.add('hidden');
+      if (otpVerificationView) otpVerificationView.classList.remove('hidden');
+      document.getElementById('otpTargetEmail').textContent = email;
+      const codeInput = document.getElementById('otpCodeInput');
+      if (codeInput) codeInput.value = '';
+      showAuthAlert(message || `A 6-digit verification code was emailed to ${email}.`, false);
+      setTimeout(() => { if (codeInput) codeInput.focus(); }, 100);
+      lucide.createIcons();
     }
 
     document.getElementById('authOpenBtn').addEventListener('click', () => {
@@ -1412,6 +1477,11 @@
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Sign in failed');
 
+        if (data.otp_required) {
+          showOtpView(data.email || email, data.message);
+          return;
+        }
+
         setAuthToken(data.token);
         currentUser = data.user;
         updateAuthUI();
@@ -1443,6 +1513,11 @@
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Registration failed');
 
+        if (data.otp_required) {
+          showOtpView(data.email || email, data.message);
+          return;
+        }
+
         setAuthToken(data.token);
         currentUser = data.user;
         updateAuthUI();
@@ -1455,6 +1530,89 @@
       } catch (err) {
         showAuthAlert(err.message, true);
       }
+    });
+
+    // OTP Verification Submit
+    otpForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      authAlert.classList.add('hidden');
+      const code = document.getElementById('otpCodeInput').value.trim();
+      if (!code || !pendingAuthEmail) {
+        showAuthAlert('Please enter the 6-digit verification code.', true);
+        return;
+      }
+
+      const submitBtn = document.getElementById('verifyOtpSubmitBtn');
+      const origHtml = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<svg class="animate-spin w-4 h-4 text-white inline-block mr-1.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> <span>Verifying...</span>`;
+
+      try {
+        const res = await fetch('/api/auth/verify-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: pendingAuthEmail, code })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Verification failed');
+
+        setAuthToken(data.token);
+        currentUser = data.user;
+        updateAuthUI();
+        applyUserToSearchForm(currentUser);
+        initRecentSearches();
+        loadFavorites();
+        authModal.classList.add('hidden');
+        authModal.classList.remove('flex');
+        loginForm.reset();
+        registerForm.reset();
+        otpForm.reset();
+        switchAuthTab('login');
+      } catch (err) {
+        showAuthAlert(err.message, true);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origHtml;
+      }
+    });
+
+    // Resend OTP
+    document.getElementById('resendOtpBtn').addEventListener('click', async () => {
+      if (!pendingAuthEmail) return;
+      const resendBtn = document.getElementById('resendOtpBtn');
+      resendBtn.disabled = true;
+      try {
+        const res = await fetch('/api/auth/resend-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: pendingAuthEmail })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Could not resend code');
+        showAuthAlert(data.message || 'A new verification code was sent to your email.', false);
+
+        let remaining = 60;
+        resendBtn.textContent = `Resend in ${remaining}s`;
+        if (resendCooldownTimer) clearInterval(resendCooldownTimer);
+        resendCooldownTimer = setInterval(() => {
+          remaining -= 1;
+          if (remaining <= 0) {
+            clearInterval(resendCooldownTimer);
+            resendBtn.disabled = false;
+            resendBtn.textContent = 'Resend Code';
+          } else {
+            resendBtn.textContent = `Resend in ${remaining}s`;
+          }
+        }, 1000);
+      } catch (err) {
+        resendBtn.disabled = false;
+        showAuthAlert(err.message, true);
+      }
+    });
+
+    // Cancel / Back from OTP
+    document.getElementById('cancelOtpBtn').addEventListener('click', () => {
+      switchAuthTab('login');
     });
 
     // Sign Out

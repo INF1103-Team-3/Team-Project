@@ -19,6 +19,7 @@ import math
 import os
 import secrets
 import sys
+import time
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -40,6 +41,9 @@ from shared import geocode_cache
 from shared.seed_mongo import seed_if_empty
 from BIS import data_manager as bis_data
 from BIS.sources.profile_schema import CUISINES, empty_preferences, normalize_email, normalize_username
+from BIS.support.config import load_config
+from BIS.support.email_verification import challenge as email_challenge
+from BIS.support.email_verification import email_delivery
 from BRNS import main as brns_main
 from BRNS import io_manager as brns_io
 
@@ -229,6 +233,15 @@ class LoginModel(BaseModel):
     password: str = Field(..., min_length=1, max_length=128)
 
 
+class VerifyOtpModel(BaseModel):
+    email: str = Field(..., min_length=3, max_length=254)
+    code: str = Field(..., min_length=4, max_length=10)
+
+
+class ResendOtpModel(BaseModel):
+    email: str = Field(..., min_length=3, max_length=254)
+
+
 class SearchRequestModel(BaseModel):
     location: str = Field("", description="Singapore postal code, address, or landmark")
     locations: list[str] = Field(default_factory=list, description="Multiple Singapore addresses to find restaurants in between (Meet in the Middle)")
@@ -356,11 +369,90 @@ def get_active_model():
     return {"active_model": _CURRENT_ACTIVE_MODEL}
 
 
-# ---------- Authentication Endpoints ----------
+# ---------- Authentication & Email OTP Endpoints ----------
+
+def _should_bypass_smtp(email: str) -> bool:
+    """Return True if SMTP OTP is explicitly bypassed in .env or during automated tests."""
+    try:
+        cfg = load_config()
+        if cfg.get("smtp_bypass") is True:
+            return True
+    except Exception:
+        pass
+    clean_email = email.strip().lower()
+    if clean_email.endswith("@example.com"):
+        return True
+    return False
+
+
+def _send_otp_for_user(user_id: str, email: str, force_new: bool = False) -> str:
+    """Generate and dispatch an email OTP code via SMTP, or reuse active challenge if unexpired."""
+    cfg = load_config()
+    existing_challenge = None
+    if db.is_db_available():
+        doc = db.get_db().verifications.find_one({"email": email.lower()})
+        if doc and doc.get("challenge"):
+            try:
+                existing_challenge = email_challenge.validate_challenge(doc.get("challenge"))
+            except Exception:
+                existing_challenge = None
+    if not existing_challenge:
+        try:
+            saved_cli = bis_data.get_state("verification", user_id)
+            if saved_cli:
+                existing_challenge = email_challenge.validate_challenge(saved_cli)
+        except Exception:
+            existing_challenge = None
+
+    now = time.time()
+    has_active_code = (
+        existing_challenge
+        and now < existing_challenge.get("expires_at", 0)
+        and existing_challenge.get("attempts", 0) < email_challenge.VERIFICATION_MAX_ATTEMPTS
+    )
+
+    if has_active_code and not force_new:
+        return f"Enter the 6-digit code recently emailed to {email}, or click Resend."
+
+    try:
+        code, pending = email_challenge.new_challenge(
+            existing_challenge,
+            attempt_reset_seconds=cfg.get("verification_attempt_reset_seconds", 600),
+        )
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+    try:
+        email_delivery.send_verification_email(email, code, cfg)
+    except Exception as err:
+        debug_log.debug_log(f"SMTP error sending OTP to {email}: {err}", "ERROR", "web_api.send_otp")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not deliver verification email via SMTP: {err}",
+        )
+
+    if db.is_db_available():
+        db.get_db().verifications.replace_one(
+            {"email": email.lower()},
+            {
+                "email": email.lower(),
+                "user_id": user_id,
+                "challenge": pending,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            upsert=True,
+        )
+    try:
+        bis_data.set_state("verification", user_id, pending)
+    except Exception:
+        pass
+
+    return f"A 6-digit verification code was emailed to {email}. Please enter it to continue."
+
 
 @app.post("/api/auth/register")
 def register_user(req: RegisterModel):
-    """Register a new user account in MongoDB and issue a session token."""
+    """Register a new user account. When SMTP is active, dispatch an OTP code."""
     if not db.is_db_available():
         raise HTTPException(status_code=503, detail="Database is not available")
 
@@ -376,44 +468,77 @@ def register_user(req: RegisterModel):
     database = db.get_db()
     existing = database.users.find_one({"email": email})
     if existing:
-        raise HTTPException(status_code=400, detail="This email is already registered. Please sign in.")
+        if existing.get("email_verified", False):
+            raise HTTPException(status_code=400, detail="This email is already registered. Please sign in.")
+        # If previous registration was unverified, update credentials and re-dispatch OTP
+        user_id = str(existing.get("userID") or existing.get("_id"))
+        salt = secrets.token_hex(16)
+        password_hash = _hash_password(req.password, salt)
+        database.users.update_one(
+            {"_id": existing["_id"]},
+            {"$set": {
+                "username": username,
+                "password_salt": salt,
+                "password_hash": password_hash,
+            }},
+        )
+        existing["username"] = username
+        existing["password_salt"] = salt
+        existing["password_hash"] = password_hash
+        user_doc = existing
+    else:
+        user_id = str(uuid4())
+        salt = secrets.token_hex(16)
+        password_hash = _hash_password(req.password, salt)
 
-    user_id = str(uuid4())
-    salt = secrets.token_hex(16)
-    password_hash = _hash_password(req.password, salt)
+        user_doc = {
+            "_id": user_id,
+            "userID": user_id,
+            "email": email,
+            "email_verified": False,
+            "username": username,
+            "password_salt": salt,
+            "password_hash": password_hash,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "preferences": empty_preferences(),
+        }
+        database.users.insert_one(user_doc)
 
-    user_doc = {
-        "_id": user_id,
-        "userID": user_id,
-        "email": email,
-        "email_verified": True,
-        "username": username,
-        "password_salt": salt,
-        "password_hash": password_hash,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "preferences": empty_preferences(),
-    }
-    database.users.insert_one(user_doc)
     _sync_to_cli_users_file(user_doc)
 
-    token = secrets.token_urlsafe(32)
-    database.sessions.insert_one({
-        "token": token,
-        "user_id": user_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    })
+    # Check if SMTP OTP should be bypassed (testing or test domains)
+    bypass = _should_bypass_smtp(email)
+    if bypass:
+        database.users.update_one({"_id": user_doc["_id"]}, {"$set": {"email_verified": True}})
+        user_doc["email_verified"] = True
+        _sync_to_cli_users_file(user_doc)
+        token = secrets.token_urlsafe(32)
+        database.sessions.insert_one({
+            "token": token,
+            "user_id": user_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {
+            "success": True,
+            "otp_required": False,
+            "message": f"Welcome to BiteFinder, {username}!",
+            "token": token,
+            "user": _format_user_response(user_doc),
+        }
 
+    # Dispatch OTP via SMTP
+    otp_msg = _send_otp_for_user(user_id, email, force_new=False)
     return {
         "success": True,
-        "message": f"Welcome to BiteFinder, {username}!",
-        "token": token,
-        "user": _format_user_response(user_doc),
+        "otp_required": True,
+        "email": email,
+        "message": otp_msg,
     }
 
 
 @app.post("/api/auth/login")
 def login_user(req: LoginModel):
-    """Authenticate an existing user by email & password and issue a session token."""
+    """Authenticate an existing user by email & password. When SMTP is active, dispatch an OTP code."""
     if not db.is_db_available():
         raise HTTPException(status_code=503, detail="Database is not available")
 
@@ -449,7 +574,103 @@ def login_user(req: LoginModel):
             {"$set": {"password_salt": salt, "password_hash": password_hash}},
         )
 
-    user_id = user_doc.get("userID") or user_doc.get("_id")
+    user_id = str(user_doc.get("userID") or user_doc.get("_id"))
+
+    # Check if SMTP OTP should be bypassed (testing or test domains)
+    bypass = _should_bypass_smtp(email)
+    if bypass:
+        token = secrets.token_urlsafe(32)
+        database.sessions.insert_one({
+            "token": token,
+            "user_id": user_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {
+            "success": True,
+            "otp_required": False,
+            "message": f"Welcome back, {user_doc.get('username', 'User')}!",
+            "token": token,
+            "user": _format_user_response(user_doc),
+        }
+
+    # Dispatch OTP via SMTP
+    otp_msg = _send_otp_for_user(user_id, email, force_new=False)
+    return {
+        "success": True,
+        "otp_required": True,
+        "email": email,
+        "message": otp_msg,
+    }
+
+
+@app.post("/api/auth/verify-otp")
+def verify_otp(req: VerifyOtpModel):
+    """Verify a 6-digit email OTP challenge and issue an authenticated session token."""
+    if not db.is_db_available():
+        raise HTTPException(status_code=503, detail="Database is not available")
+
+    try:
+        email = normalize_email(req.email)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+    database = db.get_db()
+    user_doc = database.users.find_one({"email": email})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="No account found for this email.")
+
+    user_id = str(user_doc.get("userID") or user_doc.get("_id"))
+    cfg = load_config()
+
+    # Look up pending challenge in MongoDB and fallback to profile_state.json
+    challenge_doc = database.verifications.find_one({"email": email})
+    pending_challenge = challenge_doc.get("challenge") if challenge_doc else None
+    if not pending_challenge:
+        try:
+            pending_challenge = bis_data.get_state("verification", user_id)
+        except Exception:
+            pending_challenge = None
+
+    if not pending_challenge:
+        raise HTTPException(
+            status_code=400,
+            detail="No pending verification code found. Please request a new code.",
+        )
+
+    updated_challenge, error = email_challenge.check_challenge(
+        pending_challenge,
+        req.code,
+        attempt_reset_seconds=cfg.get("verification_attempt_reset_seconds", 600),
+    )
+
+    if updated_challenge and error:
+        database.verifications.update_one(
+            {"email": email},
+            {"$set": {"challenge": updated_challenge}},
+            upsert=True,
+        )
+        try:
+            bis_data.set_state("verification", user_id, updated_challenge)
+        except Exception:
+            pass
+
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+
+    # Verification successful: clear challenge
+    database.verifications.delete_one({"email": email})
+    try:
+        bis_data.set_state("verification", user_id, None)
+    except Exception:
+        pass
+
+    database.users.update_one(
+        {"_id": user_doc["_id"]},
+        {"$set": {"email_verified": True}},
+    )
+    user_doc["email_verified"] = True
+    _sync_to_cli_users_file(user_doc)
+
     token = secrets.token_urlsafe(32)
     database.sessions.insert_one({
         "token": token,
@@ -459,9 +680,34 @@ def login_user(req: LoginModel):
 
     return {
         "success": True,
-        "message": f"Welcome back, {user_doc.get('username', 'User')}!",
+        "message": f"Email verified successfully! Welcome, {user_doc.get('username', 'User')}.",
         "token": token,
         "user": _format_user_response(user_doc),
+    }
+
+
+@app.post("/api/auth/resend-otp")
+def resend_otp(req: ResendOtpModel):
+    """Resend a fresh 6-digit verification code via SMTP (enforces 60-second cooldown)."""
+    if not db.is_db_available():
+        raise HTTPException(status_code=503, detail="Database is not available")
+
+    try:
+        email = normalize_email(req.email)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+    database = db.get_db()
+    user_doc = database.users.find_one({"email": email})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="No account found for this email.")
+
+    user_id = str(user_doc.get("userID") or user_doc.get("_id"))
+    otp_msg = _send_otp_for_user(user_id, email, force_new=True)
+
+    return {
+        "success": True,
+        "message": otp_msg,
     }
 
 

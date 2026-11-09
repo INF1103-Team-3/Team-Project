@@ -727,6 +727,82 @@ def test_multi_location_midpoint_search():
         web_api.brns_main.search = orig_search
 
 
+def test_email_otp_verification_lifecycle():
+    """WEB-11: Email OTP Challenge Verification & Error Handling."""
+    otp_test_email = "otptest_user@example.com"
+    database = web_api.db.get_db()
+    database.users.delete_many({"email": otp_test_email})
+    database.verifications.delete_many({"email": otp_test_email})
+
+    try:
+        # 1. Create an unverified user
+        reg_res = client.post(
+            "/api/auth/register",
+            json={
+                "username": "OtpTester",
+                "email": otp_test_email,
+                "password": "secretpassword123",
+            },
+        )
+        assert reg_res.status_code == 200
+
+        # Mark user unverified and attach a simulated challenge
+        from BIS.support.email_verification import challenge as email_challenge
+        code, pending = email_challenge.new_challenge(attempt_reset_seconds=600)
+        user_doc = database.users.find_one({"email": otp_test_email})
+        user_id = str(user_doc["_id"])
+        database.users.update_one({"_id": user_doc["_id"]}, {"$set": {"email_verified": False}})
+        database.verifications.replace_one(
+            {"email": otp_test_email},
+            {"email": otp_test_email, "user_id": user_id, "challenge": pending},
+            upsert=True,
+        )
+
+        # 2. Test invalid OTP verification -> returns 400
+        bad_verify = client.post(
+            "/api/auth/verify-otp",
+            json={"email": otp_test_email, "code": "000000"},
+        )
+
+        # 3. Test correct OTP verification -> returns 200 with session token
+        ok_verify = client.post(
+            "/api/auth/verify-otp",
+            json={"email": otp_test_email, "code": code},
+        )
+        verify_data = ok_verify.json()
+
+        # 4. Verify MongoDB has updated email_verified to True
+        updated_user = database.users.find_one({"email": otp_test_email})
+
+        actual = {
+            "bad_verify_status": bad_verify.status_code,
+            "bad_verify_detail": bad_verify.json().get("detail"),
+            "ok_verify_status": ok_verify.status_code,
+            "has_token": bool(verify_data.get("token")),
+            "db_email_verified": updated_user.get("email_verified"),
+        }
+        expected = {
+            "bad_verify_status": 400,
+            "bad_verify_detail": "Incorrect verification code.",
+            "ok_verify_status": 200,
+            "has_token": True,
+            "db_email_verified": True,
+        }
+
+        show_case(
+            "WEB-11: Email OTP Challenge Verification & Error Handling",
+            "POST /api/auth/verify-otp",
+            "Verifies that email OTP challenges validate codes, reject invalid attempts with HTTP 400, and complete authentication upon valid code entry.",
+            {"email": otp_test_email, "valid_code_verified": True},
+            expected,
+            actual,
+        )
+        assert actual == expected
+    finally:
+        database.users.delete_many({"email": otp_test_email})
+        database.verifications.delete_many({"email": otp_test_email})
+
+
 TESTS = (
     test_health_and_cuisines,
     test_authentication_lifecycle,
@@ -738,6 +814,7 @@ TESTS = (
     test_turn_by_turn_route_endpoint,
     test_multi_cuisine_and_custom_cuisine_division,
     test_multi_location_midpoint_search,
+    test_email_otp_verification_lifecycle,
 )
 
 
