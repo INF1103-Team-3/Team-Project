@@ -242,9 +242,20 @@ def test_profile_preferences_persistence():
 
 
 def test_favorites_bookmarks_lifecycle():
-    """WEB-04: Toggle add/remove and delete saved favorite restaurants in MongoDB."""
+    """WEB-04: Toggle add/remove and delete saved favorite restaurants in MongoDB (strictly per user)."""
     _cleanup_test_user()
     try:
+        reg_res = client.post(
+            "/api/auth/register",
+            json={
+                "username": "FavTester",
+                "email": TEST_EMAIL,
+                "password": "secretpassword123",
+            },
+        )
+        token = reg_res.json()["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
         sample_restaurant = {
             "google_place_id": "test_place_key_123",
             "name": "Sin Chie Toke Huan Hainanese Curry Rice",
@@ -253,32 +264,35 @@ def test_favorites_bookmarks_lifecycle():
             "today_hours": "17:00–02:30",
         }
 
-        # 1. Add favorite
-        add_res = client.post("/api/favorites", json={"restaurant": sample_restaurant})
+        # 1. Add favorite (authenticated)
+        add_res = client.post("/api/favorites", json={"restaurant": sample_restaurant}, headers=headers)
         add_json = add_res.json()
 
-        # 2. List favorites
-        list_res = client.get("/api/favorites")
+        # 2. List favorites (authenticated vs signed-out guest)
+        list_res = client.get("/api/favorites", headers=headers)
         list_json = list_res.json()
         has_saved = any(f.get("place_key") == "test_place_key_123" for f in list_json.get("favorites", []))
+        guest_list = client.get("/api/favorites").json().get("favorites", [])
 
         # 3. Toggle again removes favorite
-        rem_res = client.post("/api/favorites", json={"restaurant": sample_restaurant})
+        rem_res = client.post("/api/favorites", json={"restaurant": sample_restaurant}, headers=headers)
         rem_json = rem_res.json()
 
         # 4. Re-add and delete via DELETE /api/favorites
-        client.post("/api/favorites", json={"restaurant": sample_restaurant})
-        del_res = client.delete("/api/favorites", params={"place_key": "test_place_key_123"})
+        client.post("/api/favorites", json={"restaurant": sample_restaurant}, headers=headers)
+        del_res = client.delete("/api/favorites", params={"place_key": "test_place_key_123"}, headers=headers)
 
         actual = {
             "add_action": add_json.get("action"),
             "listed_in_favorites": has_saved,
+            "guest_isolated_empty": len(guest_list) == 0,
             "toggle_remove_action": rem_json.get("action"),
             "explicit_delete_status": del_res.status_code,
         }
         expected = {
             "add_action": "added",
             "listed_in_favorites": True,
+            "guest_isolated_empty": True,
             "toggle_remove_action": "removed",
             "explicit_delete_status": 200,
         }

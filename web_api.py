@@ -902,10 +902,12 @@ def get_restaurant_route(req: RouteRequestModel):
 
 @app.get("/api/favorites")
 def get_favorites(authorization: str | None = Header(default=None)):
-    """Return bookmarked restaurants from MongoDB for the current user (or guest)."""
+    """Return bookmarked restaurants from MongoDB strictly for the signed-in user."""
     if not db.is_db_available():
         return {"favorites": [], "count": 0}
     user_scope = _resolve_user_scope(authorization)
+    if user_scope == "guest":
+        return {"favorites": [], "count": 0}
     try:
         docs = list(
             db.get_db().favorites.find(
@@ -925,6 +927,8 @@ def toggle_favorite(req: FavoriteToggleModel, authorization: str | None = Header
     if not db.is_db_available():
         raise HTTPException(status_code=503, detail="Database is not available")
     user_scope = _resolve_user_scope(authorization)
+    if user_scope == "guest":
+        raise HTTPException(status_code=401, detail="Please sign in to save favorite restaurants.")
     place_key = _make_place_key(req.restaurant)
     database = db.get_db()
 
@@ -961,6 +965,8 @@ def remove_favorite(place_key: str, authorization: str | None = Header(default=N
     if not db.is_db_available():
         raise HTTPException(status_code=503, detail="Database is not available")
     user_scope = _resolve_user_scope(authorization)
+    if user_scope == "guest":
+        raise HTTPException(status_code=401, detail="Please sign in to manage favorite restaurants.")
     database = db.get_db()
     database.favorites.delete_one({"user_id": user_scope, "place_key": place_key})
     count = database.favorites.count_documents({"user_id": user_scope})
