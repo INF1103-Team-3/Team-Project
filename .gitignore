@@ -16,6 +16,7 @@ BRNS/data/search_history.json
 BRC/data/
 logs/*.log
 project_overview/function_graphs/
+project_overview/uml/
 
 # Local project documentation
 BIS/docs/
