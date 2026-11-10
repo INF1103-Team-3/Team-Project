@@ -10,11 +10,10 @@ from sources.prompts import (
     QUESTIONS,
 )
 
-import data_manager
-import ai_manager
-from support.email_verification import challenge as email_challenge
-from support.email_verification import service as email_service
-import logic_manager
+from BIS import ai_manager, data_manager, logic_manager
+from BIS.classes.io_manager import IOManager
+from BIS.support.email_verification import challenge as email_challenge
+from BIS.support.email_verification import service as email_service
 from shared import terminal_ui as ui
 from shared import geocode_cache
 from BIS.classes.location_gateway import LocationGateway
@@ -25,6 +24,7 @@ from sources.profile_schema import (
 )
 
 _color_handler = None
+_MANAGER = None
 _LOCATION_GATEWAY = LocationGateway(
     logic_manager,
     geocode_cache,
@@ -33,6 +33,18 @@ _LOCATION_GATEWAY = LocationGateway(
         "https://maps.googleapis.com/maps/api/geocode/json",
     ),
 )
+
+
+def manager():
+    """Return the configured BIS IO Manager."""
+    global _MANAGER
+    if _MANAGER is None:
+        _MANAGER = IOManager(
+            sys.modules[__name__],
+            ai_manager.review_prompt_text,
+            logic_manager.manager(),
+        )
+    return _MANAGER
 
 
 def set_color_handler(handler):
@@ -730,52 +742,7 @@ def ask_search_clarification(config):
 
 def collect_search(user, config):
     """Collect one search request without changing the saved user profile."""
-    profile = user["preferences"]
-    location = ask_search_location(config)
-    if location is None:
-        return None
-    mode = ask_search_mode(config)
-    if mode is None:
-        return None
-    distance, minutes = ask_search_limit(profile, mode, config)
-    if distance is None and minutes is None:
-        return None
-    traffic_aware = ask_drive_traffic(config) if mode == "drive" and minutes is not None else False
-    if traffic_aware is None:
-        return None
-    cuisine = ask_search_cuisine(profile, config)
-    if cuisine is None:
-        return None
-    save_cuisine = False
-    if cuisine != "none" and cuisine not in (profile["liked_cuisines"] or []):
-        disliked = cuisine in (profile["disliked_cuisines"] or [])
-        question = (f"Add {cuisine.title()} to your saved liked cuisines"
-                    + (" and remove it from disliked cuisines?" if disliked
-                       else "?"))
-        save_cuisine = ask_yes_no(question, config)
-        if save_cuisine is None:
-            return None
-    budget = ask_search_budget(profile, config)
-    if budget is None:
-        return None
-    wishes = ask_search_wishes(profile, config)
-    if wishes is None:
-        return None
-    other = wishes["selected"]
-    if config.get("ai_bypass") and wishes["text"]:
-        other = validate_value(OTHER_PREFERENCES, other + [wishes["text"]])
-    request = {
-        "origin": location, "mode": mode, "max_distance_km": distance,
-        "max_travel_minutes": minutes, "traffic_aware": traffic_aware,
-        "cuisine": cuisine, "budget_per_person": budget,
-        OTHER_PREFERENCES: other,
-        "dietary_requirements": list(profile["dietary_requirements"] or []),
-        "disliked_cuisines": [item for item in
-                              (profile["disliked_cuisines"] or [])
-                              if item != cuisine],
-    }
-    return {"request": request, "today_request": wishes["text"],
-            "save_cuisine": cuisine if save_cuisine else None}
+    return manager().collect_search(user, config)
 
 
 def choose_results_action(result_count, alternatives_hidden=False):
@@ -1327,55 +1294,5 @@ def _profile_travel_action(text, field, config, location_action):
 
 def collect_action(user, config, field=None, location_action="add"):
     """Collect and review a typed action without persisting it."""
-    preferences = user["preferences"]
-    field = field or logic_manager.next_field(preferences)
-    if field is not None:
-        display_message(QUESTIONS[field])
-    text = read_input()
-    if text is None:
-        return {"action": "exit"}
-    command = command_action(text)
-    if command is not None:
-        return command
-    natural_command = natural_command_action(
-        text, config, allow_ai=field is None)
-    if natural_command is not None:
-        return natural_command
-    if field == OTHER_PREFERENCES and not text.strip():
-        return {"action": "profile_update",
-                "updates": {OTHER_PREFERENCES: []},
-                "location_action": location_action}
-    text = clean_text(text, 1000)
-    if field in {"max_distance_km", "max_travel_time_minutes"}:
-        return _profile_travel_action(text, field, config, location_action)
-    if (field is not None and field not in {
-            "max_distance_km", "max_travel_time_minutes", "budget_per_person"}
-            and text.lower() not in {"none", "both"}
-            and not config.get("ai_bypass")):
-        reviewed = ai_manager.review_prompt_text(
-            text, config, QUESTIONS[field], 1000)
-        if reviewed is None:
-            raise ValueError("Please rephrase your answer in English.")
-        if reviewed != text:
-            if ask_yes_no(f"Use '{reviewed}' instead?", config) is not True:
-                raise ValueError("No changes saved. Please re-enter your answer.")
-            text = reviewed
-    if field in CUISINE_FIELDS:
-        if not config.get("ai_bypass") and text.lower() not in {
-            "none", "no preference", "no preferences",
-        }:
-            return interpretation_action(preferences, field, text)
-        updates = resolve_cuisines(text, field, preferences, config)
-        return {"action": "profile_update", "updates": updates,
-                "location_action": location_action}
-    if field == OTHER_PREFERENCES:
-        updates = logic_manager.parse_local_answer(text, field)
-        return {"action": "profile_update", "updates": updates,
-                "location_action": location_action}
-    if not config.get("ai_bypass"):
-        return interpretation_action(preferences, field, text)
-    if field is None:
-        raise ValueError("Use /edit to change a completed profile.")
-    updates = logic_manager.parse_local_answer(text, field)
-    return {"action": "profile_update", "updates": updates,
-            "location_action": location_action}
+    return manager().collect_action(
+        user, config, field, location_action)

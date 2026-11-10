@@ -1,5 +1,6 @@
 """Compatibility façade and bootstrap for the OOP BRNS application."""
 
+import os
 import sys
 from pathlib import Path
 
@@ -7,22 +8,24 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from BRC import main as brc_main
+from BRC.classes.brc_http_client import BRCHTTPClient
 from BRNS import ai_manager, config, data_manager, io_manager, logic_manager
 from BRNS.classes.recommendation_system import RecommendationSystem
-from BRNS.classes.brns_ai_manager import BRNSAIManager
-from BRNS.classes.brns_data_manager import BRNSDataManager
-from BRNS.classes.brns_io_manager import BRNSIOManager
-from BRNS.classes.brns_logic_manager import BRNSLogicManager
 from shared import debug_log as log
 from shared import terminal_ui as ui
 
 
+_BRC_CHECKER = (
+    BRCHTTPClient() if os.getenv("BRC_SERVICE_URL") else brc_main
+)
+
+
 _APPLICATION = RecommendationSystem(
-    BRNSAIManager(ai_manager),
-    BRNSDataManager(data_manager),
-    BRNSIOManager(io_manager),
-    BRNSLogicManager(manager_module=logic_manager),
-    brc_main,
+    ai_manager.manager(),
+    data_manager.manager(),
+    io_manager.manager(),
+    logic_manager.manager(),
+    _BRC_CHECKER,
     config,
     log,
     ui,

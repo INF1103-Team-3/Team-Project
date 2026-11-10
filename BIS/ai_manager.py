@@ -13,6 +13,7 @@ import requests
 
 from BIS.classes.ai_provider_router import AIProviderRouter
 from BIS.classes.ai_provider_factory_registry import AIProviderFactoryRegistry
+from BIS.classes.ai_manager import AIManager
 from BIS.classes.gemini_ai_provider import GeminiAIProvider
 from BIS.classes.groq_ai_provider import GroqAIProvider
 from BIS.classes.openrouter_ai_provider import OpenRouterAIProvider
@@ -38,6 +39,21 @@ MODEL_CHAIN = [
     {"provider": "gemini", "model": "gemini-3.6-flash"},
     {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
 ]
+_MANAGER = None
+
+
+def manager():
+    """Return the configured BIS AI Manager."""
+    global _MANAGER
+    if _MANAGER is None:
+        from BIS import logic_manager
+        _MANAGER = AIManager(
+            _call_json_with_fallback,
+            build_prompt,
+            validate_response,
+            logic_manager.validate_search_request,
+        )
+    return _MANAGER
 
 
 def _extend_bis_chain_with_groq():
@@ -391,22 +407,7 @@ def parse_response(raw):
 
 def process(record, config):
     """Stable temporary interface for the forthcoming team AI Manager."""
-    if config.get("ai_bypass"):
-        raise RuntimeError("AI is disabled for local testing.")
-    from sources.profile_schema import clean_text, validate_preferences
-
-    context = {
-        "current_profile": validate_preferences(record["preferences"]),
-        "current_field": record["field"],
-        "user_message": clean_text(record["text"], 1000),
-    }
-    if context["current_field"] not in PREFERENCE_FIELDS + (None,):
-        raise ValueError("Invalid question field.")
-    payload = {
-        "model": config["openrouter_model"], "messages": build_prompt(context),
-        "temperature": 0, "max_tokens": 700,
-    }
-    return _call_json_with_fallback(payload, config, validate_response)
+    return manager().process(record, config)
 
 
 def interpret_command(text, config):
@@ -799,46 +800,5 @@ def classify_search_constraints(text, config):
 
 def interpret_search_request(request, today_request, config):
     """Propose a structured search from today's natural-language request."""
-    if config.get("ai_bypass"):
-        raise RuntimeError("AI is disabled for local testing.")
-    payload = {
-        "model": config["openrouter_model"],
-        "messages": [
-            {"role": "system", "content": (
-                "Interpret today's restaurant wish into one JSON search "
-                "request with exactly these keys: origin, mode, "
-                "max_distance_km, max_travel_minutes, traffic_aware, cuisine, "
-                "budget_per_person, "
-                "other_preferences, dietary_requirements, "
-                "disliked_cuisines. Copy origin, mode, distance, journey "
-                "time, traffic_aware, budget, "
-                "dietary requirements, disliked cuisines, and selected cuisine "
-                "exactly from confirmed_choices. Preserve every selected "
-                "other preference. Do not duplicate a selected preference "
-                "with equivalent wording. Add to other_preferences only "
-                "wishes explicitly stated in today_request; use short strings. "
-                "Preserve any stated minimum Google star rating exactly as a "
-                "numeric star threshold (for example, 'minimum 4.5 stars'). "
-                "Other preferences are the strongest part of the search. "
-                "Preserve words such as only, must, minimum, and at least "
-                "because they mark hard constraints. A bare star rating "
-                "without minimum wording remains a soft preference. "
-                "If today_request conflicts with a confirmed choice, reflect "
-                "the conflicting choice so the next layer can ask the user. "
-                "Do not invent locations, restrictions, or restaurant facts. "
-                "Return JSON only."
-            )},
-            {"role": "user", "content": json.dumps(
-                {"confirmed_choices": request,
-                 "today_request": today_request},
-                ensure_ascii=False)},
-        ],
-        "temperature": 0,
-        "max_tokens": 700,
-    }
-    def check_search_schema(parsed):
-        import logic_manager
-        logic_manager.validate_search_request(parsed)
-        return parsed
-
-    return _call_json_with_fallback(payload, config, check_search_schema)
+    return manager().interpret_search_request(
+        request, today_request, config)

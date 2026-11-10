@@ -12,7 +12,11 @@ class BRCRestaurantCheckerAdapter(RestaurantVerificationInterface):
         self._checker = checker_module
 
     def database_missing(self):
+        if hasattr(self._checker, "database_missing"):
+            return self._checker.database_missing()
         return not self._checker.data_manager.CLEAN_DATABASE_PATH.exists()
 
     def verify(self, restaurant):
+        if hasattr(self._checker, "verify"):
+            return self._checker.verify(restaurant)
         return self._checker.run(restaurant)
