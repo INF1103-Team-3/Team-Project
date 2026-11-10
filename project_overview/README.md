@@ -34,6 +34,33 @@ separate from normal application requirements.
 
 ## Generate static graphs
 
+### UML class diagrams
+
+```bash
+python project_overview/test_uml.py
+```
+
+Runs the UML generator checks and writes `uml/bitefinder.png`, plus
+`uml/BIS.png`, `uml/BRNS.png`, and `uml/BRC.png`. Class boxes follow the
+reference layout: class name, attributes, and method signatures in separate
+compartments. `+`, `#`, and `-` represent Python public, protected-style, and
+private-style names. `?` means the source does not declare a type.
+
+Each diagram also has editable `.puml` and `.dot` sources. Install the optional
+Graphviz system application (`dot` on PATH) for automatic graph layout;
+otherwise the existing Pillow dependency renders compartmented boxes and
+routed relationship arrows. `uml/relationships.json` records source lines
+supporting each detected edge.
+
+Arrows distinguish inheritance, interface implementation, constructor calls,
+and class references. These are static dependencies, not execution order.
+Untyped injected collaborators, dynamic factories, and HTTP communication
+cannot always be resolved by this analysis. Multiplicities, aggregation, and
+composition are not inferred without evidence of ownership. No application
+modules are imported and no external service is called.
+
+The full diagram is large; use the subsystem PNGs for closer inspection.
+
 Run:
 
 ```bash
