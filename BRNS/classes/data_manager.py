@@ -35,3 +35,9 @@ class DataManager(BRNSDataManagerInterface):
 
     def query(self, filter_fn):
         return self._store.query(filter_fn)
+
+    def load_user_history(self, user_id):
+        return self._store.load_user_history(user_id)
+
+    def clear_user_history(self, user_id):
+        return self._store.clear_user_history(user_id)

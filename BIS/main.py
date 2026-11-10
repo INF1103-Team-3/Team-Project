@@ -5,21 +5,34 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from BIS import ai_manager, data_manager, io_manager, logic_manager
-from BIS.classes.bis_search_workflow import BISSearchWorkflow
-from BIS.classes.interaction_session import InteractionSession
-from BIS.classes.search_preference_recorder import SearchPreferenceRecorder
-from BIS.classes.search_results_controller import SearchResultsController
-from BRNS import io_manager as brns_io
-from BRNS import main as brns_main
-from sources.profile_schema import OTHER_PREFERENCES
-from support import config as settings
-from support.email_verification import email_delivery
-from shared import debug_log, terminal_ui
+_INITIALIZED = False
+
+
+def _initialize_cli():
+    global _INITIALIZED
+    global ai_manager, data_manager, io_manager, logic_manager
+    global BISSearchWorkflow, InteractionSession, SearchPreferenceRecorder
+    global SearchResultsController, brns_io, brns_main, OTHER_PREFERENCES
+    global settings, email_delivery, debug_log, terminal_ui
+    if _INITIALIZED:
+        return
+    from BIS import ai_manager, data_manager, io_manager, logic_manager
+    from BIS.classes.bis_search_workflow import BISSearchWorkflow
+    from BIS.classes.interaction_session import InteractionSession
+    from BIS.classes.search_preference_recorder import SearchPreferenceRecorder
+    from BIS.classes.search_results_controller import SearchResultsController
+    from BRNS import io_manager as brns_io
+    from BRNS import main as brns_main
+    from sources.profile_schema import OTHER_PREFERENCES
+    from support import config as settings
+    from support.email_verification import email_delivery
+    from shared import debug_log, terminal_ui
+    _INITIALIZED = True
 
 
 def _search_managers():
     """Create the four BIS manager objects for one search workflow."""
+    _initialize_cli()
     return (
         io_manager.manager(),
         ai_manager.manager(),
@@ -29,6 +42,7 @@ def _search_managers():
 
 
 def _search_preference_recorder(data=None):
+    _initialize_cli()
     return SearchPreferenceRecorder(
         data or data_manager.manager(),
         debug_log,
@@ -51,7 +65,10 @@ def _search_workflow():
 
 def run_search(session, config, automatic=False):
     """Run the IO → AI → Logic → Data BIS search workflow."""
-    return _search_workflow().run(session, config, automatic)
+    _initialize_cli()
+    from BRNS.data_manager import history_scope
+    with history_scope.for_user(session["user"]["userID"]):
+        return _search_workflow().run(session, config, automatic)
 
 
 def remember_search_wishes(session, today_request, config):
@@ -68,6 +85,7 @@ def remember_search_cuisine(session, cuisine, config):
 
 def _interaction_session(state, config):
     """Build the session object used by legacy-compatible entry points."""
+    _initialize_cli()
     return InteractionSession(
         state["user"],
         config,
@@ -114,6 +132,7 @@ def run_session(user, config):
 
 
 def run_accounts(config):
+    _initialize_cli()
     data_manager.load()
     if data_manager.LAST_ERROR:
         io_manager.display_message(data_manager.LAST_ERROR, role="error")
@@ -126,8 +145,9 @@ def run_accounts(config):
             return
 
 
-def main():
-    """Start the interactive chatbot using environment configuration."""
+def run_cli():
+    """Start the existing CLI using environment configuration."""
+    _initialize_cli()
     debug_log.configure()
     try:
         config = settings.load_config()
@@ -143,6 +163,24 @@ def main():
         io_manager.display_message(error)
     except (EOFError, KeyboardInterrupt):
         io_manager.display_message("Goodbye!")
+
+
+def main(argv=None):
+    """Choose CLI or web; importing the module never launches either mode."""
+    import argparse
+    from BIS.classes.bis_launcher import BISLauncher
+    from BIS.classes.launcher_io import LauncherIO
+    from BIS.classes.web_interface_launcher import WebInterfaceLauncher
+    parser = argparse.ArgumentParser(description="BiteFinder CLI and web launcher")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--cli", action="store_true")
+    modes.add_argument("--web", action="store_true")
+    args = parser.parse_args(argv)
+    mode = "cli" if args.cli else "web" if args.web else None
+    try:
+        return BISLauncher(LauncherIO(), run_cli, WebInterfaceLauncher()).run(mode)
+    except (EOFError, KeyboardInterrupt):
+        LauncherIO().display_message("Goodbye!")
 
 
 if __name__ == "__main__":
