@@ -1,3 +1,7 @@
+> **WEB-OOP branch:** see [WEB_OOP.md](WEB_OOP.md) for the CLI/web launcher,
+> optional FastAPI/nginx/Mongo stack, migration and integration tests. `python
+> main.py` now offers a mode menu; `python main.py --cli` starts the CLI directly.
+
 # BiteFinder
 
 BiteFinder is a procedural command-line application that helps people choose
