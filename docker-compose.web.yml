@@ -1,0 +1,115 @@
+name: bitefinder-web-oop
+
+services:
+  mongodb:
+    image: mongo:7.0
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    networks: [bitefinder-web]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  brc:
+    build:
+      context: .
+      target: brc
+      args:
+        SEED_ACCOUNTS: "no"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - brc-data:/data
+    networks: [bitefinder-web]
+
+  api:
+    build:
+      context: .
+      target: api
+      args:
+        SEED_ACCOUNTS: "no"
+    environment:
+      BITEFINDER_STORAGE: mongo
+      MONGO_URI: mongodb://mongodb:27017/
+      MONGO_DATABASE: bitefinder
+      BRC_SERVICE_URL: http://brc:8000
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      brc:
+        condition: service_healthy
+    volumes:
+      - application-data:/data
+    networks: [bitefinder-web]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  web:
+    image: nginx:alpine
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [bitefinder-web]
+
+  bis-brns:
+    build:
+      context: .
+      target: api
+      args:
+        SEED_ACCOUNTS: "no"
+    profiles: [cli]
+    command: ["sleep", "infinity"]
+    stdin_open: true
+    tty: true
+    environment:
+      BITEFINDER_STORAGE: mongo
+      MONGO_URI: mongodb://mongodb:27017/
+      MONGO_DATABASE: bitefinder
+      BRC_SERVICE_URL: http://brc:8000
+      BITEFINDER_WEB_READY_URL: http://web/api/health
+      BITEFINDER_WEB_URL: http://localhost:8080
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      brc:
+        condition: service_healthy
+    volumes:
+      - application-data:/data
+    networks: [bitefinder-web]
+
+  web-test:
+    profiles: [test]
+    build:
+      context: .
+      target: web-test
+      args:
+        SEED_ACCOUNTS: "no"
+    environment:
+      BITEFINDER_STORAGE: json
+    networks: [bitefinder-web]
+
+networks:
+  bitefinder-web:
+
+volumes:
+  mongo-data:
+  brc-data:
+  application-data:
