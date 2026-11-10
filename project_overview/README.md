@@ -40,26 +40,45 @@ separate from normal application requirements.
 python project_overview/test_uml.py
 ```
 
-Runs the UML generator checks and writes `uml/bitefinder.png`, plus
-`uml/BIS.png`, `uml/BRNS.png`, and `uml/BRC.png`. Class boxes follow the
-reference layout: class name, attributes, and method signatures in separate
-compartments. `+`, `#`, and `-` represent Python public, protected-style, and
-private-style names. `?` means the source does not declare a type.
+Runs source-analysis tests and then generates:
 
-Each diagram also has editable `.puml` and `.dot` sources. Install the optional
-Graphviz system application (`dot` on PATH) for automatic graph layout;
-otherwise the existing Pillow dependency renders compartmented boxes and
-routed relationship arrows. `uml/relationships.json` records source lines
-supporting each detected edge.
+- `uml/bitefinder.png` and `.svg`: the full UML class diagram.
+- `uml/BIS.png`, `uml/BRNS.png`, `uml/BRC.png` (and SVG): subsystem detail.
+- `uml/bitefinder_flow.png` and `.svg`: compact class/method dependencies.
+- `.puml` and `.dot` sources for editing or rendering with external tools.
+- `uml/analysis.json`: class locations, relationships with source-line evidence,
+  unresolved calls, and whether type inference converged.
+- `.edges.json` beside each view: numbered edges and their full details.
 
-Arrows distinguish inheritance, interface implementation, constructor calls,
-and class references. These are static dependencies, not execution order.
-Untyped injected collaborators, dynamic factories, and HTTP communication
-cannot always be resolved by this analysis. Multiplicities, aggregation, and
-composition are not inferred without evidence of ownership. No application
-modules are imported and no external service is called.
+The analysis reads Python ASTs without importing or executing application code.
+It resolves imports, aliases/re-exports, factory returns, constructor wiring,
+registered lambda factories, tuple unpacking, inherited methods, annotations,
+and calls through compatibility functions. It follows injected collaborators
+into stored attributes before drawing their relationships.
 
-The full diagram is large; use the subsystem PNGs for closer inspection.
+Boxes show class names, inferred/declared attributes, and method signatures in
+separate compartments. `+`, `#`, and `-` indicate Python visibility conventions;
+`?` means no type was resolved. Abstract classes/interfaces are marked. Colors
+identify BIS, BRNS, and BRC.
+
+Relationships distinguish inheritance, interfaces, stored construction
+(composition), injected collections (aggregation), injected references
+(association), construction dependencies, and method calls. Default construction
+is labeled `(default)` when an injected override is also possible. These ownership
+labels reflect source construction/storage, not a proof of runtime lifetimes.
+HTTP service edges are conditional matches between configured client routes and
+handler routes; they do not prove a service is currently running.
+
+Graphviz's optional `dot` executable provides automatic graph layout. Otherwise
+Pillow uses connected neighborhoods in multiple rows and columns, with A* edge
+routing around class boxes. SVG files support zoom and full edge tooltips;
+numbered PNG labels refer to `.edges.json`. Dense graphs may lack space for every
+text label, so consult SVG tooltips or the edge inventory for complete details.
+
+This is static dependency analysis, not runtime sequence tracing. It explicitly
+reports unresolved dynamic calls instead of guessing from class names. It cannot
+prove arbitrary Python behavior or resolve every callback/reflection pattern.
+Use the existing live tracer when observed execution order is needed.
 
 Run:
 
