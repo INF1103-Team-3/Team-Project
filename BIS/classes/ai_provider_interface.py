@@ -11,6 +11,11 @@ class AIProviderInterface(ABC):
     def label(self):
         """Return a non-secret provider/model identifier."""
 
+    @property
+    @abstractmethod
+    def primary(self):
+        """Whether this provider is the primary attempt in the fallback chain."""
+
     @abstractmethod
     def request(self, payload, config):
         """Return model response text or raise RuntimeError."""

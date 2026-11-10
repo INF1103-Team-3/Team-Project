@@ -1,6 +1,7 @@
 """BRC workflow for building the cleaned MUIS database."""
 
 from BRC.classes.base_brc_workflow import BaseBRCWorkflow
+from BRC.classes.cuisine_tagging_workflow import CuisineTaggingWorkflow
 
 
 class BuildDatabaseWorkflow(BaseBRCWorkflow):
@@ -26,10 +27,13 @@ class BuildDatabaseWorkflow(BaseBRCWorkflow):
                 f"Data Manager: recovered {recovered} cuisine tags "
                 "from the existing cleaned database.")
         self._save_cache = data.save_cuisine_cache
+        self._logic = logic
+        self._report = report
 
     def ask_ai(self, ai):
-        return ai.tag_cuisines(
-            self._snapshot.listings, self._cache, self._save_cache)
+        return CuisineTaggingWorkflow(self._report).run(
+            self._snapshot.listings, self._cache, ai, self._logic,
+            self._save_cache)
 
     def apply_rules(self, logic, cuisines):
         return logic.build_database(self._snapshot, cuisines)

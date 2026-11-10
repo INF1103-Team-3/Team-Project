@@ -28,13 +28,6 @@ MATCH_PROMPT = (
 class AIManager:
     """Build BRC prompts, call an injected client, and validate replies."""
 
-    KEYWORDS = {
-        "malay": "malay", "nasi": "malay", "chicken rice": "chinese",
-        "chinese": "chinese", "indian": "indian", "biryani": "indian",
-        "japanese": "japanese", "sushi": "japanese", "korean": "korean",
-        "thai": "thai", "western": "western", "pizza": "italian",
-    }
-
     def __init__(self, client):
         self._client = client
         self._report = lambda message: None
@@ -44,56 +37,18 @@ class AIManager:
         self._client.set_reporter(report)
 
     def tag_cuisines(self, listings, cache, save_cache=None):
-        """Return cuisine tags for every listing in the original order."""
-        tags, pending = self._tags_without_ai(listings, cache)
-        if len(pending) < len(listings):
-            self._report(
-                f"AI: reused or derived {len(listings) - len(pending)} "
-                f"cached cuisine tags; {len(pending)} still need AI.")
-        if save_cache:
-            save_cache(cache)
-        size = self._batch_size()
-        for start in range(0, len(pending), size):
-            batch = pending[start:start + size]
-            self._report(
-                "AI: tagging cuisines for restaurants "
-                f"{start + 1}–{start + len(batch)} of {len(pending)} "
-                f"(currently {batch[0][1].name or 'unknown'})")
-            try:
-                answers = self._tag_batch(batch)
-            except AIResponseError as error:
-                self._report(
-                    "AI: skipped this batch after invalid responses "
-                    f"({error}); it will be retried on the next build.")
-                continue
-            except AIServiceError as error:
-                self._report(
-                    f"AI: Gemini is unavailable ({error}); "
-                    f"{len(pending) - start} restaurants were left untagged "
-                    "and will be retried next build.")
-                break
-            for index, cuisines in answers.items():
-                tags[index] = cuisines
-                cache.put(listings[index], cuisines)
-            if save_cache:
-                save_cache(cache)
-        return tags
+        """Legacy entry point; production jobs use CuisineTaggingWorkflow."""
+        from BRC.classes.cuisine_tagging_workflow import CuisineTaggingWorkflow
+        from BRC.classes.logic_manager import LogicManager
+        return CuisineTaggingWorkflow(self._report).run(
+            listings, cache, self, LogicManager(), save_cache)
 
-    def _tags_without_ai(self, listings, cache):
-        tags, pending = [[] for _ in listings], []
-        for index, listing in enumerate(listings):
-            cached = cache.get(listing)
-            text = f"{listing.name or ''} {listing.category or ''}".casefold()
-            keyword_tags = sorted({
-                tag for word, tag in self.KEYWORDS.items() if word in text})
-            if cached is not None:
-                tags[index] = cached
-            elif keyword_tags:
-                tags[index] = keyword_tags
-                cache.put(listing, keyword_tags)
-            else:
-                pending.append((index, listing))
-        return tags, pending
+    def tag_batch(self, batch):
+        """Return validated cuisine proposals for one indexed batch."""
+        return self._tag_batch(batch)
+
+    def batch_size(self):
+        return self._batch_size()
 
     def _tag_batch(self, batch):
         rows = [{
@@ -130,32 +85,14 @@ class AIManager:
         return answers
 
     def match_outlets(self, records, candidate_groups, exact_matches):
-        """Return the selected certificate for each restaurant, or None."""
-        chosen = []
-        ai_available = True
-        for number, (record, candidates, exact) in enumerate(
-                zip(records, candidate_groups, exact_matches), 1):
-            self._report(
-                f"AI: checking restaurant {number} of {len(records)} "
-                f"({record.to_dict().get('name', 'unknown')})")
-            if not candidates or exact is not None or not ai_available:
-                chosen.append(exact)
-                continue
-            try:
-                chosen.append(
-                    self._ask_for_match(number, record, candidates))
-            except AIResponseError as error:
-                self._report(
-                    f"AI: no valid answer for restaurant {number} "
-                    f"({error}); it is marked not verified.")
-                chosen.append(None)
-            except AIServiceError as error:
-                self._report(
-                    f"AI: Gemini is unavailable ({error}); the remaining "
-                    "restaurants are marked not verified.")
-                chosen.append(None)
-                ai_available = False
-        return chosen
+        """Legacy entry point; delegate whole-job orchestration."""
+        from BRC.classes.outlet_matching_workflow import OutletMatchingWorkflow
+        return OutletMatchingWorkflow(self._report).run(
+            records, candidate_groups, exact_matches, self)
+
+    def propose_match(self, number, record, candidates):
+        """Return one schema-validated outlet proposal."""
+        return self._ask_for_match(number, record, candidates)
 
     def _ask_for_match(self, number, record, candidates):
         payload = {
@@ -180,12 +117,7 @@ class AIManager:
         return certificate
 
     def _ask(self, prompt, read_answer):
-        if hasattr(self._client, "request_validated"):
-            return self._client.request_validated(prompt, read_answer)
-        try:
-            return read_answer(self._client.call_api(prompt))
-        except AIResponseError:
-            return read_answer(self._client.call_api(prompt))
+        return self._client.request_validated(prompt, read_answer)
 
     @staticmethod
     def parse_response(raw, object_ok=False):

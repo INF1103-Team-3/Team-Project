@@ -9,6 +9,9 @@ class DataManager(BRNSDataManagerInterface):
     def __init__(self, store):
         self._store = store
 
+    def load_candidate_records(self, path=None):
+        return self._store.load_candidate_records(path)
+
     def load_restaurants(self, path=None):
         return self._store.load_restaurants(path)
 

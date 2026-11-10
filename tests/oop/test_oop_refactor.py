@@ -125,6 +125,250 @@ def result_set():
 
 
 class OOPRefactorTests(unittest.TestCase):
+    def test_bis_logic_retains_omitted_wish_without_mutation(self):
+        from BIS.classes.logic_manager import LogicManager
+        from copy import deepcopy
+        request = search_request()
+        request["other_preferences"] = []
+        before = deepcopy(request)
+        manager = LogicManager()
+        result = manager.preserve_search_wish(request, request, "quiet seating")
+        self.assertEqual(result["other_preferences"], ["quiet seating"])
+        self.assertEqual(request, before)
+        interpreted = dict(request, other_preferences=["spicy food"])
+        self.assertIs(manager.preserve_search_wish(request, interpreted, "spicy"), interpreted)
+
+    def test_bis_router_accepts_provider_implementing_only_public_contract(self):
+        class ContractProvider(AIProviderInterface):
+            @property
+            def primary(self):
+                return False
+
+            @property
+            def label(self):
+                return "sample/model"
+
+            def request(self, payload, config):
+                raise RuntimeError("offline")
+
+        router = AIProviderRouter([ContractProvider()], json.loads, lambda *_args: None)
+        with self.assertRaisesRegex(RuntimeError, "unavailable"):
+            router.route({}, {})
+
+    def test_brns_logic_rejects_missing_required_readers_at_construction(self):
+        from BRNS.classes.logic_manager import LogicManager
+        with self.assertRaisesRegex(TypeError, "must be callable"):
+            LogicManager(lambda x: x, lambda *_a: None, lambda *_a: [],
+                         3, 3, None, None, lambda *_a: None, SimpleNamespace())
+
+    def test_brns_saved_candidate_policy_and_search_order(self):
+        from BRNS import logic_manager, data_manager
+        logic = logic_manager.manager()
+        request = search_request()
+        request["other_preferences"] = ["quiet", "must have outdoor seating"]
+        lookup = logic.prepare_candidate_search(request)
+        self.assertEqual(lookup["free_text"], "must have outdoor seating quiet")
+        self.assertEqual(request["other_preferences"][0], "quiet")
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "restaurants.json"
+            for value in (None, "invalid json", '{}'):
+                if value is not None:
+                    path.write_text(value)
+                self.assertEqual(data_manager.manager().load_candidate_records(path), [])
+            path.write_text(json.dumps([{"name": "Cafe", "cuisine": "japanese",
+                                         "g_rating": "4.2", "g_no_reviews": "9"}, None]))
+            rows = data_manager.manager().load_candidate_records(path)
+            candidates = logic.saved_candidates(rows)
+            self.assertEqual(candidates[0]["cuisines"], ["japanese"])
+            self.assertEqual(candidates[0]["rating"], 4.2)
+            self.assertEqual(candidates[0]["rating_count"], 9)
+
+    def test_brns_context_preserves_prompt_facts_and_previous_names(self):
+        from BRNS import logic_manager
+        request = search_request()
+        request["other_preferences"] = ["at least 4.5 stars"]
+        candidate = {"name": "Cafe", "rating": 4.6, "rating_count": 100,
+                     "walk_minutes": 12, "walk_meters": 600}
+        context = logic_manager.manager().recommendation_context(
+            request, [candidate], [{"name": "Cafe"}, {"name": "Cafe"}])
+        self.assertEqual(list(context), ["request", "minimum_rating", "preferred_rating",
+                                        "hard_cuisines", "hard_preferences", "candidates",
+                                        "previous_restaurants"])
+        self.assertEqual(context["minimum_rating"], 4.5)
+        self.assertEqual(context["previous_restaurants"], ["Cafe"])
+        self.assertEqual(context["candidates"][0]["travel_minutes"], 12)
+        self.assertEqual(context["candidates"][0]["confidence_adjusted_rating"],
+                         logic_manager.confidence_adjusted_rating(4.6, 100))
+
+    def test_brc_cuisine_job_preserves_skips_checkpoints_and_partial_failure(self):
+        from BRC.classes.cuisine_tagging_workflow import CuisineTaggingWorkflow
+        from BRC.classes.logic_manager import LogicManager
+        from BRC.classes.ai_response_error import AIResponseError
+        rows = [SimpleNamespace(name=name, category="")
+                for name in ("Cached", "Nasi Cafe", "Unknown One", "Unknown Two")]
+        values = {"Cached": ["chinese"]}
+        cache = SimpleNamespace(get=lambda row: values.get(row.name),
+                                put=lambda row, tags: values.__setitem__(row.name, tags))
+        checkpoints, batches = [], []
+
+        def tag(batch):
+            batches.append([index for index, _ in batch])
+            if batch[0][0] == 2:
+                raise AIResponseError("malformed")
+            return {3: ["western"]}
+
+        ai = SimpleNamespace(batch_size=lambda: 1, tag_batch=tag)
+        result = CuisineTaggingWorkflow(lambda *_a: None).run(
+            rows, cache, ai, LogicManager(), lambda _cache: checkpoints.append(dict(values)))
+        self.assertEqual(result, [["chinese"], ["malay"], [], ["western"]])
+        self.assertEqual(batches, [[2], [3]])
+        self.assertEqual(len(checkpoints), 2)
+        self.assertNotIn("Unknown One", values)
+
+    def test_brc_outlet_job_preserves_exact_and_service_failure_policy(self):
+        from BRC.classes.outlet_matching_workflow import OutletMatchingWorkflow
+        from BRC.classes.ai_service_error import AIServiceError
+        rows = [SimpleNamespace(to_dict=lambda: {"name": "Cafe"}) for _ in range(3)]
+        calls = []
+
+        def propose(number, record, candidates):
+            calls.append(number)
+            raise AIServiceError("offline")
+
+        result = OutletMatchingWorkflow(lambda *_a: None).run(
+            rows, [[object()]] * 3, ["EXACT", None, None], SimpleNamespace(propose_match=propose))
+        self.assertEqual(result, ["EXACT", None, None])
+        self.assertEqual(calls, [2])
+
+    def test_brc_http_routes_preserve_request_response_contract(self):
+        import threading
+        import http.client
+        from http.server import ThreadingHTTPServer
+        from unittest.mock import patch
+        from BRC.classes.brc_http_handler import BRCRequestHandler
+        received = []
+
+        def check(value):
+            received.append(value)
+            return dict(value, halal_certification="none")
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "missing.json"
+            with patch.object(BRCRequestHandler, "application_run", staticmethod(check)), \
+                    patch.object(BRCRequestHandler, "database_path", path):
+                server = ThreadingHTTPServer(("127.0.0.1", 0), BRCRequestHandler)
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                connection = http.client.HTTPConnection(*server.server_address, timeout=3)
+                try:
+                    for route, expected in (("/health", {"status": "ok"}),
+                                            ("/status", {"database_exists": False})):
+                        connection.request("GET", route)
+                        response = connection.getresponse()
+                        self.assertEqual(response.status, 200)
+                        self.assertEqual(json.loads(response.read()), expected)
+                    value = {"name": "Cafe", "postal_code": "123456"}
+                    connection.request("POST", "/check", json.dumps(value),
+                                       {"Content-Type": "application/json"})
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(json.loads(response.read()),
+                                     dict(value, halal_certification="none"))
+                    self.assertEqual(received, [value])
+                    connection.request("POST", "/check", '{')
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 400)
+                    self.assertIn("error", json.loads(response.read()))
+                finally:
+                    connection.close()
+                    server.shutdown()
+                    thread.join(timeout=3)
+                    server.server_close()
+
+    def test_wish_collector_handles_plain_text_without_constraint_classification(self):
+        from BIS.classes.search_wish_collector import SearchWishCollector
+        from BIS.classes.logic_manager import LogicManager
+        from unittest.mock import Mock
+        ui = SimpleNamespace(section=Mock(), item=Mock())
+        io = SimpleNamespace(read_input=lambda *_a: "quiet seating",
+                             _cancelled=lambda _v: False, display_message=Mock(),
+                             ask_yes_no=Mock())
+        ai = SimpleNamespace(review_special_request=lambda text, _config: text,
+                             classify_search_constraints=Mock())
+        logic = SimpleNamespace(validate_special_request_text=lambda text: text,
+                                apply_search_constraints=LogicManager.apply_search_constraints)
+        result = SearchWishCollector(io, ai, logic, ui).collect(
+            {"other_preferences": []}, {})
+        self.assertEqual(result, {"selected": [], "text": "quiet seating"})
+        ai.classify_search_constraints.assert_not_called()
+        io.ask_yes_no.assert_not_called()
+
+    def test_wish_collector_confirms_and_encodes_soft_rating_as_minimum(self):
+        from BIS.classes.search_wish_collector import SearchWishCollector
+        from BIS.classes.logic_manager import LogicManager
+        from unittest.mock import Mock
+        io = SimpleNamespace(read_input=lambda *_a: "4.5 stars",
+                             _cancelled=lambda _v: False, display_message=Mock(),
+                             ask_yes_no=Mock(return_value=True))
+        ai = SimpleNamespace(review_special_request=lambda text, _config: text,
+                             classify_search_constraints=lambda *_a: dict(
+                                 rating=4.5, rating_is_minimum=False,
+                                 hard_requirement=False, hard_cuisine=None))
+        logic = SimpleNamespace(validate_special_request_text=lambda text: text,
+                                apply_search_constraints=LogicManager.apply_search_constraints)
+        result = SearchWishCollector(io, ai, logic, SimpleNamespace()).collect(
+            {"other_preferences": []}, {})
+        self.assertEqual(result["text"], "4.5 stars, at least 4.5 stars")
+        io.ask_yes_no.assert_called_once()
+
+    def test_restaurant_enrichment_preserves_live_precedence_and_missing_facts(self):
+        from BRNS.classes.restaurant_enricher import RestaurantEnricher
+        from copy import deepcopy
+        enricher = RestaurantEnricher()
+        place = dict(name="Cafe", address="1 Road", lat=1.3, lng=103.8,
+                     types=["japanese_restaurant"], rating=4.7,
+                     serves_vegetarian_food=True)
+        original = deepcopy(place)
+        live = enricher.enrich(place, [])
+        self.assertEqual(live["cuisines"], ["japanese"])
+        self.assertIsNone(live["avg_price"])
+        self.assertIsNone(live["price_band"])
+        self.assertEqual(live["source"], "google places")
+        saved = [dict(name="Cafe", address="1 Road", avg_price=12,
+                      cuisines=["korean"], dietary=["halal"], rating=1)]
+        merged = enricher.enrich(place, saved)
+        self.assertEqual(merged["rating"], 4.7)
+        self.assertEqual(merged["avg_price"], 12)
+        self.assertEqual(merged["price_band"], "moderate")
+        self.assertEqual(merged["dietary_requirements"], ["halal", "vegetarian"])
+        self.assertEqual(merged["source"], "saved + google places")
+        saved[0]["address"] = "Different branch"
+        self.assertEqual(enricher.enrich(place, saved)["source"], "google places")
+        self.assertEqual(place, original)
+
+    def test_outcome_policy_preserves_scoring_order_and_estimate_rejection(self):
+        from BRNS.classes.restaurant_outcome_policy import RestaurantOutcomePolicy
+        from copy import deepcopy
+        rules = SimpleNamespace(has_hard_preferences=lambda _p: False,
+                                hard_required_cuisines=lambda _p: [],
+                                minimum_rating=lambda _p: None)
+        policy = RestaurantOutcomePolicy(rules)
+        request = search_request()
+        request["other_preferences"] = []
+        restaurant = dict(source="google places", open_now=True,
+                          cuisines=[request["cuisine"]], dietary_requirements=[],
+                          avg_price=10, price_start=None, price_end=None,
+                          walk_source="route", walk_meters=100)
+        original = deepcopy(restaurant)
+        outcome = policy.evaluate(restaurant, request)
+        self.assertEqual(outcome, ("match", 3, ["matches your selected cuisine",
+                         "average price is within your budget", "within your route distance limit"]))
+        self.assertEqual(restaurant, original)
+        restaurant["walk_source"] = "estimate"
+        outcome = policy.evaluate(restaurant, request)
+        self.assertEqual(outcome[0], "alternative")
+        self.assertIn("! travel distance estimated or unavailable", outcome[2])
+
     def test_ai_provider_factories_are_open_to_registration(self):
         bis_registry = BISAIProviderFactoryRegistry()
         bis_registry.register(
@@ -184,6 +428,7 @@ class OOPRefactorTests(unittest.TestCase):
             next_field=lambda _preferences: None,
             validate_search_request=lambda *_args:
                 events.append("logic") or request,
+            preserve_search_wish=lambda _confirmed, request, *_args: request,
             is_search_clarification=lambda _error: False,
         )
         data_manager = SimpleNamespace(
@@ -228,10 +473,11 @@ class OOPRefactorTests(unittest.TestCase):
         )
         ai_manager = SimpleNamespace(
             has_configured_provider=lambda: True,
-            recommend_candidates=lambda *_args, **_kwargs:
+            recommend_prepared=lambda *_args, **_kwargs:
                 events.append("ai") or recommendations,
         )
         logic_manager = SimpleNamespace(
+            recommendation_context=lambda *_args: {},
             rank_restaurants=lambda *_args, **_kwargs:
                 events.append("logic") or results,
         )

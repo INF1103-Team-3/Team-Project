@@ -4,14 +4,22 @@ from BRNS.classes.brns_logic_manager_interface import (
     BRNSLogicManagerInterface,
 )
 from BRNS.classes.recommendation_sorter import RecommendationSorter
+from BRNS.classes.restaurant_enricher import RestaurantEnricher
+from BIS.sources.profile_schema import CUISINES
 
 
 class LogicManager(BRNSLogicManagerInterface):
     """Own BRNS recommendation decisions using injected rule functions."""
 
     def __init__(self, normalizer, outcome_decider, reason_grounder,
-                 max_matches, max_alternatives, minimum_rating_reader=None,
-                 hard_preference_reader=None, recommendation_sorter=None):
+                 max_matches, max_alternatives, minimum_rating_reader,
+                 hard_preference_reader, today_hours_reader, context_builder,
+                 recommendation_sorter=None, restaurant_enricher=None):
+        if not callable(minimum_rating_reader) or not callable(hard_preference_reader):
+            raise TypeError("Rating and hard-preference readers must be callable.")
+        self._enricher = restaurant_enricher or RestaurantEnricher()
+        self._today_hours = today_hours_reader
+        self._context_builder = context_builder
         self._normalize = normalizer
         self._decide = outcome_decider
         self._ground_reasons = reason_grounder
@@ -20,6 +28,47 @@ class LogicManager(BRNSLogicManagerInterface):
         self._minimum_rating_reader = minimum_rating_reader
         self._hard_preference_reader = hard_preference_reader
         self._sorter = recommendation_sorter or RecommendationSorter()
+
+    def enrich_place(self, place, saved_restaurants):
+        return self._enricher.enrich(place, saved_restaurants)
+
+    def saved_candidates(self, data):
+        restaurants = []
+        for row in data:
+            if not isinstance(row, dict) or not row.get("name"):
+                continue
+            candidate = dict(row)
+            cuisine = row.get("cuisine")
+            candidate["cuisines"] = [cuisine] if cuisine in CUISINES else []
+            candidate["dietary_requirements"] = [
+                item for item in row.get("dietary") or []
+                if item in ("halal", "vegetarian")]
+            candidate["price_start"] = row.get("avg_price_low_sgd")
+            candidate["price_end"] = row.get("avg_price_high_sgd")
+            try:
+                candidate["rating"] = float(row["g_rating"])
+            except (KeyError, TypeError, ValueError):
+                candidate["rating"] = None
+            try:
+                candidate["rating_count"] = int(row["g_no_reviews"])
+            except (KeyError, TypeError, ValueError):
+                candidate["rating_count"] = None
+            candidate["halal_hint"] = row.get("halal_certification") == "unofficial"
+            candidate["halal_certification"] = row.get("halal_certification")
+            candidate["today_hours"] = self._today_hours(
+                row.get("opening_hours"))
+            restaurants.append(candidate)
+        return restaurants
+
+    def prepare_candidate_search(self, request):
+        lookup = dict(request)
+        preferences = list(request["other_preferences"])
+        preferences.sort(key=lambda item: not self.has_hard_preferences([item]))
+        lookup["free_text"] = " ".join(preferences)
+        return lookup
+
+    def recommendation_context(self, request, candidates, previous_restaurants=()):
+        return self._context_builder.build(request, candidates, previous_restaurants)
 
     def minimum_rating(self, preferences):
         return self._minimum_rating_reader(preferences)

@@ -14,6 +14,29 @@ from BRC.models import (
 class LogicManager:
     """Apply BRC rules to AI proposals and authoritative MUIS evidence."""
 
+    KEYWORDS = {
+        "malay": "malay", "nasi": "malay", "chicken rice": "chinese",
+        "chinese": "chinese", "indian": "indian", "biryani": "indian",
+        "japanese": "japanese", "sushi": "japanese", "korean": "korean",
+        "thai": "thai", "western": "western", "pizza": "italian",
+    }
+
+    def prepare_cuisine_tags(self, listings, cache):
+        tags, pending = [[] for _ in listings], []
+        for index, listing in enumerate(listings):
+            cached = cache.get(listing)
+            text = f"{listing.name or ''} {listing.category or ''}".casefold()
+            keyword_tags = sorted({
+                tag for word, tag in self.KEYWORDS.items() if word in text})
+            if cached is not None:
+                tags[index] = cached
+            elif keyword_tags:
+                tags[index] = keyword_tags
+                cache.put(listing, keyword_tags)
+            else:
+                pending.append((index, listing))
+        return tags, pending
+
     def __init__(self, matcher=None):
         self._matcher = matcher or OutletMatcher()
 
