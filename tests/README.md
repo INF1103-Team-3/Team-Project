@@ -32,6 +32,7 @@ Run a smaller group by replacing `all` with one of the following names:
 | `core` | BIS,BRNS and BRC function tests together; this is the default group |
 | `blackbox` | Real BIS and BRNS processes with controlled HTTP fixtures |
 | `integration` | BIS-to-BRNS JSON contract and shared rules |
+| `oop` | BIS/BRNS manager contracts and pipeline order, provider factories/fallback, email collaboration, action dispatch, sorting strategies and JSON stores |
 | `deployment` | Image contents, writable volumes, imports, BRC networking, and core tests inside Docker |
 | `api` | Live API key connectivity (OpenRouter, Gemini, Groq, Google Maps), AI multi-tier fallback chains, and Google Maps services |
 | `all` | Every group above |

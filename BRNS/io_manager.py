@@ -8,6 +8,7 @@ import requests
 from pathlib import Path
 
 from BRNS import config, logic_manager
+from BRNS.classes.google_route_gateway import GoogleRouteGateway
 from shared import geocode_cache
 from shared import debug_log as log
 from shared import terminal_ui as ui
@@ -802,163 +803,38 @@ def enrich_place(place, saved_restaurants):
 
 # ---------- Google Routes API ----------
 
-def _haversine_km(a, b):
-    lat1, lng1, lat2, lng2 = map(math.radians, (a[0], a[1], b[0], b[1]))
-    h = (math.sin((lat2 - lat1) / 2) ** 2
-         + math.cos(lat1) * math.cos(lat2) * math.sin((lng2 - lng1) / 2) ** 2)
-    return 2 * 6371.0 * math.asin(math.sqrt(h))
+_ROUTE_GATEWAY = GoogleRouteGateway(config, log, _log_api_error)
 
 
-def _estimate_travel_minutes(origin, r, mode):
-    """Straight-line distance / speed, +20% street factor. Labeled estimate.
-    Walk: 80 m/min. Drive: ~500 m/min (~30 km/h urban SG average)."""
-    if mode not in {"walk", "drive"}:
-        raise ValueError("Transit journey times require a real route.")
-    speed = 80 if mode == "walk" else 500
-    meters = _haversine_km(origin, (r["lat"], r["lng"])) * 1000 * 1.2
-    return max(1, round(meters / speed))
+def _haversine_km(first, second):
+    return _ROUTE_GATEWAY.haversine_km(first, second)
+
+
+def _estimate_travel_minutes(origin, restaurant, mode):
+    return _ROUTE_GATEWAY.estimate_travel_minutes(
+        origin, restaurant, mode)
 
 
 def travel_times_matrix(origin, restaurants, mode, traffic_aware=False):
-    """ONE request for ALL restaurants, for ONE mode.
-    Writes r[f'{mode}_minutes'] and r[f'{mode}_meters'].
-    mode = 'walk' | 'drive' | 'transit'. Transit has no speed estimate.
-    NOTE: computeRouteMatrix returns a bare JSON ARRAY."""
-    if not restaurants:
-        return
-    log.debug_log(f"Route matrix requested for {len(restaurants)} candidates.",
-                  "INFO", "BRNS.io_manager.travel_times_matrix")
-    headers = {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": config.GOOGLE_MAPS_API_KEY,
-        "X-Goog-FieldMask": ("originIndex,destinationIndex,duration,"
-                             "distanceMeters,status,condition"),
-    }
-    body = {
-        "origins": [{"waypoint": {"location": {"latLng": {
-            "latitude": origin[0], "longitude": origin[1]}}}}],
-        "destinations": [{"waypoint": {"location": {"latLng": {
-            "latitude": r["lat"], "longitude": r["lng"]}}}} for r in restaurants],
-        "travelMode": {"walk": "WALK", "drive": "DRIVE",
-                       "transit": "TRANSIT"}[mode],
-    }
-    if traffic_aware and mode == "drive":
-        body["routingPreference"] = "TRAFFIC_AWARE"
-    try:
-        resp = requests.post(config.MATRIX_URL, headers=headers, json=body, timeout=20)
-        resp.raise_for_status()
-        data = resp.json()
-        elements = data if isinstance(data, list) else data.get("elements", [])
-        for el in elements:
-            try:
-                idx = el["destinationIndex"]
-                if el.get("condition") == "ROUTE_NOT_FOUND":
-                    continue
-                status_code = (el.get("status") or {}).get("code", 0)
-                if status_code not in (0, None):
-                    continue
-                restaurants[idx][f"{mode}_minutes"] = int(el["duration"].rstrip("s")) / 60
-                restaurants[idx][f"{mode}_meters"] = int(el["distanceMeters"])
-                restaurants[idx][f"{mode}_source"] = "route"
-            except (KeyError, ValueError, TypeError):
-                continue
-    except (requests.RequestException, AttributeError, KeyError, ValueError) as err:
-        _log_api_error(f"routes_matrix_{mode}", err)
-    routed = sum(r.get(f"{mode}_source") == "route" for r in restaurants)
-    log.debug_log(f"Route matrix supplied {routed} routes.", "INFO",
-                  "BRNS.io_manager.travel_times_matrix")
+    return _ROUTE_GATEWAY.travel_times_matrix(
+        origin, restaurants, mode, traffic_aware)
 
 
 def _fill_travel_estimates(origin, restaurants):
-    """Per-mode fallback: fill missing walk/drive times with labeled estimates."""
-    for r in restaurants:
-        for mode in ("walk", "drive"):
-            if r.get(f"{mode}_minutes") is None:
-                r[f"{mode}_minutes"] = _estimate_travel_minutes(origin, r, mode)
-                r[f"{mode}_meters"] = int(_haversine_km(origin, (r["lat"], r["lng"])) * 1000)
-                r[f"{mode}_source"] = "estimate"
+    return _ROUTE_GATEWAY.fill_travel_estimates(origin, restaurants)
 
 
 def format_transit_step(step):
-    """Summarize a Google transit step without inventing missing stop facts."""
-    details = step.get("transitDetails") or {}
-    if not details:
-        return step.get("navigationInstruction", {}).get("instructions")
-    line = details.get("transitLine") or {}
-    vehicle = (line.get("vehicle") or {}).get("name") or {}
-    service = (line.get("nameShort") or line.get("name")
-               or vehicle.get("text") or "Transit")
-    text = f"Take {service}"
-    if details.get("headsign"):
-        text += f" toward {details['headsign']}"
-    stops = details.get("stopDetails") or {}
-    departure = (stops.get("departureStop") or {}).get("name")
-    arrival = (stops.get("arrivalStop") or {}).get("name")
-    if departure:
-        text += f" from {departure}"
-    if arrival:
-        text += f" to {arrival}"
-    if details.get("stopCount"):
-        text += f" ({details['stopCount']} stops)"
-    return text
+    return _ROUTE_GATEWAY.format_transit_step(step)
 
 
 def get_route(origin, destination, mode, traffic_aware=False):
-    """ONE on-demand call for the chosen restaurant. None on failure."""
-    log.debug_log("Directions request started.", "INFO",
-                  "BRNS.io_manager.get_route")
-    body = {
-        "origin": {"location": {"latLng": {"latitude": origin[0], "longitude": origin[1]}}},
-        "destination": {"location": {"latLng": {"latitude": destination[0], "longitude": destination[1]}}},
-        "travelMode": {"walk": "WALK", "drive": "DRIVE",
-                       "transit": "TRANSIT"}[mode],
-    }
-    if traffic_aware and mode == "drive":
-        body["routingPreference"] = "TRAFFIC_AWARE"
-    field_mask = ("routes.duration,routes.distanceMeters,"
-                  "routes.legs.steps.navigationInstruction")
-    if mode == "transit":
-        field_mask += (",routes.legs.steps.travelMode,"
-                       "routes.legs.steps.transitDetails")
-    headers = {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": config.GOOGLE_MAPS_API_KEY,
-        "X-Goog-FieldMask": field_mask,
-    }
-    try:
-        resp = requests.post(config.ROUTES_URL, headers=headers, json=body, timeout=15)
-        resp.raise_for_status()
-        routes = resp.json().get("routes", [])
-        if not routes:
-            log.debug_log("Directions returned no route.", "WARNING",
-                          "BRNS.io_manager.get_route")
-            return None
-        route = routes[0]
-        steps = []
-        for leg in route.get("legs", []):
-            for s in leg.get("steps", []):
-                text = (format_transit_step(s) if mode == "transit"
-                        else s.get("navigationInstruction", {}).get(
-                            "instructions"))
-                if text:
-                    steps.append(text)
-        log.debug_log("Directions route returned.", "INFO",
-                      "BRNS.io_manager.get_route")
-        return {"duration_min": round(int(route["duration"].rstrip("s")) / 60),
-                "distance_m": route["distanceMeters"],
-                "steps": steps}
-    except (requests.RequestException, KeyError, ValueError) as err:
-        _log_api_error("get_route", err)
-        return None
+    return _ROUTE_GATEWAY.get_route(
+        origin, destination, mode, traffic_aware)
 
 
 def build_maps_link(origin, destination, mode):
-    """Free, no API call — opens the route in Google Maps (mode-aware)."""
-    travelmode = {"walk": "walking", "drive": "driving",
-                  "transit": "transit"}[mode]
-    return (f"https://www.google.com/maps/dir/?api=1"
-            f"&origin={origin[0]},{origin[1]}"
-            f"&destination={destination[0]},{destination[1]}&travelmode={travelmode}")
+    return _ROUTE_GATEWAY.build_maps_link(origin, destination, mode)
 
 
 # ---------- candidate builder ----------

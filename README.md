@@ -68,7 +68,9 @@ The three applications have separate responsibilities:
   cleaned official halal database, caches cuisine tags, and checks restaurant
   objects or arrays against that database.
 
-Each application follows the procedural manager pattern:
+Each application keeps the four manager interfaces while BIS and BRNS use
+object-oriented session, recommendation, validation, sorting and persistence
+implementations behind compatibility façades:
 
 | Manager | Responsibility |
 | --- | --- |
@@ -79,6 +81,9 @@ Each application follows the procedural manager pattern:
 
 `main.py` coordinates the managers and decides whether processing continues or
 returns safely to the user after a failure.
+
+Production BIS/BRNS classes live one per module under `BIS/classes/` and
+`BRNS/classes/`.
 
 ## Detailed documentation
 
@@ -111,17 +116,20 @@ The current project statement is in
 ```text
 BIS/                         account, profile, search-input, and email workflow
   README.md                  detailed BIS workflow and manager documentation
-  main.py                    BIS orchestration and result-action loop
+  main.py                    BIS compatibility façade and object wiring
+  classes/                   workflows, manager contracts and domain services
   io_manager.py              CLI input and display boundary
   ai_manager.py              BIS interpretation and model fallback chain
   logic_manager.py           profile and search-request rules
   data_manager.py            user, state, and search JSON persistence
   sources/                   prompts and profile schema
-  support/                   configuration and SMTP verification
+  support/                   configuration and SMTP verification façades
+    email_verification/classes/  challenge, delivery, verification objects
 
 BRNS/                        restaurant recommendation and navigation
   README.md                  detailed BRNS search, ranking, and route guide
-  main.py                    BRNS search, BRC handoff, sorting, and routing
+  main.py                    BRNS compatibility façade and object wiring
+  classes/                   workflows, adapters, contracts and domain services
   io_manager.py              BIS JSON, Google Places, Routes, and result display
   ai_manager.py              candidate ranking and provider fallback chain
   logic_manager.py           matching, alternatives, scores, and opening hours

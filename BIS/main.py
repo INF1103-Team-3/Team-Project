@@ -1,6 +1,5 @@
-"""Coordinate the five procedural chatbot managers."""
+"""BIS compatibility façade and four-manager application bootstrap."""
 
-import time
 import sys
 from pathlib import Path
 
@@ -10,448 +9,115 @@ import ai_manager
 import data_manager
 import io_manager
 import logic_manager
+from BIS.classes.bis_ai_manager import BISAIManager
+from BIS.classes.bis_data_manager import BISDataManager
+from BIS.classes.bis_io_manager import BISIOManager
+from BIS.classes.bis_logic_manager import BISLogicManager
+from BIS.classes.bis_search_workflow import BISSearchWorkflow
+from BIS.classes.interaction_session import InteractionSession
+from BIS.classes.search_preference_recorder import SearchPreferenceRecorder
+from BIS.classes.search_results_controller import SearchResultsController
 from BRNS import io_manager as brns_io
 from BRNS import main as brns_main
-from sources.profile_schema import OTHER_PREFERENCES, empty_preferences
+from sources.profile_schema import OTHER_PREFERENCES
 from support import config as settings
 from support.email_verification import email_delivery
 from shared import debug_log, terminal_ui
 
 
+def _search_managers():
+    """Create the four BIS manager objects for one search workflow."""
+    return (
+        BISIOManager(io_manager),
+        BISAIManager(ai_manager),
+        BISLogicManager(manager_module=logic_manager),
+        BISDataManager(data_manager),
+    )
+
+
+def _search_preference_recorder(data=None):
+    return SearchPreferenceRecorder(
+        data or BISDataManager(data_manager),
+        debug_log,
+        OTHER_PREFERENCES,
+    )
+
+
+def _search_workflow():
+    io, ai, logic, data = _search_managers()
+    preferences = _search_preference_recorder(data)
+    results = SearchResultsController(
+        io, ai, logic, data, preferences, brns_main, brns_io,
+        email_delivery, debug_log, OTHER_PREFERENCES,
+    )
+    return BISSearchWorkflow(
+        io, ai, logic, data, preferences, results,
+        debug_log, OTHER_PREFERENCES,
+    )
+
+
 def run_search(session, config, automatic=False):
-    if logic_manager.next_field(session["user"]["preferences"]) is not None:
-        io_manager.display_message("Complete your profile before using /search.")
-        return
-    user_id = session["user"]["userID"]
-    trace_token = debug_log.start_trace()
-    started = time.monotonic()
-    debug_log.debug_log("Search started.", "INFO", "BIS.main.run_search")
-    try:
-        state = data_manager.get_state("search", user_id)
-        if automatic and state and state.get("completed"):
-            return
-        if automatic:
-            io_manager.display_message("Profile complete. Starting /search.")
-        collected = io_manager.collect_search(session["user"], config)
-        if collected is None:
-            debug_log.debug_log("Collection cancelled.", "INFO", "BIS.io.collect_search")
-            io_manager.display_message("Search cancelled.")
-            return
-        debug_log.debug_log("Search choices collected.", "INFO",
-                            "BIS.io.collect_search")
-        confirmed = collected["request"]
-        today_request = collected["today_request"]
-        if collected.get("save_cuisine"):
-            remember_search_cuisine(session, collected["save_cuisine"], config)
-        if config.get("ai_bypass"):
-            request = logic_manager.validate_search_request(confirmed)
-        else:
-            while True:
-                interpreted = ai_manager.interpret_search_request(
-                    confirmed, today_request, config)
-                debug_log.debug_log("AI interpretation returned.", "INFO",
-                                    "BIS.ai.interpret_search_request")
-                if interpreted is None:
-                    raise RuntimeError(
-                        "BIS AI could not interpret today's request. Please retry.")
-                try:
-                    request = logic_manager.validate_search_request(
-                        confirmed, interpreted)
-                    if (today_request and not confirmed[OTHER_PREFERENCES]
-                            and request[OTHER_PREFERENCES]
-                            == confirmed[OTHER_PREFERENCES]):
-                        request = dict(request)
-                        request[OTHER_PREFERENCES] = (
-                            confirmed[OTHER_PREFERENCES] + [today_request])
-                        request = logic_manager.validate_search_request(request)
-                    debug_log.debug_log("AI proposal validated.", "INFO",
-                                        "BIS.logic.validate_search_request")
-                    break
-                except ValueError as error:
-                    if not logic_manager.is_search_clarification(error):
-                        raise
-                    debug_log.debug_log("Clarification required.", "WARNING",
-                                        "BIS.logic.validate_search_request")
-                    io_manager.display_message(
-                        logic_manager.clarification_message(error))
-                    today_request = io_manager.ask_search_clarification(config)
-                    if today_request is None:
-                        io_manager.display_message("Search cancelled.")
-                        return
-            if io_manager.confirm_search_request(request, config) is not True:
-                debug_log.debug_log("Interpretation declined.", "INFO",
-                                    "BIS.io.confirm_search_request")
-                io_manager.display_message("Search cancelled.")
-                return
-            debug_log.debug_log("Interpretation confirmed.", "INFO",
-                                "BIS.io.confirm_search_request")
-        payload = data_manager.serialize_search_request(request)
-        debug_log.debug_log("Validated request serialized to JSON.", "INFO",
-                            "BIS.data.serialize_search_request")
-        remember_search_wishes(session, today_request, config)
-        if config.get("ai_bypass"):
-            io_manager.display_search_summary(request)
-            session["search"] = request
-            data_manager.set_state("search", user_id, {"completed": True})
-            io_manager.display_message(
-                "Chatbot test mode: restaurant search skipped.",
-                role="bypass")
-            debug_log.debug_log("Chatbot test completed without BRNS.", "INFO",
-                                "BIS.main.run_search")
-            return
-        previous_restaurants = []
-        while True:
-            io_manager.display_message("Searching restaurants...")
-            if previous_restaurants:
-                results = brns_main.search(
-                    payload, previous_restaurants=previous_restaurants)
-            else:
-                results = brns_main.search(payload)
-            matches = results["matches"]
-            alternatives = results["alternatives"]
-            debug_log.debug_log(
-                f"BRNS returned {len(matches)} matches and "
-                f"{len(alternatives)} alternatives.", "INFO",
-                "BIS.main.run_search")
-            session["search"] = request
-            data_manager.set_state("search", user_id, {"completed": True})
-            io_manager.display_message(
-                f"Found {len(matches)} match{'es' if len(matches) != 1 else ''} "
-                f"and {len(alternatives)} alternative"
-                f"{'s' if len(alternatives) != 1 else ''}.")
-            if previous_restaurants and results.get("new_count") == 0:
-                io_manager.display_message(
-                    "No new restaurants found for these choices; "
-                    "showing available results again.")
-            if matches:
-                io_manager.display_message(
-                    f"Top match: {matches[0]['restaurant']['name']}.")
-            if not matches:
-                brns_io.show_no_matches(results)
-            visible = bool(matches)
-            if visible:
-                brns_io.show_result_list(results)
-            options = matches + alternatives
-            previous_restaurants.extend(item["restaurant"] for item in options)
-            while True:
-                action = io_manager.choose_results_action(
-                    len(options) if visible else 0,
-                    alternatives_hidden=bool(alternatives) and not visible)
-                if action == "done":
-                    io_manager.display_message(
-                        "Search finished. Use /search to try again.")
-                    return
-                if action == "repeat":
-                    debug_log.debug_log(
-                        "Repeating search with the same confirmed request.",
-                        "INFO", "BIS.main.run_search")
-                    break
-                if action == "alternatives" and alternatives and not visible:
-                    brns_io.show_result_list(results)
-                    visible = True
-                    continue
-                if action == "more" and visible:
-                    brns_io.show_results(
-                        results, announce_no_matches=False)
-                    continue
-                if action == "sort" and visible:
-                    sort_by = io_manager.choose_result_sort()
-                    if sort_by is None:
-                        continue
-                    results = brns_main.sort_results(results, sort_by)
-                    matches = results["matches"]
-                    alternatives = results["alternatives"]
-                    options = matches + alternatives
-                    io_manager.display_message(
-                        "Results sorted by "
-                        + ("Google rating." if sort_by == "rating"
-                           else "travel distance."))
-                    brns_io.show_result_list(results)
-                    continue
-                if action == "again":
-                    refined = io_manager.refine_search_request(
-                        request, session["user"]["preferences"], config)
-                    if refined is None:
-                        continue
-                    try:
-                        if config.get("ai_bypass"):
-                            validated = logic_manager.validate_search_request(
-                                refined)
-                        else:
-                            interpreted = ai_manager.interpret_search_request(
-                                refined, "", config)
-                            if interpreted is None:
-                                io_manager.display_message(
-                                    "Could not interpret that change. "
-                                    "Try again.")
-                                continue
-                            validated = logic_manager.validate_search_request(
-                                refined, interpreted)
-                    except (ValueError, RuntimeError) as error:
-                        io_manager.display_message(error)
-                        continue
-                    if not config.get("ai_bypass"):
-                        if io_manager.confirm_search_request(
-                                validated, config) is not True:
-                            io_manager.display_message(
-                                "Search change cancelled; previous "
-                                "results remain.")
-                            continue
-                    for wish in validated[OTHER_PREFERENCES]:
-                        if (wish not in request[OTHER_PREFERENCES]
-                                and wish not in (
-                                    session["user"]["preferences"].get(
-                                        OTHER_PREFERENCES) or [])):
-                            remember_search_wishes(
-                                session, wish, config)
-                    request = validated
-                    payload = data_manager.serialize_search_request(request)
-                    previous_restaurants = []
-                    debug_log.debug_log(
-                        "Refined request serialized to JSON.", "INFO",
-                        "BIS.data.serialize_search_request")
-                    break
-                if action == "route" and visible:
-                    result_number = io_manager.choose_route_result(len(options))
-                    if result_number is None:
-                        continue
-                    chosen = options[result_number - 1]["restaurant"]
-                    if chosen.get("lat") is None or chosen.get("lng") is None:
-                        io_manager.display_message(
-                            "No route is available for that restaurant.")
-                        continue
-                    route = brns_main.route_to(chosen, request)
-                    brns_io.show_route(**route)
-                    continue
-                if action == "email" and visible:
-                    user = session["user"]
-                    if not user.get("email_verified"):
-                        io_manager.display_message(
-                            "Verify your email before sending a Maps link.")
-                        continue
-                    result_number = io_manager.choose_route_result(
-                        len(options))
-                    if result_number is None:
-                        continue
-                    chosen = options[result_number - 1]["restaurant"]
-                    if chosen.get("lat") is None or chosen.get("lng") is None:
-                        io_manager.display_message(
-                            "No Maps link is available for that restaurant.")
-                        continue
-                    origin = (request["origin"]["latitude"],
-                              request["origin"]["longitude"])
-                    destination = (chosen["lat"], chosen["lng"])
-                    link = brns_io.build_maps_link(
-                        origin, destination, request["mode"])
-                    try:
-                        email_delivery.send_maps_link_email(
-                            user["email"], chosen["name"], link, config)
-                    except (ValueError, RuntimeError, OSError) as error:
-                        io_manager.display_message(error)
-                        continue
-                    io_manager.display_message(
-                        f"Google Maps link sent to {user['email']}.")
-                    continue
-                io_manager.display_message("Choose one of the actions shown.")
-    except (ValueError, RuntimeError, OSError) as error:
-        debug_log.debug_log(
-            f"Search stopped: {type(error).__name__}.", "ERROR",
-            "BIS.main.run_search")
-        io_manager.display_message(
-            f"{error} Details: logs/bitefinder.log "
-            f"(trace {debug_log.current_trace_id()}).", role="error")
-    finally:
-        debug_log.debug_log(
-            f"Search flow finished in {time.monotonic() - started:.2f}s.",
-            "INFO", "BIS.main.run_search")
-        debug_log.end_trace(trace_token)
+    """Run the IO → AI → Logic → Data BIS search workflow."""
+    return _search_workflow().run(session, config, automatic)
 
 
 def remember_search_wishes(session, today_request, config):
-    """Keep the user's confirmed wording in the profile for later searches."""
-    if not today_request:
-        return
-    user = session["user"]
-    saved = user["preferences"][OTHER_PREFERENCES] or []
-    wish = today_request.lower()
-    if wish in saved:
-        return
-    preferences = dict(user["preferences"])
-    preferences[OTHER_PREFERENCES] = saved + [wish]
-    session["user"] = data_manager.save_preferences(
-        user["userID"], preferences, config)
-    debug_log.debug_log(
-        "Saved one confirmed special request for later searches.",
-        "INFO", "BIS.data.save_preferences")
+    """Keep confirmed wording in the profile for later searches."""
+    return _search_preference_recorder().remember_wishes(
+        session, today_request, config)
 
 
 def remember_search_cuisine(session, cuisine, config):
     """Save an explicitly approved search cuisine to the user's likes."""
-    user = session["user"]
-    preferences = dict(user["preferences"])
-    preferences["liked_cuisines"] = list(dict.fromkeys(
-        (preferences["liked_cuisines"] or []) + [cuisine]))
-    preferences["disliked_cuisines"] = [
-        item for item in preferences["disliked_cuisines"] or []
-        if item != cuisine]
-    session["user"] = data_manager.save_preferences(
-        user["userID"], preferences, config)
-    debug_log.debug_log("Saved one approved liked cuisine.", "INFO",
-                        "BIS.data.save_preferences")
+    return _search_preference_recorder().remember_cuisine(
+        session, cuisine, config)
+
+
+def _interaction_session(state, config):
+    """Build the session object used by legacy-compatible entry points."""
+    return InteractionSession(
+        state["user"],
+        config,
+        BISAIManager(ai_manager),
+        BISDataManager(data_manager),
+        BISIOManager(io_manager),
+        BISLogicManager(manager_module=logic_manager),
+        terminal_ui,
+        debug_log,
+        run_search,
+        state=state,
+    )
 
 
 def save_update(action, session, config, from_ai):
     """Save only a fully resolved update, then advance the session."""
-    trace_token = debug_log.start_trace()
-    try:
-        user = session["user"]
-        was_incomplete = logic_manager.next_field(user["preferences"]) is not None
-        operation = action.get("location_action", "add")
-        if session["field"] == "location":
-            operation = session["location_action"]
-        updates = io_manager.resolve_proposed_updates(
-            user["preferences"], action["updates"], from_ai,
-            location_action=operation,
-        )
-        debug_log.debug_log(
-            f"Resolved {len(updates)} preference fields.", "INFO",
-            "BIS.io.resolve_proposed_updates")
-        preferences = logic_manager.apply_updates(
-            user["preferences"], updates, operation,
-        )
-        debug_log.debug_log("Profile update validated.", "INFO",
-                            "BIS.logic.apply_updates")
-        saved = data_manager.save_preferences(
-            user["userID"], preferences, config)
-        debug_log.debug_log("Preferences saved.", "INFO",
-                            "BIS.data.save_preferences")
-        session.update(user=saved, field=None, location_action="add")
-        io_manager.display_message("Preferences saved.")
-        if was_incomplete and logic_manager.next_field(
-                saved["preferences"]) is None:
-            run_search(session, config, automatic=True)
-    finally:
-        debug_log.end_trace(trace_token)
+    return _interaction_session(session, config).save_update(action, from_ai)
 
 
 def rename_user(session):
-    username = io_manager.prompt_username()
-    if username is None:
-        return
-    updated = dict(session["user"], username=username)
-    session["user"] = data_manager.save(updated)
-    io_manager.display_message("Username saved.")
+    return _interaction_session(session, {}).rename_user()
 
 
 def reset_preferences(session, config):
-    saved = data_manager.save_preferences(
-        session["user"]["userID"], empty_preferences(), config,
-    )
-    session.update(user=saved, field=None, location_action="add")
-    io_manager.display_message("Preferences reset; account details retained.")
+    return _interaction_session(session, config).reset_preferences()
 
 
 def end_session(intent, session, config):
-    user = session["user"]
-    data_manager.save_preferences(user["userID"], user["preferences"], config)
-    message = {"logout": "Logged out.", "exit": "Goodbye!"}[intent]
-    if intent == "exit" and logic_manager.next_field(user["preferences"]) is not None:
-        message = "Profile saved. " + message
-    io_manager.display_message(message)
-    debug_log.debug_log("Session ended.", "INFO", "BIS.session." + intent)
-    return intent
+    return _interaction_session(session, config).end(intent)
 
 
 def handle_action(action, session, config, from_ai=False):
     """Dispatch an action with guard clauses instead of nested branches."""
-    intent = action["action"]
-    debug_log.debug_log(f"Dispatching {intent}.", "DEBUG",
-                        "BIS.main.handle_action")
-    if intent in {"exit", "logout"}:
-        return end_session(intent, session, config)
-    if intent == "show_profile":
-        io_manager.display_profile(session["user"])
-        return None
-    if intent == "search":
-        run_search(session, config)
-        return None
-    if intent == "help":
-        io_manager.display_help(action.get("topic"))
-        return None
-    if intent == "color":
-        io_manager.apply_color_setting(action["enabled"])
-        return None
-    if intent == "edit_menu":
-        selected = io_manager.choose_profile_edit()
-        if selected is None:
-            return None
-        if selected["action"] == "rename":
-            rename_user(session)
-            return None
-        session.update(field=selected["field"],
-                       location_action=selected["location_action"])
-        return None
-    if intent == "edit":
-        session.update(field=action["field"],
-                       location_action=action["location_action"])
-        return None
-    if intent == "rename":
-        rename_user(session)
-        return None
-    if intent == "reset_profile":
-        reset_preferences(session, config)
-        return None
-    if intent == "profile_update" and action.get("updates"):
-        save_update(action, session, config, from_ai)
-        return None
-    io_manager.display_message(
-        "Please clarify your preferences; nothing was changed."
-    )
-    return None
+    return _interaction_session(session, config).handle_action(
+        action, from_ai)
 
 
 def run_session(user, config):
     """Retain the saved state if collection, confirmation, or saving fails."""
-    display = data_manager.get_state("display", user["userID"]) or {}
-    terminal_ui.set_color_enabled(display.get("color_enabled") is not False)
-
-    def change_color(enabled):
-        data_manager.set_state("display", user["userID"],
-                               None if enabled else {"color_enabled": False})
-        terminal_ui.set_color_enabled(enabled)
-        io_manager.display_message(
-            "Colors enabled for your account." if enabled
-            else "Colors disabled for your account.")
-
-    io_manager.set_color_handler(change_color)
-    try:
-        io_manager.display_welcome(user)
-        session = {"user": user, "field": None, "location_action": "add"}
-        if logic_manager.next_field(user["preferences"]) is None:
-            run_search(session, config, automatic=True)
-        while True:
-            action = {}
-            try:
-                action = io_manager.collect_action(
-                    session["user"], config, session["field"],
-                    session["location_action"],
-                )
-                from_ai = action["action"] == "interpret"
-                if from_ai:
-                    action = ai_manager.process(action["record"], config)
-                result = handle_action(action, session, config, from_ai)
-                if result is not None:
-                    return result
-            except (ValueError, RuntimeError, OSError) as error:
-                io_manager.display_message(error)
-                io_manager.display_message(
-                    "No preference update was applied. Please retry."
-                )
-                if action.get("action") in {"exit", "logout"}:
-                    return "exit"
-    finally:
-        io_manager.set_color_handler(None)
-        terminal_ui.set_color_enabled(True)
+    return _interaction_session(
+        {"user": user, "field": None, "location_action": "add"},
+        config,
+    ).run()
 
 
 def run_accounts(config):

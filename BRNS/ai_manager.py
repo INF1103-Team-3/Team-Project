@@ -10,6 +10,12 @@ from contextlib import contextmanager
 
 import requests
 from BRNS import config, logic_manager
+from BRNS.classes.ai_provider_router import AIProviderRouter
+from BRNS.classes.ai_provider_factory_registry import AIProviderFactoryRegistry
+from BRNS.classes.gemini_ai_provider import GeminiAIProvider
+from BRNS.classes.groq_ai_provider import GroqAIProvider
+from BRNS.classes.openrouter_ai_provider import OpenRouterAIProvider
+from BRNS.classes.unsupported_ai_provider import UnsupportedAIProvider
 from shared import debug_log as log
 
 SYSTEM_PROMPT = """You convert a user's food request into strict JSON.
@@ -268,34 +274,45 @@ def call_ai(user_record):
     """Walk MODEL_CHAIN across providers until one returns schema-valid JSON.
     Returns (True, parsed_dict, model_used) or (False, error_summary, None)."""
     user_text = build_prompt(user_record)
-    errors = []
+    registry = AIProviderFactoryRegistry()
+    registry.register(
+        "openrouter",
+        lambda model: OpenRouterAIProvider(
+            model,
+            lambda system_prompt, text, selected=model:
+            _call_openrouter(selected, system_prompt, text),
+        ),
+    )
+    registry.register(
+        "gemini",
+        lambda model: GeminiAIProvider(
+            model,
+            lambda system_prompt, text, selected=model:
+            _call_gemini(selected, system_prompt, text),
+        ),
+    )
+    registry.register(
+        "groq",
+        lambda model: GroqAIProvider(
+            model,
+            lambda system_prompt, text, selected=model:
+            _call_groq(selected, system_prompt, text),
+        ),
+    )
+    providers = []
     for entry in config.MODEL_CHAIN:
         provider, model = entry["provider"], entry["model"]
-        if provider == "openrouter":
-            ok, content = _call_openrouter(model, SYSTEM_PROMPT, user_text)
-        elif provider == "gemini":
-            ok, content = _call_gemini(model, SYSTEM_PROMPT, user_text)
-        elif provider == "groq":
-            ok, content = _call_groq(model, SYSTEM_PROMPT, user_text)
-        else:
-            ok, content = False, f"unknown provider '{provider}'"
-        if ok:
-            try:
-                parsed = parse_json_reply(content)
-            except ValueError as err:
-                errors.append(f"{provider}/{model}: unparseable")
-                _log_ai_event("fallback", f"{provider}/{model}: invalid JSON")
-                continue
-            is_valid, result = validate_ai_output(parsed)
-            if is_valid:
-                return True, result, f"{provider}/{model}"
-            errors.append(f"{provider}/{model}: schema invalid ({result})")
-            _log_ai_event("fallback", f"{provider}/{model} schema: {result}")
-            continue
-        errors.append(f"{provider}/{model}: {_safe_failure(content)}")
-        _log_ai_event("fallback", f"{provider}/{model}: {_safe_failure(content)}")
-        time.sleep(1)
-    return False, "; ".join(errors), None
+        configured = registry.create(provider, model)
+        providers.append(
+            configured or UnsupportedAIProvider(provider, model))
+    return AIProviderRouter(
+        providers,
+        parse_json_reply,
+        validate_ai_output,
+        _safe_failure,
+        _log_ai_event,
+        time.sleep,
+    ).route(SYSTEM_PROMPT, user_text)
 
 
 def call_api(prompt):
