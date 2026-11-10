@@ -5,14 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import ai_manager
-import data_manager
-import io_manager
-import logic_manager
-from BIS.classes.bis_ai_manager import BISAIManager
-from BIS.classes.bis_data_manager import BISDataManager
-from BIS.classes.bis_io_manager import BISIOManager
-from BIS.classes.bis_logic_manager import BISLogicManager
+from BIS import ai_manager, data_manager, io_manager, logic_manager
 from BIS.classes.bis_search_workflow import BISSearchWorkflow
 from BIS.classes.interaction_session import InteractionSession
 from BIS.classes.search_preference_recorder import SearchPreferenceRecorder
@@ -28,16 +21,16 @@ from shared import debug_log, terminal_ui
 def _search_managers():
     """Create the four BIS manager objects for one search workflow."""
     return (
-        BISIOManager(io_manager),
-        BISAIManager(ai_manager),
-        BISLogicManager(manager_module=logic_manager),
-        BISDataManager(data_manager),
+        io_manager.manager(),
+        ai_manager.manager(),
+        logic_manager.manager(),
+        data_manager.manager(),
     )
 
 
 def _search_preference_recorder(data=None):
     return SearchPreferenceRecorder(
-        data or BISDataManager(data_manager),
+        data or data_manager.manager(),
         debug_log,
         OTHER_PREFERENCES,
     )
@@ -78,10 +71,10 @@ def _interaction_session(state, config):
     return InteractionSession(
         state["user"],
         config,
-        BISAIManager(ai_manager),
-        BISDataManager(data_manager),
-        BISIOManager(io_manager),
-        BISLogicManager(manager_module=logic_manager),
+        ai_manager.manager(),
+        data_manager.manager(),
+        io_manager.manager(),
+        logic_manager.manager(),
         terminal_ui,
         debug_log,
         run_search,

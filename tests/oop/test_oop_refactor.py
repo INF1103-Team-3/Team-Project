@@ -1,5 +1,6 @@
-"""Offline contract tests for the BIS/BRNS OOP refactor."""
+"""Offline contract tests for the BiteFinder OOP refactor."""
 
+import ast
 import sys
 import json
 import tempfile
@@ -83,6 +84,7 @@ from BRNS.classes.rating_result_sorter import RatingResultSorter
 from BRNS.classes.recommendation_sorter import RecommendationSorter
 from BRNS.classes.result_sorter_interface import ResultSorterInterface
 from BRNS.classes.result_sorter_registry import ResultSorterRegistry
+from BRC.classes.fallback_ai_client import FallbackAIClient
 
 
 def search_request():
@@ -486,6 +488,48 @@ class OOPRefactorTests(unittest.TestCase):
             self.assertEqual(record["postal_code"], "123456")
             self.assertEqual(record["g_rating"], "4.5")
             self.assertEqual(record["halal_certification"], "none")
+
+    def test_production_classes_have_one_subsystem_class_file_each(self):
+        for subsystem in ("BIS", "BRNS", "BRC"):
+            for path in (ROOT / subsystem).rglob("*.py"):
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+                classes = [
+                    node for node in tree.body
+                    if isinstance(node, ast.ClassDef)]
+                self.assertLessEqual(
+                    len(classes), 1,
+                    f"{path.relative_to(ROOT)} defines multiple classes")
+                if classes:
+                    self.assertIn(
+                        "classes", path.parts,
+                        f"{path.relative_to(ROOT)} defines a class outside "
+                        "its subsystem classes directory")
+
+    def test_brc_production_client_falls_back_after_invalid_json(self):
+        calls = []
+        settings = {
+            "providers": [
+                {"provider": "gemini", "model": "first"},
+                {"provider": "groq", "model": "second"},
+            ],
+            "chain_timeout_seconds": 10,
+            "timeout_seconds": 2,
+            "report": None,
+        }
+
+        def gemini(_prompt, _settings, model):
+            calls.append(("gemini", model))
+            return "not-json"
+
+        def chat(_prompt, _settings, provider, model, _timeout):
+            calls.append((provider, model))
+            return '{"certificate_number": null}'
+
+        client = FallbackAIClient(settings, gemini, chat)
+        result = client.request_validated("prompt", json.loads)
+        self.assertEqual(result, {"certificate_number": None})
+        self.assertEqual(calls, [
+            ("gemini", "first"), ("groq", "second")])
 
 
 if __name__ == "__main__":

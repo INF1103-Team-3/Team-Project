@@ -1,8 +1,6 @@
 """Procedural profile and search decisions and conversions."""
 
-import math
 import re
-from copy import deepcopy
 from difflib import SequenceMatcher
 
 from sources.profile_schema import (
@@ -11,7 +9,7 @@ from sources.profile_schema import (
     PREFERENCE_FIELDS, clean_text, validate_preferences, validate_updates,
     validate_value, validate_travel_minutes,
 )
-from BIS.classes.bis_logic_manager import BISLogicManager
+from BIS.classes.logic_manager import LogicManager
 
 COORDINATES = re.compile(
     r"\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)\s*"
@@ -26,7 +24,12 @@ SEARCH_FIELDS = {
 
 SEARCH_CLARIFICATION_PREFIX = "SEARCH_CLARIFICATION: "
 
-_MANAGER = BISLogicManager()
+_MANAGER = LogicManager()
+
+
+def manager():
+    """Return the configured BIS Logic Manager."""
+    return _MANAGER
 
 
 def search_clarification_error(message):
@@ -36,13 +39,12 @@ def search_clarification_error(message):
 
 def is_search_clarification(error):
     """Identify clarification errors without defining an exception class."""
-    return (isinstance(error, ValueError)
-            and str(error).startswith(SEARCH_CLARIFICATION_PREFIX))
+    return _MANAGER.is_search_clarification(error)
 
 
 def clarification_message(error):
     """Remove the internal marker before displaying an error."""
-    return str(error)[len(SEARCH_CLARIFICATION_PREFIX):]
+    return _MANAGER.clarification_message(error)
 
 
 def validate_special_request_text(text):
@@ -64,118 +66,27 @@ def validate_search_request(request, ai_response=None):
     return _MANAGER.validate_search_request(request, ai_response)
 
 
-def _validate_search_fields(request):
-    """Normalize the exact ten-field BIS/BRNS search contract."""
-    if not isinstance(request, dict) or set(request) != SEARCH_FIELDS:
-        raise ValueError("Today's search has an invalid set of fields.")
-    origin = request["origin"]
-    if not isinstance(origin, dict) or set(origin) != {
-        "query", "label", "latitude", "longitude"
-    }:
-        raise ValueError("Today's search needs a confirmed location.")
-    latitude, longitude = origin["latitude"], origin["longitude"]
-    if (type(latitude) not in (int, float)
-            or type(longitude) not in (int, float)
-            or not in_singapore(latitude, longitude)):
-        raise ValueError("Today's search location must be in Singapore.")
-    if request["mode"] not in ("walk", "drive", "transit"):
-        raise ValueError("Choose walk, drive, or transit for today's search.")
-    if request["cuisine"] not in (*CUISINES, "none"):
-        raise ValueError("Choose a supported cuisine or none for today's search.")
-    for field in (OTHER_PREFERENCES, "dietary_requirements",
-                  "disliked_cuisines"):
-        if not isinstance(request[field], list):
-            raise ValueError(f"{field} must be a list.")
-    distance = request["max_distance_km"]
-    minutes = request["max_travel_minutes"]
-    if (distance is None) == (minutes is None):
-        raise ValueError("Choose exactly one travel limit: distance or time.")
-    if request["mode"] == "transit" and distance is not None:
-        raise ValueError("Transit searches use a time limit.")
-    distance = (validate_value("max_distance_km", distance)
-                if distance is not None else None)
-    minutes = validate_travel_minutes(minutes) if minutes is not None else None
-    traffic_aware = request["traffic_aware"]
-    if type(traffic_aware) is not bool or (traffic_aware and
-            (request["mode"] != "drive" or minutes is None)):
-        raise ValueError("Live traffic is available only for driving time searches.")
-    budget = validate_value("budget_per_person", request["budget_per_person"])
-    if budget is None:
-        raise ValueError("Today's search needs a travel limit and budget.")
-    preferences = validate_value(
-        OTHER_PREFERENCES, request[OTHER_PREFERENCES])
-    return {
-        "origin": {
-            "query": clean_text(origin["query"], 200),
-            "label": clean_text(origin["label"], 500),
-            "latitude": latitude, "longitude": longitude,
-        },
-        "mode": request["mode"], "max_distance_km": distance,
-        "max_travel_minutes": minutes, "traffic_aware": traffic_aware,
-        "cuisine": request["cuisine"], "budget_per_person": budget,
-        OTHER_PREFERENCES: preferences,
-        "dietary_requirements": validate_value(
-            "dietary_requirements", request["dietary_requirements"]),
-        "disliked_cuisines": validate_value(
-            "disliked_cuisines", request["disliked_cuisines"]),
-    }
-
-
 def in_singapore(latitude, longitude):
     """Reject locations outside the app's supported search area."""
-    return (math.isfinite(latitude) and math.isfinite(longitude)
-            and 1.15 <= latitude <= 1.48
-            and 103.60 <= longitude <= 104.10)
+    return _MANAGER.in_singapore(latitude, longitude)
 
 
 def parse_coordinates(text):
-    match = COORDINATES.fullmatch(text)
-    if not match:
-        return None
-    latitude, longitude = map(float, match.groups())
-    if not in_singapore(latitude, longitude):
-        raise ValueError("Enter coordinates within Singapore.")
-    return latitude, longitude
+    return _MANAGER.parse_coordinates(text)
 
 
 def is_direct_location_input(text):
-    return parse_coordinates(text) is not None or bool(
-        re.fullmatch(r"\d{5,6}", text)
-    )
+    return _MANAGER.is_direct_location_input(text)
 
 
 def estimate_travel_limits(updates):
     """Complete only this update's missing counterpart, never an old value."""
-    updates = dict(updates)
-    distance = updates.get("max_distance_km")
-    minutes = updates.get("max_travel_time_minutes")
-    if distance is not None and minutes is None:
-        updates["max_travel_time_minutes"] = round(
-            distance * MINUTES_PER_KM, 2)
-    elif minutes is not None and distance is None:
-        updates["max_distance_km"] = max(
-            0.01, round(minutes / MINUTES_PER_KM, 2))
-    return updates
+    return _MANAGER.estimate_travel_limits(updates)
 
 
 def apply_updates(preferences, updates, location_action="add"):
     """Build a new profile; reject conflicts without mutating the old one."""
-    if location_action not in {"add", "replace", "remove"}:
-        raise ValueError("Choose add, replace, or remove for locations.")
-    result = deepcopy(validate_preferences(preferences))
-    updates = estimate_travel_limits(validate_updates(updates))
-    if "location" in updates:
-        old = result["location"] or []
-        incoming = updates["location"]
-        if location_action == "add":
-            updates["location"] = list(dict.fromkeys(old + incoming))
-        elif location_action == "remove":
-            if any(item not in old for item in incoming):
-                raise ValueError("That location is not in your saved list.")
-            updates["location"] = [
-                item for item in old if item not in incoming]
-    result.update(updates)
-    return validate_preferences(result)
+    return _MANAGER.apply_updates(preferences, updates, location_action)
 
 
 def cuisine_conflicts(preferences, updates):
@@ -306,10 +217,7 @@ def parse_local_answer(text, field):
 
 
 def next_field(preferences):
-    for field in PREFERENCE_FIELDS:
-        if preferences[field] is None:
-            return field
-    return None
+    return _MANAGER.next_field(preferences)
 
 
 def evaluate(record):

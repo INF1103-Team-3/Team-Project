@@ -9,6 +9,7 @@ from pathlib import Path
 
 from BRNS import config, logic_manager
 from BRNS.classes.google_route_gateway import GoogleRouteGateway
+from BRNS.classes.io_manager import IOManager
 from shared import geocode_cache
 from shared import debug_log as log
 from shared import terminal_ui as ui
@@ -22,6 +23,16 @@ SEARCH_FIELDS = {
     "dietary_requirements", "disliked_cuisines",
 }
 ORIGIN_FIELDS = {"query", "label", "latitude", "longitude"}
+_MANAGER = None
+
+
+def manager():
+    """Return the configured BRNS IO Manager."""
+    global _MANAGER
+    if _MANAGER is None:
+        _MANAGER = IOManager(
+            sys.modules[__name__], logic_manager.manager(), log)
+    return _MANAGER
 
 
 def display_debug(line):
@@ -31,69 +42,7 @@ def display_debug(line):
 
 def accept_bis_json(payload):
     """Validate one BIS search request without prompting or changing it."""
-    if isinstance(payload, str):
-        try:
-            payload = json.loads(payload)
-        except ValueError as error:
-            raise ValueError("BRNS requires valid BIS search JSON.") from error
-    if not isinstance(payload, dict) or set(payload) != SEARCH_FIELDS:
-        raise ValueError("BRNS requires the ten BIS search fields only.")
-    origin = payload["origin"]
-    if not isinstance(origin, dict) or set(origin) != ORIGIN_FIELDS:
-        raise ValueError("BRNS requires a confirmed origin object.")
-    query = clean_text(origin["query"], 200)
-    label = clean_text(origin["label"], 500)
-    latitude, longitude = origin["latitude"], origin["longitude"]
-    if (type(latitude) not in (int, float)
-            or type(longitude) not in (int, float)
-            or not math.isfinite(latitude) or not math.isfinite(longitude)
-            or not 1.15 <= latitude <= 1.48
-            or not 103.60 <= longitude <= 104.10):
-        raise ValueError("The search origin must be within Singapore.")
-    if payload["mode"] not in ("walk", "drive", "transit"):
-        raise ValueError("Choose walk, drive, or transit for the search.")
-    distance = payload["max_distance_km"]
-    minutes = payload["max_travel_minutes"]
-    if (distance is None) == (minutes is None):
-        raise ValueError("BRNS requires exactly one travel limit.")
-    if payload["mode"] == "transit" and distance is not None:
-        raise ValueError("Transit searches require a time limit.")
-    distance = (validate_value("max_distance_km", distance)
-                if distance is not None else None)
-    minutes = validate_travel_minutes(minutes) if minutes is not None else None
-    traffic_aware = payload["traffic_aware"]
-    if type(traffic_aware) is not bool or (traffic_aware and
-            (payload["mode"] != "drive" or minutes is None)):
-        raise ValueError("Live traffic is available only for driving time searches.")
-    if payload["budget_per_person"] is None:
-        raise ValueError("Search budget is required.")
-    if any(not isinstance(payload[field], list) for field in (
-        "other_preferences", "dietary_requirements", "disliked_cuisines",
-    )):
-        raise ValueError("Search preferences and dietary requirements must be lists.")
-    cuisine = payload["cuisine"]
-    if not isinstance(cuisine, str) or cuisine not in (*CUISINES, "none"):
-        raise ValueError("Choose a supported cuisine or none for the search.")
-    other_preferences = validate_value(
-        "other_preferences", payload["other_preferences"])
-    logic_manager.minimum_rating(other_preferences)
-    return {
-        "origin": {
-            "query": query, "label": label,
-            "latitude": latitude, "longitude": longitude,
-        },
-        "mode": payload["mode"],
-        "max_distance_km": distance,
-        "max_travel_minutes": minutes, "traffic_aware": traffic_aware,
-        "cuisine": cuisine,
-        "budget_per_person": validate_value(
-            "budget_per_person", payload["budget_per_person"]),
-        "other_preferences": other_preferences,
-        "dietary_requirements": validate_value(
-            "dietary_requirements", payload["dietary_requirements"]),
-        "disliked_cuisines": validate_value(
-            "disliked_cuisines", payload["disliked_cuisines"]),
-    }
+    return manager().accept_bis_json(payload)
 
 
 def _clean_free_text_query(preferences):
@@ -110,22 +59,7 @@ def _clean_free_text_query(preferences):
 
 def find_candidates(request):
     """Collect restaurant facts through Places or saved records."""
-    origin = (request["origin"]["latitude"],
-              request["origin"]["longitude"])
-    lookup = dict(request)
-    lookup["free_text"] = _clean_free_text_query(
-        request.get("other_preferences") or [])
-    preferences = list(request["other_preferences"])
-    preferences.sort(
-        key=lambda item: not logic_manager.has_hard_preferences([item]))
-    lookup["free_text"] = " ".join(preferences)
-    saved_restaurants = load_saved_restaurants()
-    log.debug_log(f"Loaded {len(saved_restaurants)} saved restaurants.", "DEBUG",
-                  "BRNS.io_manager.find_candidates")
-    candidates = build_candidates(origin, lookup, saved_restaurants)
-    log.debug_log(f"Candidate builder returned {len(candidates)} records.",
-                  "DEBUG", "BRNS.io_manager.find_candidates")
-    return candidates
+    return manager().find_candidates(request)
 
 
 def show_results(results, announce_no_matches=True):
