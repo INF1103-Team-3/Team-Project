@@ -22,6 +22,10 @@ class IOManager(BISSessionIOInterface, BISSearchIOInterface):
         self._wish_collector = SearchWishCollector(
             helpers, helpers.ai_manager, helpers.logic_manager, helpers.ui)
 
+    def choose_interface(self):
+        from BIS.classes.launcher_io import LauncherIO
+        return LauncherIO(self._helpers.read_input, self.display_message).choose_interface()
+
     def ask_search_wishes(self, profile, config):
         return self._wish_collector.collect(profile, config)
 

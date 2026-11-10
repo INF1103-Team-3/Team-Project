@@ -18,7 +18,16 @@ GEOCODE_URL = os.getenv(
     "https://maps.googleapis.com/maps/api/geocode/json",
 )
 
-_STORE = JsonUserStore(USERS_FILE, STATE_FILE)
+_BACKEND = os.getenv("BITEFINDER_STORAGE", "json").strip().lower()
+if _BACKEND == "json":
+    _STORE = JsonUserStore(USERS_FILE, STATE_FILE)
+elif _BACKEND == "mongo":
+    from BIS.storage_dependencies import mongo_connection
+    from BIS.classes.mongo_user_store import MongoUserStore
+    _STORE = MongoUserStore(mongo_connection())
+    _STORE.ensure_indexes()
+else:
+    raise ValueError("BITEFINDER_STORAGE must be json or mongo.")
 _LOCATION_GATEWAY = LocationGateway(
     logic_manager, geocode_cache, GEOCODE_URL)
 _MANAGER = DataManager(_STORE, _LOCATION_GATEWAY)

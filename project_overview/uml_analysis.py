@@ -30,6 +30,7 @@ class SourceAnalysis:
         self.root = Path(root)
         self.classes, self.functions, self.modules = {}, {}, {}
         self.aliases = defaultdict(dict)
+        self.global_names = defaultdict(set)
         self.values = defaultdict(set)
         self.attributes = defaultdict(set)
         self.returns = defaultdict(set)
@@ -110,6 +111,12 @@ class SourceAnalysis:
     def _function(self, key, module, owner, node):
         self.functions[key] = (module, owner, node)
         self.aliases[key].update(self._imports(node, module))
+        for statement in self.scoped_nodes(node):
+            if isinstance(statement, ast.Global):
+                self.global_names[key].update(statement.names)
+        for name in self.global_names[key]:
+            if name in self.aliases[key]:
+                self.aliases[module][name] = self.aliases[key][name]
         if owner:
             self.values[key + '.self'].add(owner)
             self.values[key + '.cls'].add(owner)
@@ -224,7 +231,8 @@ class SourceAnalysis:
     def _assign(self, target, value, scope, module):
         values = self.known(self.resolve(value, scope, module))
         if isinstance(target, ast.Name):
-            self.values[scope + '.' + target.id].update(values)
+            target_scope = module if target.id in self.global_names[scope] else scope
+            self.values[target_scope + '.' + target.id].update(values)
         elif isinstance(target, ast.Attribute):
             for owner in self.resolve(target.value, scope, module):
                 if owner in self.classes:

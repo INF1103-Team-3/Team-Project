@@ -1,6 +1,7 @@
 """AI layer — prompt building, API call, JSON parsing, schema validation.
 Multi-provider chain (OpenRouter + direct Gemini) with automatic fallback.
 Zero domain logic here. Never crashes: returns (ok, result_or_error, model_used_or_None)."""
+from contextvars import ContextVar
 import json
 import re
 import signal
@@ -55,19 +56,19 @@ REQUIRED_KEYS = ["cuisine", "dietary", "budget_band",
                  "budget_min", "budget_max", "min_rating",
                  "max_walk_minutes", "max_drive_km", "eat_time", "free_text_notes"]
 VALID_BANDS = ("any", "inexpensive", "moderate", "expensive", "very_expensive")
-_ACTIVE_CHAIN_DEADLINE = None
+_ACTIVE_CHAIN_DEADLINE = ContextVar("brns_ai_deadline", default=None)
+_LAST_USED_MODEL = ContextVar("brns_ai_model", default=None)
 _MANAGER = None
 
 
 @contextmanager
 def _recommendation_deadline(seconds):
-    global _ACTIVE_CHAIN_DEADLINE
-    previous_deadline = _ACTIVE_CHAIN_DEADLINE
-    _ACTIVE_CHAIN_DEADLINE = time.monotonic() + seconds
+    token = _ACTIVE_CHAIN_DEADLINE.set(time.monotonic() + seconds)
+    _LAST_USED_MODEL.set(None)
     try:
         yield
     finally:
-        _ACTIVE_CHAIN_DEADLINE = previous_deadline
+        _ACTIVE_CHAIN_DEADLINE.reset(token)
 
 
 def manager():
@@ -187,8 +188,9 @@ def _hard_request_deadline(seconds):
 def _post(url, **kwargs):
     """Post with both socket inactivity and total wall-clock limits."""
     seconds = config.AI_REQUEST_TIMEOUT_SECONDS
-    if _ACTIVE_CHAIN_DEADLINE is not None:
-        seconds = min(seconds, max(0.05, _ACTIVE_CHAIN_DEADLINE - time.monotonic()))
+    deadline = _ACTIVE_CHAIN_DEADLINE.get()
+    if deadline is not None:
+        seconds = min(seconds, max(0.05, deadline - time.monotonic()))
     kwargs["timeout"] = (min(3, seconds), seconds)
     with _hard_request_deadline(seconds):
         return requests.post(url, **kwargs)
@@ -476,6 +478,7 @@ def _recommend_prepared(context, candidate_count):
     ok, result, model_used = router.route(
         RECOMMEND_SYSTEM_PROMPT, user_text)
     if ok:
+        _LAST_USED_MODEL.set(model_used)
         _log_ai_event(
             "recommend_candidates",
             f"Accepted {model_used} response.", "INFO")
@@ -492,3 +495,7 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
     """Rank candidates while enforcing one deadline across all providers."""
     return manager().recommend_candidates(
         request, candidates, previous_restaurants)
+
+
+def last_used_model():
+    return _LAST_USED_MODEL.get()

@@ -1,12 +1,23 @@
 """Compatibility façade for the object-oriented BRNS Data Manager."""
 
+import os
 from BRNS import config
+from BRNS.classes.search_history_scope import SearchHistoryScope
 from BRNS.classes.data_manager import DataManager
 from BRNS.classes.json_recommendation_store import JsonRecommendationStore
 
 
-_STORE = JsonRecommendationStore(
-    config.RESTAURANT_FILE, config.HISTORY_FILE)
+history_scope = SearchHistoryScope()
+_BACKEND = os.getenv("BITEFINDER_STORAGE", "json").strip().lower()
+if _BACKEND == "json":
+    _STORE = JsonRecommendationStore(config.RESTAURANT_FILE, config.HISTORY_FILE)
+elif _BACKEND == "mongo":
+    from BIS.storage_dependencies import mongo_connection
+    from BRNS.classes.mongo_recommendation_store import MongoRecommendationStore
+    _STORE = MongoRecommendationStore(mongo_connection(), history_scope)
+    _STORE.ensure_indexes()
+else:
+    raise ValueError("BITEFINDER_STORAGE must be json or mongo.")
 _MANAGER = DataManager(_STORE)
 
 
@@ -22,7 +33,7 @@ def _save_json(path, data, *, compact_hours=False):
     return _STORE._save_json(path, data, compact_hours=compact_hours)
 
 
-def load_restaurants(path=config.RESTAURANT_FILE):
+def load_restaurants(path=None):
     return _MANAGER.load_restaurants(path)
 
 
@@ -30,15 +41,15 @@ def _restaurant_record(candidate):
     return _STORE.restaurant_record(candidate)
 
 
-def save_restaurants(candidates, path=config.RESTAURANT_FILE):
+def save_restaurants(candidates, path=None):
     return _MANAGER.save_restaurants(candidates, path)
 
 
-def load_history(path=config.HISTORY_FILE):
+def load_history(path=None):
     return _MANAGER.load_history(path)
 
 
-def save_history(entry, path=config.HISTORY_FILE):
+def save_history(entry, path=None):
     return _MANAGER.save_history(entry, path)
 
 

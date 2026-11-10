@@ -114,6 +114,20 @@ class UMLGeneratorTests(unittest.TestCase):
         self.assertFalse(analysis.edges)
         self.assertTrue(analysis.unresolved)
 
+    def test_lazy_global_imports_are_resolved_without_running_initializers(self):
+        analysis = self.fixture({
+            'BIS/parts.py': 'class Service: pass\n',
+            'BIS/app.py': 'service=None\n'
+                          'def initialize():\n'
+                          '    global service, Service\n'
+                          '    from .parts import Service\n'
+                          '    service=Service()\n'
+                          'def current():\n    initialize()\n    return service\n'
+                          'class App:\n    def __init__(self): self.service=current()\n',
+        })
+        self.assertIn(('BIS.app.App', 'BIS.parts.Service', 'association'),
+                      {(s, t, k) for s, t, k, *_ in analysis.edges})
+
     def test_registered_lambda_factory_and_forwarding_facade(self):
         analysis = self.fixture({
             'BIS/parts.py': 'class Service:\n    def run(self): pass\n'

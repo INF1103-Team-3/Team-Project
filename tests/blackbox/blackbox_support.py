@@ -1162,6 +1162,7 @@ def run_cli(
                         / application
                         / "main.py"
                     ),
+                    *(["--cli"] if application == "BIS" else []),
                 ],
 
                 input=
