@@ -11,6 +11,12 @@ from pathlib import Path
 
 import requests
 
+from BIS.classes.ai_provider_router import AIProviderRouter
+from BIS.classes.ai_provider_factory_registry import AIProviderFactoryRegistry
+from BIS.classes.gemini_ai_provider import GeminiAIProvider
+from BIS.classes.groq_ai_provider import GroqAIProvider
+from BIS.classes.openrouter_ai_provider import OpenRouterAIProvider
+
 from sources.prompts import INTENTS, SYSTEM_PROMPT
 
 from shared.debug_log import debug_log
@@ -260,58 +266,59 @@ def _parse_json_response(content):
 
 def _call_json_with_fallback(payload, config, validator=None):
     """Try the BIS primary model, then BIS's own fallback chain for JSON."""
-    errors = []
-    if config.get("openrouter_model"):
-        try:
-            parsed = _parse_json_response(_call_openrouter(payload, config))
-            return validator(parsed) if validator else parsed
-        except (RuntimeError, ValueError, TypeError, AttributeError) as error:
-            errors.append(type(error).__name__)
-            debug_log("Primary BIS model failed; trying model chain.",
-                      "WARNING", "BIS.ai.fallback")
+    providers = []
+    primary_model = config.get("openrouter_model")
+    has_openrouter_key = bool(
+        config.get("openrouter_api_keys")
+        or config.get("openrouter_api_key")
+    )
+    if primary_model:
+        providers.append(OpenRouterAIProvider(
+            primary_model,
+            lambda request, settings: _call_openrouter(request, settings),
+            primary=True,
+            include_model=False,
+        ))
+    registry = AIProviderFactoryRegistry()
+    registry.register(
+        "gemini",
+        lambda model: GeminiAIProvider(
+            model,
+            lambda request, settings, selected=model: _call_gemini(
+                request, selected, settings),
+        ),
+        enabled=lambda settings: bool(settings.get("gemini_api_key")),
+    )
+    registry.register(
+        "openrouter",
+        lambda model: OpenRouterAIProvider(
+            model,
+            lambda request, settings: _call_openrouter(request, settings),
+        ),
+        enabled=lambda _settings: has_openrouter_key,
+    )
+    registry.register(
+        "groq",
+        lambda model: GroqAIProvider(
+            model,
+            lambda request, settings, selected=model: _call_groq(
+                request, selected, settings),
+        ),
+        enabled=lambda settings: bool(settings.get("groq_api_key")),
+    )
     for entry in MODEL_CHAIN:
         provider, model = entry.get("provider"), entry.get("model")
         if not model or any(char in model for char in "<> "):
             continue
         if (provider == "openrouter"
-                and model == config.get("openrouter_model")
-                and (config.get("openrouter_api_keys")
-                     or config.get("openrouter_api_key"))):
+                and model == primary_model and has_openrouter_key):
             continue
-        if provider == "groq" and not config.get("groq_api_key"):
-            continue
-        if provider == "gemini" and not config.get("gemini_api_key"):
-            continue
-        if provider == "openrouter" and not (
-                config.get("openrouter_api_keys")
-                or config.get("openrouter_api_key")):
-            continue
-        try:
-            if provider == "gemini":
-                content = _call_gemini(payload, model, config)
-            elif provider == "openrouter":
-                content = _call_openrouter(dict(payload, model=model), config)
-            elif provider == "groq":
-                content = _call_groq(payload, model, config)
-            else:
-                continue
-        except RuntimeError:
-            errors.append(f"{provider}/{model}")
-            debug_log(f"Fallback model {provider}/{model} failed.",
-                      "WARNING", "BIS.ai.fallback")
-            continue
-        try:
-            parsed = _parse_json_response(content)
-            parsed = validator(parsed) if validator else parsed
-        except (RuntimeError, ValueError, TypeError, AttributeError):
-            errors.append(f"{provider}/{model} invalid response")
-            continue
-        debug_log(f"Fallback model {provider}/{model} responded.",
-                  "INFO", "BIS.ai.fallback")
-        return parsed
-    raise RuntimeError(
-        "BIS AI models are unavailable. Please retry."
-        if errors else "Configure a BIS AI model before continuing.")
+        configured = registry.create(provider, model, config)
+        if configured is not None:
+            providers.append(configured)
+    return AIProviderRouter(
+        providers, _parse_json_response, debug_log,
+    ).route(payload, config, validator)
 
 
 def has_fallback_provider(config):

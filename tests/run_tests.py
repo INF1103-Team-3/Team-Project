@@ -20,6 +20,7 @@ BLACKBOX_TESTS = (
     TESTS_DIR / "blackbox" / "test_blackbox_bis_to_brns.py",
 )
 INTEGRATION_TEST = TESTS_DIR / "integration" / "test_bis_brns_integration.py"
+OOP_TEST = TESTS_DIR / "oop" / "test_oop_refactor.py"
 DEPLOYMENT_TEST = TESTS_DIR / "deployment" / "smoke.py"
 API_AI_TEST = TESTS_DIR / "API" / "test_ai_keys_and_fallback.py"
 API_GOOGLE_TEST = TESTS_DIR / "API" / "test_google_api.py"
@@ -37,7 +38,10 @@ TEST_GROUPS = {
         BIS_TEST,
         BRNS_TEST,
         BRC_TEST,
+        OOP_TEST,
     ),
+
+    "oop": (OOP_TEST,),
 
     "blackbox": BLACKBOX_TESTS,
 
@@ -53,6 +57,7 @@ TEST_GROUPS = {
         BRC_TEST,
         *BLACKBOX_TESTS,
         INTEGRATION_TEST,
+        OOP_TEST,
         DEPLOYMENT_TEST,
     ),
 }
@@ -80,6 +85,10 @@ GROUP_DESCRIPTIONS = {
     "integration": (
         "Verifies the structured BIS to BRNS request boundary and shared "
         "business rules."
+    ),
+    "oop": (
+        "Tests live BIS/BRNS classes, contracts, AI provider fallback, "
+        "inheritance, polymorphic sorting and temporary JSON persistence."
     ),
     "deployment": (
         "Checks that BiteFinder and its automated tests work inside the "

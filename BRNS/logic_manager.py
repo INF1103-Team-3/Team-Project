@@ -5,6 +5,8 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from BRNS import config
+from BRNS.classes.brns_logic_manager import BRNSLogicManager
+from BRNS.classes.opening_hours_service import OpeningHoursService
 from shared import debug_log as log
 
 
@@ -27,6 +29,8 @@ _HARD_LANGUAGE = re.compile(
     r"\b(?:only|must|required|hard requirement|minimum|at least|"
     r"no less than|exclusively)\b", re.IGNORECASE,
 )
+
+_MANAGER = BRNSLogicManager()
 
 
 def minimum_rating(preferences):
@@ -83,35 +87,7 @@ def confidence_adjusted_rating(rating, review_count):
 
 def sort_results(results, sort_by):
     """Sort matches and alternatives while preserving their classifications."""
-    if sort_by not in {"rating", "distance"}:
-        raise ValueError("Sort results by rating or distance.")
-    mode = results.get("mode")
-
-    def facts(item):
-        restaurant = item.get("restaurant", {})
-        rating = restaurant.get("rating")
-        rating = rating if type(rating) in (int, float) else None
-        reviews = restaurant.get("rating_count")
-        reviews = reviews if type(reviews) is int and reviews >= 0 else 0
-        distance = restaurant.get(f"{mode}_meters")
-        distance = (distance if type(distance) in (int, float)
-                    and distance >= 0 else None)
-        name = str(restaurant.get("name") or "").casefold()
-        return rating, reviews, distance, name
-
-    def key(item):
-        rating, reviews, distance, name = facts(item)
-        if sort_by == "rating":
-            return (rating is None, -(rating or 0), -reviews,
-                    distance is None, distance or 0, name)
-        return (distance is None, distance or 0, rating is None,
-                -(rating or 0), -reviews, name)
-
-    sorted_results = dict(results)
-    sorted_results["matches"] = sorted(results.get("matches", []), key=key)
-    sorted_results["alternatives"] = sorted(
-        results.get("alternatives", []), key=key)
-    return sorted_results
+    return _MANAGER.sort_results(results, sort_by)
 
 
 def normalize_candidate(record, *, offline=False):
@@ -478,164 +454,55 @@ def rank_restaurants(restaurants, request, recommendations=None,
 
 # ---------- Opening-hours decisions (Logic) ----------
 
-SINGAPORE = timezone(timedelta(hours=8))
-DAYS = ("sunday", "monday", "tuesday", "wednesday", "thursday", "friday",
-        "saturday")
-WEEK_MINUTES = 7 * 24 * 60
+_OPENING_HOURS = OpeningHoursService()
+SINGAPORE = _OPENING_HOURS.SINGAPORE
+DAYS = _OPENING_HOURS.DAYS
+WEEK_MINUTES = _OPENING_HOURS.WEEK_MINUTES
 
 
 def _minute(point):
-    if not isinstance(point, dict):
-        return None
-    day, hour, minute = point.get("day"), point.get("hour", 0), point.get("minute", 0)
-    if (type(day) is not int or not 0 <= day < 7
-            or type(hour) is not int or not 0 <= hour < 24
-            or type(minute) is not int or not 0 <= minute < 60):
-        return None
-    return day * 1440 + hour * 60 + minute
+    return _OPENING_HOURS._minute(point)
 
 
 def _intervals(hours):
-    if not isinstance(hours, dict):
-        return []
-    intervals = []
-    for period in hours.get("periods") or []:
-        if not isinstance(period, dict):
-            continue
-        start = _minute(period.get("open"))
-        if start is None:
-            continue
-        if not period.get("close"):
-            return [(0, WEEK_MINUTES)]
-        end = _minute(period["close"])
-        if end is None:
-            continue
-        if end <= start:
-            end += WEEK_MINUTES
-        intervals.append((start, end))
-    return intervals
+    return _OPENING_HOURS._intervals(hours)
 
 
 def _local_now(now=None):
-    return now.astimezone(SINGAPORE) if now is not None else datetime.now(SINGAPORE)
+    return _OPENING_HOURS._local_now(now)
 
 
 def _today_index(now):
-    return (now.weekday() + 1) % 7
+    return _OPENING_HOURS._today_index(now)
 
 
 def _fmt(minute):
-    return f"{minute // 60:02d}:{minute % 60:02d}"
+    return _OPENING_HOURS._fmt(minute)
 
 
 def open_now_from_weekly(hours, now=None):
     """Check saved regular opening hours against Singapore local time."""
-    if not isinstance(hours, dict):
-        return False
-    now = _local_now(now)
-    periods = hours.get(DAYS[_today_index(now)])
-    if not isinstance(periods, list):
-        return False
-    if len(periods) == 2 and all(isinstance(part, str) for part in periods):
-        periods = [periods]
-    minute = now.hour * 60 + now.minute
-    for period in periods:
-        if (not isinstance(period, list) or len(period) != 2
-                or any(not isinstance(part, str) or len(part) != 4
-                       or not part.isdigit() for part in period)):
-            continue
-        start = int(period[0][:2]) * 60 + int(period[0][2:])
-        end = int(period[1][:2]) * 60 + int(period[1][2:])
-        if start <= minute < end or (end == 1439 and minute == 1439):
-            return True
-    return False
+    return _OPENING_HOURS.open_now_from_weekly(hours, now)
 
 
 def today_hours_from_weekly(hours, now=None):
     """Describe today's saved hours for the offline result card."""
-    if not isinstance(hours, dict):
-        return "Hours unavailable"
-    periods = hours.get(DAYS[_today_index(_local_now(now))])
-    if periods is None:
-        return "Hours unavailable"
-    if not periods:
-        return "Closed today"
-    if len(periods) == 2 and all(isinstance(part, str) for part in periods):
-        periods = [periods]
-    if periods == [["0000", "2359"]]:
-        return "Open 24 hours"
-    return ", ".join(
-        f"{pair[0][:2]}:{pair[0][2:]}–{pair[1][:2]}:{pair[1][2:]}"
-        for pair in periods
-        if isinstance(pair, list) and len(pair) == 2
-        and all(isinstance(part, str) and len(part) == 4 for part in pair)
-    ) or "Hours unavailable"
+    return _OPENING_HOURS.today_hours_from_weekly(hours, now)
 
 
 def weekly_opening_hours(hours):
-    """Convert regular Google periods into a complete Monday–Sunday week.
-
-    A single daily interval is [start, end]. Split shifts use a list of such
-    pairs, and an empty list means Google listed that day as closed.
-    """
-    if not isinstance(hours, dict) or "periods" not in hours:
-        return None
-    week = {}
-    for day_name in (*DAYS[1:], DAYS[0]):
-        day_index = DAYS.index(day_name)
-        day_start = day_index * 1440
-        segments = set()
-        for start, end in _intervals(hours):
-            for shift in (-WEEK_MINUTES, 0, WEEK_MINUTES):
-                left = max(day_start, start + shift)
-                right = min(day_start + 1440, end + shift)
-                if left < right:
-                    local_start = left - day_start
-                    local_end = right - day_start
-                    segments.add((f"{local_start // 60:02d}{local_start % 60:02d}",
-                                  "2359" if local_end == 1440 else
-                                  f"{local_end // 60:02d}{local_end % 60:02d}"))
-        intervals = [list(pair) for pair in sorted(segments)]
-        week[day_name] = intervals[0] if len(intervals) == 1 else intervals
-    return week
+    """Convert regular Google periods into a Monday–Sunday week."""
+    return _OPENING_HOURS.weekly_opening_hours(hours)
 
 
 def today_hours(hours, now=None):
-    """Display today's live hours, including overnight and 24-hour periods."""
-    now = _local_now(now)
-    day_start = _today_index(now) * 1440
-    segments = []
-    for start, end in _intervals(hours):
-        for shift in (-WEEK_MINUTES, 0, WEEK_MINUTES):
-            left = max(day_start, start + shift)
-            right = min(day_start + 1440, end + shift)
-            if left < right:
-                segments.append((left - day_start, right - day_start))
-    segments = sorted(set(segments))
-    if segments == [(0, 1440)]:
-        return "Open 24 hours"
-    if not segments:
-        if isinstance(hours, dict) and hours.get("periods") == []:
-            return "Closed today"
-        return "Hours unavailable"
-    return ", ".join(
-        f"{_fmt(start)}–{_fmt(end) if end < 1440 else '24:00'}"
-        for start, end in segments)
+    """Display today's live hours, including overnight periods."""
+    return _OPENING_HOURS.today_hours(hours, now)
 
 
 def open_now(hours, now=None):
-    """Prefer Google's special-hours-aware flag; otherwise check its periods."""
-    if not isinstance(hours, dict):
-        return None
-    if type(hours.get("openNow")) is bool:
-        return hours["openNow"]
-    intervals = _intervals(hours)
-    if not intervals:
-        return False if "periods" in hours else None
-    now = _local_now(now)
-    minute = _today_index(now) * 1440 + now.hour * 60 + now.minute
-    return any(start <= minute < end or start <= minute + WEEK_MINUTES < end
-               for start, end in intervals)
+    """Prefer Google's flag; otherwise evaluate its regular periods."""
+    return _OPENING_HOURS.open_now(hours, now)
 
 
 def evaluate(record):

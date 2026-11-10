@@ -1,5 +1,6 @@
 """All terminal input/output for BiteFinder profiles and search setup."""
 
+import os
 import re
 import sys
 import time
@@ -15,6 +16,8 @@ from support.email_verification import challenge as email_challenge
 from support.email_verification import service as email_service
 import logic_manager
 from shared import terminal_ui as ui
+from shared import geocode_cache
+from BIS.classes.location_gateway import LocationGateway
 from sources.profile_schema import (
     CUISINES, CUISINE_FIELDS, OTHER_PREFERENCES, PREFERENCE_FIELDS,
     clean_text, normalize_email, normalize_username, validate_updates,
@@ -22,6 +25,14 @@ from sources.profile_schema import (
 )
 
 _color_handler = None
+_LOCATION_GATEWAY = LocationGateway(
+    logic_manager,
+    geocode_cache,
+    os.getenv(
+        "BITEFINDER_GEOCODE_URL",
+        "https://maps.googleapis.com/maps/api/geocode/json",
+    ),
+)
 
 
 def set_color_handler(handler):
@@ -277,7 +288,7 @@ def ask_search_location(config):
             continue
         try:
             raw = clean_text(raw, 200)
-            cached = data_manager.lookup_cached_location(raw)
+            cached = _LOCATION_GATEWAY.lookup_cached(raw)
             query = raw
             if not cached and not logic_manager.is_direct_location_input(raw):
                 try:
@@ -285,9 +296,9 @@ def ask_search_location(config):
                 except RuntimeError:
                     # Google can geocode the original landmark when the AI is unavailable.
                     query = raw
-            location = data_manager.resolve_location(
+            location = _LOCATION_GATEWAY.resolve(
                 query, config.get("google_maps_api_key", ""))
-            data_manager.remember_location((raw, query), location)
+            _LOCATION_GATEWAY.remember((raw, query), location)
         except (ValueError, RuntimeError, OSError) as error:
             display_message(error)
             continue

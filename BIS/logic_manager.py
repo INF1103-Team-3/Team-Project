@@ -11,6 +11,7 @@ from sources.profile_schema import (
     PREFERENCE_FIELDS, clean_text, validate_preferences, validate_updates,
     validate_value, validate_travel_minutes,
 )
+from BIS.classes.bis_logic_manager import BISLogicManager
 
 COORDINATES = re.compile(
     r"\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)\s*"
@@ -24,6 +25,8 @@ SEARCH_FIELDS = {
 
 
 SEARCH_CLARIFICATION_PREFIX = "SEARCH_CLARIFICATION: "
+
+_MANAGER = BISLogicManager()
 
 
 def search_clarification_error(message):
@@ -58,24 +61,7 @@ def validate_special_request_text(text):
 
 def validate_search_request(request, ai_response=None):
     """Validate AI interpretation while protecting confirmed search choices."""
-    confirmed = _validate_search_fields(request)
-    if ai_response is None:
-        return confirmed
-    try:
-        proposed = _validate_search_fields(ai_response)
-    except ValueError as error:
-        raise ValueError(
-            "The AI returned an invalid search request. Please retry.") from error
-    protected = SEARCH_FIELDS - {OTHER_PREFERENCES}
-    if any(proposed[field] != confirmed[field] for field in protected):
-        raise search_clarification_error(
-            "The AI interpretation conflicts with a confirmed choice. "
-            "Please clarify what you want today.")
-    if not set(confirmed[OTHER_PREFERENCES]).issubset(
-            proposed[OTHER_PREFERENCES]):
-        raise search_clarification_error(
-            "The AI removed a selected preference. Please clarify your request.")
-    return proposed
+    return _MANAGER.validate_search_request(request, ai_response)
 
 
 def _validate_search_fields(request):
