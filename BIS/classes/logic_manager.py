@@ -36,6 +36,51 @@ class LogicManager(BISLogicManagerInterface):
         return self._search_validator.validate(request, ai_response)
 
     @staticmethod
+    def apply_search_constraints(text, constraints):
+        """Encode confirmed constraints without changing the original length limit."""
+        additions = []
+        cuisine = constraints["hard_cuisine"]
+        if cuisine and not (
+                re.search(
+                    rf"\bonly\s+{re.escape(cuisine)}\b",
+                    text, re.IGNORECASE)
+                or re.search(
+                    rf"\b{re.escape(cuisine)}\s+only\b",
+                    text, re.IGNORECASE)
+                or re.search(
+                    rf"\b(?:must be|exclusively)\s+"
+                    rf"{re.escape(cuisine)}\b",
+                    text, re.IGNORECASE)):
+            additions.append(f"only {cuisine} cuisine")
+        if (constraints["rating_is_minimum"]
+                and not re.search(
+                    r"\b(?:minimum|at least|no less than)\b",
+                    text, re.IGNORECASE)):
+            additions.append(f"at least {constraints['rating']:g} stars")
+        if (not additions and not cuisine
+                and not constraints["rating_is_minimum"]
+                and not re.search(
+                    r"\b(?:only|must|required|minimum|"
+                    r"at least|no less than|exclusively)\b",
+                    text, re.IGNORECASE)):
+            additions.append("hard requirement")
+        for addition in additions:
+            if (addition not in text.casefold()
+                    and len(text) + len(addition) + 2 <= 100):
+                text += ", " + addition
+        return text
+
+    def preserve_search_wish(self, confirmed, request, today_request,
+                             field="other_preferences"):
+        """Retain an explicit wish omitted from an otherwise valid AI proposal."""
+        if (today_request and not confirmed[field]
+                and request[field] == confirmed[field]):
+            request = dict(request)
+            request[field] = confirmed[field] + [today_request]
+            request = self.validate_search_request(request)
+        return request
+
+    @staticmethod
     def next_field(preferences):
         for field in PREFERENCE_FIELDS:
             if preferences[field] is None:

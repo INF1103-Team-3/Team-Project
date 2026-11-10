@@ -1,6 +1,7 @@
 """BRC workflow for independently verifying restaurant records."""
 
 from BRC.classes.base_brc_workflow import BaseBRCWorkflow
+from BRC.classes.outlet_matching_workflow import OutletMatchingWorkflow
 
 
 class CheckRestaurantsWorkflow(BaseBRCWorkflow):
@@ -17,14 +18,15 @@ class CheckRestaurantsWorkflow(BaseBRCWorkflow):
         self._exact = [None] * len(records)
 
     def announce(self, data, logic, report):
+        self._report = report
         report(
             f"IO Manager: accepted {len(self._records)} restaurant(s).")
         self._exact = logic.exact_matches(
             self._records, self._candidates)
 
     def ask_ai(self, ai):
-        return ai.match_outlets(
-            self._records, self._candidates, self._exact)
+        return OutletMatchingWorkflow(self._report).run(
+            self._records, self._candidates, self._exact, ai)
 
     def apply_rules(self, logic, chosen_certificates):
         return logic.check_restaurants(

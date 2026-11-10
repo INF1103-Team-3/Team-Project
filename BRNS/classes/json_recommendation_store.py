@@ -1,6 +1,8 @@
 """JSON-backed restaurant facts and search-history persistence."""
 
 import re
+import json
+from pathlib import Path
 
 from BRNS.classes.base_json_store import BaseJsonStore
 from BRNS.classes.record_store_interface import RecordStoreInterface
@@ -16,6 +18,14 @@ class JsonRecommendationStore(BaseJsonStore, RecordStoreInterface):
     def load_restaurants(self, path=None):
         data = self._load_json(path or self._restaurant_path)
         return data if isinstance(data, list) else []
+
+    def load_candidate_records(self, path=None):
+        """Read raw candidate records with the legacy silent empty fallback."""
+        try:
+            data = json.loads(Path(self._restaurant_path if path is None else path).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        return [row for row in data if isinstance(row, dict) and row.get("name")] if isinstance(data, list) else []
 
     @staticmethod
     def restaurant_record(candidate):

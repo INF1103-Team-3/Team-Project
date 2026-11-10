@@ -11,5 +11,9 @@ class BRNSAIManagerInterface(ABC):
         """Return whether an AI provider can be used."""
 
     @abstractmethod
+    def recommend_prepared(self, context, candidate_count):
+        """Request recommendations from prepared facts without evaluating policy."""
+
+    @abstractmethod
     def recommend_candidates(self, *args, **kwargs):
         """Return schema-validated AI recommendation ordering."""

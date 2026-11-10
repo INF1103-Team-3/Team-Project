@@ -10,6 +10,7 @@ from pathlib import Path
 from BRNS import config, logic_manager
 from BRNS.classes.google_route_gateway import GoogleRouteGateway
 from BRNS.classes.io_manager import IOManager
+from BRNS.classes.restaurant_enricher import RestaurantEnricher
 from shared import geocode_cache
 from shared import debug_log as log
 from shared import terminal_ui as ui
@@ -24,14 +25,19 @@ SEARCH_FIELDS = {
 }
 ORIGIN_FIELDS = {"query", "label", "latitude", "longitude"}
 _MANAGER = None
+_ENRICHER = RestaurantEnricher()
 
 
 def manager():
     """Return the configured BRNS IO Manager."""
     global _MANAGER
     if _MANAGER is None:
+        from BRNS import data_manager
+        from BRNS.classes.candidate_search import CandidateSearch
+        search = CandidateSearch(data_manager.manager(), logic_manager.manager(),
+                                 sys.modules[__name__], log)
         _MANAGER = IOManager(
-            sys.modules[__name__], logic_manager.manager(), log)
+            sys.modules[__name__], logic_manager.manager(), log, search)
     return _MANAGER
 
 
@@ -313,39 +319,10 @@ def show_route(name, route, link, mode, traffic_aware=False):
 # ---------- Google Places, geocoding, and routing (IO) ----------
 
 def load_saved_restaurants(path=config.RESTAURANT_FILE):
-    """Read only the current restaurant JSON format for search enrichment."""
-    try:
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return []
-    if not isinstance(data, list):
-        return []
-    restaurants = []
-    for row in data:
-        if not isinstance(row, dict) or not row.get("name"):
-            continue
-        candidate = dict(row)
-        cuisine = row.get("cuisine")
-        candidate["cuisines"] = [cuisine] if cuisine in CUISINES else []
-        candidate["dietary_requirements"] = [
-            item for item in row.get("dietary") or []
-            if item in ("halal", "vegetarian")]
-        candidate["price_start"] = row.get("avg_price_low_sgd")
-        candidate["price_end"] = row.get("avg_price_high_sgd")
-        try:
-            candidate["rating"] = float(row["g_rating"])
-        except (KeyError, TypeError, ValueError):
-            candidate["rating"] = None
-        try:
-            candidate["rating_count"] = int(row["g_no_reviews"])
-        except (KeyError, TypeError, ValueError):
-            candidate["rating_count"] = None
-        candidate["halal_hint"] = row.get("halal_certification") == "unofficial"
-        candidate["halal_certification"] = row.get("halal_certification")
-        candidate["today_hours"] = logic_manager.today_hours_from_weekly(
-            row.get("opening_hours"))
-        restaurants.append(candidate)
-    return restaurants
+    """Preserve the saved-enrichment API through Data and Logic owners."""
+    from BRNS import data_manager
+    return logic_manager.manager().saved_candidates(
+        data_manager.manager().load_candidate_records(path))
 
 
 def _log_api_error(context, err):
@@ -362,13 +339,11 @@ def _log_api_error(context, err):
 
 # ---------- price helpers ----------
 
-BAND_THRESHOLDS = (8.0, 15.0, 30.0)  # <=8 $, <=15 $$, <=30 $$$, else $$$$
+BAND_THRESHOLDS = RestaurantEnricher.BAND_THRESHOLDS  # <=8 $, <=15 $$, <=30 $$$, else $$$$
 
 def price_to_band(avg_price):
-    for band, upper in zip(("inexpensive", "moderate", "expensive"), BAND_THRESHOLDS):
-        if avg_price <= upper:
-            return band
-    return "very_expensive"
+    return _ENRICHER.price_to_band(avg_price)
+
 
 
 def _money_to_float(money):
@@ -397,11 +372,8 @@ def _fmt_price_range(pr):
 
 
 def _band_from_range(start, end):
-    """Derive a budget band from a price range (midpoint). None if no numbers."""
-    vals = [v for v in (start, end) if v is not None]
-    if not vals:
-        return None
-    return price_to_band(sum(vals) / len(vals))
+    return _ENRICHER._band_from_range(start, end)
+
 
 
 # ---------- Google Geocoding API (classic, with permanent cache) ----------
@@ -440,23 +412,12 @@ def geocode_location(address_text):
 
 # ---------- Google Places API (New): nearby + profile text search ----------
 
-_CUISINE_MAP = {
-    "cafe": "cafe", "fast_food_restaurant": "fast food", "bakery": "bakery",
-    "american_restaurant": "western", "pizza_restaurant": "western",
-    "hamburger_restaurant": "western", "indian_restaurant": "indian",
-    "malaysian_restaurant": "malaysian", "indonesian_restaurant": "indonesian",
-}
+_CUISINE_MAP = RestaurantEnricher.CUISINE_MAP
 
 
 def _cuisine_from_types(types):
-    for t in types or []:
-        if t in ("halal_restaurant", "vegetarian_restaurant", "vegan_restaurant"):
-            continue
-        if t in _CUISINE_MAP:
-            return _CUISINE_MAP[t]
-        if t.endswith("_restaurant"):
-            return t[: -len("_restaurant")]
-    return "unknown"
+    return _ENRICHER._cuisine_from_types(types)
+
 
 def _weekday_index(name):
     days = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
@@ -646,93 +607,19 @@ def fetch_by_profile_text(origin, req):
 # ---------- enrichment: Places results x saved restaurants ----------
 
 def _norm(name):
-    return re.sub(r"[^a-z0-9 ]", " ", (name or "").lower()).strip()
+    return _ENRICHER._norm(name)
+
 
 
 def _match_saved_restaurant(place, saved_restaurants):
-    p = _norm(place["name"])
-    for entry in saved_restaurants:
-        e = _norm(entry.get("name", ""))
-        if e != p:
-            continue
-        address = _norm(entry.get("address", ""))
-        if not address or address != _norm(place.get("address", "")):
-            continue
-        return entry
-    return None
+    return _ENRICHER._match_saved_restaurant(place, saved_restaurants)
+
 
 
 def enrich_place(place, saved_restaurants):
-    """Merge saved fields into a Places result. Missing data stays
-    None/'unknown' — never invented (business rule)."""
-    entry = _match_saved_restaurant(place, saved_restaurants)
-    live_fields = {
-        "google_place_id": place.get("google_place_id"),
-        "postal_code": place.get("postal_code"),
-        "number": place.get("number"),
-        "rating_count": place.get("rating_count"),
-        "serves_vegetarian_food": place.get("serves_vegetarian_food") is True,
-        "halal_hint": place.get("halal_hint") is True,
-        "wheelchair_accessible": place.get("wheelchair_accessible"),
-        "open_now": place.get("open_now"),
-        "today_hours": place.get("today_hours"),
-        "opening_hours": place.get("opening_hours"),
-    }
-    if entry:
-        avg_price = entry.get("avg_price")
-        saved_cuisines = [cuisine for cuisine in (
-            entry.get("cuisines") or
-            ([entry["cuisine"]] if entry.get("cuisine") else []))
-            if cuisine in CUISINES]
-        saved_dietary = (entry.get("dietary_requirements")
-                         or entry.get("dietary") or [])
-        band = (price_to_band(avg_price) if avg_price is not None
-                else (place.get("price_level")
-                      or _band_from_range(place.get("price_start"), place.get("price_end"))))
-        return {**live_fields,
-            "name": entry.get("name", place["name"]),
-            "address": place["address"],
-            "lat": place["lat"], "lng": place["lng"],
-            "cuisines": saved_cuisines or [_cuisine_from_types(place["types"])],
-            "dietary_requirements": sorted(set(
-                saved_dietary
-                + (["vegetarian"] if place.get("serves_vegetarian_food") else []))),
-            "avg_price": avg_price,
-            "price_band": band,
-            "price_start": place.get("price_start"),
-            "price_end": place.get("price_end"),
-            "price_range": place.get("price_range"),
-            "rating": place.get("rating"),
-            "open_hours": entry.get("open_hours"),
-            "spicy_options": entry.get("spicy_options"),
-            "certification": entry.get("certification", "unknown"),
-            "walk_minutes": None, "walk_meters": None,
-            "drive_minutes": None, "drive_meters": None,
-            "transit_minutes": None, "transit_meters": None,
-            "source": "saved + google places",
-        }
-    return {**live_fields,
-        "name": place["name"],
-        "address": place["address"],
-        "lat": place["lat"], "lng": place["lng"],
-        "cuisines": [_cuisine_from_types(place["types"])],
-        "dietary_requirements": (
-            ["vegetarian"] if place.get("serves_vegetarian_food") else []),
-        "avg_price": None,
-        "price_band": (place.get("price_level")
-                       or _band_from_range(place.get("price_start"), place.get("price_end"))),
-        "price_start": place.get("price_start"),
-        "price_end": place.get("price_end"),
-        "price_range": place.get("price_range"),
-        "rating": place.get("rating"),
-        "open_hours": None,
-        "spicy_options": None,
-        "certification": "unknown",
-        "walk_minutes": None, "walk_meters": None,
-        "drive_minutes": None, "drive_meters": None,
-        "transit_minutes": None, "transit_meters": None,
-        "source": "google places",
-    }
+    """Compatibility entry point for the domain enrichment policy."""
+    return logic_manager.manager().enrich_place(place, saved_restaurants)
+
 
 
 # ---------- Google Routes API ----------

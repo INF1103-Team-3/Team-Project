@@ -49,14 +49,9 @@ class BRNSRecommendationWorkflow:
                 )
             self._io.show_ai_ranking_start(
                 len(candidates), self._config.AI_CHAIN_TIMEOUT_SECONDS)
-            recommendations = (
-                self._ai.recommend_candidates(
-                    request, candidates,
-                    previous_restaurants=previous_restaurants,
-                )
-                if previous_restaurants
-                else self._ai.recommend_candidates(request, candidates)
-            )
+            context = self._logic.recommendation_context(
+                request, candidates, previous_restaurants)
+            recommendations = self._ai.recommend_prepared(context, len(candidates))
             if recommendations is None:
                 raise RuntimeError(
                     "BRNS AI could not recommend restaurants. Please retry.")

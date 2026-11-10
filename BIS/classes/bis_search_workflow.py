@@ -106,15 +106,8 @@ class BISSearchWorkflow:
             try:
                 request = self._logic.validate_search_request(
                     confirmed, interpreted)
-                if (today_request
-                        and not confirmed[self._other_preferences]
-                        and request[self._other_preferences]
-                        == confirmed[self._other_preferences]):
-                    request = dict(request)
-                    request[self._other_preferences] = (
-                        confirmed[self._other_preferences]
-                        + [today_request])
-                    request = self._logic.validate_search_request(request)
+                request = self._logic.preserve_search_wish(
+                    confirmed, request, today_request, self._other_preferences)
                 self._log.debug_log(
                     "AI proposal validated.", "INFO",
                     "BIS.logic.validate_search_request")

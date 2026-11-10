@@ -75,7 +75,7 @@ def manager():
     global _MANAGER
     if _MANAGER is None:
         _MANAGER = AIManager(
-            config, _recommend_candidates, _recommendation_deadline)
+            config, _recommend_candidates, _recommendation_deadline, _recommend_prepared)
     return _MANAGER
 
 
@@ -448,60 +448,27 @@ def _validate_recommendation_output(reply, candidate_count):
 
 
 def _recommend_candidates(request, candidates, previous_restaurants=()):
-    """Return a complete AI recommendation, or None if every model fails."""
+    """Legacy request API; prepare domain facts outside the AI implementation."""
     if not candidates:
         return None
+    context = logic_manager.manager().recommendation_context(
+        request, candidates, previous_restaurants)
+    return _recommend_prepared(context, len(candidates))
+
+
+def _recommend_prepared(context, candidate_count):
+    """Send prepared facts and validate model output without evaluating rules."""
     _log_ai_event("recommend_candidates",
-                  f"Preparing {len(candidates)} candidate summaries.", "INFO")
-    mode = request["mode"]
-    rating_floor = logic_manager.minimum_rating(request["other_preferences"])
-    rating_preference = logic_manager.preferred_rating(
-        request["other_preferences"])
-    hard_cuisines = logic_manager.hard_required_cuisines(
-        request["other_preferences"])
-    hard_preferences = logic_manager.has_hard_preferences(
-        request["other_preferences"])
-    facts = []
-    for index, candidate in enumerate(candidates):
-        facts.append({
-            "id": index,
-            "name": candidate.get("name"),
-            "cuisines": candidate.get("cuisines"),
-            "dietary_requirements": candidate.get("dietary_requirements"),
-            "halal_hint_unofficial": bool(candidate.get("halal_hint")),
-            "avg_price": candidate.get("avg_price"),
-            "price_start": candidate.get("price_start"),
-            "rating": candidate.get("rating"),
-            "review_count": candidate.get("rating_count"),
-            "confidence_adjusted_rating": logic_manager.confidence_adjusted_rating(
-                candidate.get("rating"), candidate.get("rating_count")),
-            "google_search_rank": candidate.get("google_search_rank"),
-            "spicy_options": candidate.get("spicy_options"),
-            "travel_meters": candidate.get(f"{mode}_meters"),
-            "travel_minutes": candidate.get(f"{mode}_minutes"),
-            "travel_source": candidate.get(f"{mode}_source"),
-        })
-    _log_ai_event(
-        "recommend_candidates",
-        "Candidate facts sent to model: "
-        + json.dumps(facts, ensure_ascii=False, separators=(",", ":")),
-        "DEBUG")
-    prior_names = list(dict.fromkeys(
-        restaurant.get("name") for restaurant in previous_restaurants
-        if isinstance(restaurant, dict)
-        and isinstance(restaurant.get("name"), str)))
-    user_text = json.dumps({"request": request, "minimum_rating": rating_floor,
-                            "preferred_rating": rating_preference,
-                            "hard_cuisines": hard_cuisines,
-                            "hard_preferences": hard_preferences,
-                            "candidates": facts,
-                            "previous_restaurants": prior_names},
-                           separators=(",", ":"))
+                  f"Preparing {candidate_count} candidate summaries.", "INFO")
+    _log_ai_event("recommend_candidates", "Candidate facts sent to model: "
+                  + json.dumps(context["candidates"], ensure_ascii=False,
+                               separators=(",", ":")), "DEBUG")
+    user_text = json.dumps(context, separators=(",", ":"))
     router = AIProviderRouter(
         _provider_objects(configured_only=True),
         parse_json_reply,
         lambda reply: _validate_recommendation_output(
-            reply, len(candidates)),
+            reply, candidate_count),
         _safe_failure,
         _log_ai_event,
         time.sleep,

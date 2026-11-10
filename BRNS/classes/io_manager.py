@@ -30,7 +30,8 @@ class IOManager(
         NavigationIOInterface):
     """Own BRNS input validation, candidate IO orchestration, and output."""
 
-    def __init__(self, helpers, logic_manager, logger):
+    def __init__(self, helpers, logic_manager, logger, candidate_search):
+        self._candidate_search = candidate_search
         self._helpers = helpers
         self._logic = logic_manager
         self._log = logger
@@ -118,25 +119,7 @@ class IOManager(
         }
 
     def find_candidates(self, request):
-        origin = (
-            request["origin"]["latitude"],
-            request["origin"]["longitude"],
-        )
-        lookup = dict(request)
-        preferences = list(request["other_preferences"])
-        preferences.sort(
-            key=lambda item: not self._logic.has_hard_preferences([item]))
-        lookup["free_text"] = " ".join(preferences)
-        saved_restaurants = self._helpers.load_saved_restaurants()
-        self._log.debug_log(
-            f"Loaded {len(saved_restaurants)} saved restaurants.",
-            "DEBUG", "BRNS.io_manager.find_candidates")
-        candidates = self._helpers.build_candidates(
-            origin, lookup, saved_restaurants)
-        self._log.debug_log(
-            f"Candidate builder returned {len(candidates)} records.",
-            "DEBUG", "BRNS.io_manager.find_candidates")
-        return candidates
+        return self._candidate_search.find(request)
 
     def show_ai_ranking_start(self, count, timeout):
         return self._helpers.show_ai_ranking_start(count, timeout)

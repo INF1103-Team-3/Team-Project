@@ -1,6 +1,7 @@
 """BIS IO Manager: terminal interaction and input workflow ownership."""
 
 from BIS.classes.bis_search_io_interface import BISSearchIOInterface
+from BIS.classes.search_wish_collector import SearchWishCollector
 from BIS.classes.bis_session_io_interface import BISSessionIOInterface
 from BIS.sources.prompts import QUESTIONS
 from BIS.sources.profile_schema import (
@@ -18,6 +19,11 @@ class IOManager(BISSessionIOInterface, BISSearchIOInterface):
         self._helpers = helpers
         self._review_prompt = prompt_reviewer
         self._logic = logic_manager
+        self._wish_collector = SearchWishCollector(
+            helpers, helpers.ai_manager, helpers.logic_manager, helpers.ui)
+
+    def ask_search_wishes(self, profile, config):
+        return self._wish_collector.collect(profile, config)
 
     def collect_search(self, user, config):
         profile = user["preferences"]

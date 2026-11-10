@@ -7,6 +7,10 @@ class BRNSDataManagerInterface(ABC):
     """Can persist restaurant facts and recommendation history."""
 
     @abstractmethod
+    def load_candidate_records(self, path=None):
+        """Read raw saved restaurant records with missing/corrupt fallback."""
+
+    @abstractmethod
     def save_restaurants(self, candidates):
         """Persist normalized restaurant records."""
 

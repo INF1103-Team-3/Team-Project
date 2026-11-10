@@ -242,3 +242,7 @@ def route(record):
     """Route an evaluated profile to completion or its next required field."""
     field = record.get("next_field") if isinstance(record, dict) else None
     return "profile_complete" if field is None else field
+
+
+def apply_search_constraints(text, constraints):
+    return _MANAGER.apply_search_constraints(text, constraints)
