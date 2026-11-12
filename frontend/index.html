@@ -48,7 +48,7 @@
       <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
         <button id="navChatFocusBtn" type="button" title="Ask BiteFinder AI Chatbot"
           class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-500/15 hover:bg-brand-100 dark:hover:bg-brand-500/25 rounded-lg transition-colors border border-brand-200 dark:border-brand-500/30">
-          <i data-lucide="message-square-sparkles" class="w-4 h-4 text-brand-600 dark:text-brand-400"></i>
+          <i data-lucide="sparkles" class="w-4 h-4 text-brand-600 dark:text-brand-400"></i>
           <span class="hidden sm:inline">AI Chat</span>
         </button>
 
@@ -98,10 +98,10 @@
   <!-- Main Container -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 w-full">
 
-    <!-- Left Column: BIS Chatbot & Search Filters (Sticky on Desktop) -->
+    <!-- Left Column: BIS Chatbot & Search Filters (Sticky & Scrollable on Desktop) -->
     <div id="leftPanelColumn" class="lg:col-span-5 flex flex-col gap-6 lg:sticky lg:top-20 lg:self-start">
       <div
-        class="bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors duration-200">
+        class="bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors duration-200 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto overscroll-contain">
         <!-- Mode Switcher -->
         <div class="flex items-center justify-between gap-2 pb-4 mb-4 border-b border-slate-100 dark:border-slate-800">
           <div class="grid grid-cols-2 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-full">
@@ -187,7 +187,7 @@
 
           <!-- Conversation History -->
           <div id="chatMessages"
-            class="h-[460px] sm:h-[520px] overflow-y-auto space-y-3 pr-1 scroll-smooth rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-3">
+            class="h-[380px] sm:h-[420px] xl:h-[460px] overflow-y-auto space-y-3 pr-1 scroll-smooth rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-3">
           </div>
 
           <!-- Chat Composer -->
