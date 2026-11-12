@@ -72,6 +72,8 @@ class BISChatbotService:
             return ""
         if text.isdigit():
             return f"Singapore {text}"
+        if text.islower() and any(ch.isalpha() for ch in text):
+            text = re.sub(r"\bmrt\b", "MRT", text.title(), flags=re.IGNORECASE)
         return text
 
     @classmethod
@@ -324,6 +326,45 @@ class BISChatbotService:
                 items.append(token)
         return items
 
+    _LOCATION_NOISE_WORDS = frozenset({
+        "etc", "more", "others", "other", "location", "locations", "place", "places",
+        "area", "areas", "spot", "spots", "another", "second", "third", "2nd", "3rd",
+        "another location", "second location", "none", "any", "nothing", "so on",
+    })
+
+    @classmethod
+    def _extract_location_list(cls, raw_text, reject_non_location=False):
+        """Extract one or more Singapore place/postal strings from free-form phrasing."""
+        text = str(raw_text or "").strip()
+        if not text:
+            return []
+        text = re.sub(
+            r"^(?:(?:a|an|another|extra|new|more|my|the|next|additional|1st|2nd|3rd|4th|first|second|third|fourth)\s+)*"
+            r"(?:starting\s+)?(?:locations?|places?|areas?|spots?|points?|addresses?)"
+            r"(?:\s*[:,-]\s*|\s+(?:is|to|as|at|near|in)\s+|\s+|$)",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        ).strip(" ,:;-")
+        if not text:
+            return []
+        non_loc = (
+            set(CUISINES) | set(_COMMON_CUSTOM_CUISINES) | set(DIETARY_CHOICES) | _STOP_WORDS_NOT_CUISINES
+            if reject_non_location else set(DIETARY_CHOICES)
+        )
+        items = []
+        for chunk in re.split(r"[,/&;]|\band\b", text, flags=re.IGNORECASE):
+            token = re.sub(r"^(?:and|or|also|to|at|near|around|in)\s+", "", chunk.strip(" .,!?;:-"), flags=re.IGNORECASE)
+            token = re.sub(r"\s+", " ", token.strip(" .,!?;:-"))
+            token_cf = token.casefold()
+            if not token or token_cf in cls._LOCATION_NOISE_WORDS or token_cf in non_loc:
+                continue
+            if len(token) < 2 or len(token) > 60:
+                continue
+            if token_cf not in {x.casefold() for x in items}:
+                items.append(token)
+        return items
+
     @classmethod
     def _parse_contextual_answer(cls, message, awaiting_field, current=None):
         """Parse concise direct answers when the chatbot just asked a targeted question."""
@@ -360,23 +401,21 @@ class BISChatbotService:
                 updates["max_distance_km"] = float(km_match.group(1))
             elif mins_match:
                 updates["max_travel_minutes"] = float(mins_match.group(1))
-        elif awaiting_field == "location":
+        elif awaiting_field in ("location", "add_location"):
+            target_action = "add" if awaiting_field == "add_location" else "replace"
             between = re.search(
                 r"\b(?:between\s+)?([A-Za-z0-9\s,'-]{2,50}?)\s+(?:and|&)\s+([A-Za-z0-9\s,'-]{2,50}?)$",
                 text,
                 re.IGNORECASE,
             )
-            if between and not re.search(r"\b(?:halal|vegetarian|budget|walk|drive|transit)\b", lower):
+            if between and target_action == "replace" and not re.search(r"\b(?:halal|vegetarian|budget|walk|drive|transit)\b", lower):
                 updates["locations"] = [between.group(1).strip(), between.group(2).strip()]
                 updates["locations_action"] = "replace"
-            elif "," in text and len(text) < 120:
-                parts = [p.strip() for p in text.split(",") if p.strip()]
-                if parts:
-                    updates["locations"] = parts
-                    updates["locations_action"] = "replace"
-            elif len(text) <= 80 and not re.search(r"\b(?:help|cancel|reset|profile|none|skip)\b", lower):
-                updates["locations"] = [text]
-                updates["locations_action"] = "replace"
+            elif not re.search(r"\b(?:help|cancel|reset|profile|none|skip)\b", lower):
+                locs = cls._extract_location_list(text)
+                if locs:
+                    updates["locations"] = locs
+                    updates["locations_action"] = target_action
         elif awaiting_field == "dietary_requirements":
             if lower in ("none", "no", "no limits", "no dietary", "no dietary limits", "clear", "none / clear", "anything", "normal"):
                 updates["dietary_action"] = "clear"
@@ -495,35 +534,82 @@ class BISChatbotService:
             text,
             re.IGNORECASE,
         )
-        add_loc = re.search(
-            r"\b(?:add|also\s+(?:at|near|with)|meet\s+(?:friend|someone)\s+(?:at|from|near))\s+([A-Za-z0-9][A-Za-z0-9\s,'-]{1,45}?)(?=$|\s+(?:for|with|under|below|within|budget|walk|drive|transit|mrt|halal|vegetarian)\b|[.,!?])",
+        add_explicit_loc = re.search(
+            r"\b(?:"
+            r"(?:add|include|plus)\s+(?:(?:a|an|another|extra|new|more|additional|1st|2nd|3rd|4th|first|second|third|fourth)\s+)*(?:starting\s+)?(?:locations?|places?|areas?|spots?)(?:\s*[:,-]\s*|\s+(?:is|as|at|near|in)\s+|\s+)"
+            r"|(?:also\s+(?:at|near|around|from|in)|meet(?:ing)?\s+(?:up\s+)?(?:with\s+(?:a\s+)?friend\s+)?(?:at|from|near)|meet\s+at)\s+"
+            r")"
+            r"([A-Za-z0-9][A-Za-z0-9\s,&/.'-]{1,120}?)"
+            r"(?=$|\s+(?:for|with|under|below|within|budget|walk|drive|transit|mrt|halal|vegetarian|cuisine|cuisines)\b|[!?])",
             text,
             re.IGNORECASE,
         )
+        add_generic_loc = re.search(
+            r"\badd\s+([A-Za-z0-9][A-Za-z0-9\s,&/'-]{1,80}?)"
+            r"(?=$|\s+(?:for|with|under|below|within|budget|walk|drive|transit|mrt|halal|vegetarian|cuisine|cuisines)\b|[.!?])",
+            text,
+            re.IGNORECASE,
+        )
+        rem_explicit_loc = re.search(
+            r"\b(?:remove|drop|delete|take\s+out|exclude)\s+(?:(?:the|my)\s+)?(?:starting\s+)?(?:locations?|places?|areas?|spots?)(?:\s*[:,-]\s*|\s+)"
+            r"([A-Za-z0-9][A-Za-z0-9\s,&/'-]{1,100}?)"
+            r"(?=$|\s+(?:from|for|with|under|below|within|budget|walk|drive|transit|mrt|halal|vegetarian)\b|[.!?])",
+            text,
+            re.IGNORECASE,
+        )
+        rem_nth_loc = bool(re.search(
+            r"\b(?:remove|drop|delete|take\s+out|clear)\s+(?:the\s+)?(?:2nd|second|last|extra|other)\s+location\b",
+            lower,
+        ))
+
         if between:
             updates["locations"] = [between.group(1).strip(), between.group(2).strip()]
             updates["locations_action"] = "replace"
-        elif add_loc and add_loc.group(1).strip().casefold() not in _STOP_WORDS_NOT_CUISINES:
-            updates["locations"] = [add_loc.group(1).strip()]
-            updates["locations_action"] = "add"
+        elif rem_nth_loc and len(current.get("locations") or []) > 1:
+            updates["locations"] = [current["locations"][-1]]
+            updates["locations_action"] = "remove"
+        elif rem_explicit_loc:
+            rem_locs = cls._extract_location_list(rem_explicit_loc.group(1))
+            if rem_locs:
+                updates["locations"] = rem_locs
+                updates["locations_action"] = "remove"
+        elif add_explicit_loc:
+            added_locs = cls._extract_location_list(add_explicit_loc.group(1))
+            if added_locs:
+                updates["locations"] = added_locs
+                updates["locations_action"] = "add"
+        elif add_generic_loc and "locations" not in updates:
+            added_locs = cls._extract_location_list(add_generic_loc.group(1), reject_non_location=True)
+            if added_locs:
+                updates["locations"] = added_locs
+                updates["locations_action"] = "add"
         elif "locations" not in updates:
-            postal = re.search(r"\b(\d{6})\b", text)
-            loc_match = re.search(
-                r"\b(?:near|around|at(?!\s+(?:least|most|all)\b)|in(?!\s+(?:general|mind)\b)|by(?!\s+(?:walk|drive|transit|mrt|bus|train|car|foot|grab|taxi)\b))\s+([A-Za-z0-9][A-Za-z0-9\s,'-]{1,45}?)(?=$|\s+(?:for|with|under|below|within|budget|walk|drive|transit|mrt|halal|vegetarian)\b|[.,!?])",
-                text,
-                re.IGNORECASE,
-            )
-            if loc_match:
-                candidate_loc = loc_match.group(1).strip()
-                if (
-                    candidate_loc.casefold() not in ("halal", "vegetarian", "walk", "drive", "transit", "mrt", "singapore")
-                    and not re.match(r"^(?:least|most|min|minimum|max|under|below)\b", candidate_loc, re.IGNORECASE)
-                ):
-                    updates["locations"] = [candidate_loc]
+            current_locs = list(current.get("locations") or [])
+            matched_rem_locs = [
+                loc for loc in current_locs
+                if re.search(rf"\b(?:remove|drop|delete|take\s+out)\s+{re.escape(loc)}\b", lower)
+            ]
+            if matched_rem_locs:
+                updates["locations"] = matched_rem_locs
+                updates["locations_action"] = "remove"
+            else:
+                postal = re.search(r"\b(\d{6})\b", text)
+                loc_match = re.search(
+                    r"\b(?:near|around|at(?!\s+(?:least|most|all)\b)|in(?!\s+(?:general|mind)\b)|by(?!\s+(?:walk|drive|transit|mrt|bus|train|car|foot|grab|taxi)\b))\s+([A-Za-z0-9][A-Za-z0-9\s,'-]{1,45}?)(?=$|\s+(?:for|with|under|below|within|budget|walk|drive|transit|mrt|halal|vegetarian)\b|[.,!?])",
+                    text,
+                    re.IGNORECASE,
+                )
+                if loc_match:
+                    candidate_loc = loc_match.group(1).strip()
+                    if (
+                        candidate_loc.casefold() not in ("halal", "vegetarian", "walk", "drive", "transit", "mrt", "singapore")
+                        and not re.match(r"^(?:least|most|min|minimum|max|under|below)\b", candidate_loc, re.IGNORECASE)
+                    ):
+                        updates["locations"] = [candidate_loc]
+                        updates["locations_action"] = "replace"
+                elif postal:
+                    updates["locations"] = [postal.group(1)]
                     updates["locations_action"] = "replace"
-            elif postal:
-                updates["locations"] = [postal.group(1)]
-                updates["locations_action"] = "replace"
 
         if re.search(r"\b(?:drive|driving|car|grab|taxi)\b", lower):
             updates["mode"] = "drive"
@@ -1115,6 +1201,14 @@ class BISChatbotService:
         if cleaned in ("change location", "edit location", "change starting location", "location", "change place"):
             prompt, qrs = self._prompt_for_missing_search_field("location")
             return self._clarify_response(current, "location", prompt, qrs)
+
+        if cleaned in ("add location", "add another location", "add second location", "add more locations", "add a location"):
+            return self._clarify_response(
+                current,
+                "add_location",
+                "Sure! Which Singapore location(s) would you like to add to meet in the middle? (e.g. 'Marina Bay' or 'Marina Bay, Sentosa')",
+                ["Marina Bay", "Orchard Road", "Bugis Junction", "Sentosa"],
+            )
 
         if cleaned in ("change budget", "edit budget", "budget"):
             prompt, qrs = self._prompt_for_missing_search_field("budget_per_person")

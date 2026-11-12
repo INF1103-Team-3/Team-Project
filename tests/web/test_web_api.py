@@ -758,6 +758,66 @@ class WebIntegrationTests(unittest.TestCase):
         self.assertIn("avoid seafood cuisine", other_cf)
         self.assertIn("avoid fast food cuisine", other_cf)
 
+    def test_chatbot_multi_location_add_phrases_and_removal(self):
+        base = {
+            "location": "Singapore 530967",
+            "locations": ["Singapore 530967"],
+            "mode": "drive",
+            "max_travel_minutes": 20,
+            "budget_per_person": 30,
+            "dietary_requirements": [],
+            "liked_cuisines": ["chinese", "japanese"],
+            "disliked_cuisines": [],
+            "other_preferences": [],
+        }
+
+        # Exact phrasing from bug report: must extract "Marina Bay", NOT "another location"
+        r1 = self.client.post("/api/chat", json={"message": "add another location, marina bay", "current_filters": base}).json()
+        self.assertEqual(r1["action"], "confirm")
+        self.assertEqual(r1["filters"]["locations"], ["Singapore 530967", "Marina Bay"])
+
+        # "add second location, sentosa"
+        r2 = self.client.post("/api/chat", json={"message": "add second location, sentosa", "current_filters": r1["filters"]}).json()
+        self.assertEqual(r2["filters"]["locations"], ["Singapore 530967", "Marina Bay", "Sentosa"])
+
+        # Multi-add with filler "etc": "add locations, bugis, orchard road, etc"
+        r3 = self.client.post("/api/chat", json={"message": "add locations, bugis, orchard road, etc", "current_filters": base}).json()
+        self.assertEqual(r3["filters"]["locations"], ["Singapore 530967", "Bugis", "Orchard Road"])
+
+        # "add location, tampines"
+        r4 = self.client.post("/api/chat", json={"message": "add location, tampines", "current_filters": base}).json()
+        self.assertEqual(r4["filters"]["locations"], ["Singapore 530967", "Tampines"])
+
+        # "remove location marina bay" and "remove second location"
+        r5 = self.client.post("/api/chat", json={"message": "remove location marina bay", "current_filters": r1["filters"]}).json()
+        self.assertEqual(r5["filters"]["locations"], ["Singapore 530967"])
+        r6 = self.client.post("/api/chat", json={"message": "remove second location", "current_filters": r1["filters"]}).json()
+        self.assertEqual(r6["filters"]["locations"], ["Singapore 530967"])
+
+        # Bare "add another location" clarifies with awaiting_field='add_location', then appends without replacing
+        r7 = self.client.post("/api/chat", json={"message": "add another location", "current_filters": base}).json()
+        self.assertEqual(r7["action"], "clarify")
+        self.assertEqual(r7["awaiting_field"], "add_location")
+        r8 = self.client.post("/api/chat", json={
+            "message": "Marina Bay, Sentosa",
+            "current_filters": r7["filters"],
+            "awaiting_field": r7["awaiting_field"],
+        }).json()
+        self.assertEqual(r8["filters"]["locations"], ["Singapore 530967", "Marina Bay", "Sentosa"])
+
+        # Reconcile guards against confused live AI returning "another location"
+        def confused_loc_ai(*_args):
+            return {
+                "intent": "search",
+                "reply": "Added!",
+                "updates": {"locations": ["another location"], "locations_action": "add"},
+                "quick_replies": [],
+            }
+
+        self.application._chatbot._ai = SimpleNamespace(chat_turn=confused_loc_ai)
+        r9 = self.client.post("/api/chat", json={"message": "add another location, marina bay", "current_filters": base}).json()
+        self.assertEqual(r9["filters"]["locations"], ["Singapore 530967", "Marina Bay"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
