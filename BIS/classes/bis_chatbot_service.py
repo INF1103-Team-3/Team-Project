@@ -8,7 +8,19 @@ from BIS.sources.profile_schema import CUISINES, DIETARY_CHOICES, NUMBER_LIMITS
 _COMMON_CUSTOM_CUISINES = (
     "ramen", "sushi", "dim sum", "hawker", "zi char", "hotpot", "bbq",
     "bakery", "cafe", "seafood", "steamboat", "prata", "biryani", "fast food",
+    "mexican", "spanish", "french", "turkish", "mediterranean", "taiwanese",
+    "cantonese", "filipino", "burmese", "lebanese", "greek", "steak",
+    "burger", "burgers", "pizza", "pasta", "noodles", "dessert", "brunch",
 )
+
+_STOP_WORDS_NOT_CUISINES = {
+    "halal", "muis", "vegetarian", "veggie", "veg", "plant", "dietary",
+    "limit", "limits", "restriction", "restrictions", "budget", "location",
+    "locations", "travel", "time", "distance", "walk", "drive", "transit",
+    "mrt", "bus", "car", "wishes", "preferences", "preference", "rating",
+    "stars", "star", "spicy", "quiet", "anything", "everything", "all",
+    "none", "more", "food", "restaurants", "restaurant", "cuisine", "cuisines",
+}
 
 _ONBOARDING_QUESTIONS = {
     "location": (
@@ -144,7 +156,7 @@ class BISChatbotService:
         disliked = []
         for item in (raw.get("disliked_cuisines") or []):
             clean = str(item or "").strip().lower()
-            if clean in CUISINES and clean not in disliked and clean not in liked:
+            if clean and clean not in ("none", "any", "any cuisine", "nothing") and clean not in disliked and clean not in liked:
                 disliked.append(clean)
 
         other = []
@@ -252,11 +264,15 @@ class BISChatbotService:
 
         if isinstance(updates.get("disliked_cuisines"), list) or updates.get("disliked_action") == "clear":
             action = updates.get("disliked_action") or "add"
+            raw_disliked = [
+                str(c).strip().lower()
+                for c in (updates.get("disliked_cuisines") or [])
+                if str(c or "").strip() and str(c or "").strip().lower() not in ("none", "any", "nothing")
+            ]
             result["disliked_cuisines"] = cls._merge_list(
                 result["disliked_cuisines"],
-                updates.get("disliked_cuisines") or [],
+                raw_disliked,
                 action,
-                allowed=set(CUISINES),
             )
             disliked_keys = {d.casefold() for d in result["disliked_cuisines"]}
             result["liked_cuisines"] = [
@@ -273,8 +289,43 @@ class BISChatbotService:
 
         return cls.normalize_filters(result, user=user)
 
+    @staticmethod
+    def _has_negation_for(lower, keyword_pattern):
+        """Return True when the user explicitly negates, removes, or turns off keyword_pattern."""
+        neg_prefix = (
+            r"(?:"
+            r"(?:i\s+)?(?:do\s*not|don'?t)\s+(?:want|need|require|care\s+for)"
+            r"|no\s+need(?:\s+for)?"
+            r"|not\s+looking\s+for"
+            r"|never\s*mind"
+            r"|remove|drop|delete|take\s+out|clear|undo|cancel|unselect|uncheck|skip|without|exclude|off"
+            r"|non[- ]?|not|no"
+            r")"
+        )
+        filler = r"(?:\s+(?:any|the|to|be|for|of|it|strictly|only|all|more|from|options?|food|restaurants?|cuisine|dietary|limits?|requirements?)){0,4}"
+        before_rx = rf"\b{neg_prefix}{filler}\s+(?:{keyword_pattern})\b"
+        after_rx = rf"\b(?:{keyword_pattern})\b\s+(?:not\s+needed|not\s+required|removed?|off)\b"
+        return bool(re.search(before_rx, lower) or re.search(after_rx, lower))
+
+    @staticmethod
+    def _extract_custom_cuisine_list(text):
+        """Split comma/'and'-separated cuisine phrases while stripping non-cuisine filler words."""
+        cleaned = re.sub(r"\b(?:only|switch\s+to|change\s+to|prefer|avoid|dislike|no)\b", ",", text, flags=re.IGNORECASE)
+        items = []
+        for chunk in re.split(r"[,/&]|\band\b|\bor\b", cleaned, flags=re.IGNORECASE):
+            token = re.sub(
+                r"(?<!fast\s)(?<!street\s)(?<!comfort\s)(?<!soul\s)(?<!pub\s)(?<!bar\s)(?<!health\s)(?<!finger\s)(?<!hawker\s)\b(?:cuisine|cuisines|food|restaurants?)\b",
+                "",
+                chunk,
+                flags=re.IGNORECASE,
+            )
+            token = re.sub(r"\s+", " ", token.strip(" .,!?;:-")).lower()
+            if token and token not in _STOP_WORDS_NOT_CUISINES and token not in items and len(token) <= 32:
+                items.append(token)
+        return items
+
     @classmethod
-    def _parse_contextual_answer(cls, message, awaiting_field):
+    def _parse_contextual_answer(cls, message, awaiting_field, current=None):
         """Parse concise direct answers when the chatbot just asked a targeted question."""
         text = str(message or "").strip()
         lower = text.casefold()
@@ -283,11 +334,19 @@ class BISChatbotService:
             return updates
 
         if awaiting_field == "budget_per_person":
-            num_match = re.search(r"^\s*(?:sgd|\$)?\s*(\d+(?:\.\d+)?)\s*(?:dollars?|sgd)?\s*$", lower)
-            if num_match:
-                updates["budget_per_person"] = float(num_match.group(1))
+            if lower in ("cheap", "budget", "hawker", "affordable"):
+                updates["budget_per_person"] = 12.0
+            elif lower in ("moderate", "mid", "mid-range", "casual"):
+                updates["budget_per_person"] = 25.0
+            else:
+                range_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:-|to|and)\s*\$?\s*(\d+(?:\.\d+)?)", lower)
+                num_match = re.search(r"^(?:around|about|roughly|max|under|below|sgd|\$|\s)*(\d+(?:\.\d+)?)\s*(?:dollars?|sgd|bucks)?\s*$", lower)
+                if range_match:
+                    updates["budget_per_person"] = float(range_match.group(2))
+                elif num_match:
+                    updates["budget_per_person"] = float(num_match.group(1))
         elif awaiting_field == "travel":
-            if re.search(r"\b(?:drive|driving|car)\b", lower):
+            if re.search(r"\b(?:drive|driving|car|grab|taxi)\b", lower):
                 updates["mode"] = "drive"
             elif re.search(r"\b(?:transit|mrt|bus|train|public transport)\b", lower):
                 updates["mode"] = "transit"
@@ -295,7 +354,9 @@ class BISChatbotService:
                 updates["mode"] = "walk"
             km_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:km|kilometres?|kilometers?)\b", lower)
             mins_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:m|mins?|minutes?)?\b", lower)
-            if km_match:
+            if "half an hour" in lower or "half hour" in lower:
+                updates["max_travel_minutes"] = 30.0
+            elif km_match:
                 updates["max_distance_km"] = float(km_match.group(1))
             elif mins_match:
                 updates["max_travel_minutes"] = float(mins_match.group(1))
@@ -316,6 +377,64 @@ class BISChatbotService:
             elif len(text) <= 80 and not re.search(r"\b(?:help|cancel|reset|profile|none|skip)\b", lower):
                 updates["locations"] = [text]
                 updates["locations_action"] = "replace"
+        elif awaiting_field == "dietary_requirements":
+            if lower in ("none", "no", "no limits", "no dietary", "no dietary limits", "clear", "none / clear", "anything", "normal"):
+                updates["dietary_action"] = "clear"
+            elif "both" in lower or ("halal" in lower and ("vegetarian" in lower or "veggie" in lower)):
+                if not cls._has_negation_for(lower, r"halal|vegetarian|veggie"):
+                    updates["dietary_requirements"] = ["halal", "vegetarian"]
+                    updates["dietary_action"] = "replace"
+            else:
+                rem, add = [], []
+                if cls._has_negation_for(lower, r"halal|muis"):
+                    rem.append("halal")
+                elif "halal" in lower or "muis" in lower:
+                    add.append("halal")
+                if cls._has_negation_for(lower, r"vegetarian|veggie|veg|plant[- ]?based"):
+                    rem.append("vegetarian")
+                elif re.search(r"\b(?:vegetarian|veggie|veg|plant[- ]?based)\b", lower):
+                    add.append("vegetarian")
+                if add:
+                    updates["dietary_requirements"] = add
+                    updates["dietary_action"] = "replace" if re.search(r"\bonly\b", lower) else "add"
+                elif rem:
+                    updates["dietary_requirements"] = rem
+                    updates["dietary_action"] = "remove"
+        elif awaiting_field == "liked_cuisines":
+            if lower in ("any", "any cuisine", "none", "no preference", "clear", "clear cuisines", "all"):
+                updates["liked_action"] = "clear"
+            elif re.match(r"^(?:remove|drop|take\s+out|clear)\s+", lower):
+                items = cls._extract_custom_cuisine_list(re.sub(r"^(?:remove|drop|take\s+out|clear)\s+", "", text, flags=re.IGNORECASE))
+                if items:
+                    updates["liked_cuisines"] = items
+                    updates["liked_action"] = "remove"
+            else:
+                items = cls._extract_custom_cuisine_list(text)
+                if items:
+                    updates["liked_cuisines"] = items
+                    updates["liked_action"] = "add" if re.match(r"^(?:add|also|plus)\b", lower) else "replace"
+        elif awaiting_field == "disliked_cuisines":
+            if lower in ("none", "nothing", "clear", "clear avoids", "clear all avoids", "no dislikes", "allow all"):
+                updates["disliked_action"] = "clear"
+            elif re.match(r"^(?:allow|unblock|remove|drop|clear|don'?t\s+avoid|dont\s+avoid)\s+", lower):
+                cleaned_txt = re.sub(r"^(?:allow|unblock|remove|drop|clear|don'?t\s+avoid|dont\s+avoid)\s+", "", text, flags=re.IGNORECASE)
+                items = cls._extract_custom_cuisine_list(cleaned_txt)
+                if items:
+                    updates["disliked_cuisines"] = items
+                    updates["disliked_action"] = "remove"
+            else:
+                items = cls._extract_custom_cuisine_list(text)
+                if items:
+                    updates["disliked_cuisines"] = items
+                    updates["disliked_action"] = "add"
+        elif awaiting_field == "other_preferences":
+            if lower in ("none", "no", "clear", "clear wishes", "no wishes", "any"):
+                updates["other_action"] = "clear"
+            elif len(text) <= 120:
+                items = [p.strip() for p in text.split(",") if p.strip()]
+                if items:
+                    updates["other_preferences"] = items
+                    updates["other_action"] = "add"
         return updates
 
     @classmethod
@@ -370,19 +489,27 @@ class BISChatbotService:
                 ),
             }
 
-        updates = cls._parse_contextual_answer(text, awaiting_field)
+        updates = cls._parse_contextual_answer(text, awaiting_field, current=current)
         between = re.search(
             r"\bbetween\s+([A-Za-z0-9\s,'-]{2,50}?)\s+(?:and|&)\s+([A-Za-z0-9\s,'-]{2,50}?)(?=$|\s+(?:for|with|under|below|within|by|walk|drive|transit|mrt)\b|[.,!?])",
+            text,
+            re.IGNORECASE,
+        )
+        add_loc = re.search(
+            r"\b(?:add|also\s+(?:at|near|with)|meet\s+(?:friend|someone)\s+(?:at|from|near))\s+([A-Za-z0-9][A-Za-z0-9\s,'-]{1,45}?)(?=$|\s+(?:for|with|under|below|within|budget|walk|drive|transit|mrt|halal|vegetarian)\b|[.,!?])",
             text,
             re.IGNORECASE,
         )
         if between:
             updates["locations"] = [between.group(1).strip(), between.group(2).strip()]
             updates["locations_action"] = "replace"
+        elif add_loc and add_loc.group(1).strip().casefold() not in _STOP_WORDS_NOT_CUISINES:
+            updates["locations"] = [add_loc.group(1).strip()]
+            updates["locations_action"] = "add"
         elif "locations" not in updates:
             postal = re.search(r"\b(\d{6})\b", text)
             loc_match = re.search(
-                r"\b(?:near|around|at(?!\s+(?:least|most|all)\b)|in(?!\s+(?:general|mind)\b)|by(?!\s+(?:walk|drive|transit|mrt|bus|train|car|foot)\b))\s+([A-Za-z0-9][A-Za-z0-9\s,'-]{1,45}?)(?=$|\s+(?:for|with|under|below|within|budget|walk|drive|transit|mrt|halal|vegetarian)\b|[.,!?])",
+                r"\b(?:near|around|at(?!\s+(?:least|most|all)\b)|in(?!\s+(?:general|mind)\b)|by(?!\s+(?:walk|drive|transit|mrt|bus|train|car|foot|grab|taxi)\b))\s+([A-Za-z0-9][A-Za-z0-9\s,'-]{1,45}?)(?=$|\s+(?:for|with|under|below|within|budget|walk|drive|transit|mrt|halal|vegetarian)\b|[.,!?])",
                 text,
                 re.IGNORECASE,
             )
@@ -398,68 +525,120 @@ class BISChatbotService:
                 updates["locations"] = [postal.group(1)]
                 updates["locations_action"] = "replace"
 
-        if re.search(r"\b(?:drive|driving|car)\b", lower):
+        if re.search(r"\b(?:drive|driving|car|grab|taxi)\b", lower):
             updates["mode"] = "drive"
-            if "traffic" in lower:
+            if "traffic" in lower and not cls._has_negation_for(lower, r"traffic"):
                 updates["traffic_aware"] = True
+            elif "traffic" in lower and cls._has_negation_for(lower, r"traffic"):
+                updates["traffic_aware"] = False
         elif re.search(r"\b(?:transit|mrt|bus|train|public transport)\b", lower):
             updates["mode"] = "transit"
         elif re.search(r"\b(?:walk|walking|on foot)\b", lower):
             updates["mode"] = "walk"
 
-        mins_match = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:mins?|minutes?)\b", lower)
+        mins_match = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:m|mins?|minutes?)\b", lower)
         km_match = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:km|kilometres?|kilometers?)\b", lower)
-        if mins_match:
+        if "half an hour" in lower or "half hour" in lower:
+            updates["max_travel_minutes"] = 30.0
+        elif mins_match:
             updates["max_travel_minutes"] = float(mins_match.group(1))
         elif km_match:
             updates["max_distance_km"] = float(km_match.group(1))
 
         budget_match = re.search(
-            r"(?:\$\s*(\d+(?:\.\d+)?))|\b(?:under|below|budget|max)\s*(?:sgd|\$)?\s*(\d+(?:\.\d+)?)\b",
+            r"(?:\$\s*(\d+(?:\.\d+)?))|\b(?:under|below|budget(?:\s+of|\s+is)?|max(?:imum)?|up\s+to|around|about)\s*(?:sgd|\$)?\s*(\d+(?:\.\d+)?)\b|\b(\d+(?:\.\d+)?)\s*(?:sgd|bucks|dollars?)\b",
             lower,
         )
         if budget_match:
-            raw_b = budget_match.group(1) or budget_match.group(2)
+            raw_b = budget_match.group(1) or budget_match.group(2) or budget_match.group(3)
             updates["budget_per_person"] = float(raw_b)
 
+        clear_diet = bool(
+            re.search(
+                r"\b(?:no\s+dietary|no\s+restrictions|clear\s+dietary|remove\s+dietary|reset\s+dietary|any\s+dietary|eat\s+anything|normal\s+food)\b",
+                lower,
+            )
+            or cls._has_negation_for(lower, r"dietary(?:\s+(?:limits?|requirements?|restrictions?|needs?))?")
+        )
         diet_add, diet_rem = [], []
-        if re.search(r"\b(?:non[- ]?halal|no halal|not halal)\b", lower):
+        if cls._has_negation_for(lower, r"halal|muis"):
             diet_rem.append("halal")
-        elif "halal" in lower or "muis" in lower:
+        elif re.search(r"\b(?:halal|muis)\b", lower):
             diet_add.append("halal")
-        if re.search(r"\b(?:not vegetarian|no vegetarian)\b", lower):
+        if cls._has_negation_for(lower, r"vegetarian|veggie|plant[- ]?based"):
             diet_rem.append("vegetarian")
-        elif re.search(r"\b(?:vegetarian|veggie|plant[- ]based)\b", lower):
+        elif re.search(r"\b(?:vegetarian|veggie|plant[- ]?based)\b", lower):
             diet_add.append("vegetarian")
-        if "no dietary" in lower or "no restrictions" in lower:
+
+        if clear_diet:
             updates["dietary_action"] = "clear"
+        elif diet_add and diet_rem:
+            # e.g. "vegetarian instead of halal" / "not halal, vegetarian"
+            updates["dietary_requirements"] = diet_add
+            updates["dietary_action"] = "replace"
         elif diet_add:
             updates["dietary_requirements"] = diet_add
-            updates["dietary_action"] = "add"
+            updates["dietary_action"] = "replace" if re.search(r"\b(?:only|instead|switch)\b", lower) else "add"
         elif diet_rem:
             updates["dietary_requirements"] = diet_rem
             updates["dietary_action"] = "remove"
 
-        liked, disliked = [], []
-        for cuisine in tuple(CUISINES) + _COMMON_CUSTOM_CUISINES:
+        current_liked = {c.casefold() for c in (current.get("liked_cuisines") or [])}
+        current_disliked = {c.casefold() for c in (current.get("disliked_cuisines") or [])}
+        liked_add, liked_rem, disliked_add, disliked_rem = [], [], [], []
+        explicit_dislike_cue = bool(re.search(r"\b(?:avoid|dislike|exclude|hate|allergic|don'?t\s+like|dont\s+like|no\s+(?:spicy\s+)?)\b", lower))
+
+        all_known_cuisines = list(dict.fromkeys(tuple(CUISINES) + _COMMON_CUSTOM_CUISINES + tuple(current_liked) + tuple(current_disliked)))
+        for cuisine in all_known_cuisines:
             if not re.search(rf"\b{re.escape(cuisine)}\b", lower):
                 continue
-            if (
+            unblock_cuisine = bool(
+                re.search(rf"\b(?:allow|unblock|stop\s+avoiding|don'?t\s+avoid|dont\s+avoid|not\s+avoiding)\s+{re.escape(cuisine)}\b", lower)
+                or re.search(rf"\bremove\s+{re.escape(cuisine)}\s+from\s+(?:avoid|disliked?)\b", lower)
+            )
+            soft_remove = bool(re.search(rf"\b(?:remove|drop|take\s+out|delete|unselect|never\s*mind|cancel)\s+{re.escape(cuisine)}\b", lower))
+            strict_dislike = bool(
                 awaiting_field == "disliked_cuisines"
-                or re.search(rf"\b(?:no|avoid|dislike|exclude|not|without)\s+{re.escape(cuisine)}\b", lower)
-            ):
-                if cuisine in CUISINES:
-                    disliked.append(cuisine)
+                or re.search(rf"\b(?:avoid|dislike|exclude|hate|without|no|not)\s+{re.escape(cuisine)}\b", lower)
+                or cls._has_negation_for(lower, re.escape(cuisine))
+            )
+            if unblock_cuisine or (soft_remove and cuisine.casefold() in current_disliked):
+                disliked_rem.append(cuisine)
+            elif (soft_remove or (strict_dislike and not explicit_dislike_cue)) and cuisine.casefold() in current_liked:
+                liked_rem.append(cuisine)
+            elif strict_dislike:
+                disliked_add.append(cuisine)
             else:
-                liked.append(cuisine)
-        if "any cuisine" in lower or "clear cuisine" in lower:
+                liked_add.append(cuisine)
+
+        # Also catch explicit free-form avoid/dislike phrases like "avoid seafood, dim sum"
+        avoid_phrase = re.search(
+            r"\b(?:avoid|dislike|exclude|hate|don'?t\s+like|dont\s+like)\s+([a-zA-Z][a-zA-Z\s,&/-]{2,50}?)(?=$|\s+(?:near|at|in|under|below|within|walk|drive|transit|budget)\b|[.!?])",
+            lower,
+        )
+        if avoid_phrase and not re.search(r"\b(?:halal|vegetarian|traffic|all|everything)\b", avoid_phrase.group(1)):
+            for c in cls._extract_custom_cuisine_list(avoid_phrase.group(1)):
+                if c not in disliked_add and c not in disliked_rem:
+                    disliked_add.append(c)
+
+        if re.search(r"\b(?:any\s+cuisine|clear\s+(?:liked\s+)?cuisines?|remove\s+all\s+cuisines?|no\s+cuisine\s+pref)\b", lower):
             updates["liked_action"] = "clear"
-        elif liked:
-            updates["liked_cuisines"] = liked
-            updates["liked_action"] = "replace" if re.search(r"\b(?:switch|change|instead|only)\b", lower) else "add"
-        if disliked:
-            updates["disliked_cuisines"] = disliked
+        else:
+            if liked_add:
+                updates["liked_cuisines"] = liked_add
+                updates["liked_action"] = "replace" if re.search(r"\b(?:switch|change|instead|only)\b", lower) else "add"
+            elif liked_rem:
+                updates["liked_cuisines"] = liked_rem
+                updates["liked_action"] = "remove"
+
+        if re.search(r"\b(?:clear\s+(?:disliked?|avoids?)|no\s+dislikes?|allow\s+all\s+cuisines?|don'?t\s+avoid\s+any)\b", lower):
+            updates["disliked_action"] = "clear"
+        elif disliked_add:
+            updates["disliked_cuisines"] = disliked_add
             updates["disliked_action"] = "add"
+        elif disliked_rem:
+            updates["disliked_cuisines"] = disliked_rem
+            updates["disliked_action"] = "remove"
 
         other = []
         rating_match = re.search(
@@ -474,11 +653,13 @@ class BISChatbotService:
                 else f"{rating_val} stars"
             )
         for kw in ("spicy", "quiet", "open 24 hours", "24 hours", "outdoor seating", "aircon"):
-            if kw in lower:
+            if kw in lower and not cls._has_negation_for(lower, re.escape(kw)):
                 other.append(kw)
-        if "only " in lower and liked and liked[0] in CUISINES:
-            other.append(f"only {liked[0]} cuisine")
-        if other:
+        if "only " in lower and liked_add and liked_add[0] in CUISINES:
+            other.append(f"only {liked_add[0]} cuisine")
+        if re.search(r"\b(?:clear\s+(?:special\s+)?wish(?:es)?|no\s+(?:special\s+)?wish(?:es)?|remove\s+rating|no\s+rating\s+limit|any\s+rating)\b", lower):
+            updates["other_action"] = "clear"
+        elif other:
             updates["other_preferences"] = other
             updates["other_action"] = "add"
 
@@ -567,6 +748,17 @@ class BISChatbotService:
                 if custom_wish.casefold() not in {o.casefold() for o in extra_other}:
                     extra_other.append(custom_wish)
 
+        supported_disliked = []
+        for cuisine in (filters.get("disliked_cuisines") or []):
+            clean = str(cuisine or "").strip().lower()
+            if clean in CUISINES:
+                if clean not in supported_disliked:
+                    supported_disliked.append(clean)
+            elif clean:
+                custom_avoid = f"avoid {clean} cuisine"
+                if custom_avoid.casefold() not in {o.casefold() for o in extra_other}:
+                    extra_other.append(custom_avoid)
+
         locs = filters.get("locations") or prefs.get("location")
         budget = filters.get("budget_per_person")
         if budget is None:
@@ -587,7 +779,7 @@ class BISChatbotService:
             "budget_per_person": budget,
             "dietary_requirements": filters.get("dietary_requirements") or [],
             "liked_cuisines": supported_liked,
-            "disliked_cuisines": [c for c in (filters.get("disliked_cuisines") or []) if c in CUISINES],
+            "disliked_cuisines": supported_disliked,
             "other_preferences": extra_other,
         }
 
@@ -646,10 +838,12 @@ class BISChatbotService:
                     )
                 except (RuntimeError, ValueError, TypeError):
                     parsed = None
-            raw_updates = (parsed or {}).get("updates") or {}
-            det_updates = self._deterministic_parse(text, current, user, awaiting_field=target_field).get("updates") or {}
-            merged_updates = dict(det_updates)
-            merged_updates.update({k: v for k, v in raw_updates.items() if v is not None})
+            det_parsed = self._deterministic_parse(text, current, user, awaiting_field=target_field)
+            reconciled = self._reconcile_ai_updates(det_parsed, parsed, current) if parsed is not None else det_parsed
+            merged_updates = dict(reconciled.get("updates") or {})
+            if is_none_answer and target_field == "dietary_requirements":
+                merged_updates["dietary_requirements"] = []
+                merged_updates["dietary_action"] = "clear"
 
             updated_filters = self._apply_updates(current, merged_updates, user=user)
             accepted = False
@@ -673,12 +867,29 @@ class BISChatbotService:
                 accepted = True
             if target_field == "liked_cuisines":
                 supported = [c for c in updated_filters["liked_cuisines"] if c in CUISINES]
-                if supported:
+                custom_liked = [f"{c} cuisine" for c in updated_filters["liked_cuisines"] if c not in CUISINES]
+                if supported or custom_liked:
                     prefs["liked_cuisines"] = supported
+                    if custom_liked:
+                        existing_other = list(prefs.get("other_preferences") or [])
+                        existing_cf = {str(x).casefold() for x in existing_other}
+                        for wish in custom_liked:
+                            if wish.casefold() not in existing_cf:
+                                existing_other.append(wish)
+                        prefs["other_preferences"] = existing_other
                     accepted = True
             if target_field == "disliked_cuisines":
-                if updated_filters["disliked_cuisines"]:
-                    prefs["disliked_cuisines"] = updated_filters["disliked_cuisines"]
+                supported = [c for c in updated_filters["disliked_cuisines"] if c in CUISINES]
+                custom_disliked = [f"avoid {c} cuisine" for c in updated_filters["disliked_cuisines"] if c not in CUISINES]
+                if supported or custom_disliked:
+                    prefs["disliked_cuisines"] = supported
+                    if custom_disliked:
+                        existing_other = list(prefs.get("other_preferences") or [])
+                        existing_cf = {str(x).casefold() for x in existing_other}
+                        for wish in custom_disliked:
+                            if wish.casefold() not in existing_cf:
+                                existing_other.append(wish)
+                        prefs["other_preferences"] = existing_other
                     accepted = True
             if target_field == "other_preferences":
                 prefs["other_preferences"] = updated_filters["other_preferences"] or [text]
@@ -830,13 +1041,21 @@ class BISChatbotService:
         "looks good", "sounds good", "all good", "all correct", "that's right",
         "thats right", "go ahead", "proceed", "search", "search now",
         "find now", "run search", "start search", "do it", "retry search",
-        "try again",
+        "try again", "lets go", "let's go", "yes lets go", "yes let's go",
+        "ok search", "okay search", "ok search now", "yes looks good", "ok looks good",
     }
+
+    _CONFIRM_REGEX = re.compile(
+        r"^(?:yes|yep|yeah|yup|ok|okay|sure|great|perfect|awesome|alright)"
+        r"(?:[,\s]+(?:looks good|sounds good|all good|all correct|search|search now|go ahead|proceed|lets go|let's go|please|start|find it))?$"
+    )
 
     @classmethod
     def _is_search_confirmation(cls, message):
         cleaned = re.sub(r"[.!?\s]+$", "", str(message or "").casefold().strip())
-        return cleaned in cls._CONFIRM_PHRASES
+        if cleaned in cls._CONFIRM_PHRASES:
+            return True
+        return bool(cls._CONFIRM_REGEX.match(cleaned))
 
     @staticmethod
     def _format_confirmation_reply(filters, prefix="Here is your current search setup:"):
@@ -852,86 +1071,204 @@ class BISChatbotService:
         budget = f"SGD ${filters['budget_per_person']:g}" if filters.get("budget_per_person") is not None else "Not set"
         diet = ", ".join(d.title() for d in (filters.get("dietary_requirements") or [])) or "None"
         liked = ", ".join(c.title() for c in (filters.get("liked_cuisines") or [])) or "Any"
-        parts = [f"{loc_label}: {locs}", f"Travel: {travel}", f"Budget: {budget}", f"Dietary: {diet}", f"Cuisines: {liked}"]
+        lines = [
+            prefix,
+            f"• {loc_label}: {locs}",
+            f"• Travel: {travel}",
+            f"• Budget: {budget}",
+            f"• Dietary: {diet}",
+            f"• Cuisines: {liked}",
+        ]
         if filters.get("disliked_cuisines"):
-            parts.append("Avoid: " + ", ".join(c.title() for c in filters["disliked_cuisines"]))
+            lines.append("• Avoid: " + ", ".join(c.title() for c in filters["disliked_cuisines"]))
         if filters.get("other_preferences"):
-            parts.append("Wishes: " + ", ".join(filters["other_preferences"]))
-        return f"{prefix} {' | '.join(parts)}. Should I proceed with searching, or would you like to change anything?"
+            lines.append("• Wishes: " + ", ".join(filters["other_preferences"]))
+        lines.append("")
+        lines.append("Should I proceed with searching, or would you like to change anything?")
+        return "\n".join(lines)
 
     @staticmethod
     def _confirmation_quick_replies(filters, signed_in):
-        replies = ["Yes, search now", "Change location", "Change budget", "Edit cuisines"]
-        if signed_in and len(replies) < 4:
-            replies[3] = "Save to profile"
+        replies = ["Yes, search now", "Change location"]
+        if filters.get("dietary_requirements"):
+            replies.append("No dietary limits")
+        else:
+            replies.append("Change budget")
+        replies.append("Save to profile" if signed_in else "Edit cuisines")
         return replies
+
+    def _clarify_response(self, current, awaiting_field, reply, quick_replies):
+        return {
+            "success": True,
+            "action": "clarify",
+            "awaiting_field": awaiting_field,
+            "reply": reply,
+            "filters": current,
+            "changes": [],
+            "quick_replies": quick_replies,
+            "model_used": self._model() or "BiteFinder Assistant",
+            "saved_to_profile": False,
+        }
 
     def _handle_edit_request(self, lower, current):
         cleaned = re.sub(r"[.!?\s]+$", "", lower.strip())
-        if cleaned in ("change location", "edit location", "change starting location"):
+        if cleaned in ("change location", "edit location", "change starting location", "location", "change place"):
             prompt, qrs = self._prompt_for_missing_search_field("location")
-            return {
-                "success": True,
-                "action": "clarify",
-                "awaiting_field": "location",
-                "reply": prompt,
-                "filters": current,
-                "changes": [],
-                "quick_replies": qrs,
-                "model_used": self._model() or "BiteFinder Assistant",
-                "saved_to_profile": False,
-            }
-        if cleaned in ("change budget", "edit budget"):
+            return self._clarify_response(current, "location", prompt, qrs)
+
+        if cleaned in ("change budget", "edit budget", "budget"):
             prompt, qrs = self._prompt_for_missing_search_field("budget_per_person")
-            return {
-                "success": True,
-                "action": "clarify",
-                "awaiting_field": "budget_per_person",
-                "reply": prompt,
-                "filters": current,
-                "changes": [],
-                "quick_replies": qrs,
-                "model_used": self._model() or "BiteFinder Assistant",
-                "saved_to_profile": False,
-            }
-        if cleaned in ("change travel", "edit travel", "change time", "change distance"):
+            return self._clarify_response(current, "budget_per_person", prompt, qrs)
+
+        if cleaned in ("change travel", "edit travel", "change time", "edit time", "change distance", "edit distance", "travel", "change transport"):
             prompt, qrs = self._prompt_for_missing_search_field("travel")
-            return {
-                "success": True,
-                "action": "clarify",
-                "awaiting_field": "travel",
-                "reply": prompt,
-                "filters": current,
-                "changes": [],
-                "quick_replies": qrs,
-                "model_used": self._model() or "BiteFinder Assistant",
-                "saved_to_profile": False,
-            }
-        if cleaned in ("change cuisine", "edit cuisine", "edit cuisines", "change cuisines"):
-            return {
-                "success": True,
-                "action": "clarify",
-                "awaiting_field": "confirm",
-                "reply": "Which cuisines would you like to search for instead? (e.g. 'Japanese, Korean' or 'any cuisine')",
-                "filters": current,
-                "changes": [],
-                "quick_replies": ["Japanese, Korean", "Halal only", "Any cuisine", "Yes, search now"],
-                "model_used": self._model() or "BiteFinder Assistant",
-                "saved_to_profile": False,
-            }
-        if cleaned in ("no", "not yet", "wait", "edit", "change something", "cancel"):
-            return {
-                "success": True,
-                "action": "clarify",
-                "awaiting_field": "confirm",
-                "reply": "No problem! Tell me what you'd like to adjust (location, budget, travel limit, dietary needs, cuisines, or wishes).",
-                "filters": current,
-                "changes": [],
-                "quick_replies": ["Change location", "Change budget", "Change travel", "Edit cuisines"],
-                "model_used": self._model() or "BiteFinder Assistant",
-                "saved_to_profile": False,
-            }
+            return self._clarify_response(current, "travel", prompt, qrs)
+
+        if cleaned in (
+            "change dietary", "edit dietary", "dietary", "dietary requirements",
+            "change diet", "edit diet", "diet", "change halal", "edit halal",
+        ):
+            active_diet = [d for d in (current.get("dietary_requirements") or []) if d in ("halal", "vegetarian")]
+            if active_diet:
+                active_label = ", ".join(d.title() for d in active_diet)
+                qrs = []
+                if "halal" in active_diet:
+                    qrs.append("Remove halal")
+                if "vegetarian" in active_diet:
+                    qrs.append("Remove vegetarian")
+                qrs.append("No dietary limits")
+                if "halal" not in active_diet:
+                    qrs.append("Halal")
+                if "vegetarian" not in active_diet and len(qrs) < 4:
+                    qrs.append("Vegetarian")
+                return self._clarify_response(
+                    current,
+                    "dietary_requirements",
+                    f"Dietary is currently set to {active_label}. Would you like to remove it, clear all dietary limits, or switch?",
+                    qrs[:4],
+                )
+            return self._clarify_response(
+                current,
+                "dietary_requirements",
+                "Which dietary requirement would you like to apply? (e.g. 'Halal', 'Vegetarian', or 'No dietary limits')",
+                ["Halal", "Vegetarian", "Both", "No dietary limits"],
+            )
+
+        if cleaned in (
+            "change cuisine", "edit cuisine", "edit cuisines", "change cuisines",
+            "cuisines", "change liked cuisines", "edit liked cuisines",
+        ):
+            liked = current.get("liked_cuisines") or []
+            qrs = ["Japanese, Korean", "Mexican", "Any cuisine", "Yes, search now"]
+            if liked:
+                qrs = [f"Remove {liked[0].title()}", "Any cuisine", "Japanese, Korean", "Yes, search now"]
+            return self._clarify_response(
+                current,
+                "liked_cuisines",
+                "Which cuisines would you like to include, add, or remove? (e.g. 'Japanese, Mexican', 'remove japanese', or 'any cuisine')",
+                qrs,
+            )
+
+        if cleaned in (
+            "change dislikes", "edit dislikes", "edit disliked cuisines",
+            "change disliked cuisines", "disliked cuisines", "dislikes", "avoid cuisines",
+        ):
+            disliked = current.get("disliked_cuisines") or []
+            qrs = ["Clear dislikes", "Avoid fast food", "Avoid seafood", "Yes, search now"] if disliked else ["Avoid fast food", "Avoid seafood", "Avoid chinese", "Yes, search now"]
+            return self._clarify_response(
+                current,
+                "disliked_cuisines",
+                "Which cuisines would you like to avoid or clear from your dislikes? (e.g. 'avoid seafood', 'clear dislikes')",
+                qrs,
+            )
+
+        if cleaned in (
+            "change wishes", "edit wishes", "wishes", "other preferences",
+            "change preferences", "edit preferences", "special wishes",
+        ):
+            return self._clarify_response(
+                current,
+                "other_preferences",
+                "What special wishes or atmosphere should I look for? (e.g. 'quiet cozy spot', 'near mrt', or 'clear wishes')",
+                ["Quiet & cozy", "Air-conditioned", "Near MRT", "Clear wishes"],
+            )
+
+        if cleaned in ("no", "nope", "not yet", "wait", "edit", "change something", "cancel"):
+            return self._clarify_response(
+                current,
+                "confirm",
+                "No problem! Tell me what you'd like to adjust (location, budget, travel limit, dietary needs, cuisines, dislikes, or wishes).",
+                ["Change location", "Change budget", "Change dietary", "Edit cuisines"],
+            )
         return None
+
+    @staticmethod
+    def _reconcile_ai_updates(det_parsed, ai_parsed, current):
+        """Guard explicit deterministic negations/removals from accidental AI reversal."""
+        det_updates = dict((det_parsed or {}).get("updates") or {})
+        result = deepcopy(ai_parsed) if isinstance(ai_parsed, dict) else {"intent": "search", "updates": {}, "reply": "", "quick_replies": []}
+        ai_updates = dict(result.get("updates") or {})
+
+        # 1. Explicit dietary negation / clear must ALWAYS win over AI confusion (e.g. "i dont want halal").
+        if det_updates.get("dietary_action") in ("remove", "clear"):
+            ai_updates["dietary_action"] = det_updates["dietary_action"]
+            ai_updates["dietary_requirements"] = list(det_updates.get("dietary_requirements") or [])
+            if ai_updates.get("disliked_cuisines"):
+                ai_updates["disliked_cuisines"] = [
+                    c for c in ai_updates["disliked_cuisines"]
+                    if str(c).strip().casefold() not in ("halal", "vegetarian", "dietary")
+                ]
+            result["intent"] = "search"
+
+        # 2. Explicit liked removal/clear ("remove japanese" when japanese is liked) should not blacklist it.
+        if det_updates.get("liked_action") in ("remove", "clear"):
+            ai_updates["liked_action"] = det_updates["liked_action"]
+            det_liked = list(det_updates.get("liked_cuisines") or [])
+            ai_updates["liked_cuisines"] = det_liked
+            if ai_updates.get("disliked_cuisines"):
+                det_liked_cf = {str(c).strip().casefold() for c in det_liked}
+                ai_updates["disliked_cuisines"] = [
+                    c for c in ai_updates["disliked_cuisines"]
+                    if str(c).strip().casefold() not in det_liked_cf
+                ]
+            result["intent"] = "search"
+
+        # 3. Explicit disliked removal/clear ("stop avoiding chinese", "clear dislikes").
+        if det_updates.get("disliked_action") in ("remove", "clear"):
+            ai_updates["disliked_action"] = det_updates["disliked_action"]
+            ai_updates["disliked_cuisines"] = list(det_updates.get("disliked_cuisines") or [])
+            result["intent"] = "search"
+        elif det_updates.get("disliked_cuisines"):
+            existing_disliked = list(ai_updates.get("disliked_cuisines") or [])
+            existing_cf = {str(c).strip().casefold() for c in existing_disliked}
+            for item in det_updates["disliked_cuisines"]:
+                if str(item).strip().casefold() not in existing_cf:
+                    existing_disliked.append(item)
+            ai_updates["disliked_cuisines"] = existing_disliked
+            if not ai_updates.get("disliked_action"):
+                ai_updates["disliked_action"] = det_updates.get("disliked_action") or "add"
+            result["intent"] = "search"
+
+        # 4. Location add/remove preservation.
+        if det_updates.get("locations_action") in ("remove", "clear", "add"):
+            ai_updates["locations_action"] = det_updates["locations_action"]
+            if det_updates.get("locations"):
+                ai_updates["locations"] = list(det_updates["locations"])
+            result["intent"] = "search"
+
+        # 5. Wishes remove/clear preservation.
+        if det_updates.get("other_action") in ("remove", "clear"):
+            ai_updates["other_action"] = det_updates["other_action"]
+            ai_updates["other_preferences"] = list(det_updates.get("other_preferences") or [])
+            result["intent"] = "search"
+
+        # 6. If AI produced no updates at all despite deterministic rule extraction, trust deterministic parse.
+        if not ai_updates and det_updates:
+            ai_updates.update(det_updates)
+            result["intent"] = det_parsed.get("intent", "search")
+
+        result["updates"] = ai_updates
+        return result
 
     def respond(self, user, payload):
         message = str(payload.get("message") or "").strip()
@@ -996,14 +1333,13 @@ class BISChatbotService:
                 except (RuntimeError, ValueError, TypeError):
                     parsed = None
 
+        det_awaiting = None if awaiting_field == "confirm" else awaiting_field
+        det_parsed = self._deterministic_parse(message, current, user, awaiting_field=det_awaiting)
+
         if parsed is None:
-            det_awaiting = None if awaiting_field == "confirm" else awaiting_field
-            parsed = self._deterministic_parse(message, current, user, awaiting_field=det_awaiting)
-        elif awaiting_field and awaiting_field != "confirm" and not parsed.get("updates"):
-            ctx_updates = self._parse_contextual_answer(message, awaiting_field)
-            if ctx_updates:
-                parsed["updates"] = ctx_updates
-                parsed["intent"] = "search"
+            parsed = det_parsed
+        else:
+            parsed = self._reconcile_ai_updates(det_parsed, parsed, current)
 
         intent = parsed["intent"]
         reply = str(parsed.get("reply") or "").strip()

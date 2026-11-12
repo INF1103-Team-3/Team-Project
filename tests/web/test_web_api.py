@@ -668,6 +668,96 @@ class WebIntegrationTests(unittest.TestCase):
         self.assertIn("thai", me["disliked_cuisines"])
         self.assertTrue(any("4.3" in p for p in me["other_preferences"]))
 
+    def test_chatbot_negations_dietary_edit_and_custom_cuisines(self):
+        base_filters = {
+            "location": "Singapore 530967",
+            "locations": ["Singapore 530967"],
+            "mode": "walk",
+            "max_travel_minutes": 10,
+            "budget_per_person": 30,
+            "dietary_requirements": [],
+            "liked_cuisines": ["japanese"],
+            "disliked_cuisines": [],
+            "other_preferences": [],
+        }
+
+        # Bare "change dietary" when empty asks which dietary requirement to apply
+        r1 = self.client.post("/api/chat", json={"message": "change dietary", "current_filters": base_filters}).json()
+        self.assertEqual(r1["action"], "clarify")
+        self.assertEqual(r1["awaiting_field"], "dietary_requirements")
+
+        # User picks "i want halal" -> Halal added & confirm shown
+        r2 = self.client.post("/api/chat", json={
+            "message": "i want halal",
+            "current_filters": r1["filters"],
+            "awaiting_field": r1["awaiting_field"],
+        }).json()
+        self.assertEqual(r2["action"], "confirm")
+        self.assertEqual(r2["filters"]["dietary_requirements"], ["halal"])
+
+        # Asking to edit dietary while Halal is active surfaces "Remove halal" quick reply
+        r2_edit = self.client.post("/api/chat", json={"message": "dietary", "current_filters": r2["filters"]}).json()
+        self.assertEqual(r2_edit["action"], "clarify")
+        self.assertEqual(r2_edit["awaiting_field"], "dietary_requirements")
+        self.assertIn("Remove halal", r2_edit["quick_replies"])
+
+        # "i dont want halal" removes halal
+        r3 = self.client.post("/api/chat", json={"message": "i dont want halal", "current_filters": r2["filters"]}).json()
+        self.assertEqual(r3["action"], "confirm")
+        self.assertEqual(r3["filters"]["dietary_requirements"], [])
+
+        # Re-add halal, then "remove halal" also clears halal cleanly
+        r3b = self.client.post("/api/chat", json={"message": "halal please", "current_filters": r3["filters"]}).json()
+        self.assertEqual(r3b["filters"]["dietary_requirements"], ["halal"])
+        r4 = self.client.post("/api/chat", json={"message": "remove halal", "current_filters": r3b["filters"]}).json()
+        self.assertEqual(r4["action"], "confirm")
+        self.assertEqual(r4["filters"]["dietary_requirements"], [])
+
+        # Removing an already-liked cuisine does not mistakenly add it to disliked_cuisines
+        r5 = self.client.post("/api/chat", json={"message": "remove japanese", "current_filters": r4["filters"]}).json()
+        self.assertEqual(r5["filters"]["liked_cuisines"], [])
+        self.assertEqual(r5["filters"]["disliked_cuisines"], [])
+
+        # Avoiding custom cuisines adds them to disliked_cuisines
+        r6 = self.client.post("/api/chat", json={
+            "message": "avoid seafood and fast food",
+            "current_filters": r5["filters"],
+        }).json()
+        self.assertIn("seafood", r6["filters"]["disliked_cuisines"])
+        self.assertIn("fast food", r6["filters"]["disliked_cuisines"])
+
+        # Post-AI safety reconciliation protects explicit negations even if live AI flips dietary_action
+        def confused_ai_turn(message, current_filters, history, saved_profile, config):
+            return {
+                "intent": "search",
+                "reply": "Updated!",
+                "updates": {
+                    "dietary_requirements": ["halal"],
+                    "dietary_action": "add",
+                },
+                "quick_replies": [],
+            }
+
+        self.application._chatbot._ai = SimpleNamespace(chat_turn=confused_ai_turn)
+        r7 = self.client.post("/api/chat", json={
+            "message": "i dont want halal",
+            "current_filters": {**base_filters, "dietary_requirements": ["halal"]},
+        }).json()
+        self.assertEqual(r7["action"], "confirm")
+        self.assertEqual(r7["filters"]["dietary_requirements"], [])
+
+    def test_search_preserves_custom_disliked_cuisines_in_other_preferences(self):
+        payload = self.search_payload()
+        payload["disliked_cuisines"] = ["thai", "seafood", "fast food"]
+        res = self.client.post("/api/search", json=payload)
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertTrue(self.ranking_calls)
+        recorded = self.ranking_calls[-1]
+        self.assertEqual(recorded["disliked_cuisines"], ["thai"])
+        other_cf = [o.casefold() for o in recorded["other_preferences"]]
+        self.assertIn("avoid seafood cuisine", other_cf)
+        self.assertIn("avoid fast food cuisine", other_cf)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
