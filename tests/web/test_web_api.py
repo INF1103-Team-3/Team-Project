@@ -385,6 +385,115 @@ class WebIntegrationTests(unittest.TestCase):
         self.assertEqual(summary["verified"], 2)
         self.assertEqual([c["halal_certification"] for c in checked], ["official", "official"])
 
+    def test_chatbot_parses_search_followup_clarification_and_save_profile(self):
+        # 1. Guest without location triggers clarification
+        clarify = self.client.post("/api/chat", json={
+            "message": "Find me ramen under $15",
+            "current_filters": {},
+            "history": [],
+        })
+        self.assertEqual(clarify.status_code, 200, clarify.text)
+        self.assertEqual(clarify.json()["action"], "clarify")
+        self.assertEqual(clarify.json()["filters"]["budget_per_person"], 15.0)
+        self.assertIn("ramen", clarify.json()["filters"]["liked_cuisines"])
+
+        # 2. Meet-in-the-middle + dietary + rating + walk time triggers search
+        chat1 = self.client.post("/api/chat", json={
+            "message": "Halal Japanese between Tampines and Jurong East under $25, walk 15 mins, at least 4.5 stars",
+            "current_filters": {},
+            "history": [],
+        })
+        self.assertEqual(chat1.status_code, 200, chat1.text)
+        body1 = chat1.json()
+        self.assertEqual(body1["action"], "search")
+        f1 = body1["filters"]
+        self.assertEqual(f1["locations"], ["Tampines", "Jurong East"])
+        self.assertEqual(f1["mode"], "walk")
+        self.assertEqual(f1["max_travel_minutes"], 15.0)
+        self.assertEqual(f1["budget_per_person"], 25.0)
+        self.assertIn("halal", f1["dietary_requirements"])
+        self.assertIn("japanese", f1["liked_cuisines"])
+        self.assertTrue(any("4.5" in p for p in f1["other_preferences"]))
+
+        # 3. Incremental follow-up preserves existing locations/dietary while merging updates
+        chat2 = self.client.post("/api/chat", json={
+            "message": "Make it under $15 by transit",
+            "current_filters": f1,
+            "history": [{"role": "user", "text": "Halal Japanese..."}],
+        })
+        self.assertEqual(chat2.status_code, 200, chat2.text)
+        f2 = chat2.json()["filters"]
+        self.assertEqual(f2["locations"], ["Tampines", "Jurong East"])
+        self.assertIn("halal", f2["dietary_requirements"])
+        self.assertIn("japanese", f2["liked_cuisines"])
+        self.assertEqual(f2["budget_per_person"], 15.0)
+        self.assertEqual(f2["mode"], "transit")
+
+        # 4. Save profile requires sign-in for guests, and persists when signed in
+        guest_save = self.client.post("/api/chat", json={
+            "message": "Save these preferences to my profile",
+            "current_filters": f2,
+        })
+        self.assertEqual(guest_save.status_code, 200)
+        self.assertFalse(guest_save.json()["saved_to_profile"])
+        self.assertEqual(guest_save.json()["action"], "clarify")
+
+        headers, _ = self.account("chatbot@example.com")
+        authed_save = self.client.post("/api/chat", json={
+            "message": "Save these preferences to my profile",
+            "current_filters": f2,
+        }, headers=headers)
+        self.assertEqual(authed_save.status_code, 200, authed_save.text)
+        self.assertTrue(authed_save.json()["saved_to_profile"])
+        me = self.client.get("/api/auth/me", headers=headers).json()["user"]
+        self.assertEqual(me["location"], ["tampines", "jurong east"])
+        self.assertEqual(me["budget_per_person"], 15.0)
+        self.assertIn("halal", me["dietary_requirements"])
+
+    def test_chatbot_uses_ai_response_and_falls_back_cleanly(self):
+        calls = []
+
+        def fake_chat_turn(message, current_filters, history, saved_profile, config):
+            calls.append((message, current_filters))
+            return {
+                "intent": "search",
+                "reply": "Searching Marina Bay for Korean BBQ under $35.",
+                "updates": {
+                    "locations": ["Marina Bay"],
+                    "locations_action": "replace",
+                    "liked_cuisines": ["korean"],
+                    "liked_action": "replace",
+                    "budget_per_person": 35,
+                },
+                "quick_replies": ["Under $25", "Walk 15 mins"],
+            }
+
+        self.application._chatbot._ai = SimpleNamespace(chat_turn=fake_chat_turn)
+        res = self.client.post("/api/chat", json={
+            "message": "I want Korean BBQ around Marina Bay budget 35",
+            "current_filters": {},
+        })
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(res.json()["action"], "search")
+        self.assertEqual(res.json()["filters"]["locations"], ["Marina Bay"])
+        self.assertEqual(res.json()["filters"]["liked_cuisines"], ["korean"])
+
+        # Fallback to deterministic parsing if AI raises
+        def broken_chat_turn(*_args):
+            raise RuntimeError("AI timeout")
+
+        self.application._chatbot._ai = SimpleNamespace(chat_turn=broken_chat_turn)
+        fallback = self.client.post("/api/chat", json={
+            "message": "Vegetarian near 828761 under $18",
+            "current_filters": {},
+        })
+        self.assertEqual(fallback.status_code, 200, fallback.text)
+        self.assertEqual(fallback.json()["action"], "search")
+        self.assertEqual(fallback.json()["filters"]["locations"], ["Singapore 828761"])
+        self.assertIn("vegetarian", fallback.json()["filters"]["dietary_requirements"])
+        self.assertEqual(fallback.json()["filters"]["budget_per_person"], 18.0)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

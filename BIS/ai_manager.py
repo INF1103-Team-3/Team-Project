@@ -34,10 +34,10 @@ GROQ_URL = os.getenv(
 )
 
 # BIS owns this fallback order. Keep it independent of BRNS's model chain.
+# Groq responds in ~1-2s; place discovered Groq models ahead of slower/broken
+# secondary providers just like BRNS/BRC while keeping Gemini Flash Lite first.
 MODEL_CHAIN = [
     {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
-    {"provider": "gemini", "model": "gemini-3.6-flash"},
-    {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
 ]
 _MANAGER = None
 
@@ -57,15 +57,18 @@ def manager():
 
 
 def _extend_bis_chain_with_groq():
-    """Fetch Groq chat models at startup and append them to MODEL_CHAIN."""
+    """Fetch Groq chat models at startup and register them ahead of slow fallbacks."""
     from dotenv import load_dotenv
     load_dotenv(BASE_DIR.parent / ".env")
     api_key = os.getenv("GROQ_API_KEY", "").strip()
-    if not api_key:
-        return
-    from shared.groq_models import fetch_chat_models
-    for model_id in fetch_chat_models(api_key):
-        MODEL_CHAIN.append({"provider": "groq", "model": model_id})
+    if api_key:
+        from shared.groq_models import fetch_chat_models
+        for model_id in fetch_chat_models(api_key):
+            MODEL_CHAIN.append({"provider": "groq", "model": model_id})
+    MODEL_CHAIN.extend([
+        {"provider": "gemini", "model": "gemini-3.6-flash"},
+        {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
+    ])
 
 
 _extend_bis_chain_with_groq()
@@ -280,7 +283,7 @@ def _parse_json_response(content):
     return parsed
 
 
-def _call_json_with_fallback(payload, config, validator=None):
+def _call_json_with_fallback(payload, config, validator=None, skip_primary=False):
     """Try the BIS primary model, then BIS's own fallback chain for JSON."""
     providers = []
     primary_model = config.get("openrouter_model")
@@ -288,7 +291,7 @@ def _call_json_with_fallback(payload, config, validator=None):
         config.get("openrouter_api_keys")
         or config.get("openrouter_api_key")
     )
-    if primary_model:
+    if primary_model and not skip_primary:
         providers.append(OpenRouterAIProvider(
             primary_model,
             lambda request, settings: _call_openrouter(request, settings),
@@ -802,3 +805,89 @@ def interpret_search_request(request, today_request, config):
     """Propose a structured search from today's natural-language request."""
     return manager().interpret_search_request(
         request, today_request, config)
+
+
+def interpret_chat_turn(message, current_filters, history, saved_profile, config):
+    """Interpret one web chatbot turn into structured intent and filter deltas."""
+    if config.get("ai_bypass"):
+        raise RuntimeError("AI is disabled for local testing.")
+    from sources.profile_schema import CUISINES, clean_text
+
+    supported_cuisines = list(CUISINES)
+    system_prompt = (
+        "You are BiteFinder's Singapore restaurant search chatbot assistant. "
+        "Understand the user's message in context of current_filters, recent_history, "
+        "and saved_profile, and return ONLY JSON with these exact top-level keys: "
+        "intent, reply, updates, quick_replies. "
+        "intent must be one of: search, clarify, update_filters, save_profile, "
+        "show_profile, reset, help. "
+        "Use intent='search' whenever the user describes food cravings, locations, "
+        "or refines filters (budget, cuisine, dietary, travel mode/time, rating) AND "
+        "either specifies a location now or current_filters/saved_profile already has one. "
+        "Use intent='clarify' ONLY when search needs a starting location and neither "
+        "the message, current_filters, nor saved_profile provides any location, or the "
+        "request is completely ambiguous greetings/chitchat. "
+        "Use intent='save_profile' when the user asks to save current preferences as defaults. "
+        "Use intent='show_profile' when the user asks to view their saved profile/settings. "
+        "Use intent='reset' when the user asks to reset/clear chat filters or restart. "
+        "Use intent='help' when the user asks how the bot works or types /help. "
+        "reply must be a concise, friendly 1-2 sentence response in plain text. "
+        "updates is an object using ONLY these keys (omit or set null if unchanged): "
+        "locations (list of Singapore place strings or 6-digit postal codes; "
+        "if 'meet in the middle between X and Y', list both ['X', 'Y']), "
+        "locations_action ('replace', 'add', 'clear'), "
+        "mode ('walk', 'drive', 'transit' — map MRT/bus/train/public transport to 'transit'), "
+        "traffic_aware (boolean), "
+        "max_travel_minutes (number 1-120), "
+        "max_distance_km (number 0.1-50), "
+        "budget_per_person (number 1-1000 SGD), "
+        "dietary_requirements (subset of ['halal', 'vegetarian']), "
+        "dietary_action ('replace', 'add', 'remove'), "
+        "liked_cuisines (list of lowercase cuisines; prefer values from "
+        + json.dumps(supported_cuisines)
+        + ", or short custom cuisine names like 'mexican'/'ramen'/'dim sum' mapped closely), "
+        "liked_action ('replace', 'add', 'remove', 'clear'), "
+        "disliked_cuisines (list from " + json.dumps(supported_cuisines) + "), "
+        "disliked_action ('replace', 'add', 'remove', 'clear'), "
+        "other_preferences (list of short constraint/preference strings like "
+        "'at least 4.5 stars', 'spicy food', 'quiet', 'open 24 hours', 'only japanese cuisine'), "
+        "other_action ('replace', 'add', 'clear'). "
+        "Preserve unmentioned filters (only specify keys the user wants to set, add, or change). "
+        "quick_replies is a list of 2-4 short clickable follow-up prompts (max 40 chars each)."
+    )
+    user_payload = {
+        "message": clean_text(str(message or ""), 1000),
+        "current_filters": current_filters or {},
+        "recent_history": (history or [])[-6:],
+        "saved_profile": saved_profile or {},
+    }
+    payload = {
+        "model": config.get("openrouter_model", ""),
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
+        ],
+        "temperature": 0,
+        "max_tokens": 550,
+    }
+    allowed_intents = {
+        "search", "clarify", "update_filters", "save_profile",
+        "show_profile", "reset", "help",
+    }
+
+    def check(parsed):
+        required = {"intent", "reply", "updates", "quick_replies"}
+        if not isinstance(parsed, dict) or not required.issubset(parsed):
+            raise ValueError("Missing chatbot response fields.")
+        if parsed["intent"] not in allowed_intents:
+            raise ValueError("Unsupported chatbot intent.")
+        if not isinstance(parsed["reply"], str) or not parsed["reply"].strip():
+            raise ValueError("Empty chatbot reply.")
+        if not isinstance(parsed["updates"], dict):
+            raise ValueError("Chatbot updates must be an object.")
+        if not isinstance(parsed["quick_replies"], list):
+            parsed["quick_replies"] = []
+        return parsed
+
+    has_fast = bool(config.get("groq_api_key") or config.get("gemini_api_key"))
+    return _call_json_with_fallback(payload, config, check, skip_primary=has_fast)
