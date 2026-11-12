@@ -475,9 +475,12 @@ class WebIntegrationTests(unittest.TestCase):
         })
         self.assertEqual(res.status_code, 200, res.text)
         self.assertEqual(len(calls), 1)
-        self.assertEqual(res.json()["action"], "search")
+        # Guest without travel limit must be asked for travel time/distance
+        self.assertEqual(res.json()["action"], "clarify")
+        self.assertEqual(res.json()["awaiting_field"], "travel")
         self.assertEqual(res.json()["filters"]["locations"], ["Marina Bay"])
         self.assertEqual(res.json()["filters"]["liked_cuisines"], ["korean"])
+        self.assertEqual(res.json()["filters"]["budget_per_person"], 35.0)
 
         # Fallback to deterministic parsing if AI raises
         def broken_chat_turn(*_args):
@@ -485,7 +488,7 @@ class WebIntegrationTests(unittest.TestCase):
 
         self.application._chatbot._ai = SimpleNamespace(chat_turn=broken_chat_turn)
         fallback = self.client.post("/api/chat", json={
-            "message": "Vegetarian near 828761 under $18",
+            "message": "Vegetarian near 828761 under $18 walk 15 mins",
             "current_filters": {},
         })
         self.assertEqual(fallback.status_code, 200, fallback.text)
@@ -493,6 +496,116 @@ class WebIntegrationTests(unittest.TestCase):
         self.assertEqual(fallback.json()["filters"]["locations"], ["Singapore 828761"])
         self.assertIn("vegetarian", fallback.json()["filters"]["dietary_requirements"])
         self.assertEqual(fallback.json()["filters"]["budget_per_person"], 18.0)
+        self.assertEqual(fallback.json()["filters"]["max_travel_minutes"], 15.0)
+
+    def test_guest_chatbot_questions_location_budget_and_travel_sequentially(self):
+        # Step 1: Guest asks broadly -> chatbot questions location
+        s1 = self.client.post("/api/chat", json={
+            "message": "Find me something good to eat",
+            "current_filters": {},
+            "history": [],
+        })
+        self.assertEqual(s1.status_code, 200, s1.text)
+        b1 = s1.json()
+        self.assertEqual(b1["action"], "clarify")
+        self.assertEqual(b1["awaiting_field"], "location")
+
+        # Step 2: Bare location reply -> chatbot questions budget
+        s2 = self.client.post("/api/chat", json={
+            "message": "Bugis",
+            "current_filters": b1["filters"],
+            "awaiting_field": b1["awaiting_field"],
+        })
+        self.assertEqual(s2.status_code, 200, s2.text)
+        b2 = s2.json()
+        self.assertEqual(b2["action"], "clarify")
+        self.assertEqual(b2["awaiting_field"], "budget_per_person")
+        self.assertEqual(b2["filters"]["locations"], ["Bugis"])
+
+        # Step 3: Bare budget reply -> chatbot questions travel
+        s3 = self.client.post("/api/chat", json={
+            "message": "$22",
+            "current_filters": b2["filters"],
+            "awaiting_field": b2["awaiting_field"],
+        })
+        self.assertEqual(s3.status_code, 200, s3.text)
+        b3 = s3.json()
+        self.assertEqual(b3["action"], "clarify")
+        self.assertEqual(b3["awaiting_field"], "travel")
+        self.assertEqual(b3["filters"]["budget_per_person"], 22.0)
+
+        # Step 4: Travel reply completes required fields -> triggers search
+        s4 = self.client.post("/api/chat", json={
+            "message": "15 mins walk",
+            "current_filters": b3["filters"],
+            "awaiting_field": b3["awaiting_field"],
+        })
+        self.assertEqual(s4.status_code, 200, s4.text)
+        b4 = s4.json()
+        self.assertEqual(b4["action"], "search")
+        self.assertEqual(b4["filters"]["locations"], ["Bugis"])
+        self.assertEqual(b4["filters"]["budget_per_person"], 22.0)
+        self.assertEqual(b4["filters"]["max_travel_minutes"], 15.0)
+        self.assertEqual(b4["filters"]["mode"], "walk")
+
+    def test_new_user_profile_onboarding_via_chatbot(self):
+        headers, _ = self.account("onboard@example.com")
+
+        # Start onboarding wizard
+        start = self.client.post("/api/chat", json={
+            "message": "__start_onboarding__",
+            "current_filters": {},
+            "onboarding": True,
+        }, headers=headers)
+        self.assertEqual(start.status_code, 200, start.text)
+        st = start.json()
+        self.assertEqual(st["action"], "onboarding")
+        self.assertEqual(st["awaiting_field"], "location")
+
+        steps = [
+            ("Punggol", "budget_per_person"),
+            ("$25", "travel"),
+            ("20 mins", "dietary_requirements"),
+            ("Halal", "liked_cuisines"),
+            ("Japanese, Korean", "disliked_cuisines"),
+            ("Thai", "other_preferences"),
+        ]
+        state = st
+        for msg, expected_next in steps:
+            res = self.client.post("/api/chat", json={
+                "message": msg,
+                "current_filters": state["filters"],
+                "onboarding": True,
+                "awaiting_field": state["awaiting_field"],
+            }, headers=headers)
+            self.assertEqual(res.status_code, 200, res.text)
+            state = res.json()
+            self.assertEqual(state["action"], "onboarding")
+            self.assertEqual(state["awaiting_field"], expected_next, msg)
+
+        # Final preference step finishes onboarding and triggers search
+        done = self.client.post("/api/chat", json={
+            "message": "At least 4.3 stars",
+            "current_filters": state["filters"],
+            "onboarding": True,
+            "awaiting_field": state["awaiting_field"],
+        }, headers=headers)
+        self.assertEqual(done.status_code, 200, done.text)
+        d = done.json()
+        self.assertEqual(d["action"], "search")
+        self.assertIsNone(d["awaiting_field"])
+        self.assertTrue(d["saved_to_profile"])
+
+        # Verify profile was persisted incrementally to user store
+        me = self.client.get("/api/auth/me", headers=headers).json()["user"]
+        self.assertEqual(me["location"], ["punggol"])
+        self.assertEqual(me["budget_per_person"], 25.0)
+        self.assertEqual(me["max_travel_time_minutes"], 20.0)
+        self.assertIn("halal", me["dietary_requirements"])
+        self.assertIn("japanese", me["liked_cuisines"])
+        self.assertIn("korean", me["liked_cuisines"])
+        self.assertIn("thai", me["disliked_cuisines"])
+        self.assertTrue(any("4.3" in p for p in me["other_preferences"]))
 
 
 if __name__ == "__main__":

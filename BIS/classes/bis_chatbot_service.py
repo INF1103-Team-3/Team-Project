@@ -1,4 +1,4 @@
-"""Conversational BIS assistant: parses chat turns into synced search/profile actions."""
+"""Conversational BIS assistant: parses chat turns into synced search and profile actions."""
 from copy import deepcopy
 import re
 
@@ -9,6 +9,38 @@ _COMMON_CUSTOM_CUISINES = (
     "ramen", "sushi", "dim sum", "hawker", "zi char", "hotpot", "bbq",
     "bakery", "cafe", "seafood", "steamboat", "prata", "biryani", "fast food",
 )
+
+_ONBOARDING_QUESTIONS = {
+    "location": (
+        "Welcome to BiteFinder! Let's set up your profile. First, which starting location(s) "
+        "in Singapore do you usually search around? (e.g. Compass One, Bugis, or 828761)",
+        ["Compass One", "Bugis Junction", "Rivervale Plaza", "Jewel Changi"],
+    ),
+    "budget_per_person": (
+        "Got it! What is your usual budget per person in SGD? (e.g. $15, $25, or $40)",
+        ["$15", "$25", "$40", "$60"],
+    ),
+    "travel": (
+        "How far or how long are you usually willing to travel? (e.g. 20 mins or 1.5 km)",
+        ["15 mins walk", "30 mins walk", "2 km", "20 mins MRT"],
+    ),
+    "dietary_requirements": (
+        "Do you have any dietary requirements to save? (Halal, Vegetarian, Both, or None)",
+        ["Halal", "Vegetarian", "Both", "None"],
+    ),
+    "liked_cuisines": (
+        "Which cuisines do you like most? (e.g. Japanese, Chinese, Korean — or None)",
+        ["Japanese, Korean", "Chinese, Malay", "Western, Italian", "None"],
+    ),
+    "disliked_cuisines": (
+        "Are there any cuisines you prefer to avoid? (or None)",
+        ["None", "Indian", "Malay", "Thai"],
+    ),
+    "other_preferences": (
+        "Any other regular preferences? (e.g. spicy food, at least 4.5 stars — or None)",
+        ["At least 4.5 stars", "Spicy food", "Quiet", "None"],
+    ),
+}
 
 
 class BISChatbotService:
@@ -22,34 +54,6 @@ class BISChatbotService:
         self._save_profile = profile_saver
 
     @staticmethod
-    def _default_filters(user=None):
-        prefs = (user or {}).get("preferences") or {}
-        saved_locs = [
-            BISChatbotService._normalize_location(loc)
-            for loc in (prefs.get("location") or [])
-            if str(loc or "").strip()
-        ]
-        max_mins = prefs.get("max_travel_time_minutes")
-        max_km = prefs.get("max_distance_km")
-        if max_mins is None and max_km is None:
-            max_mins = 30.0
-        elif max_mins is not None:
-            max_km = None
-        return {
-            "location": saved_locs[0] if saved_locs else "",
-            "locations": saved_locs,
-            "mode": "walk",
-            "traffic_aware": False,
-            "max_travel_minutes": max_mins,
-            "max_distance_km": max_km,
-            "budget_per_person": prefs.get("budget_per_person") or 30.0,
-            "dietary_requirements": list(prefs.get("dietary_requirements") or []),
-            "liked_cuisines": [str(c).strip().lower() for c in (prefs.get("liked_cuisines") or []) if str(c).strip()],
-            "disliked_cuisines": [str(c).strip().lower() for c in (prefs.get("disliked_cuisines") or []) if str(c).strip()],
-            "other_preferences": [str(p).strip() for p in (prefs.get("other_preferences") or []) if str(p).strip()],
-        }
-
-    @staticmethod
     def _normalize_location(raw):
         text = re.sub(r"\s+", " ", str(raw or "").strip()).strip(".,;!?")
         if not text:
@@ -57,6 +61,33 @@ class BISChatbotService:
         if text.isdigit():
             return f"Singapore {text}"
         return text
+
+    @classmethod
+    def _default_filters(cls, user=None):
+        prefs = (user or {}).get("preferences") or {}
+        saved_locs = [
+            cls._normalize_location(loc)
+            for loc in (prefs.get("location") or [])
+            if str(loc or "").strip()
+        ]
+        max_mins = prefs.get("max_travel_time_minutes")
+        max_km = prefs.get("max_distance_km")
+        if max_mins is not None:
+            max_km = None
+        budget = prefs.get("budget_per_person")
+        return {
+            "location": saved_locs[0] if saved_locs else "",
+            "locations": saved_locs,
+            "mode": "walk",
+            "traffic_aware": False,
+            "max_travel_minutes": float(max_mins) if max_mins is not None else None,
+            "max_distance_km": float(max_km) if max_km is not None else None,
+            "budget_per_person": float(budget) if budget is not None else None,
+            "dietary_requirements": list(prefs.get("dietary_requirements") or []),
+            "liked_cuisines": [str(c).strip().lower() for c in (prefs.get("liked_cuisines") or []) if str(c).strip()],
+            "disliked_cuisines": [str(c).strip().lower() for c in (prefs.get("disliked_cuisines") or []) if str(c).strip()],
+            "other_preferences": [str(p).strip() for p in (prefs.get("other_preferences") or []) if str(p).strip()],
+        }
 
     @classmethod
     def normalize_filters(cls, raw, user=None):
@@ -77,8 +108,8 @@ class BISChatbotService:
         if mode not in ("walk", "drive", "transit"):
             mode = "walk"
 
-        max_mins = raw.get("max_travel_minutes")
-        max_km = raw.get("max_distance_km")
+        max_mins = raw.get("max_travel_minutes") if "max_travel_minutes" in raw else defaults["max_travel_minutes"]
+        max_km = raw.get("max_distance_km") if "max_distance_km" in raw else defaults["max_distance_km"]
         if isinstance(max_mins, (int, float)) and not isinstance(max_mins, bool) and max_mins > 0:
             low, high = NUMBER_LIMITS["max_travel_time_minutes"]
             max_mins = round(max(low, min(high, float(max_mins))), 1)
@@ -88,15 +119,15 @@ class BISChatbotService:
             max_km = round(max(low, min(high, float(max_km))), 2)
             max_mins = None
         else:
-            max_mins = defaults["max_travel_minutes"]
-            max_km = defaults["max_distance_km"]
+            max_mins = None
+            max_km = None
 
-        budget = raw.get("budget_per_person")
-        if not isinstance(budget, (int, float)) or isinstance(budget, bool) or budget <= 0:
-            budget = defaults["budget_per_person"]
-        else:
+        budget = raw.get("budget_per_person") if "budget_per_person" in raw else defaults["budget_per_person"]
+        if isinstance(budget, (int, float)) and not isinstance(budget, bool) and budget > 0:
             b_low, b_high = NUMBER_LIMITS["budget_per_person"]
             budget = round(max(b_low, min(b_high, float(budget))), 2)
+        else:
+            budget = None
 
         diet = []
         for item in (raw.get("dietary_requirements") or []):
@@ -243,7 +274,52 @@ class BISChatbotService:
         return cls.normalize_filters(result, user=user)
 
     @classmethod
-    def _deterministic_parse(cls, message, current, user):
+    def _parse_contextual_answer(cls, message, awaiting_field):
+        """Parse concise direct answers when the chatbot just asked a targeted question."""
+        text = str(message or "").strip()
+        lower = text.casefold()
+        updates = {}
+        if not awaiting_field or not text:
+            return updates
+
+        if awaiting_field == "budget_per_person":
+            num_match = re.search(r"^\s*(?:sgd|\$)?\s*(\d+(?:\.\d+)?)\s*(?:dollars?|sgd)?\s*$", lower)
+            if num_match:
+                updates["budget_per_person"] = float(num_match.group(1))
+        elif awaiting_field == "travel":
+            if re.search(r"\b(?:drive|driving|car)\b", lower):
+                updates["mode"] = "drive"
+            elif re.search(r"\b(?:transit|mrt|bus|train|public transport)\b", lower):
+                updates["mode"] = "transit"
+            elif re.search(r"\b(?:walk|walking|foot)\b", lower):
+                updates["mode"] = "walk"
+            km_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:km|kilometres?|kilometers?)\b", lower)
+            mins_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:m|mins?|minutes?)?\b", lower)
+            if km_match:
+                updates["max_distance_km"] = float(km_match.group(1))
+            elif mins_match:
+                updates["max_travel_minutes"] = float(mins_match.group(1))
+        elif awaiting_field == "location":
+            between = re.search(
+                r"\b(?:between\s+)?([A-Za-z0-9\s,'-]{2,50}?)\s+(?:and|&)\s+([A-Za-z0-9\s,'-]{2,50}?)$",
+                text,
+                re.IGNORECASE,
+            )
+            if between and not re.search(r"\b(?:halal|vegetarian|budget|walk|drive|transit)\b", lower):
+                updates["locations"] = [between.group(1).strip(), between.group(2).strip()]
+                updates["locations_action"] = "replace"
+            elif "," in text and len(text) < 120:
+                parts = [p.strip() for p in text.split(",") if p.strip()]
+                if parts:
+                    updates["locations"] = parts
+                    updates["locations_action"] = "replace"
+            elif len(text) <= 80 and not re.search(r"\b(?:help|cancel|reset|profile|none|skip)\b", lower):
+                updates["locations"] = [text]
+                updates["locations_action"] = "replace"
+        return updates
+
+    @classmethod
+    def _deterministic_parse(cls, message, current, user, awaiting_field=None):
         text = str(message or "").strip()
         lower = text.casefold()
 
@@ -251,13 +327,12 @@ class BISChatbotService:
             return {
                 "intent": "help",
                 "reply": (
-                    "Just tell me what you're craving! You can combine location, cuisine, "
-                    "budget, dietary needs, travel mode, or ratings — or ask to meet a friend "
-                    "between two spots, refine results ('cheaper', '4.5 stars'), or 'save to profile'."
+                    "Just tell me what you're craving! Combine location, budget, travel time/distance, "
+                    "cuisine, dietary needs, or ratings — or let me walk you through step-by-step."
                 ),
                 "updates": {},
                 "quick_replies": [
-                    "Halal Japanese near Bugis under $20",
+                    "Halal Japanese near Bugis under $20, 15 mins walk",
                     "Meet between Tampines and Jurong East",
                     "At least 4.5 stars near Compass One",
                 ],
@@ -268,7 +343,7 @@ class BISChatbotService:
                 "intent": "show_profile",
                 "reply": cls._format_profile_summary(user),
                 "updates": {},
-                "quick_replies": ["Use my saved profile", "Halal food near me", "Help"],
+                "quick_replies": ["Use my saved profile", "Help"],
             }
 
         if re.search(r"\b(?:save|remember|store)\b.*\b(?:profile|default|preferences)\b", lower) or lower == "/save":
@@ -285,13 +360,17 @@ class BISChatbotService:
                 "reply": (
                     "Restored your saved profile defaults."
                     if user and user.get("preferences")
-                    else "Reset filters back to defaults."
+                    else "Cleared filters. Tell me your starting location, budget, and travel limit to search!"
                 ),
                 "updates": {},
-                "quick_replies": ["Search now", "Bugis Junction under $20", "Halal food near Compass One"],
+                "quick_replies": (
+                    ["Search now", "Halal Japanese under $20"]
+                    if user and user.get("preferences")
+                    else ["Bugis Junction", "Compass One", "Rivervale Plaza"]
+                ),
             }
 
-        updates = {}
+        updates = cls._parse_contextual_answer(text, awaiting_field)
         between = re.search(
             r"\bbetween\s+([A-Za-z0-9\s,'-]{2,50}?)\s+(?:and|&)\s+([A-Za-z0-9\s,'-]{2,50}?)(?=$|\s+(?:for|with|under|below|within|by|walk|drive|transit|mrt)\b|[.,!?])",
             text,
@@ -300,16 +379,19 @@ class BISChatbotService:
         if between:
             updates["locations"] = [between.group(1).strip(), between.group(2).strip()]
             updates["locations_action"] = "replace"
-        else:
+        elif "locations" not in updates:
             postal = re.search(r"\b(\d{6})\b", text)
             loc_match = re.search(
-                r"\b(?:near|around|at|in|by)\s+([A-Za-z0-9][A-Za-z0-9\s,'-]{1,45}?)(?=$|\s+(?:for|with|under|below|within|budget|walk|drive|transit|mrt|halal|vegetarian)\b|[.,!?])",
+                r"\b(?:near|around|at(?!\s+(?:least|most|all)\b)|in(?!\s+(?:general|mind)\b)|by(?!\s+(?:walk|drive|transit|mrt|bus|train|car|foot)\b))\s+([A-Za-z0-9][A-Za-z0-9\s,'-]{1,45}?)(?=$|\s+(?:for|with|under|below|within|budget|walk|drive|transit|mrt|halal|vegetarian)\b|[.,!?])",
                 text,
                 re.IGNORECASE,
             )
             if loc_match:
                 candidate_loc = loc_match.group(1).strip()
-                if candidate_loc.casefold() not in ("halal", "vegetarian", "walk", "drive", "transit", "mrt", "singapore"):
+                if (
+                    candidate_loc.casefold() not in ("halal", "vegetarian", "walk", "drive", "transit", "mrt", "singapore")
+                    and not re.match(r"^(?:least|most|min|minimum|max|under|below)\b", candidate_loc, re.IGNORECASE)
+                ):
                     updates["locations"] = [candidate_loc]
                     updates["locations_action"] = "replace"
             elif postal:
@@ -362,7 +444,10 @@ class BISChatbotService:
         for cuisine in tuple(CUISINES) + _COMMON_CUSTOM_CUISINES:
             if not re.search(rf"\b{re.escape(cuisine)}\b", lower):
                 continue
-            if re.search(rf"\b(?:no|avoid|dislike|exclude|not|without)\s+{re.escape(cuisine)}\b", lower):
+            if (
+                awaiting_field == "disliked_cuisines"
+                or re.search(rf"\b(?:no|avoid|dislike|exclude|not|without)\s+{re.escape(cuisine)}\b", lower)
+            ):
                 if cuisine in CUISINES:
                     disliked.append(cuisine)
             else:
@@ -383,21 +468,20 @@ class BISChatbotService:
         )
         if rating_match:
             rating_val = rating_match.group(1)
-            if re.search(r"\b(?:at least|minimum|min|>=)\b", lower):
-                other.append(f"at least {rating_val} stars")
-            else:
-                other.append(f"{rating_val} stars")
+            other.append(
+                f"at least {rating_val} stars"
+                if re.search(r"\b(?:at least|minimum|min|>=)\b", lower)
+                else f"{rating_val} stars"
+            )
         for kw in ("spicy", "quiet", "open 24 hours", "24 hours", "outdoor seating", "aircon"):
             if kw in lower:
                 other.append(kw)
-        if "only " in lower and liked:
-            if liked[0] in CUISINES:
-                other.append(f"only {liked[0]} cuisine")
+        if "only " in lower and liked and liked[0] in CUISINES:
+            other.append(f"only {liked[0]} cuisine")
         if other:
             updates["other_preferences"] = other
             updates["other_action"] = "add"
 
-        merged_preview = cls._apply_updates(current, updates, user=user)
         has_search_signal = bool(
             updates
             or re.search(r"\b(?:search|find|recommend|suggest|eat|food|dinner|lunch|breakfast|supper|restaurant|cafe|hungry|retry)\b", lower)
@@ -407,30 +491,253 @@ class BISChatbotService:
             return {
                 "intent": "clarify",
                 "reply": (
-                    "Tell me what kind of food, area, budget, or dietary option you want "
-                    "(for example: 'Halal Japanese near Bugis under $20')."
+                    "Tell me what you'd like to eat, or start with your location, budget, and travel limit!"
                 ),
                 "updates": {},
                 "quick_replies": [
-                    "Halal Japanese near Bugis under $20",
-                    "Meet between Tampines and Jurong East",
-                    "Search with current filters",
+                    "Halal Japanese near Bugis under $20, 15 mins walk",
+                    "Compass One",
+                    "Bugis Junction",
                 ],
-            }
-
-        if not merged_preview["locations"]:
-            return {
-                "intent": "clarify",
-                "reply": "Where in Singapore would you like me to search? Enter an area, landmark, MRT, or 6-digit postal code.",
-                "updates": updates,
-                "quick_replies": ["Bugis Junction", "Compass One", "Rivervale Plaza", "Jewel Changi"],
             }
 
         return {
             "intent": "search",
             "reply": "Got it! Updating your search preferences and finding matching restaurants now.",
             "updates": updates,
-            "quick_replies": cls._default_quick_replies(merged_preview, bool(user)),
+            "quick_replies": [],
+        }
+
+    @staticmethod
+    def _next_missing_search_field(filters):
+        if not filters.get("locations"):
+            return "location"
+        if filters.get("budget_per_person") is None:
+            return "budget_per_person"
+        if filters.get("max_travel_minutes") is None and filters.get("max_distance_km") is None:
+            return "travel"
+        return None
+
+    @staticmethod
+    def _prompt_for_missing_search_field(field):
+        if field == "location":
+            return (
+                "Where in Singapore would you like me to search? Enter an area, landmark, MRT, or 6-digit postal code (or 'between X and Y').",
+                ["Bugis Junction", "Compass One", "Rivervale Plaza", "Jewel Changi"],
+            )
+        if field == "budget_per_person":
+            return (
+                "What is your budget per person in SGD? (e.g. $15, $25, or $40)",
+                ["$15", "$25", "$40", "$60"],
+            )
+        return (
+            "How far or how long are you willing to travel? (e.g. 15 mins walk, 2 km, or 20 mins MRT)",
+            ["15 mins walk", "30 mins walk", "2 km", "20 mins MRT"],
+        )
+
+    @staticmethod
+    def _next_onboarding_field(prefs):
+        if not prefs.get("location"):
+            return "location"
+        if prefs.get("budget_per_person") is None:
+            return "budget_per_person"
+        if prefs.get("max_travel_time_minutes") is None and prefs.get("max_distance_km") is None:
+            return "travel"
+        if prefs.get("dietary_requirements") is None:
+            return "dietary_requirements"
+        if prefs.get("liked_cuisines") is None:
+            return "liked_cuisines"
+        if prefs.get("disliked_cuisines") is None:
+            return "disliked_cuisines"
+        if prefs.get("other_preferences") is None:
+            return "other_preferences"
+        return None
+
+    def _build_safe_profile_payload(self, user, filters, fallback_prefs=None):
+        prefs = fallback_prefs if fallback_prefs is not None else ((user or {}).get("preferences") or {})
+        supported_liked = []
+        extra_other = list(filters.get("other_preferences") or [])
+        for cuisine in (filters.get("liked_cuisines") or []):
+            clean = str(cuisine or "").strip().lower()
+            if clean in CUISINES:
+                if clean not in supported_liked:
+                    supported_liked.append(clean)
+            elif clean:
+                custom_wish = f"{clean} cuisine"
+                if custom_wish.casefold() not in {o.casefold() for o in extra_other}:
+                    extra_other.append(custom_wish)
+
+        locs = filters.get("locations") or prefs.get("location")
+        budget = filters.get("budget_per_person")
+        if budget is None:
+            budget = prefs.get("budget_per_person") or 30.0
+        max_mins = filters.get("max_travel_minutes")
+        max_km = filters.get("max_distance_km")
+        if max_mins is None and max_km is None:
+            max_mins = prefs.get("max_travel_time_minutes")
+            max_km = prefs.get("max_distance_km")
+            if max_mins is None and max_km is None:
+                max_mins = 30.0
+
+        return {
+            "user_id": user["userID"],
+            "location": locs or ["Compass One"],
+            "max_distance_km": max_km,
+            "max_travel_time_minutes": max_mins,
+            "budget_per_person": budget,
+            "dietary_requirements": filters.get("dietary_requirements") or [],
+            "liked_cuisines": supported_liked,
+            "disliked_cuisines": [c for c in (filters.get("disliked_cuisines") or []) if c in CUISINES],
+            "other_preferences": extra_other,
+        }
+
+    def _handle_onboarding(self, user, message, awaiting_field, current):
+        prefs = deepcopy((user or {}).get("preferences") or {})
+        text = str(message or "").strip()
+        lower = text.casefold()
+        next_needed = self._next_onboarding_field(prefs)
+
+        if text == "__start_onboarding__" or not next_needed:
+            if not next_needed:
+                filters = self._default_filters(user)
+                return {
+                    "success": True,
+                    "action": "search",
+                    "awaiting_field": None,
+                    "reply": "Your profile is already set up! Finding restaurants using your saved preferences.",
+                    "filters": filters,
+                    "changes": [],
+                    "quick_replies": self._default_quick_replies(filters, True),
+                    "model_used": self._model() or "BiteFinder Assistant",
+                    "saved_to_profile": False,
+                }
+            prompt, quick_replies = _ONBOARDING_QUESTIONS[next_needed]
+            return {
+                "success": True,
+                "action": "onboarding",
+                "awaiting_field": next_needed,
+                "reply": prompt,
+                "filters": current,
+                "changes": [],
+                "quick_replies": quick_replies,
+                "model_used": self._model() or "BiteFinder Assistant",
+                "saved_to_profile": False,
+            }
+
+        target_field = awaiting_field if awaiting_field in _ONBOARDING_QUESTIONS else next_needed
+        is_none_answer = lower in ("none", "no", "nil", "n/a", "skip", "skip for now", "anything", "any")
+        updates = {}
+
+        if target_field in ("dietary_requirements", "liked_cuisines", "disliked_cuisines", "other_preferences") and is_none_answer:
+            prefs[target_field] = []
+        else:
+            parsed = None
+            if not self._config.get("ai_bypass") and hasattr(self._ai, "chat_turn"):
+                try:
+                    parsed = self._ai.chat_turn(
+                        f"[Profile setup question for {target_field}] User answered: {text}",
+                        current, [], prefs, deepcopy(self._config),
+                    )
+                except (RuntimeError, ValueError, TypeError):
+                    parsed = None
+            raw_updates = (parsed or {}).get("updates") or {}
+            det_updates = self._deterministic_parse(text, current, user, awaiting_field=target_field).get("updates") or {}
+            merged_updates = dict(det_updates)
+            merged_updates.update({k: v for k, v in raw_updates.items() if v is not None})
+
+            updated_filters = self._apply_updates(current, merged_updates, user=user)
+            accepted = False
+
+            if target_field == "location" and merged_updates.get("locations"):
+                prefs["location"] = [loc.lower() for loc in updated_filters["locations"]]
+                accepted = True
+            if target_field == "budget_per_person" and merged_updates.get("budget_per_person") is not None and updated_filters["budget_per_person"] is not None:
+                prefs["budget_per_person"] = updated_filters["budget_per_person"]
+                accepted = True
+            if target_field == "travel" and (merged_updates.get("max_travel_minutes") is not None or merged_updates.get("max_distance_km") is not None):
+                prefs.update(self._logic.estimate_travel_limits({
+                    key: val for key, val in (
+                        ("max_travel_time_minutes", updated_filters["max_travel_minutes"]),
+                        ("max_distance_km", updated_filters["max_distance_km"]),
+                    ) if val is not None
+                }))
+                accepted = True
+            if target_field == "dietary_requirements" and ("dietary_requirements" in merged_updates or "both" in lower):
+                prefs["dietary_requirements"] = ["halal", "vegetarian"] if "both" in lower else updated_filters["dietary_requirements"]
+                accepted = True
+            if target_field == "liked_cuisines":
+                supported = [c for c in updated_filters["liked_cuisines"] if c in CUISINES]
+                if supported:
+                    prefs["liked_cuisines"] = supported
+                    accepted = True
+            if target_field == "disliked_cuisines":
+                if updated_filters["disliked_cuisines"]:
+                    prefs["disliked_cuisines"] = updated_filters["disliked_cuisines"]
+                    accepted = True
+            if target_field == "other_preferences":
+                prefs["other_preferences"] = updated_filters["other_preferences"] or [text]
+                accepted = True
+
+            if not accepted:
+                prompt, quick_replies = _ONBOARDING_QUESTIONS[target_field]
+                return {
+                    "success": True,
+                    "action": "onboarding",
+                    "awaiting_field": target_field,
+                    "reply": f"I didn't catch a valid value for {target_field.replace('_', ' ')}. {prompt}",
+                    "filters": current,
+                    "changes": [],
+                    "quick_replies": quick_replies,
+                    "model_used": self._model() or "BiteFinder Assistant",
+                    "saved_to_profile": False,
+                }
+
+        # Persist only already-answered profile fields directly via save_profile when possible
+        saved_user = user
+        if self._save_profile is not None:
+            answered_payload = {"user_id": user["userID"]}
+            for field in (
+                "location", "max_distance_km", "max_travel_time_minutes",
+                "budget_per_person", "dietary_requirements", "liked_cuisines",
+                "disliked_cuisines", "other_preferences",
+            ):
+                if prefs.get(field) is not None:
+                    answered_payload[field] = prefs[field]
+            saved_user = self._save_profile(user, answered_payload)
+
+        updated_filters = self._default_filters(saved_user)
+        if not updated_filters.get("locations") and prefs.get("location"):
+            updated_filters["locations"] = [self._normalize_location(loc) for loc in prefs["location"]]
+            updated_filters["location"] = updated_filters["locations"][0]
+        if current.get("mode") in ("walk", "drive", "transit"):
+            updated_filters["mode"] = current["mode"]
+
+        changes = self._summarize_changes(current, updated_filters)
+        remaining = self._next_onboarding_field(saved_user.get("preferences") or prefs)
+        if remaining:
+            next_prompt, quick_replies = _ONBOARDING_QUESTIONS[remaining]
+            return {
+                "success": True,
+                "action": "onboarding",
+                "awaiting_field": remaining,
+                "reply": f"Saved! {next_prompt}",
+                "filters": updated_filters,
+                "changes": changes,
+                "quick_replies": quick_replies,
+                "model_used": self._model() or "BiteFinder Assistant",
+                "saved_to_profile": True,
+            }
+
+        return {
+            "success": True,
+            "action": "search",
+            "awaiting_field": None,
+            "reply": "Your BiteFinder profile is complete and saved! Searching for matching restaurants now.",
+            "filters": updated_filters,
+            "changes": changes,
+            "quick_replies": self._default_quick_replies(updated_filters, True),
+            "model_used": self._model() or "BiteFinder Assistant",
+            "saved_to_profile": True,
         }
 
     @staticmethod
@@ -440,8 +747,8 @@ class BISChatbotService:
         prefs = user.get("preferences") or {}
         locs = ", ".join(prefs.get("location") or []) or "Not set"
         budget = f"SGD ${prefs['budget_per_person']}" if prefs.get("budget_per_person") else "Not set"
-        diet = ", ".join(prefs.get("dietary_requirements") or []) or "None"
-        liked = ", ".join(prefs.get("liked_cuisines") or []) or "Any"
+        diet = ", ".join(prefs.get("dietary_requirements") or []) or "Not set"
+        liked = ", ".join(prefs.get("liked_cuisines") or []) or "Any / Not set"
         return (
             f"Saved profile for {user.get('username', 'User')}: "
             f"Locations [{locs}], Budget [{budget}], Dietary [{diet}], Likes [{liked}]."
@@ -450,7 +757,8 @@ class BISChatbotService:
     @staticmethod
     def _default_quick_replies(filters, signed_in):
         suggestions = []
-        if float(filters.get("budget_per_person") or 30) > 15:
+        budget = filters.get("budget_per_person")
+        if budget is None or float(budget) > 15:
             suggestions.append("Under $15")
         if "halal" not in (filters.get("dietary_requirements") or []):
             suggestions.append("Halal only")
@@ -473,13 +781,11 @@ class BISChatbotService:
             after.get("mode"), after.get("max_travel_minutes"), after.get("max_distance_km")
         ):
             icon = {"walk": "🚶 Walk", "drive": "🚗 Drive", "transit": "🚆 Transit"}.get(after["mode"], "🚶 Walk")
-            limit = (
-                f"{after['max_distance_km']:g}km"
-                if after.get("max_distance_km")
-                else f"{int(round(after.get('max_travel_minutes') or 30))}m"
-            )
-            changes.append(f"{icon} · {limit}")
-        if before.get("budget_per_person") != after.get("budget_per_person"):
+            if after.get("max_distance_km") is not None:
+                changes.append(f"{icon} · {after['max_distance_km']:g}km")
+            elif after.get("max_travel_minutes") is not None:
+                changes.append(f"{icon} · {int(round(after['max_travel_minutes']))}m")
+        if before.get("budget_per_person") != after.get("budget_per_person") and after.get("budget_per_person") is not None:
             changes.append(f"💰 SGD ${after['budget_per_person']:g}")
         if before.get("dietary_requirements") != after.get("dietary_requirements"):
             if after.get("dietary_requirements"):
@@ -507,6 +813,11 @@ class BISChatbotService:
             raise ValueError("Please enter a message for the BiteFinder chatbot.")
 
         current = self.normalize_filters(payload.get("current_filters"), user=user)
+        awaiting_field = payload.get("awaiting_field")
+
+        if payload.get("onboarding") and user:
+            return self._handle_onboarding(user, message, awaiting_field, current)
+
         history = [
             {"role": str(item.get("role", "")), "text": str(item.get("text", ""))[:300]}
             for item in (payload.get("history") or [])[-6:]
@@ -520,12 +831,21 @@ class BISChatbotService:
             if not is_utility:
                 try:
                     saved_profile = (user or {}).get("preferences") or {}
-                    parsed = self._ai.chat_turn(message, current, history, saved_profile, deepcopy(self._config))
+                    ai_msg = (
+                        f"[Answering question for {awaiting_field}] {message}"
+                        if awaiting_field else message
+                    )
+                    parsed = self._ai.chat_turn(ai_msg, current, history, saved_profile, deepcopy(self._config))
                 except (RuntimeError, ValueError, TypeError):
                     parsed = None
 
         if parsed is None:
-            parsed = self._deterministic_parse(message, current, user)
+            parsed = self._deterministic_parse(message, current, user, awaiting_field=awaiting_field)
+        elif awaiting_field and not parsed.get("updates"):
+            ctx_updates = self._parse_contextual_answer(message, awaiting_field)
+            if ctx_updates:
+                parsed["updates"] = ctx_updates
+                parsed["intent"] = "search"
 
         intent = parsed["intent"]
         reply = str(parsed.get("reply") or "").strip()
@@ -542,6 +862,7 @@ class BISChatbotService:
             return {
                 "success": True,
                 "action": "reset",
+                "awaiting_field": None,
                 "reply": reply or "Filters reset.",
                 "filters": updated,
                 "changes": changes,
@@ -559,6 +880,7 @@ class BISChatbotService:
                 return {
                     "success": True,
                     "action": "clarify",
+                    "awaiting_field": None,
                     "reply": "Please sign in first so I can save your preferences to your BiteFinder profile.",
                     "filters": updated,
                     "changes": changes,
@@ -566,17 +888,7 @@ class BISChatbotService:
                     "model_used": self._model() or "BiteFinder Assistant",
                     "saved_to_profile": False,
                 }
-            profile_payload = {
-                "user_id": user["userID"],
-                "location": updated["locations"] or (user.get("preferences") or {}).get("location") or ["Compass One"],
-                "max_distance_km": updated["max_distance_km"],
-                "max_travel_time_minutes": updated["max_travel_minutes"],
-                "budget_per_person": updated["budget_per_person"],
-                "dietary_requirements": updated["dietary_requirements"],
-                "liked_cuisines": updated["liked_cuisines"],
-                "disliked_cuisines": updated["disliked_cuisines"],
-                "other_preferences": updated["other_preferences"],
-            }
+            profile_payload = self._build_safe_profile_payload(user, updated)
             self._save_profile(user, profile_payload)
             saved_to_profile = True
             reply = "Saved your current preferences to your BiteFinder profile."
@@ -584,23 +896,27 @@ class BISChatbotService:
         elif intent == "show_profile":
             reply = self._format_profile_summary(user)
 
-        elif intent == "search" and not updated["locations"]:
-            fallback_locs = self._default_filters(user)["locations"]
-            if fallback_locs:
-                updated["locations"] = fallback_locs
-                updated["location"] = fallback_locs[0]
-                changes = self._summarize_changes(current, updated)
-            else:
+        elif intent == "search":
+            missing_field = self._next_missing_search_field(updated)
+            if missing_field:
                 intent = "clarify"
-                reply = (
-                    "I've noted your preferences! Where in Singapore would you like me to search? "
-                    "(e.g. 'Bugis Junction', '529510', or 'between Tampines and Jurong East')"
-                )
-                quick_replies = ["Bugis Junction", "Compass One", "Rivervale Plaza", "Jewel Changi"]
+                reply, quick_replies = self._prompt_for_missing_search_field(missing_field)
+                return {
+                    "success": True,
+                    "action": intent,
+                    "awaiting_field": missing_field,
+                    "reply": reply,
+                    "filters": updated,
+                    "changes": changes,
+                    "quick_replies": quick_replies,
+                    "model_used": self._model() or "BiteFinder Assistant",
+                    "saved_to_profile": False,
+                }
 
         return {
             "success": True,
             "action": intent,
+            "awaiting_field": self._next_missing_search_field(updated) if intent == "clarify" else None,
             "reply": reply,
             "filters": updated,
             "changes": changes,
