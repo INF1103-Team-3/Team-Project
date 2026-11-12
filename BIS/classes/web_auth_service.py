@@ -16,7 +16,28 @@ class WebAuthService:
             raise PermissionError("Not authenticated or session expired.")
         return self._data.get_user(user_id)
 
+    def _complete_bypass(self, user, pending):
+        if pending.get("credential"):
+            self._data.save_credentials(user["userID"], pending["credential"])
+        updates = {}
+        if pending.get("username") and pending["username"] != user["username"]:
+            updates["username"] = pending["username"]
+        if not user.get("email_verified"):
+            updates["email_verified"] = True
+        if updates:
+            user = self._data.save(dict(user, **updates))
+        self._data.set_state("web_auth", user["userID"], None)
+        return {
+            "success": True,
+            "otp_required": False,
+            "message": f"Welcome back, {user['username']}!",
+            "token": self._data.issue_session(user["userID"]),
+            "user": user,
+        }
+
     def _send(self, user, pending):
+        if self._config.get("smtp_bypass") is True:
+            return self._complete_bypass(user, pending)
         pending = dict(pending, expires_at=self._clock() + 600)
         self._verification.request_code(user, self._config)
         self._data.set_state("web_auth", user["userID"], pending)

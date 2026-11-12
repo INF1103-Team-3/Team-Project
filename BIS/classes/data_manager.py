@@ -8,15 +8,26 @@ from BIS.classes.bis_data_manager_interface import BISDataManagerInterface
 class DataManager(BISDataManagerInterface):
     """Coordinate BIS repositories without owning UI or business rules."""
 
-    def __init__(self, user_store, location_gateway, sessions=None, favorites=None, credentials=None, proposals=None):
+    def __init__(self, user_store, location_gateway, sessions=None, favorites=None,
+                 credentials=None, proposals=None, user_sync=None):
         self._proposals = proposals
         self._sessions, self._favorites, self._credentials = sessions, favorites, credentials
         self._user_store = user_store
         self._location_gateway = location_gateway
+        self._user_sync = user_sync
 
     @property
     def last_error(self):
         return self._user_store.last_error
+
+    def _sync_from_cli(self):
+        if self._user_sync is not None:
+            self._user_sync.sync_from_file()
+
+    def _sync_to_cli(self, user):
+        if self._user_sync is not None:
+            self._user_sync.sync_to_file(user)
+        return user
 
     def serialize_search_request(self, request):
         return json.dumps(
@@ -24,29 +35,35 @@ class DataManager(BISDataManagerInterface):
             separators=(",", ":"))
 
     def load(self):
+        self._sync_from_cli()
         return self._user_store.load()
 
     def query(self, filter_fn):
+        self._sync_from_cli()
         return self._user_store.query(filter_fn)
 
     def save(self, record):
-        return self._user_store.save(record)
+        return self._sync_to_cli(self._user_store.save(record))
 
     def register_user(self, email, username):
-        return self._user_store.register_user(email, username)
+        self._sync_from_cli()
+        return self._sync_to_cli(self._user_store.register_user(email, username))
 
     def email_exists(self, email):
+        self._sync_from_cli()
         return self._user_store.email_exists(email)
 
     def find_user(self, email):
+        self._sync_from_cli()
         return self._user_store.find_user(email)
 
     def get_user(self, user_id):
+        self._sync_from_cli()
         return self._user_store.get_user(user_id)
 
     def save_preferences(self, user_id, preferences, config):
-        return self._user_store.save_preferences(
-            user_id, preferences, config)
+        return self._sync_to_cli(self._user_store.save_preferences(
+            user_id, preferences, config))
 
     def get_state(self, section, user_id):
         return self._user_store.get_state(section, user_id)
