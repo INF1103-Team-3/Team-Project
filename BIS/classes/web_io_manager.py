@@ -3,9 +3,11 @@ from BIS.sources.profile_schema import CUISINES
 
 
 class WebIOManager:
-    def __init__(self, data, auth, application, favorites, health):
+    def __init__(self, data, auth, application, favorites, health,
+                 active_model_reader=lambda: "Gemini AI"):
         self._data, self._auth, self._application = data, auth, application
         self._favorites, self._health = favorites, health
+        self._active_model_reader = active_model_reader
 
     @staticmethod
     def token(authorization):
@@ -38,9 +40,24 @@ class WebIOManager:
     def cuisines(self):
         return {"cuisines": list(CUISINES)}
 
+    @staticmethod
+    def _format_model_display(raw_model):
+        clean = str(raw_model or "").strip()
+        if not clean:
+            return "Gemini AI"
+        if "/" in clean:
+            provider, model_name = clean.split("/", 1)
+            p_lower = provider.lower()
+            if p_lower == "gemini":
+                return f"Gemini AI ({model_name})"
+            if p_lower == "groq":
+                return f"Groq AI ({model_name})"
+            if p_lower == "openrouter":
+                return f"OpenRouter AI ({model_name})"
+        return clean
+
     def active_model(self):
-        # Deliberately truthful metadata, not another request's global progress.
-        return {"active_model": "configured AI provider chain", "status": "configured"}
+        return {"active_model": self._format_model_display(self._active_model_reader())}
 
     def register(self, payload):
         return self._auth.register(payload["email"], payload["username"], payload["password"])

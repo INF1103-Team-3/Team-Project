@@ -4,6 +4,24 @@ import sys
 from pathlib import Path
 
 
+def _seed_mongo_if_empty(connection):
+    if os.getenv("BITEFINDER_AUTO_SEED", "1") != "1":
+        return
+    try:
+        from BIS.classes.json_mongo_migration import JsonMongoMigration
+        root = Path(__file__).resolve().parents[1]
+        restaurants_path = root / "BRNS" / "data" / "restaurants.json"
+        if restaurants_path.exists() and connection.execute(
+                lambda db: db.restaurants.count_documents({})) == 0:
+            migration = JsonMongoMigration()
+            records = migration.prepare(restaurants=restaurants_path)
+            for row in records["restaurants"]:
+                connection.execute(lambda db, doc=row: db.restaurants.update_one(
+                    {"_id": doc["_id"]}, {"$setOnInsert": doc}, upsert=True))
+    except Exception:
+        pass
+
+
 def build_runtime():
     if os.getenv("BITEFINDER_STORAGE", "json").lower() != "mongo":
         raise RuntimeError("The web API requires BITEFINDER_STORAGE=mongo; standalone CLI defaults to JSON.")
@@ -57,6 +75,7 @@ def build_runtime():
         scope = SearchHistoryScope()
         store = MongoRecommendationStore(connection, scope)
         store.ensure_indexes()
+        _seed_mongo_if_empty(connection)
         recommendation_data = RecommendationData(store)
         logic = logic_manager.manager()
         search = CandidateSearch(recommendation_data, logic, io_manager, debug_log)
@@ -70,7 +89,12 @@ def build_runtime():
             data, bis_ai.manager(), bis_logic.manager(), workflow,
             NavigationService(io, debug_log), recommendation_data, scope,
             settings, ai_manager.last_used_model)
-        return WebRuntime(WebIOManager(data, auth, application, FavoriteService(data), connection.ready), connection)
+        return WebRuntime(
+            WebIOManager(
+                data, auth, application, FavoriteService(data),
+                connection.ready, ai_manager.current_active_model),
+            connection,
+        )
     except Exception:
         connection.close()
         raise

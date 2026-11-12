@@ -58,6 +58,7 @@ REQUIRED_KEYS = ["cuisine", "dietary", "budget_band",
 VALID_BANDS = ("any", "inexpensive", "moderate", "expensive", "very_expensive")
 _ACTIVE_CHAIN_DEADLINE = ContextVar("brns_ai_deadline", default=None)
 _LAST_USED_MODEL = ContextVar("brns_ai_model", default=None)
+_CURRENT_ACTIVE_MODEL = None
 _MANAGER = None
 
 
@@ -97,6 +98,8 @@ def build_prompt(user_record):
 def parse_json_reply(content):
     """Extract the JSON object from an AI reply, tolerating markdown fences,
     reasoning preamble, or trailing commentary around it."""
+    if not isinstance(content, str):
+        raise ValueError("no JSON object found in AI reply")
     text = content.strip()
     start = text.find("{")
     end = text.rfind("}")
@@ -142,6 +145,12 @@ def _safe_failure(detail):
 
 
 def _log_ai_event(context, detail, level="WARNING"):
+    global _CURRENT_ACTIVE_MODEL
+    if isinstance(detail, str):
+        if detail.startswith("Trying ") and detail.endswith("."):
+            _CURRENT_ACTIVE_MODEL = detail[len("Trying "):-1].strip()
+        elif detail.startswith("Accepted ") and detail.endswith(" response."):
+            _CURRENT_ACTIVE_MODEL = detail[len("Accepted "):-len(" response.")].strip()
     log.debug_log(detail, level, f"BRNS.ai_manager.{context}")
 
 
@@ -185,15 +194,64 @@ def _hard_request_deadline(seconds):
             )
 
 
+def _close_response_safely(resp):
+    """Force-close an in-flight streaming socket on deadline expiry."""
+    try:
+        raw = getattr(resp, "raw", None)
+        if raw is not None:
+            fp = getattr(raw, "_fp", None)
+            sock = getattr(getattr(fp, "fp", None), "raw", None)
+            if hasattr(sock, "_sock") and sock._sock is not None:
+                try:
+                    sock._sock.close()
+                except OSError:
+                    pass
+    except Exception:
+        pass
+
+
 def _post(url, **kwargs):
-    """Post with both socket inactivity and total wall-clock limits."""
+    """Post with socket inactivity and wall-clock limits across all threads."""
     seconds = config.AI_REQUEST_TIMEOUT_SECONDS
     deadline = _ACTIVE_CHAIN_DEADLINE.get()
     if deadline is not None:
         seconds = min(seconds, max(0.05, deadline - time.monotonic()))
+    wall_deadline = time.monotonic() + seconds
     kwargs["timeout"] = (min(3, seconds), seconds)
+    kwargs.setdefault("stream", True)
     with _hard_request_deadline(seconds):
-        return requests.post(url, **kwargs)
+        resp = requests.post(url, **kwargs)
+        if not hasattr(resp, "iter_content"):
+            return resp
+        timed_out = threading.Event()
+
+        def _expire():
+            timed_out.set()
+            _close_response_safely(resp)
+
+        remaining = max(0.05, wall_deadline - time.monotonic())
+        timer = threading.Timer(remaining, _expire)
+        timer.daemon = True
+        timer.start()
+        try:
+            chunks = []
+            for chunk in resp.iter_content(chunk_size=16384):
+                if chunk:
+                    chunks.append(chunk)
+                if timed_out.is_set() or time.monotonic() >= wall_deadline:
+                    raise requests.Timeout("AI provider exceeded its total deadline")
+            if timed_out.is_set() or time.monotonic() >= wall_deadline:
+                raise requests.Timeout("AI provider exceeded its total deadline")
+            resp._content = b"".join(chunks)
+            resp._content_consumed = True
+            return resp
+        except (requests.RequestException, AttributeError, OSError, ValueError):
+            if timed_out.is_set():
+                raise requests.Timeout("AI provider exceeded its total deadline")
+            raise
+        finally:
+            timer.cancel()
+            resp.close()
 
 
 def _call_openrouter(model_id, system_prompt, user_text):
@@ -294,6 +352,12 @@ def _call_groq(model_id, system_prompt, user_text):
     return False, "request rejected"
 
 
+def _track_provider_call(provider, model, fn):
+    global _CURRENT_ACTIVE_MODEL
+    _CURRENT_ACTIVE_MODEL = f"{provider}/{model}"
+    return fn()
+
+
 def _provider_registry():
     """Build provider objects around the existing transport functions."""
     registry = AIProviderFactoryRegistry()
@@ -302,7 +366,9 @@ def _provider_registry():
         lambda model: OpenRouterAIProvider(
             model,
             lambda system_prompt, text, selected=model:
-            _call_openrouter(selected, system_prompt, text),
+            _track_provider_call(
+                "openrouter", selected,
+                lambda: _call_openrouter(selected, system_prompt, text)),
         ),
     )
     registry.register(
@@ -310,7 +376,9 @@ def _provider_registry():
         lambda model: GeminiAIProvider(
             model,
             lambda system_prompt, text, selected=model:
-            _call_gemini(selected, system_prompt, text),
+            _track_provider_call(
+                "gemini", selected,
+                lambda: _call_gemini(selected, system_prompt, text)),
         ),
     )
     registry.register(
@@ -318,7 +386,9 @@ def _provider_registry():
         lambda model: GroqAIProvider(
             model,
             lambda system_prompt, text, selected=model:
-            _call_groq(selected, system_prompt, text),
+            _track_provider_call(
+                "groq", selected,
+                lambda: _call_groq(selected, system_prompt, text)),
         ),
     )
     return registry
@@ -499,3 +569,19 @@ def recommend_candidates(request, candidates, previous_restaurants=()):
 
 def last_used_model():
     return _LAST_USED_MODEL.get()
+
+
+def current_active_model():
+    """Return the active/most-recent configured AI provider label."""
+    if _CURRENT_ACTIVE_MODEL:
+        return _CURRENT_ACTIVE_MODEL
+    for entry in getattr(config, "MODEL_CHAIN", []):
+        provider = entry.get("provider", "")
+        model = entry.get("model", "")
+        if provider == "gemini" and getattr(config, "GEMINI_API_KEY", ""):
+            return f"{provider}/{model}"
+        if provider == "openrouter" and getattr(config, "OPENROUTER_API_KEY", ""):
+            return f"{provider}/{model}"
+        if provider == "groq" and getattr(config, "GROQ_API_KEY", ""):
+            return f"{provider}/{model}"
+    return "Gemini AI"

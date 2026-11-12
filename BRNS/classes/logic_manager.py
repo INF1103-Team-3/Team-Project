@@ -153,8 +153,18 @@ class LogicManager(BRNSLogicManagerInterface):
 
         matches.sort(key=was_returned)
         alternatives.sort(key=was_returned)
-        visible_matches = matches[:self._max_matches]
-        visible_alternatives = alternatives[:self._max_alternatives]
+        max_matches = (
+            self._max_matches()
+            if callable(self._max_matches)
+            else self._max_matches
+        )
+        max_alternatives = (
+            self._max_alternatives()
+            if callable(self._max_alternatives)
+            else self._max_alternatives
+        )
+        visible_matches = matches[:max_matches]
+        visible_alternatives = alternatives[:max_alternatives]
         return {
             "matches": visible_matches,
             "alternatives": visible_alternatives,

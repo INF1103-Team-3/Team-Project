@@ -482,11 +482,8 @@ def _parse_place(p):
         "opening_hours": weekly,
     }
 
-def _search_radius(req):
-    """Choose a Places discovery radius; Routes decides actual eligibility."""
-    if logic_manager.has_hard_preferences(
-            req.get("other_preferences") or []):
-        return 50000
+def _travel_radius(req):
+    """Radius in meters implied by the user's travel mode and limit."""
     if req.get("max_travel_minutes") is not None:
         speed = {"walk": 100, "drive": 650, "transit": 650}[req["mode"]]
         return max(500, min(int(req["max_travel_minutes"] * speed), 50000))
@@ -497,6 +494,14 @@ def _search_radius(req):
         return max(500, min(int(distance * 1000), 20000))
     walk = req.get("max_walk_minutes")
     return max(500, min((walk if walk else 15) * 100, 20000))
+
+
+def _search_radius(req):
+    """Choose a Places discovery radius; Routes decides actual eligibility."""
+    if logic_manager.has_hard_preferences(
+            req.get("other_preferences") or []):
+        return 50000
+    return _travel_radius(req)
 
 
 def fetch_nearby_restaurants(origin, req, debug=False):
@@ -584,6 +589,7 @@ def fetch_by_profile_text(origin, req):
         "textQuery": query,
         "languageCode": "en",
         "pageSize": 20,
+        "openNow": True,
         "locationRestriction": {"rectangle": {
             "low": {"latitude": max(-90, lat - delta), "longitude": max(-180, lng - delta)},
             "high": {"latitude": min(90, lat + delta), "longitude": min(180, lng + delta)},
@@ -603,6 +609,81 @@ def fetch_by_profile_text(origin, req):
     except (requests.RequestException, KeyError, ValueError) as err:
         _log_api_error("places_profile_text", err)
         return []
+
+
+OPEN_SEARCH_MAX_PAGES = 1   # 1 page x 20 open places keeps AI ranking fast and within token limits
+
+
+def fetch_open_places(origin, req):
+    """Text Search restricted to places open right now, nearest first.
+
+    Nearby Search returns only the 20 closest places and cannot filter by
+    opening status, so late at night most of them are closed and discarded.
+    When Nearby Search drops closed slots, asking Text Search for openNow=True
+    with DISTANCE ranking fills the candidate pool with nearby open venues.
+    """
+    lat, lng = origin
+    cuisine = (req.get("cuisine") or "").strip()
+    dietary = req.get("dietary_requirements") or []
+    raw_free_text = (req.get("free_text") or "").strip()
+    free_text = logic_manager._RATING_FLOOR.sub("", raw_free_text).strip()
+    free_text = re.sub(r"\b(?:and|with)\b", " ", free_text, flags=re.IGNORECASE)
+    free_text = re.sub(r"^[,\s&/]+|[,\s&/]+$", "", free_text).strip().lower()[:200]
+    terms = list(dietary)
+    if cuisine not in ("any", "none", ""):
+        terms.append(cuisine)
+    if free_text:
+        terms.append(free_text)
+    query = " ".join(terms) if terms else "restaurants"
+    if terms and not any(w in query for w in _VENUE_WORDS):
+        query += " food"
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": config.GOOGLE_MAPS_API_KEY,
+        "X-Goog-FieldMask": ("places.id,places.displayName,places.formattedAddress,"
+                             "places.location,places.rating,places.priceLevel,"
+                             "places.priceRange,places.types,places.userRatingCount,"
+                             "places.currentOpeningHours,places.regularOpeningHours,"
+                             "places.nationalPhoneNumber,places.postalAddress,"
+                             "places.accessibilityOptions,places.servesVegetarianFood,"
+                             "nextPageToken"),
+    }
+    radius_m = float(min(_travel_radius(req), 50000))
+    # A circle *bias* anchors DISTANCE ranking on the origin (a rectangle
+    # restriction does not), so pages come back nearest-first.
+    body = {
+        "textQuery": query,
+        "languageCode": "en",
+        "pageSize": 20,
+        "openNow": True,
+        "rankPreference": "DISTANCE",
+        "locationBias": {"circle": {
+            "center": {"latitude": lat, "longitude": lng},
+            "radius": radius_m,
+        }},
+    }
+    log.debug_log("Open-now Text Places request started.", "INFO",
+                  "BRNS.io_manager.fetch_open_places")
+    places = []
+    try:
+        for _ in range(OPEN_SEARCH_MAX_PAGES):
+            resp = requests.post(config.TEXT_SEARCH_URL, headers=headers,
+                                 json=body, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            for p in data.get("places", []):
+                parsed = _parse_place(p)
+                if parsed and _haversine_km(origin, (parsed["lat"], parsed["lng"])) * 1000 <= radius_m:
+                    places.append(parsed)
+            token = data.get("nextPageToken")
+            if not token:
+                break
+            body = dict(body, pageToken=token)
+    except (requests.RequestException, KeyError, ValueError, AttributeError) as err:
+        _log_api_error("places_open_text", err)
+    log.debug_log(f"Open-now Text Places returned {len(places)} usable records.",
+                  "INFO", "BRNS.io_manager.fetch_open_places")
+    return places
 
 # ---------- enrichment: Places results x saved restaurants ----------
 
@@ -687,10 +768,17 @@ def build_candidates(origin, req, saved_restaurants):
         log.debug_log("Text search empty; trying nearby Places.", "INFO",
                       "BRNS.io_manager.build_candidates")
         places = fetch_nearby_restaurants(origin, req)
+        # Nearby Search returns at most 20 closest venues without an openNow
+        # filter. When closed venues consume those slots, supplement with
+        # openNow=True Text Search so surrounding open places are discovered.
+        if any(isinstance(p, dict) and p.get("open_now") is not True for p in places):
+            places = list(places) + fetch_open_places(origin, req)
     if not places:
         return []
     candidates, seen = [], set()
     for p in places:
+        if len(candidates) >= 20:
+            break
         if not isinstance(p, dict) or "name" not in p:
             _log_api_error("candidate_build", "malformed place skipped")
             continue
