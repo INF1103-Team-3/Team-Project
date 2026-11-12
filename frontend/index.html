@@ -216,7 +216,7 @@
 
           <!-- Conversation History -->
           <div id="chatMessages"
-            class="h-[380px] overflow-y-auto space-y-3 pr-1 scroll-smooth rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-3">
+            class="h-[480px] sm:h-[520px] overflow-y-auto space-y-3 pr-1 scroll-smooth rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-3">
           </div>
 
           <!-- Chat Composer -->
@@ -252,8 +252,7 @@
             <div class="relative flex items-center">
               <i data-lucide="map-pin" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
               <input type="text" id="locationInput" required placeholder="Enter postal code, address, or landmark (e.g. Hougang)"
-                class="w-full pl-9 pr-16 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition"
-                value="Compass One">
+                class="w-full pl-9 pr-16 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
               <button type="button" id="useGpsBtn" title="Use My Current GPS Location"
                 class="absolute right-2 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-200 hover:bg-brand-100 dark:hover:bg-brand-500/20 hover:text-brand-700 dark:hover:text-brand-300 transition flex items-center gap-1">
                 <span>📍</span>
@@ -330,9 +329,8 @@
                     Distance
                   </button>
                 </div>
-                <span id="timeDisplay" class="text-xs font-bold text-brand-600 dark:text-brand-400">30 mins</span>
-                <span id="distanceDisplay" class="hidden text-xs font-bold text-brand-600 dark:text-brand-400">2.0
-                  km</span>
+                <span id="timeDisplay" class="text-xs font-bold text-slate-400 dark:text-slate-500">Not set</span>
+                <span id="distanceDisplay" class="hidden text-xs font-bold text-slate-400 dark:text-slate-500">Not set</span>
               </div>
               <input type="range" id="timeSlider" min="5" max="90" step="5" value="30"
                 class="w-full accent-brand-600 mt-2">
@@ -362,7 +360,7 @@
             <div class="flex justify-between items-center mb-1.5">
               <label class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Budget Per
                 Person</label>
-              <span id="budgetDisplay" class="text-xs font-bold text-brand-600 dark:text-brand-400">SGD $30</span>
+              <span id="budgetDisplay" class="text-xs font-bold text-slate-400 dark:text-slate-500">Not set</span>
             </div>
             <input type="range" id="budgetSlider" min="5" max="100" step="5" value="30" class="w-full accent-brand-600">
             <div class="flex justify-between text-[10px] text-slate-400 mt-1">
@@ -1201,11 +1199,14 @@
     document.querySelectorAll('.preset-pill').forEach(pill => {
       pill.addEventListener('click', () => {
         document.getElementById('locationInput').value = pill.dataset.loc;
+        if (typeof renderChatFilterSummary === 'function') renderChatFilterSummary();
       });
     });
 
     // Sliders & Limit Type Toggle (Max Time vs Max Distance)
     let currentLimitType = 'time'; // 'time' or 'distance'
+    let isTravelSet = false;
+    let isBudgetSet = false;
     const limitTypeTimeBtn = document.getElementById('limitTypeTimeBtn');
     const limitTypeDistBtn = document.getElementById('limitTypeDistBtn');
     const timeSlider = document.getElementById('timeSlider');
@@ -1213,40 +1214,61 @@
     const distanceSlider = document.getElementById('distanceSlider');
     const distanceDisplay = document.getElementById('distanceDisplay');
 
+    function updateSliderDisplayStyles() {
+      const setCls = 'text-xs font-bold text-brand-600 dark:text-brand-400';
+      const unsetCls = 'text-xs font-bold text-slate-400 dark:text-slate-500';
+      timeDisplay.className = (currentLimitType === 'time' ? '' : 'hidden ') + (isTravelSet ? setCls : unsetCls);
+      distanceDisplay.className = (currentLimitType === 'distance' ? '' : 'hidden ') + (isTravelSet ? setCls : unsetCls);
+      if (!isTravelSet) {
+        timeDisplay.textContent = 'Not set';
+        distanceDisplay.textContent = 'Not set';
+      }
+      budgetDisplay.className = isBudgetSet ? setCls : unsetCls;
+      if (!isBudgetSet) {
+        budgetDisplay.textContent = 'Not set';
+      }
+    }
+
     function setLimitType(type) {
       currentLimitType = type === 'distance' ? 'distance' : 'time';
       if (currentLimitType === 'time') {
         limitTypeTimeBtn.className = "px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm transition";
         limitTypeDistBtn.className = "px-2 py-0.5 text-[10px] font-bold uppercase rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition";
         timeSlider.classList.remove('hidden');
-        timeDisplay.classList.remove('hidden');
         distanceSlider.classList.add('hidden');
-        distanceDisplay.classList.add('hidden');
       } else {
         limitTypeDistBtn.className = "px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm transition";
         limitTypeTimeBtn.className = "px-2 py-0.5 text-[10px] font-bold uppercase rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition";
         distanceSlider.classList.remove('hidden');
-        distanceDisplay.classList.remove('hidden');
         timeSlider.classList.add('hidden');
-        timeDisplay.classList.add('hidden');
       }
+      updateSliderDisplayStyles();
     }
 
     limitTypeTimeBtn.addEventListener('click', () => setLimitType('time'));
     limitTypeDistBtn.addEventListener('click', () => setLimitType('distance'));
 
     timeSlider.addEventListener('input', (e) => {
+      isTravelSet = true;
       timeDisplay.textContent = `${e.target.value} mins`;
+      updateSliderDisplayStyles();
+      if (typeof renderChatFilterSummary === 'function') renderChatFilterSummary();
     });
 
     distanceSlider.addEventListener('input', (e) => {
+      isTravelSet = true;
       distanceDisplay.textContent = `${parseFloat(e.target.value).toFixed(1)} km`;
+      updateSliderDisplayStyles();
+      if (typeof renderChatFilterSummary === 'function') renderChatFilterSummary();
     });
 
     const budgetSlider = document.getElementById('budgetSlider');
     const budgetDisplay = document.getElementById('budgetDisplay');
     budgetSlider.addEventListener('input', (e) => {
+      isBudgetSet = true;
       budgetDisplay.textContent = `SGD $${e.target.value}`;
+      updateSliderDisplayStyles();
+      if (typeof renderChatFilterSummary === 'function') renderChatFilterSummary();
     });
 
     // Preferred Cuisines Multi-Select Chips + Custom Cuisine Input
@@ -1428,6 +1450,14 @@
       return token ? { ...extra, 'Authorization': `Bearer ${token}` } : extra;
     }
 
+    function isUserProfileIncomplete(user) {
+      if (!user) return false;
+      const hasLoc = Array.isArray(user.location) && user.location.length > 0;
+      const hasBudget = typeof user.budget_per_person === 'number' && user.budget_per_person > 0;
+      const hasTravel = Boolean(user.max_travel_time_minutes || user.max_distance_km);
+      return !(hasLoc && hasBudget && hasTravel);
+    }
+
     function applyUserToSearchForm(user) {
       if (!user) return;
       if (typeof setEnteredLocations === 'function') {
@@ -1438,22 +1468,29 @@
           : '';
       }
       if (user.max_distance_km && !user.max_travel_time_minutes) {
+        isTravelSet = true;
         if (typeof setLimitType === 'function') setLimitType('distance');
         const dist = Math.min(15.0, Math.max(0.5, Math.round(user.max_distance_km * 2) / 2));
         distanceSlider.value = dist;
         distanceDisplay.textContent = `${dist.toFixed(1)} km`;
-      }
-      if (user.max_travel_time_minutes) {
+      } else if (user.max_travel_time_minutes) {
+        isTravelSet = true;
         if (typeof setLimitType === 'function') setLimitType('time');
         const mins = Math.min(90, Math.max(5, Math.round(user.max_travel_time_minutes / 5) * 5));
         timeSlider.value = mins;
         timeDisplay.textContent = `${mins} mins`;
+      } else {
+        isTravelSet = false;
       }
       if (user.budget_per_person) {
+        isBudgetSet = true;
         const bud = Math.min(100, Math.max(5, Math.round(user.budget_per_person / 5) * 5));
         budgetSlider.value = bud;
         budgetDisplay.textContent = `SGD $${bud}`;
+      } else {
+        isBudgetSet = false;
       }
+      if (typeof updateSliderDisplayStyles === 'function') updateSliderDisplayStyles();
       const diet = user.dietary_requirements || [];
       document.getElementById('halalCheck').checked = diet.includes('halal');
       document.getElementById('vegCheck').checked = diet.includes('vegetarian');
@@ -1589,6 +1626,9 @@
         authModal.classList.add('hidden');
         authModal.classList.remove('flex');
         loginForm.reset();
+        if (isUserProfileIncomplete(currentUser) && typeof startOnboardingInChat === 'function') {
+          startOnboardingInChat();
+        }
       } catch (err) {
         showAuthAlert(err.message, true);
       }
@@ -1625,6 +1665,9 @@
         authModal.classList.add('hidden');
         authModal.classList.remove('flex');
         registerForm.reset();
+        if (isUserProfileIncomplete(currentUser) && typeof startOnboardingInChat === 'function') {
+          startOnboardingInChat();
+        }
       } catch (err) {
         showAuthAlert(err.message, true);
       }
@@ -1666,6 +1709,9 @@
         registerForm.reset();
         otpForm.reset();
         switchAuthTab('login');
+        if (isUserProfileIncomplete(currentUser) && typeof startOnboardingInChat === 'function') {
+          startOnboardingInChat();
+        }
       } catch (err) {
         showAuthAlert(err.message, true);
       } finally {
@@ -1727,8 +1773,12 @@
       updateAuthUI();
       initRecentSearches();
       loadFavorites();
-      if (typeof renderChatFilterSummary === 'function') renderChatFilterSummary();
-      if (typeof refreshGreetingIfIdle === 'function') refreshGreetingIfIdle();
+      if (typeof resetChatThread === 'function') {
+        resetChatThread(true);
+      } else {
+        if (typeof renderChatFilterSummary === 'function') renderChatFilterSummary();
+        if (typeof refreshGreetingIfIdle === 'function') refreshGreetingIfIdle();
+      }
     });
 
     // Profile Modal Controls
@@ -1829,7 +1879,7 @@
     });
 
     // Check existing session token on startup
-    async function checkSession() {
+    async function checkSession(triggerOnboarding = true) {
       const token = getAuthToken();
       if (!token) {
         updateAuthUI();
@@ -1845,6 +1895,10 @@
           applyUserToSearchForm(currentUser);
           initRecentSearches();
           loadFavorites();
+          if (triggerOnboarding && !onboardingActive && isUserProfileIncomplete(currentUser)
+              && typeof startOnboardingInChat === 'function') {
+            startOnboardingInChat();
+          }
         } else {
           setAuthToken('');
           currentUser = null;
@@ -1932,7 +1986,7 @@
     let searchTriggeredFromChat = false;
     let pendingChatSearchBubble = null;
 
-    function collectCurrentFormPayload() {
+    function collectCurrentFormPayload(forChat = false) {
       const dietary = [];
       if (document.getElementById('halalCheck').checked) dietary.push('halal');
       if (document.getElementById('vegCheck').checked) dietary.push('vegetarian');
@@ -1949,13 +2003,27 @@
       const allLocations = getAllEnteredLocations();
       const primaryLoc = allLocations[0] || document.getElementById('locationInput').value.trim();
 
+      let maxMins = currentLimitType === 'time' ? parseFloat(timeSlider.value) : null;
+      let maxKm = currentLimitType === 'distance' ? parseFloat(distanceSlider.value) : null;
+      let budget = parseFloat(budgetSlider.value);
+
+      if (forChat) {
+        if (!isTravelSet) {
+          maxMins = null;
+          maxKm = null;
+        }
+        if (!isBudgetSet) {
+          budget = null;
+        }
+      }
+
       return {
         location: primaryLoc,
         locations: allLocations,
         mode: currentMode,
-        max_travel_minutes: currentLimitType === 'time' ? parseFloat(timeSlider.value) : null,
-        max_distance_km: currentLimitType === 'distance' ? parseFloat(distanceSlider.value) : null,
-        budget_per_person: parseFloat(budgetSlider.value),
+        max_travel_minutes: maxMins,
+        max_distance_km: maxKm,
+        budget_per_person: budget,
         dietary_requirements: dietary,
         cuisine: selectedLiked.length === 1 ? selectedLiked[0] : (selectedLiked.length > 1 ? selectedLiked.join(', ') : null),
         liked_cuisines: selectedLiked,
@@ -1980,21 +2048,32 @@
         trafficAwareCheck.checked = Boolean(filters.traffic_aware);
       }
 
-      if (filters.max_distance_km && !filters.max_travel_minutes) {
+      if (filters.max_distance_km != null && filters.max_travel_minutes == null) {
+        isTravelSet = true;
         setLimitType('distance');
         const dist = Math.min(15.0, Math.max(0.5, Math.round(filters.max_distance_km * 2) / 2));
         distanceSlider.value = dist;
         distanceDisplay.textContent = `${dist.toFixed(1)} km`;
-      } else {
+      } else if (filters.max_travel_minutes != null) {
+        isTravelSet = true;
         setLimitType('time');
-        const mins = Math.min(90, Math.max(5, Math.round((filters.max_travel_minutes || 30) / 5) * 5));
+        const mins = Math.min(90, Math.max(5, Math.round(filters.max_travel_minutes / 5) * 5));
         timeSlider.value = mins;
         timeDisplay.textContent = `${mins} mins`;
+      } else {
+        isTravelSet = false;
+        setLimitType('time');
       }
 
-      const bud = Math.min(100, Math.max(5, Math.round((filters.budget_per_person || 30) / 5) * 5));
-      budgetSlider.value = bud;
-      budgetDisplay.textContent = `SGD $${bud}`;
+      if (filters.budget_per_person != null) {
+        isBudgetSet = true;
+        const bud = Math.min(100, Math.max(5, Math.round(filters.budget_per_person / 5) * 5));
+        budgetSlider.value = bud;
+        budgetDisplay.textContent = `SGD $${bud}`;
+      } else {
+        isBudgetSet = false;
+      }
+      if (typeof updateSliderDisplayStyles === 'function') updateSliderDisplayStyles();
 
       const diet = filters.dietary_requirements || [];
       document.getElementById('halalCheck').checked = diet.includes('halal');
@@ -3313,6 +3392,8 @@
 
     let chatHistory = [];
     let chatHasUserTurn = false;
+    let onboardingActive = false;
+    let awaitingChatField = null;
 
     function setLeftPanelMode(mode) {
       const isChat = mode === 'chat';
@@ -3333,39 +3414,48 @@
 
     function renderChatFilterSummary() {
       if (!chatFilterSummaryEl) return;
-      const p = collectCurrentFormPayload();
+      const p = collectCurrentFormPayload(true);
       const pills = [];
+      const hasLoc = (p.locations && p.locations.length) || p.location;
       const locLabel = (p.locations && p.locations.length)
         ? p.locations.join(' + ')
         : (p.location || 'Location not set');
-      pills.push(`📍 ${locLabel}`);
+      pills.push({ text: `📍 ${locLabel}`, missing: !hasLoc });
 
       const modeIcon = p.mode === 'drive' ? '🚗 Drive' : (p.mode === 'transit' ? '🚆 Transit' : '🚶 Walk');
-      const limitLabel = p.max_distance_km
-        ? `${p.max_distance_km}km`
-        : `${Math.round(p.max_travel_minutes || 30)}m`;
-      pills.push(`${modeIcon} · ${limitLabel}`);
-      pills.push(`💰 $${Math.round(p.budget_per_person || 30)}`);
+      if (p.max_distance_km != null) {
+        pills.push({ text: `${modeIcon} · ${p.max_distance_km}km`, missing: false });
+      } else if (p.max_travel_minutes != null) {
+        pills.push({ text: `${modeIcon} · ${Math.round(p.max_travel_minutes)}m`, missing: false });
+      } else {
+        pills.push({ text: '🚶 Travel not set', missing: true });
+      }
+
+      if (p.budget_per_person != null) {
+        pills.push({ text: `💰 $${Math.round(p.budget_per_person)}`, missing: false });
+      } else {
+        pills.push({ text: '💰 Budget not set', missing: true });
+      }
 
       (p.dietary_requirements || []).forEach(d => {
-        pills.push(d === 'halal' ? '🕌 Halal' : '🥗 Vegetarian');
+        pills.push({ text: d === 'halal' ? '🕌 Halal' : '🥗 Vegetarian', missing: false });
       });
       if (p.liked_cuisines && p.liked_cuisines.length) {
-        pills.push(`🍽️ ${p.liked_cuisines.map(formatCuisineLabel).join(', ')}`);
+        pills.push({ text: `🍽️ ${p.liked_cuisines.map(formatCuisineLabel).join(', ')}`, missing: false });
       }
       if (p.disliked_cuisines && p.disliked_cuisines.length) {
-        pills.push(`🚫 No ${p.disliked_cuisines.map(formatCuisineLabel).join(', ')}`);
+        pills.push({ text: `🚫 No ${p.disliked_cuisines.map(formatCuisineLabel).join(', ')}`, missing: false });
       }
       if (p.other_preferences && p.other_preferences.length) {
-        pills.push(`✨ ${p.other_preferences.join(', ')}`);
+        pills.push({ text: `✨ ${p.other_preferences.join(', ')}`, missing: false });
       }
 
-      chatFilterSummaryEl.innerHTML = pills.map(text => `
-        <button type="button" data-open-filters="1"
-          class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-brand-400 transition">
-          ${escapeHtml(text)}
-        </button>
-      `).join('');
+      chatFilterSummaryEl.innerHTML = pills.map(pill => {
+        const cls = pill.missing
+          ? 'px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50/70 dark:bg-amber-950/30 border border-dashed border-amber-300 dark:border-amber-700/70 text-amber-700 dark:text-amber-300 hover:border-brand-400 transition'
+          : 'px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-brand-400 transition';
+        return `<button type="button" data-open-filters="1" class="${cls}">${escapeHtml(pill.text)}</button>`;
+      }).join('');
 
       chatFilterSummaryEl.querySelectorAll('[data-open-filters]').forEach(btn => {
         btn.addEventListener('click', () => setLeftPanelMode('filters'));
@@ -3455,7 +3545,7 @@
         const locs = Array.isArray(prefs.location) && prefs.location.length
           ? prefs.location.join(' + ')
           : 'Singapore';
-        const budget = prefs.budget_per_person ? `SGD $${prefs.budget_per_person}` : 'SGD $30';
+        const budget = prefs.budget_per_person ? `SGD $${prefs.budget_per_person}` : 'Budget not set';
         return {
           text: `Hi ${prefs.username}! Your saved defaults (${locs}, ${budget}) are loaded. Tell me what you're craving today, or ask to meet a friend in the middle.`,
           quickReplies: [
@@ -3467,29 +3557,31 @@
         };
       }
       return {
-        text: "Hi! I'm your BiteFinder restaurant assistant. Tell me what you want to eat — combine area, cuisine, budget, halal/vegetarian, travel mode, or ratings!",
+        text: "Hi! I'm your BiteFinder assistant. Where in Singapore would you like to search first? (Or tell me your location, budget, and travel time all at once!)",
         quickReplies: [
-          'Halal Japanese near Bugis under $20',
-          'Meet between Tampines and Jurong East',
-          'Vegetarian at least 4.5 stars near Compass One',
+          'Bugis Junction',
+          'Compass One',
+          'Halal Japanese near Bugis under $20, 15 mins walk',
           'Help'
         ]
       };
     }
 
     function resetChatThread(resetFilters = false) {
+      onboardingActive = false;
+      awaitingChatField = null;
       if (resetFilters) {
         if (currentUser) {
           applyUserToSearchForm(currentUser);
         } else {
           applyFiltersToSearchForm({
-            location: 'Compass One',
-            locations: ['Compass One'],
+            location: '',
+            locations: [],
             mode: 'walk',
             traffic_aware: false,
-            max_travel_minutes: 30,
+            max_travel_minutes: null,
             max_distance_km: null,
-            budget_per_person: 30,
+            budget_per_person: null,
             dietary_requirements: [],
             liked_cuisines: [],
             disliked_cuisines: [],
@@ -3501,12 +3593,54 @@
       chatHasUserTurn = false;
       chatMessagesEl.innerHTML = '';
       const greeting = buildGreetingState();
+      if (!currentUser) {
+        awaitingChatField = 'location';
+      }
       appendChatBubble('assistant', greeting.text, { quickReplies: greeting.quickReplies });
       renderChatFilterSummary();
     }
 
     function refreshGreetingIfIdle() {
-      if (!chatHasUserTurn) {
+      if (!chatHasUserTurn && !onboardingActive) {
+        resetChatThread(false);
+      }
+    }
+
+    async function startOnboardingInChat() {
+      if (!currentUser) return;
+      setLeftPanelMode('chat');
+      onboardingActive = true;
+      awaitingChatField = null;
+      chatHistory = [];
+      chatHasUserTurn = true;
+      chatMessagesEl.innerHTML = '';
+
+      const thinkingBubble = appendChatBubble('assistant', 'Preparing your BiteFinder profile setup...', { pending: true });
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            message: '__start_onboarding__',
+            onboarding: true,
+            current_filters: collectCurrentFormPayload(true),
+            history: []
+          })
+        });
+        const data = await res.json();
+        if (thinkingBubble) thinkingBubble.remove();
+        if (!res.ok) throw new Error(data.detail || 'Could not start onboarding');
+
+        awaitingChatField = data.awaiting_field || null;
+        if (data.action !== 'onboarding') {
+          onboardingActive = false;
+        }
+        if (data.filters) applyFiltersToSearchForm(data.filters);
+        appendChatBubble('assistant', data.reply, { quickReplies: data.quick_replies || [] });
+        chatHistory.push({ role: 'assistant', text: data.reply });
+      } catch (err) {
+        if (thinkingBubble) thinkingBubble.remove();
+        onboardingActive = false;
         resetChatThread(false);
       }
     }
@@ -3579,8 +3713,10 @@
           headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             message,
-            current_filters: collectCurrentFormPayload(),
-            history: chatHistory.slice(-6)
+            current_filters: collectCurrentFormPayload(true),
+            history: chatHistory.slice(-6),
+            onboarding: onboardingActive,
+            awaiting_field: awaitingChatField
           })
         });
         const data = await response.json();
@@ -3588,6 +3724,11 @@
 
         if (!response.ok) {
           throw new Error(data.detail || data.error || 'Chatbot request failed');
+        }
+
+        awaitingChatField = data.awaiting_field || null;
+        if (onboardingActive && data.action !== 'onboarding') {
+          onboardingActive = false;
         }
 
         if (data.filters) {
@@ -3602,7 +3743,7 @@
         chatHistory.push({ role: 'assistant', text: data.reply });
 
         if (data.saved_to_profile && currentUser) {
-          checkSession();
+          checkSession(false);
         }
 
         if (shouldRunSearch) {
