@@ -126,10 +126,18 @@ class BISApplicationService:
             if custom_wish not in other_prefs:
                 other_prefs = other_prefs + [custom_wish]
 
-        disliked = [
-            str(c).strip().lower() for c in (payload.get("disliked_cuisines") or [])
-            if str(c or "").strip().lower() in CUISINES
-        ]
+        disliked = []
+        for raw_c in (payload.get("disliked_cuisines") or []):
+            clean_c = str(raw_c or "").strip().lower()
+            if not clean_c:
+                continue
+            if clean_c in CUISINES:
+                if clean_c not in disliked:
+                    disliked.append(clean_c)
+            else:
+                avoid_wish = f"avoid {clean_c} cuisine"
+                if avoid_wish not in other_prefs:
+                    other_prefs = other_prefs + [avoid_wish]
         mode = payload.get("mode", "walk")
         traffic = bool(payload.get("traffic_aware", False) and mode == "drive" and minutes is not None)
         request = {

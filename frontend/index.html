@@ -404,11 +404,11 @@
             <div>
               <div class="flex items-center justify-between mb-1.5">
                 <label
-                  class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Disliked Cuisines (Click to Exclude)</label>
+                  class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Disliked Cuisines (Exclude Multiple or Type)</label>
                 <button type="button" id="clearDislikedBtn"
                   class="hidden text-[10px] font-bold text-rose-600 dark:text-rose-400 hover:underline">Clear</button>
               </div>
-              <div id="dislikedChipsContainer" class="flex flex-wrap gap-1.5">
+              <div id="dislikedChipsContainer" class="flex flex-wrap gap-1.5 mb-2">
                 <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="chinese">Chinese</button>
                 <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="malay">Malay</button>
                 <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="indian">Indian</button>
@@ -421,6 +421,15 @@
                 <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="peranakan">Peranakan</button>
                 <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="indonesian">Indonesian</button>
                 <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="middle eastern">Middle Eastern</button>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="customDislikedCuisineInput"
+                  placeholder="Not listed? Type disliked cuisine (e.g. Seafood, Fast Food) & press +"
+                  class="flex-1 px-3 py-1.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition">
+                <button type="button" id="addCustomDislikedCuisineBtn"
+                  class="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/60 hover:text-rose-700 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700 transition shrink-0">
+                  + Add
+                </button>
               </div>
             </div>
 

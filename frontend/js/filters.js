@@ -133,21 +133,29 @@ export function setEnteredLocations(locArray) {
   updateMidpointHint();
 }
 
-export function ensurePreferredChipExists(cuisine) {
+function ensureCuisineChip(containerId, chipClass, hoverBorderCls, cuisine, toggleFn) {
   const clean = String(cuisine || '').trim().toLowerCase();
-  const container = document.getElementById('preferredChipsContainer');
+  const container = document.getElementById(containerId);
   if (!clean || !container) return;
-  const existing = container.querySelector(`.prefer-chip[data-cuisine="${CSS.escape(clean)}"]`);
+  const existing = container.querySelector(`.${chipClass}[data-cuisine="${CSS.escape(clean)}"]`);
   if (!existing) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.dataset.cuisine = clean;
     btn.dataset.custom = 'true';
-    btn.className = 'prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition';
+    btn.className = `${chipClass} text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ${hoverBorderCls} transition`;
     btn.textContent = formatCuisineLabel(clean);
-    btn.addEventListener('click', () => togglePreferredCuisine(clean));
+    btn.addEventListener('click', () => toggleFn(clean));
     container.appendChild(btn);
   }
+}
+
+export function ensurePreferredChipExists(cuisine) {
+  ensureCuisineChip('preferredChipsContainer', 'prefer-chip', 'hover:border-emerald-400', cuisine, togglePreferredCuisine);
+}
+
+export function ensureDislikedChipExists(cuisine) {
+  ensureCuisineChip('dislikedChipsContainer', 'dislike-chip', 'hover:border-rose-300', cuisine, toggleDislikedCuisine);
 }
 
 export function updatePreferredChipsUI() {
@@ -210,23 +218,47 @@ function togglePreferredCuisine(c) {
   chatCallbacks.renderSummary();
 }
 
-export function addCustomCuisinesFromInput() {
-  const customInput = document.getElementById('customCuisineInput');
-  if (!customInput) return;
-  const raw = customInput.value.trim();
+function toggleDislikedCuisine(c) {
+  const clean = String(c || '').trim().toLowerCase();
+  if (!clean) return;
+  if (state.dislikedCuisines.has(clean)) {
+    state.dislikedCuisines.delete(clean);
+  } else {
+    state.dislikedCuisines.add(clean);
+    if (state.preferredCuisines.has(clean)) {
+      state.preferredCuisines.delete(clean);
+      updatePreferredChipsUI();
+    }
+  }
+  updateDislikedChipsUI();
+  chatCallbacks.renderSummary();
+}
+
+function addCustomCuisinesToSet(inputId, ensureChipFn, targetSet, oppositeSet) {
+  const inputEl = document.getElementById(inputId);
+  if (!inputEl) return;
+  const raw = inputEl.value.trim();
   if (!raw) return;
   raw.split(',').forEach((part) => {
     const clean = part.trim().toLowerCase();
     if (clean) {
-      ensurePreferredChipExists(clean);
-      state.preferredCuisines.add(clean);
-      state.dislikedCuisines.delete(clean);
+      ensureChipFn(clean);
+      targetSet.add(clean);
+      oppositeSet.delete(clean);
     }
   });
-  customInput.value = '';
+  inputEl.value = '';
   updateDislikedChipsUI();
   updatePreferredChipsUI();
   chatCallbacks.renderSummary();
+}
+
+export function addCustomCuisinesFromInput() {
+  addCustomCuisinesToSet('customCuisineInput', ensurePreferredChipExists, state.preferredCuisines, state.dislikedCuisines);
+}
+
+export function addCustomDislikedCuisinesFromInput() {
+  addCustomCuisinesToSet('customDislikedCuisineInput', ensureDislikedChipExists, state.dislikedCuisines, state.preferredCuisines);
 }
 
 export function getUserRecentKey() {
@@ -300,6 +332,7 @@ export function collectCurrentFormPayload(forChat = false) {
   const vegCheck = document.getElementById('vegCheck');
   const specialInput = document.getElementById('specialInput');
   const customInput = document.getElementById('customCuisineInput');
+  const customDislikedInput = document.getElementById('customDislikedCuisineInput');
   const timeSlider = document.getElementById('timeSlider');
   const distanceSlider = document.getElementById('distanceSlider');
   const budgetSlider = document.getElementById('budgetSlider');
@@ -314,6 +347,9 @@ export function collectCurrentFormPayload(forChat = false) {
 
   if (customInput && customInput.value.trim()) {
     addCustomCuisinesFromInput();
+  }
+  if (customDislikedInput && customDislikedInput.value.trim()) {
+    addCustomDislikedCuisinesFromInput();
   }
   const selectedLiked = Array.from(state.preferredCuisines);
   const allLocations = getAllEnteredLocations();
@@ -429,7 +465,14 @@ export function applyFiltersToSearchForm(filters) {
     }
   });
   updatePreferredChipsUI();
-  state.dislikedCuisines = new Set((filters.disliked_cuisines || []).map((c) => String(c).toLowerCase()));
+  state.dislikedCuisines.clear();
+  (filters.disliked_cuisines || []).forEach((c) => {
+    const clean = String(c || '').trim().toLowerCase();
+    if (clean) {
+      ensureDislikedChipExists(clean);
+      state.dislikedCuisines.add(clean);
+    }
+  });
   updateDislikedChipsUI();
   document.getElementById('specialInput').value = (filters.other_preferences || []).join(', ');
   chatCallbacks.renderSummary();
@@ -550,25 +593,22 @@ export function initFiltersControls() {
     chatCallbacks.renderSummary();
   });
 
-  document.querySelectorAll('.dislike-chip').forEach((chip) => {
-    chip.addEventListener('click', () => {
-      const c = chip.dataset.cuisine;
-      if (state.dislikedCuisines.has(c)) {
-        state.dislikedCuisines.delete(c);
-      } else {
-        state.dislikedCuisines.add(c);
-        if (state.preferredCuisines.has(c)) {
-          state.preferredCuisines.delete(c);
-          updatePreferredChipsUI();
-        }
-      }
-      updateDislikedChipsUI();
-      chatCallbacks.renderSummary();
-    });
+  document.querySelectorAll('#dislikedChipsContainer .dislike-chip').forEach((chip) => {
+    chip.addEventListener('click', () => toggleDislikedCuisine(chip.dataset.cuisine));
+  });
+
+  const customDislikedInput = document.getElementById('customDislikedCuisineInput');
+  document.getElementById('addCustomDislikedCuisineBtn')?.addEventListener('click', addCustomDislikedCuisinesFromInput);
+  customDislikedInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addCustomDislikedCuisinesFromInput();
+    }
   });
 
   document.getElementById('clearDislikedBtn')?.addEventListener('click', () => {
     state.dislikedCuisines.clear();
+    if (customDislikedInput) customDislikedInput.value = '';
     updateDislikedChipsUI();
     chatCallbacks.renderSummary();
   });
