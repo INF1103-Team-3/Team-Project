@@ -27,10 +27,36 @@ class BRCHTTPServer:
         debug_log.debug_log(
             f"BRC service listening on port {self._port}.",
             "INFO", "BRC.service")
+        self._start_background_warm()
         try:
             self._server.serve_forever()
         finally:
             self._server.server_close()
+
+    def _start_background_warm(self):
+        if os.getenv("BRC_AUTO_WARM", "1") == "0":
+            return
+        if BRCRequestHandler.database_path.exists():
+            return
+
+        def warm():
+            with BRCRequestHandler._run_lock:
+                if BRCRequestHandler.database_path.exists():
+                    return
+                try:
+                    debug_log.debug_log(
+                        "BRC background database build started.",
+                        "INFO", "BRC.service")
+                    BRCRequestHandler.application_run()
+                    debug_log.debug_log(
+                        "BRC background database build finished.",
+                        "INFO", "BRC.service")
+                except Exception as error:
+                    debug_log.debug_log(
+                        f"BRC background database build failed: {error}",
+                        "WARNING", "BRC.service")
+
+        threading.Thread(target=warm, daemon=True).start()
 
     def stop(self, *_):
         threading.Thread(

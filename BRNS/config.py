@@ -35,13 +35,11 @@ GROQ_URL = os.getenv("BITEFINDER_GROQ_URL",
 # Try the responsive direct provider first; retain OpenRouter as fallback.
 MODEL_CHAIN = [
     {"provider": "gemini", "model": "gemini-3.5-flash-lite"},   # from Google's 404 notice
-    {"provider": "gemini", "model": "gemini-3.6-flash"},        # separate daily pool
-    {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
 ]
 
 
 def _extend_chain_with_groq():
-    """Fetch Groq chat models at startup and append them to MODEL_CHAIN."""
+    """Fetch Groq chat models at startup and put them before slow fallbacks."""
     if not GROQ_API_KEY:
         return
     from shared.groq_models import fetch_chat_models
@@ -50,6 +48,10 @@ def _extend_chain_with_groq():
 
 
 _extend_chain_with_groq()
+MODEL_CHAIN.extend([
+    {"provider": "gemini", "model": "gemini-3.6-flash"},        # separate daily pool
+    {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
+])
 
 # --- IO layer: Google Maps Platform ---
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")

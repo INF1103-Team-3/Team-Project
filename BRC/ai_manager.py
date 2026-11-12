@@ -23,13 +23,13 @@ def create_manager(api_key, model):
     """Build BRC's independent configured provider-chain state."""
     try:
         interval = float(os.getenv(
-            "BRC_AI_REQUEST_INTERVAL_SECONDS", "4.2"))
+            "BRC_AI_REQUEST_INTERVAL_SECONDS", "1.5"))
     except ValueError:
-        interval = 4.2
+        interval = 1.5
     try:
-        timeout = float(os.getenv("BRC_AI_TIMEOUT_SECONDS", "20"))
+        timeout = float(os.getenv("BRC_AI_TIMEOUT_SECONDS", "12"))
     except ValueError:
-        timeout = 20.0
+        timeout = 12.0
     try:
         chain_timeout = float(os.getenv(
             "BRC_AI_CHAIN_TIMEOUT_SECONDS", "45"))
@@ -40,6 +40,19 @@ def create_manager(api_key, model):
     providers = []
     if api_key:
         providers.append({"provider": "gemini", "model": model})
+    # Put fast Groq models ahead of secondary Gemini/OpenRouter fallbacks so
+    # 503/504 Gemini failures complete in ~1s instead of stalling for ~80s.
+    if groq_key:
+        from shared.groq_models import fetch_chat_models
+        groq_models = fetch_chat_models(groq_key)
+        explicit_groq = os.getenv("BRC_GROQ_MODEL", "").strip()
+        if explicit_groq and explicit_groq not in groq_models:
+            groq_models.insert(0, explicit_groq)
+        if not groq_models:
+            groq_models = ["openai/gpt-oss-20b"]
+        for groq_model in groq_models:
+            providers.append({"provider": "groq", "model": groq_model})
+    if api_key:
         fallback = os.getenv(
             "BRC_GEMINI_FALLBACK_MODEL", "gemini-3.6-flash").strip()
         if fallback and fallback != model:
@@ -50,12 +63,6 @@ def create_manager(api_key, model):
             "model": os.getenv(
                 "BRC_OPENROUTER_MODEL",
                 "nvidia/nemotron-3-ultra-550b-a55b:free").strip(),
-        })
-    if groq_key:
-        providers.append({
-            "provider": "groq",
-            "model": os.getenv(
-                "BRC_GROQ_MODEL", "openai/gpt-oss-20b").strip(),
         })
     providers = [entry for entry in providers if entry["model"]]
     if not providers:
@@ -146,8 +153,6 @@ def _call_chat_completions(prompt, manager, provider, model, timeout):
             "BITEFINDER_GROQ_URL",
             "https://api.groq.com/openai/v1/chat/completions")
         key = manager.get("groq_api_key")
-    _pace_request(manager)
-    manager["last_request_at"] = time.monotonic()
     try:
         response = requests.post(
             url,

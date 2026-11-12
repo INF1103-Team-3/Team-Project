@@ -20,3 +20,11 @@ class BRCRestaurantCheckerAdapter(RestaurantVerificationInterface):
         if hasattr(self._checker, "verify"):
             return self._checker.verify(restaurant)
         return self._checker.run(restaurant)
+
+    def supports_batch(self):
+        return hasattr(self._checker, "verify_batch")
+
+    def verify_batch(self, restaurants):
+        if hasattr(self._checker, "verify_batch"):
+            return self._checker.verify_batch(restaurants)
+        return [self.verify(restaurant) for restaurant in restaurants]

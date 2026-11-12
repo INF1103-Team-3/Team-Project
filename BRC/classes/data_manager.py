@@ -3,6 +3,7 @@
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 
 from BRC.classes.data_unavailable_error import DataUnavailableError
 from BRC.classes.json_file import JsonFile
@@ -22,6 +23,9 @@ CLEAN_DATABASE_PATH = DATA_DIR / "halal_restaurants.json"
 
 class DataManager:
     """Own BRC JSON files and translate them into domain records."""
+
+    _CLEAN_DB_LOCK = Lock()
+    _CLEAN_DB_CACHE = {}
 
     def __init__(self, folder=DATA_DIR, raw_path=None, clean_path=None,
                  cuisine_cache_path=None):
@@ -75,11 +79,26 @@ class DataManager:
         self._raw.write(snapshot.to_dict())
 
     def load_clean_database(self):
+        path = self._clean.path
+        try:
+            stat = path.stat()
+            stamp = (str(path.resolve()), stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            stamp = None
+        if stamp is not None:
+            with self._CLEAN_DB_LOCK:
+                cached = self._CLEAN_DB_CACHE.get(stamp[0])
+                if cached and cached[0] == stamp:
+                    return cached[1]
         value = self._clean.read()
         try:
-            return self._database_from_json(value)
+            database = self._database_from_json(value)
         except ValueError as error:
             raise DataUnavailableError(str(error)) from error
+        if stamp is not None:
+            with self._CLEAN_DB_LOCK:
+                self._CLEAN_DB_CACHE[stamp[0]] = (stamp, database)
+        return database
 
     def save_clean_database(self, database):
         if len(database) == 0:

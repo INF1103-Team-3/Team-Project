@@ -1,7 +1,6 @@
 """Adapter-independent BIS profile and search use cases."""
 from copy import deepcopy
 import math
-from threading import Lock
 from BIS.sources.profile_schema import CUISINES, PREFERENCE_FIELDS, normalize_username
 
 
@@ -11,7 +10,6 @@ class BISApplicationService:
         self._data, self._ai, self._logic = data, ai, logic
         self._brns, self._navigator, self._history = brns, navigator, history
         self._history_scope, self._config, self._model = history_scope, config, model_reader
-        self._search_lock = Lock()
 
     def save_profile(self, user, payload):
         if payload.get("user_id") not in (None, user["userID"]):
@@ -276,46 +274,41 @@ class BISApplicationService:
 
     def search(self, user, payload):
         owner = user["userID"] if user else None
-        if not self._search_lock.acquire(timeout=2):
-            raise RuntimeError("Another search is in progress. Please retry shortly.")
-        try:
-            token = payload.get("confirmation_token")
-            if token:
-                proposal = self._data.consume_search_proposal(owner, token)
-                request = proposal["request"] if isinstance(proposal, dict) and "request" in proposal else proposal
-                resolved_origins = (
-                    proposal.get("resolved_origins") if isinstance(proposal, dict) and "resolved_origins" in proposal
-                    else [request["origin"]]
-                )
-                selected_cuisines = (
-                    proposal.get("selected_cuisines") if isinstance(proposal, dict) and "selected_cuisines" in proposal
-                    else ([request["cuisine"]] if request.get("cuisine") and request.get("cuisine") != "none" else [])
-                )
-                return self._run_search(
-                    owner, payload, request["origin"], resolved_origins, selected_cuisines, first_request=request)
+        token = payload.get("confirmation_token")
+        if token:
+            proposal = self._data.consume_search_proposal(owner, token)
+            request = proposal["request"] if isinstance(proposal, dict) and "request" in proposal else proposal
+            resolved_origins = (
+                proposal.get("resolved_origins") if isinstance(proposal, dict) and "resolved_origins" in proposal
+                else [request["origin"]]
+            )
+            selected_cuisines = (
+                proposal.get("selected_cuisines") if isinstance(proposal, dict) and "selected_cuisines" in proposal
+                else ([request["cuisine"]] if request.get("cuisine") and request.get("cuisine") != "none" else [])
+            )
+            return self._run_search(
+                owner, payload, request["origin"], resolved_origins, selected_cuisines, first_request=request)
 
-            raw_locations = self._collect_locations(payload)
-            origin, resolved_origins, _ = self._resolve_origins(raw_locations)
-            selected_cuisines = self._collect_cuisines(payload)
+        raw_locations = self._collect_locations(payload)
+        origin, resolved_origins, _ = self._resolve_origins(raw_locations)
+        selected_cuisines = self._collect_cuisines(payload)
 
-            if payload.get("confirm_only"):
-                single_c = selected_cuisines[0] if len(selected_cuisines) == 1 else None
-                request = self._build_validated_request(payload, origin, single_c)
-                proposal_token = self._data.create_search_proposal(owner, {
-                    "request": request,
-                    "resolved_origins": resolved_origins,
-                    "selected_cuisines": selected_cuisines,
-                })
-                return {
-                    "success": True,
-                    "confirmation_required": True,
-                    "request": request,
-                    "confirmation_token": proposal_token,
-                }
+        if payload.get("confirm_only"):
+            single_c = selected_cuisines[0] if len(selected_cuisines) == 1 else None
+            request = self._build_validated_request(payload, origin, single_c)
+            proposal_token = self._data.create_search_proposal(owner, {
+                "request": request,
+                "resolved_origins": resolved_origins,
+                "selected_cuisines": selected_cuisines,
+            })
+            return {
+                "success": True,
+                "confirmation_required": True,
+                "request": request,
+                "confirmation_token": proposal_token,
+            }
 
-            return self._run_search(owner, payload, origin, resolved_origins, selected_cuisines)
-        finally:
-            self._search_lock.release()
+        return self._run_search(owner, payload, origin, resolved_origins, selected_cuisines)
 
     def route(self, payload):
         request = {"origin": {"latitude": payload["origin_lat"], "longitude": payload["origin_lng"]},

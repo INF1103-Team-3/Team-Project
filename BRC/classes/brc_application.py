@@ -54,8 +54,9 @@ class BRCApplication:
 
     def _choose_workflow(self, value):
         if value is NO_INPUT:
+            use_ai = os.getenv("BRC_BUILD_CUISINES_WITH_AI", "1") != "0"
             return BuildDatabaseWorkflow(
-                self._load_or_download_snapshot())
+                self._load_or_download_snapshot(), use_ai=use_ai)
         records, single = self._io.validate_restaurants(value)
         database = self._load_or_build_database()
         return CheckRestaurantsWorkflow(
