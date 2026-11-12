@@ -602,20 +602,26 @@ class BISChatbotService:
                 filters = self._default_filters(user)
                 return {
                     "success": True,
-                    "action": "search",
-                    "awaiting_field": None,
-                    "reply": "Your profile is already set up! Finding restaurants using your saved preferences.",
+                    "action": "confirm",
+                    "awaiting_field": "confirm",
+                    "reply": self._format_confirmation_reply(
+                        filters,
+                        prefix="Your BiteFinder profile is already set up!",
+                    ),
                     "filters": filters,
                     "changes": [],
-                    "quick_replies": self._default_quick_replies(filters, True),
+                    "quick_replies": self._confirmation_quick_replies(filters, True),
                     "model_used": self._model() or "BiteFinder Assistant",
                     "saved_to_profile": False,
                 }
             prompt, quick_replies = _ONBOARDING_QUESTIONS[next_needed]
+            step_num = list(_ONBOARDING_QUESTIONS.keys()).index(next_needed) + 1
             return {
                 "success": True,
                 "action": "onboarding",
                 "awaiting_field": next_needed,
+                "onboarding_step": step_num,
+                "onboarding_total": len(_ONBOARDING_QUESTIONS),
                 "reply": prompt,
                 "filters": current,
                 "changes": [],
@@ -680,10 +686,13 @@ class BISChatbotService:
 
             if not accepted:
                 prompt, quick_replies = _ONBOARDING_QUESTIONS[target_field]
+                step_num = list(_ONBOARDING_QUESTIONS.keys()).index(target_field) + 1
                 return {
                     "success": True,
                     "action": "onboarding",
                     "awaiting_field": target_field,
+                    "onboarding_step": step_num,
+                    "onboarding_total": len(_ONBOARDING_QUESTIONS),
                     "reply": f"I didn't catch a valid value for {target_field.replace('_', ' ')}. {prompt}",
                     "filters": current,
                     "changes": [],
@@ -716,10 +725,13 @@ class BISChatbotService:
         remaining = self._next_onboarding_field(saved_user.get("preferences") or prefs)
         if remaining:
             next_prompt, quick_replies = _ONBOARDING_QUESTIONS[remaining]
+            step_num = list(_ONBOARDING_QUESTIONS.keys()).index(remaining) + 1
             return {
                 "success": True,
                 "action": "onboarding",
                 "awaiting_field": remaining,
+                "onboarding_step": step_num,
+                "onboarding_total": len(_ONBOARDING_QUESTIONS),
                 "reply": f"Saved! {next_prompt}",
                 "filters": updated_filters,
                 "changes": changes,
@@ -730,12 +742,17 @@ class BISChatbotService:
 
         return {
             "success": True,
-            "action": "search",
-            "awaiting_field": None,
-            "reply": "Your BiteFinder profile is complete and saved! Searching for matching restaurants now.",
+            "action": "confirm",
+            "awaiting_field": "confirm",
+            "onboarding_step": len(_ONBOARDING_QUESTIONS),
+            "onboarding_total": len(_ONBOARDING_QUESTIONS),
+            "reply": self._format_confirmation_reply(
+                updated_filters,
+                prefix="Your BiteFinder profile is complete and saved!",
+            ),
             "filters": updated_filters,
             "changes": changes,
-            "quick_replies": self._default_quick_replies(updated_filters, True),
+            "quick_replies": self._confirmation_quick_replies(updated_filters, True),
             "model_used": self._model() or "BiteFinder Assistant",
             "saved_to_profile": True,
         }
@@ -807,6 +824,115 @@ class BISChatbotService:
             changes.append("✨ " + ", ".join(after["other_preferences"]))
         return changes
 
+    _CONFIRM_PHRASES = {
+        "yes", "yes search now", "yes, search now", "yes please", "yep", "yeah",
+        "yup", "sure", "ok", "okay", "confirm", "confirmed", "correct",
+        "looks good", "sounds good", "all good", "all correct", "that's right",
+        "thats right", "go ahead", "proceed", "search", "search now",
+        "find now", "run search", "start search", "do it", "retry search",
+        "try again",
+    }
+
+    @classmethod
+    def _is_search_confirmation(cls, message):
+        cleaned = re.sub(r"[.!?\s]+$", "", str(message or "").casefold().strip())
+        return cleaned in cls._CONFIRM_PHRASES
+
+    @staticmethod
+    def _format_confirmation_reply(filters, prefix="Here is your current search setup:"):
+        locs = " + ".join(filters.get("locations") or []) or "Not set"
+        loc_label = "Meet between" if len(filters.get("locations") or []) > 1 else "Location"
+        mode_name = {"walk": "Walk", "drive": "Drive", "transit": "Transit"}.get(filters.get("mode"), "Walk")
+        if filters.get("max_distance_km") is not None:
+            travel = f"{mode_name} · {filters['max_distance_km']:g} km"
+        elif filters.get("max_travel_minutes") is not None:
+            travel = f"{mode_name} · {int(round(filters['max_travel_minutes']))} mins"
+        else:
+            travel = "Not set"
+        budget = f"SGD ${filters['budget_per_person']:g}" if filters.get("budget_per_person") is not None else "Not set"
+        diet = ", ".join(d.title() for d in (filters.get("dietary_requirements") or [])) or "None"
+        liked = ", ".join(c.title() for c in (filters.get("liked_cuisines") or [])) or "Any"
+        parts = [f"{loc_label}: {locs}", f"Travel: {travel}", f"Budget: {budget}", f"Dietary: {diet}", f"Cuisines: {liked}"]
+        if filters.get("disliked_cuisines"):
+            parts.append("Avoid: " + ", ".join(c.title() for c in filters["disliked_cuisines"]))
+        if filters.get("other_preferences"):
+            parts.append("Wishes: " + ", ".join(filters["other_preferences"]))
+        return f"{prefix} {' | '.join(parts)}. Should I proceed with searching, or would you like to change anything?"
+
+    @staticmethod
+    def _confirmation_quick_replies(filters, signed_in):
+        replies = ["Yes, search now", "Change location", "Change budget", "Edit cuisines"]
+        if signed_in and len(replies) < 4:
+            replies[3] = "Save to profile"
+        return replies
+
+    def _handle_edit_request(self, lower, current):
+        cleaned = re.sub(r"[.!?\s]+$", "", lower.strip())
+        if cleaned in ("change location", "edit location", "change starting location"):
+            prompt, qrs = self._prompt_for_missing_search_field("location")
+            return {
+                "success": True,
+                "action": "clarify",
+                "awaiting_field": "location",
+                "reply": prompt,
+                "filters": current,
+                "changes": [],
+                "quick_replies": qrs,
+                "model_used": self._model() or "BiteFinder Assistant",
+                "saved_to_profile": False,
+            }
+        if cleaned in ("change budget", "edit budget"):
+            prompt, qrs = self._prompt_for_missing_search_field("budget_per_person")
+            return {
+                "success": True,
+                "action": "clarify",
+                "awaiting_field": "budget_per_person",
+                "reply": prompt,
+                "filters": current,
+                "changes": [],
+                "quick_replies": qrs,
+                "model_used": self._model() or "BiteFinder Assistant",
+                "saved_to_profile": False,
+            }
+        if cleaned in ("change travel", "edit travel", "change time", "change distance"):
+            prompt, qrs = self._prompt_for_missing_search_field("travel")
+            return {
+                "success": True,
+                "action": "clarify",
+                "awaiting_field": "travel",
+                "reply": prompt,
+                "filters": current,
+                "changes": [],
+                "quick_replies": qrs,
+                "model_used": self._model() or "BiteFinder Assistant",
+                "saved_to_profile": False,
+            }
+        if cleaned in ("change cuisine", "edit cuisine", "edit cuisines", "change cuisines"):
+            return {
+                "success": True,
+                "action": "clarify",
+                "awaiting_field": "confirm",
+                "reply": "Which cuisines would you like to search for instead? (e.g. 'Japanese, Korean' or 'any cuisine')",
+                "filters": current,
+                "changes": [],
+                "quick_replies": ["Japanese, Korean", "Halal only", "Any cuisine", "Yes, search now"],
+                "model_used": self._model() or "BiteFinder Assistant",
+                "saved_to_profile": False,
+            }
+        if cleaned in ("no", "not yet", "wait", "edit", "change something", "cancel"):
+            return {
+                "success": True,
+                "action": "clarify",
+                "awaiting_field": "confirm",
+                "reply": "No problem! Tell me what you'd like to adjust (location, budget, travel limit, dietary needs, cuisines, or wishes).",
+                "filters": current,
+                "changes": [],
+                "quick_replies": ["Change location", "Change budget", "Change travel", "Edit cuisines"],
+                "model_used": self._model() or "BiteFinder Assistant",
+                "saved_to_profile": False,
+            }
+        return None
+
     def respond(self, user, payload):
         message = str(payload.get("message") or "").strip()
         if not message:
@@ -818,6 +944,38 @@ class BISChatbotService:
         if payload.get("onboarding") and user:
             return self._handle_onboarding(user, message, awaiting_field, current)
 
+        lower = message.casefold().strip()
+        edit_reply = self._handle_edit_request(lower, current)
+        if edit_reply is not None:
+            return edit_reply
+
+        if self._is_search_confirmation(lower):
+            missing_field = self._next_missing_search_field(current)
+            if missing_field:
+                prompt, qrs = self._prompt_for_missing_search_field(missing_field)
+                return {
+                    "success": True,
+                    "action": "clarify",
+                    "awaiting_field": missing_field,
+                    "reply": prompt,
+                    "filters": current,
+                    "changes": [],
+                    "quick_replies": qrs,
+                    "model_used": self._model() or "BiteFinder Assistant",
+                    "saved_to_profile": False,
+                }
+            return {
+                "success": True,
+                "action": "search",
+                "awaiting_field": None,
+                "reply": "Confirmed! Searching Google Places, travel routes, and MUIS records now.",
+                "filters": current,
+                "changes": [],
+                "quick_replies": self._default_quick_replies(current, bool(user)),
+                "model_used": self._model() or "BiteFinder Assistant",
+                "saved_to_profile": False,
+            }
+
         history = [
             {"role": str(item.get("role", "")), "text": str(item.get("text", ""))[:300]}
             for item in (payload.get("history") or [])[-6:]
@@ -826,22 +984,22 @@ class BISChatbotService:
 
         parsed = None
         if not self._config.get("ai_bypass") and hasattr(self._ai, "chat_turn"):
-            lower = message.casefold().strip()
             is_utility = lower in ("/help", "help", "/profile", "/reset", "reset", "/save")
             if not is_utility:
                 try:
                     saved_profile = (user or {}).get("preferences") or {}
                     ai_msg = (
                         f"[Answering question for {awaiting_field}] {message}"
-                        if awaiting_field else message
+                        if awaiting_field and awaiting_field != "confirm" else message
                     )
                     parsed = self._ai.chat_turn(ai_msg, current, history, saved_profile, deepcopy(self._config))
                 except (RuntimeError, ValueError, TypeError):
                     parsed = None
 
         if parsed is None:
-            parsed = self._deterministic_parse(message, current, user, awaiting_field=awaiting_field)
-        elif awaiting_field and not parsed.get("updates"):
+            det_awaiting = None if awaiting_field == "confirm" else awaiting_field
+            parsed = self._deterministic_parse(message, current, user, awaiting_field=det_awaiting)
+        elif awaiting_field and awaiting_field != "confirm" and not parsed.get("updates"):
             ctx_updates = self._parse_contextual_answer(message, awaiting_field)
             if ctx_updates:
                 parsed["updates"] = ctx_updates
@@ -884,7 +1042,7 @@ class BISChatbotService:
                     "reply": "Please sign in first so I can save your preferences to your BiteFinder profile.",
                     "filters": updated,
                     "changes": changes,
-                    "quick_replies": ["Search with current filters", "Help"],
+                    "quick_replies": ["Yes, search now", "Help"],
                     "model_used": self._model() or "BiteFinder Assistant",
                     "saved_to_profile": False,
                 }
@@ -896,7 +1054,7 @@ class BISChatbotService:
         elif intent == "show_profile":
             reply = self._format_profile_summary(user)
 
-        elif intent == "search":
+        elif intent == "search" or bool(parsed.get("updates")):
             missing_field = self._next_missing_search_field(updated)
             if missing_field:
                 intent = "clarify"
@@ -912,6 +1070,17 @@ class BISChatbotService:
                     "model_used": self._model() or "BiteFinder Assistant",
                     "saved_to_profile": False,
                 }
+            return {
+                "success": True,
+                "action": "confirm",
+                "awaiting_field": "confirm",
+                "reply": self._format_confirmation_reply(updated, prefix="Got it! Please check if everything looks right:"),
+                "filters": updated,
+                "changes": changes,
+                "quick_replies": self._confirmation_quick_replies(updated, bool(user)),
+                "model_used": self._model() or "BiteFinder Assistant",
+                "saved_to_profile": False,
+            }
 
         return {
             "success": True,

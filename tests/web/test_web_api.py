@@ -397,7 +397,7 @@ class WebIntegrationTests(unittest.TestCase):
         self.assertEqual(clarify.json()["filters"]["budget_per_person"], 15.0)
         self.assertIn("ramen", clarify.json()["filters"]["liked_cuisines"])
 
-        # 2. Meet-in-the-middle + dietary + rating + walk time triggers search
+        # 2. Meet-in-the-middle + dietary + rating + walk time confirms before searching
         chat1 = self.client.post("/api/chat", json={
             "message": "Halal Japanese between Tampines and Jurong East under $25, walk 15 mins, at least 4.5 stars",
             "current_filters": {},
@@ -405,7 +405,8 @@ class WebIntegrationTests(unittest.TestCase):
         })
         self.assertEqual(chat1.status_code, 200, chat1.text)
         body1 = chat1.json()
-        self.assertEqual(body1["action"], "search")
+        self.assertEqual(body1["action"], "confirm")
+        self.assertEqual(body1["awaiting_field"], "confirm")
         f1 = body1["filters"]
         self.assertEqual(f1["locations"], ["Tampines", "Jurong East"])
         self.assertEqual(f1["mode"], "walk")
@@ -415,19 +416,30 @@ class WebIntegrationTests(unittest.TestCase):
         self.assertIn("japanese", f1["liked_cuisines"])
         self.assertTrue(any("4.5" in p for p in f1["other_preferences"]))
 
-        # 3. Incremental follow-up preserves existing locations/dietary while merging updates
+        # 3. Incremental follow-up preserves existing locations/dietary and re-confirms
         chat2 = self.client.post("/api/chat", json={
             "message": "Make it under $15 by transit",
             "current_filters": f1,
+            "awaiting_field": "confirm",
             "history": [{"role": "user", "text": "Halal Japanese..."}],
         })
         self.assertEqual(chat2.status_code, 200, chat2.text)
+        self.assertEqual(chat2.json()["action"], "confirm")
         f2 = chat2.json()["filters"]
         self.assertEqual(f2["locations"], ["Tampines", "Jurong East"])
         self.assertIn("halal", f2["dietary_requirements"])
         self.assertIn("japanese", f2["liked_cuisines"])
         self.assertEqual(f2["budget_per_person"], 15.0)
         self.assertEqual(f2["mode"], "transit")
+
+        # Explicit user confirmation proceeds to search
+        go = self.client.post("/api/chat", json={
+            "message": "Yes, search now",
+            "current_filters": f2,
+            "awaiting_field": "confirm",
+        })
+        self.assertEqual(go.status_code, 200, go.text)
+        self.assertEqual(go.json()["action"], "search")
 
         # 4. Save profile requires sign-in for guests, and persists when signed in
         guest_save = self.client.post("/api/chat", json={
@@ -492,7 +504,7 @@ class WebIntegrationTests(unittest.TestCase):
             "current_filters": {},
         })
         self.assertEqual(fallback.status_code, 200, fallback.text)
-        self.assertEqual(fallback.json()["action"], "search")
+        self.assertEqual(fallback.json()["action"], "confirm")
         self.assertEqual(fallback.json()["filters"]["locations"], ["Singapore 828761"])
         self.assertIn("vegetarian", fallback.json()["filters"]["dietary_requirements"])
         self.assertEqual(fallback.json()["filters"]["budget_per_person"], 18.0)
@@ -534,7 +546,7 @@ class WebIntegrationTests(unittest.TestCase):
         self.assertEqual(b3["awaiting_field"], "travel")
         self.assertEqual(b3["filters"]["budget_per_person"], 22.0)
 
-        # Step 4: Travel reply completes required fields -> triggers search
+        # Step 4: Travel reply completes required fields -> asks user to confirm before searching
         s4 = self.client.post("/api/chat", json={
             "message": "15 mins walk",
             "current_filters": b3["filters"],
@@ -542,11 +554,40 @@ class WebIntegrationTests(unittest.TestCase):
         })
         self.assertEqual(s4.status_code, 200, s4.text)
         b4 = s4.json()
-        self.assertEqual(b4["action"], "search")
+        self.assertEqual(b4["action"], "confirm")
+        self.assertEqual(b4["awaiting_field"], "confirm")
         self.assertEqual(b4["filters"]["locations"], ["Bugis"])
         self.assertEqual(b4["filters"]["budget_per_person"], 22.0)
         self.assertEqual(b4["filters"]["max_travel_minutes"], 15.0)
         self.assertEqual(b4["filters"]["mode"], "walk")
+
+        # Step 5: User asks to tweak budget before searching, then confirms
+        edit_req = self.client.post("/api/chat", json={
+            "message": "Change budget",
+            "current_filters": b4["filters"],
+            "awaiting_field": b4["awaiting_field"],
+        })
+        self.assertEqual(edit_req.status_code, 200)
+        self.assertEqual(edit_req.json()["action"], "clarify")
+        self.assertEqual(edit_req.json()["awaiting_field"], "budget_per_person")
+
+        edit_val = self.client.post("/api/chat", json={
+            "message": "$18",
+            "current_filters": edit_req.json()["filters"],
+            "awaiting_field": edit_req.json()["awaiting_field"],
+        })
+        self.assertEqual(edit_val.status_code, 200)
+        b5 = edit_val.json()
+        self.assertEqual(b5["action"], "confirm")
+        self.assertEqual(b5["filters"]["budget_per_person"], 18.0)
+
+        confirm = self.client.post("/api/chat", json={
+            "message": "Yes, search now",
+            "current_filters": b5["filters"],
+            "awaiting_field": b5["awaiting_field"],
+        })
+        self.assertEqual(confirm.status_code, 200, confirm.text)
+        self.assertEqual(confirm.json()["action"], "search")
 
     def test_new_user_profile_onboarding_via_chatbot(self):
         headers, _ = self.account("onboard@example.com")
@@ -561,6 +602,8 @@ class WebIntegrationTests(unittest.TestCase):
         st = start.json()
         self.assertEqual(st["action"], "onboarding")
         self.assertEqual(st["awaiting_field"], "location")
+        self.assertEqual(st["onboarding_step"], 1)
+        self.assertEqual(st["onboarding_total"], 7)
 
         steps = [
             ("Punggol", "budget_per_person"),
@@ -583,7 +626,7 @@ class WebIntegrationTests(unittest.TestCase):
             self.assertEqual(state["action"], "onboarding")
             self.assertEqual(state["awaiting_field"], expected_next, msg)
 
-        # Final preference step finishes onboarding and triggers search
+        # Final preference step saves profile and asks user to confirm before searching
         done = self.client.post("/api/chat", json={
             "message": "At least 4.3 stars",
             "current_filters": state["filters"],
@@ -592,9 +635,27 @@ class WebIntegrationTests(unittest.TestCase):
         }, headers=headers)
         self.assertEqual(done.status_code, 200, done.text)
         d = done.json()
-        self.assertEqual(d["action"], "search")
-        self.assertIsNone(d["awaiting_field"])
+        self.assertEqual(d["action"], "confirm")
+        self.assertEqual(d["awaiting_field"], "confirm")
         self.assertTrue(d["saved_to_profile"])
+
+        # Following up with a regular query also confirms first instead of auto-searching
+        followup = self.client.post("/api/chat", json={
+            "message": "Korean BBQ under $30",
+            "current_filters": d["filters"],
+            "awaiting_field": d["awaiting_field"],
+        }, headers=headers)
+        self.assertEqual(followup.status_code, 200, followup.text)
+        self.assertEqual(followup.json()["action"], "confirm")
+
+        # Confirming proceeds with search
+        confirm = self.client.post("/api/chat", json={
+            "message": "Yes, search now",
+            "current_filters": followup.json()["filters"],
+            "awaiting_field": "confirm",
+        }, headers=headers)
+        self.assertEqual(confirm.status_code, 200, confirm.text)
+        self.assertEqual(confirm.json()["action"], "search")
 
         # Verify profile was persisted incrementally to user store
         me = self.client.get("/api/auth/me", headers=headers).json()["user"]
