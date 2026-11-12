@@ -155,7 +155,7 @@ class WebIntegrationTests(unittest.TestCase):
     def test_confirmation_is_one_use_and_only_then_calls_brns(self):
         headers, _ = self.account()
         payload = self.search_payload()
-        first = self.client.post("/api/search", json=payload, headers=headers)
+        first = self.client.post("/api/search", json=dict(payload, confirm_only=True), headers=headers)
         self.assertEqual(first.status_code, 200, first.text)
         self.assertTrue(first.json()["confirmation_required"])
         self.assertEqual(len(self.ai_calls), 1)
@@ -171,11 +171,28 @@ class WebIntegrationTests(unittest.TestCase):
         self.client.delete("/api/history", headers=headers)
         self.assertEqual(self.client.get("/api/history", headers=headers).json()["history"], [])
 
+    def test_direct_search_supports_midpoint_and_multi_cuisine(self):
+        headers, _ = self.account("multi@example.com")
+        payload = dict(
+            self.search_payload(),
+            location="",
+            locations=["Tampines", "Bedok"],
+            cuisine="japanese, korean",
+            liked_cuisines=["japanese", "korean"],
+        )
+        res = self.client.post("/api/search", json=payload, headers=headers)
+        self.assertEqual(res.status_code, 200, res.text)
+        data = res.json()
+        self.assertFalse(data["confirmation_required"])
+        self.assertEqual(len(data["input_origins"]), 2)
+        self.assertEqual(data["selected_cuisines"], ["japanese", "korean"])
+        self.assertEqual(len(self.ranking_calls), 2)
+
     def test_user_isolation_confirmation_and_favorites(self):
         first, _ = self.account("first@example.com")
         second, _ = self.account("second@example.com")
         payload = self.search_payload()
-        token = self.client.post("/api/search", json=payload, headers=first).json()["confirmation_token"]
+        token = self.client.post("/api/search", json=dict(payload, confirm_only=True), headers=first).json()["confirmation_token"]
         payload["confirmation_token"] = token
         self.assertEqual(self.client.post("/api/search", json=payload, headers=second).status_code, 400)
         self.assertEqual(self.client.post("/api/search", json=payload, headers=first).status_code, 200)
@@ -190,8 +207,8 @@ class WebIntegrationTests(unittest.TestCase):
     def test_health_schema_validation_and_route_contract(self):
         self.assertTrue(self.client.get("/api/health").json()["mongodb"])
         self.assertIn("japanese", self.client.get("/api/cuisines").json()["cuisines"])
-        response = self.client.post("/api/search", json=dict(self.search_payload(), locations=["A", "B"]))
-        self.assertEqual(response.status_code, 422)
+        response = self.client.post("/api/search", json=dict(self.search_payload(), location="", locations=[]))
+        self.assertEqual(response.status_code, 400)
         self.assertEqual(self.ai_calls, [])
         response = self.client.post("/api/route", json={"origin_lat": 1.3, "origin_lng": 103.8,
               "dest_lat": 1.31, "dest_lng": 103.81})

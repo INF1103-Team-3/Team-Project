@@ -166,10 +166,10 @@
               <label
                 class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Starting
                 Location(s)</label>
-              <button type="button" id="addLocationRowBtn" disabled title="This integration supports one origin"
+              <button type="button" id="addLocationRowBtn"
                 class="text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 flex items-center gap-1 transition">
                 <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
-                <span>One origin per search</span>
+                <span>Add Friend's Location (Meet in Middle)</span>
               </button>
             </div>
             <div class="relative flex items-center">
@@ -372,10 +372,10 @@
                 data-cuisine="middle eastern">Middle Eastern</button>
             </div>
             <div class="flex items-center gap-1.5">
-              <input type="text" id="customCuisineInput" disabled
-                placeholder="Choose one supported cuisine above"
+              <input type="text" id="customCuisineInput"
+                placeholder="Not listed? Type cuisine (e.g. Mexican, Spanish) & press +"
                 class="flex-1 px-3 py-1.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
-              <button type="button" id="addCustomCuisineBtn" disabled
+              <button type="button" id="addCustomCuisineBtn"
                 class="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 hover:text-emerald-700 dark:hover:text-emerald-300 border border-slate-200 dark:border-slate-700 transition shrink-0">
                 + Add
               </button>
@@ -1015,12 +1015,7 @@
         btn.classList.add('bg-white', 'dark:bg-slate-700', 'shadow-sm', 'text-brand-600', 'dark:text-brand-400');
         btn.classList.remove('text-slate-600', 'dark:text-slate-400');
         currentMode = btn.dataset.mode;
-        if (allLocations.length > 1 || selectedLiked.length > 1) {
-        statusBanner.classList.remove('hidden');
-        statusText.textContent = 'Choose one origin and one cuisine for this version.';
-        return;
-      }
-      activeSearchMode = currentMode;
+        activeSearchMode = currentMode;
         if (currentMode === 'drive') {
           trafficAwareBox.classList.remove('hidden');
         } else {
@@ -1184,12 +1179,6 @@
     const customCuisineInput = document.getElementById('customCuisineInput');
     const addCustomCuisineBtn = document.getElementById('addCustomCuisineBtn');
 
-    let supportedCuisineNames = new Set();
-    fetch('/api/cuisines').then(response => response.json()).then(data => {
-      supportedCuisineNames = new Set(data.cuisines || []);
-      updatePreferredChipsUI();
-    }).catch(() => {});
-
     function escapeHtml(value) {
       const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
       return String(value ?? '').replace(/[&<>"']/g, char => entities[char]);
@@ -1221,7 +1210,6 @@
       if (preferredCuisines.has(clean)) {
         preferredCuisines.delete(clean);
       } else {
-        preferredCuisines.clear();
         preferredCuisines.add(clean);
         if (dislikedCuisines.has(clean)) {
           dislikedCuisines.delete(clean);
@@ -1234,8 +1222,8 @@
     function updatePreferredChipsUI() {
       preferredChipsContainer.querySelectorAll('.prefer-chip').forEach(chip => {
         const c = chip.dataset.cuisine;
-        chip.disabled = supportedCuisineNames.size > 0 && !supportedCuisineNames.has(c);
-        chip.title = chip.disabled ? 'Unsupported cuisine in this version' : '';
+        chip.disabled = false;
+        chip.title = '';
         const label = formatCuisineLabel(c);
         if (preferredCuisines.has(c)) {
           chip.className = "prefer-chip text-[11px] font-bold px-2.5 py-1 rounded-lg border border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 transition";
@@ -1251,7 +1239,7 @@
         clearPreferredBtn.classList.add('hidden');
       }
       if (preferredCuisines.size > 1) {
-        preferredQuotaHint.textContent = 'Choose one cuisine for this search';
+        preferredQuotaHint.textContent = `${preferredCuisines.size} selected (Outputs ÷ ${preferredCuisines.size})`;
         preferredQuotaHint.classList.remove('hidden');
       } else {
         preferredQuotaHint.classList.add('hidden');
@@ -1881,11 +1869,6 @@
       const selectedLiked = Array.from(preferredCuisines);
       const allLocations = getAllEnteredLocations();
       const primaryLoc = allLocations[0] || document.getElementById('locationInput').value.trim();
-      if (allLocations.length > 1 || selectedLiked.length > 1) {
-        statusBanner.classList.remove('hidden');
-        statusText.textContent = 'Choose one origin and one cuisine for this version.';
-        return;
-      }
       activeSearchMode = currentMode;
 
       const payload = {
@@ -1910,7 +1893,7 @@
       searchBtn.disabled = true;
       searchBtn.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Analyzing & Ranking...`;
 
-      let activeModelLabel = "configured AI provider chain";
+      let activeModelLabel = "Gemini AI";
       try {
         const mRes = await fetch('/api/active-model');
         if (mRes.ok) {
@@ -1921,13 +1904,24 @@
 
       statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200";
       statusIcon.innerHTML = `<svg class="animate-spin w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
-      statusText.textContent = 'Interpreting your request before confirmation...';
+      statusText.textContent = `Querying Google Places, computing routes, and ranking candidates with ${activeModelLabel}...`;
       statusBanner.classList.remove('hidden');
 
-      const modelPollTimer = null;
+      const modelPollTimer = setInterval(async () => {
+        try {
+          const pRes = await fetch('/api/active-model');
+          if (pRes.ok) {
+            const pData = await pRes.json();
+            if (pData.active_model && pData.active_model !== activeModelLabel) {
+              activeModelLabel = pData.active_model;
+              statusText.textContent = `Querying Google Places, computing routes, and ranking candidates with ${activeModelLabel}...`;
+            }
+          }
+        } catch { }
+      }, 600);
 
       try {
-        let response = await fetch('/api/search', {
+        const response = await fetch('/api/search', {
           method: 'POST',
           headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(payload)
@@ -1946,32 +1940,6 @@
 
         if (!response.ok) {
           throw new Error(data.detail || data.error || 'Search failed');
-        }
-
-        if (data.confirmation_required) {
-          const choice = data.request;
-          const summary = [
-            'Confirm the interpreted search:',
-            `From: ${choice.origin.label}`,
-            `Cuisine: ${choice.cuisine}`,
-            `Budget: SGD ${choice.budget_per_person}`,
-            `Travel: ${choice.mode}, ${choice.max_distance_km !== null ? choice.max_distance_km + ' km' : choice.max_travel_minutes + ' minutes'}`,
-            `Dietary: ${choice.dietary_requirements.join(', ') || 'none'}`,
-            `Other wishes: ${choice.other_preferences.join(', ') || 'none'}`
-          ].join('\n');
-          if (!window.confirm(summary)) {
-            statusText.textContent = 'Search cancelled. Edit your choices and submit again.';
-            return;
-          }
-          statusText.textContent = 'Finding and ranking restaurants for your confirmed request...';
-          response = await fetch('/api/search', {
-            method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ ...payload, confirmation_token: data.confirmation_token })
-          });
-          const resultText = await response.text();
-          try { data = JSON.parse(resultText); }
-          catch (_) { throw new Error('Search service is unavailable. Please retry.'); }
-          if (!response.ok) throw new Error(data.detail || 'Search failed');
         }
 
         if (data.message && (!data.matches || data.matches.length === 0)) {
