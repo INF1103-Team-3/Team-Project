@@ -550,11 +550,9 @@ def fetch_nearby_restaurants(origin, req, debug=False):
 _VENUE_WORDS = ("food", "cafe", "hawker", "restaurant", "centre", "center",
                 "court", "market", "kopi", "canteen", "bakery", "bar")
 
-def fetch_by_profile_text(origin, req):
-    """Places Text Search scoped by dietary/cuisine and/or the user's
-    free-text query (e.g. 'spicy', 'cafe', 'hawker centre').
-    Returns [] on failure or when nothing is set."""
-    lat, lng = origin
+
+def _build_text_query(req, default_query=None):
+    """Build a Places Text Search query from dietary, cuisine, and free-text terms."""
     cuisine = (req.get("cuisine") or "").strip()
     dietary = req.get("dietary_requirements") or []
     raw_free_text = (req.get("free_text") or "").strip()
@@ -567,76 +565,16 @@ def fetch_by_profile_text(origin, req):
     if free_text:
         terms.append(free_text)
     if not terms:
-        return []
-    log.debug_log("Text Places request started.", "INFO",
-                  "BRNS.io_manager.fetch_by_profile_text")
+        return default_query
     query = " ".join(terms)
     if not any(w in query for w in _VENUE_WORDS):
         query += " food"          # 'halal chinese' -> 'halal chinese food'
-        # but 'hawker centre' stays as-is
-    headers = {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": config.GOOGLE_MAPS_API_KEY,
-        "X-Goog-FieldMask": ("places.id,places.displayName,places.formattedAddress,"
-                             "places.location,places.rating,places.priceLevel,"
-                             "places.priceRange,places.types,places.userRatingCount,"
-                             "places.currentOpeningHours,places.regularOpeningHours,"
-                             "places.nationalPhoneNumber,places.postalAddress,"
-                             "places.accessibilityOptions,places.servesVegetarianFood"),
-    }
-    delta = _search_radius(req) / 111000.0   # meters -> degrees
-    body = {
-        "textQuery": query,
-        "languageCode": "en",
-        "pageSize": 20,
-        "openNow": True,
-        "locationRestriction": {"rectangle": {
-            "low": {"latitude": max(-90, lat - delta), "longitude": max(-180, lng - delta)},
-            "high": {"latitude": min(90, lat + delta), "longitude": min(180, lng + delta)},
-        }},
-    }
-    try:
-        resp = requests.post(config.TEXT_SEARCH_URL, headers=headers, json=body, timeout=15)
-        resp.raise_for_status()
-        places = []
-        for p in resp.json().get("places", []):
-            parsed = _parse_place(p)
-            if parsed:
-                places.append(parsed)
-        log.debug_log(f"Text Places returned {len(places)} usable records.",
-                      "INFO", "BRNS.io_manager.fetch_by_profile_text")
-        return places
-    except (requests.RequestException, KeyError, ValueError) as err:
-        _log_api_error("places_profile_text", err)
-        return []
+    return query
 
 
-OPEN_SEARCH_MAX_PAGES = 1   # 1 page x 20 open places keeps AI ranking fast and within token limits
-
-
-def fetch_open_places(origin, req):
-    """Text Search restricted to places open right now, nearest first.
-
-    Nearby Search returns only the 20 closest places and cannot filter by
-    opening status, so late at night most of them are closed and discarded.
-    When Nearby Search drops closed slots, asking Text Search for openNow=True
-    with DISTANCE ranking fills the candidate pool with nearby open venues.
-    """
+def _run_text_search(origin, query, radius_m, error_tag, max_pages=1):
+    """Execute Google Places Text Search anchored by DISTANCE bias around origin."""
     lat, lng = origin
-    cuisine = (req.get("cuisine") or "").strip()
-    dietary = req.get("dietary_requirements") or []
-    raw_free_text = (req.get("free_text") or "").strip()
-    free_text = logic_manager._RATING_FLOOR.sub("", raw_free_text).strip()
-    free_text = re.sub(r"\b(?:and|with)\b", " ", free_text, flags=re.IGNORECASE)
-    free_text = re.sub(r"^[,\s&/]+|[,\s&/]+$", "", free_text).strip().lower()[:200]
-    terms = list(dietary)
-    if cuisine not in ("any", "none", ""):
-        terms.append(cuisine)
-    if free_text:
-        terms.append(free_text)
-    query = " ".join(terms) if terms else "restaurants"
-    if terms and not any(w in query for w in _VENUE_WORDS):
-        query += " food"
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": config.GOOGLE_MAPS_API_KEY,
@@ -648,9 +586,8 @@ def fetch_open_places(origin, req):
                              "places.accessibilityOptions,places.servesVegetarianFood,"
                              "nextPageToken"),
     }
-    radius_m = float(min(_travel_radius(req), 50000))
-    # A circle *bias* anchors DISTANCE ranking on the origin (a rectangle
-    # restriction does not), so pages come back nearest-first.
+    # A circle *bias* anchors DISTANCE ranking on origin (a rectangle restriction
+    # does not and scatters results island-wide for drive/transit searches).
     body = {
         "textQuery": query,
         "languageCode": "en",
@@ -662,11 +599,9 @@ def fetch_open_places(origin, req):
             "radius": radius_m,
         }},
     }
-    log.debug_log("Open-now Text Places request started.", "INFO",
-                  "BRNS.io_manager.fetch_open_places")
     places = []
     try:
-        for _ in range(OPEN_SEARCH_MAX_PAGES):
+        for _ in range(max_pages):
             resp = requests.post(config.TEXT_SEARCH_URL, headers=headers,
                                  json=body, timeout=15)
             resp.raise_for_status()
@@ -680,7 +615,44 @@ def fetch_open_places(origin, req):
                 break
             body = dict(body, pageToken=token)
     except (requests.RequestException, KeyError, ValueError, AttributeError) as err:
-        _log_api_error("places_open_text", err)
+        _log_api_error(error_tag, err)
+        return []
+    return places
+
+
+def fetch_by_profile_text(origin, req):
+    """Places Text Search scoped by dietary/cuisine and/or the user's
+    free-text query (e.g. 'spicy', 'cafe', 'hawker centre').
+    Returns [] on failure or when nothing is set."""
+    query = _build_text_query(req, default_query=None)
+    if not query:
+        return []
+    log.debug_log("Text Places request started.", "INFO",
+                  "BRNS.io_manager.fetch_by_profile_text")
+    radius_m = float(min(_search_radius(req), 50000))
+    places = _run_text_search(origin, query, radius_m, "places_profile_text", max_pages=1)
+    log.debug_log(f"Text Places returned {len(places)} usable records.",
+                  "INFO", "BRNS.io_manager.fetch_by_profile_text")
+    return places
+
+
+OPEN_SEARCH_MAX_PAGES = 1   # 1 page x 20 open places keeps AI ranking fast and within token limits
+
+
+def fetch_open_places(origin, req):
+    """Text Search restricted to places open right now, nearest first.
+
+    Nearby Search returns only the 20 closest places and cannot filter by
+    opening status, so late at night most of them are closed and discarded.
+    When Nearby Search drops closed slots, asking Text Search for openNow=True
+    with DISTANCE ranking fills the candidate pool with nearby open venues.
+    """
+    query = _build_text_query(req, default_query="restaurants")
+    log.debug_log("Open-now Text Places request started.", "INFO",
+                  "BRNS.io_manager.fetch_open_places")
+    radius_m = float(min(_travel_radius(req), 50000))
+    places = _run_text_search(
+        origin, query, radius_m, "places_open_text", max_pages=OPEN_SEARCH_MAX_PAGES)
     log.debug_log(f"Open-now Text Places returned {len(places)} usable records.",
                   "INFO", "BRNS.io_manager.fetch_open_places")
     return places

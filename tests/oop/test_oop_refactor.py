@@ -777,6 +777,66 @@ class OOPRefactorTests(unittest.TestCase):
         self.assertEqual(calls, [
             ("gemini", "first"), ("groq", "second")])
 
+    def test_fetch_by_profile_text_anchors_to_midpoint_for_drive_and_transit(self):
+        from unittest.mock import patch
+        from BRNS import io_manager as brns_io
+
+        captured = []
+        midpoint = (1.322544, 103.840973)
+
+        def fake_post(url, headers=None, json=None, timeout=None):
+            captured.append((url, json, timeout))
+            payload = {
+                "places": [
+                    {
+                        "id": "near-midpoint",
+                        "displayName": {"text": "Novena Ramen"},
+                        "formattedAddress": "101 Thomson Rd",
+                        "location": {"latitude": 1.320, "longitude": 103.844},
+                        "types": ["japanese_restaurant"],
+                    },
+                    {
+                        "id": "too-far-away",
+                        "displayName": {"text": "Outer Island Ramen"},
+                        "formattedAddress": "1 Tuas Link",
+                        "location": {"latitude": 1.340, "longitude": 103.636},
+                        "types": ["japanese_restaurant"],
+                    },
+                ]
+            }
+            return SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda: payload,
+            )
+
+        for mode in ("drive", "transit"):
+            captured.clear()
+            req = {
+                "mode": mode,
+                "max_travel_minutes": 30,
+                "cuisine": "japanese",
+                "dietary_requirements": [],
+                "free_text": "",
+            }
+            with patch.object(brns_io.requests, "post", side_effect=fake_post), \
+                    patch.object(brns_io.config, "GOOGLE_MAPS_API_KEY", "test-key"):
+                results = brns_io.fetch_by_profile_text(midpoint, req)
+
+            self.assertEqual(len(captured), 1)
+            _, body, _ = captured[0]
+            self.assertEqual(body["rankPreference"], "DISTANCE")
+            self.assertNotIn("locationRestriction", body)
+            self.assertEqual(
+                body["locationBias"],
+                {
+                    "circle": {
+                        "center": {"latitude": midpoint[0], "longitude": midpoint[1]},
+                        "radius": 19500.0,
+                    }
+                },
+            )
+            self.assertEqual([item["google_place_id"] for item in results], ["near-midpoint"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
