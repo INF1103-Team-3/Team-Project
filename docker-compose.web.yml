@@ -66,6 +66,7 @@ services:
         condition: service_healthy
     volumes:
       - application-data:/data
+      - ./BIS/data:/data/bis
     networks: [bitefinder-web]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
@@ -112,6 +113,7 @@ services:
         condition: service_healthy
     volumes:
       - application-data:/data
+      - ./BIS/data:/data/bis
     networks: [bitefinder-web]
 
   web-test:

@@ -18,13 +18,29 @@ class BISApplicationService:
             raise PermissionError("A profile can only be changed by its owner.")
         if payload.get("email") not in (None, user["email"]):
             raise ValueError("Changing the verified email is not supported by this profile form.")
-        if not user["email_verified"]:
+        if not user["email_verified"] and self._config.get("smtp_bypass") is not True:
             raise PermissionError("Verify your email before changing preferences.")
         updates = {key: payload[key] for key in PREFERENCE_FIELDS if key in payload}
+        if "location" in updates and isinstance(updates["location"], list):
+            updates["location"] = self._normalize_list_items(updates["location"], is_location=True)
+        if "other_preferences" in updates and isinstance(updates["other_preferences"], list):
+            updates["other_preferences"] = self._normalize_list_items(updates["other_preferences"], is_location=False)
         preferences = self._logic.apply_updates(user["preferences"], updates, "replace")
         # Saving a form is an explicit confirmation; use the same Logic/Data operations as CLI.
         username = normalize_username(payload.get("username") or user["username"])
         return self._data.save(dict(user, username=username, preferences=preferences))
+
+    @staticmethod
+    def _normalize_list_items(items, is_location=False):
+        normalized = []
+        for item in items:
+            clean = str(item or "").strip()
+            if not clean:
+                continue
+            if is_location and clean.isdigit():
+                clean = f"Singapore {clean}"
+            normalized.append(clean)
+        return normalized
 
     @staticmethod
     def _collect_locations(payload):

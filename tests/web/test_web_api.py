@@ -266,6 +266,68 @@ class WebIntegrationTests(unittest.TestCase):
         self.assertIsNone(sessions.resolve(token))
         self.assertNotIn(token, str(list(self.conn.db.sessions.find({}))))
 
+    def test_smtp_bypass_claims_legacy_cli_user_and_syncs_with_users_json(self):
+        import json
+        import tempfile
+        from BIS.classes.cli_user_file_sync import CliUserFileSync
+        from BIS.sources.profile_schema import empty_preferences
+
+        with tempfile.TemporaryDirectory() as tmp:
+            users_path = Path(tmp) / "users.json"
+            cli_record = {
+                "userID": "legacy-cli-1",
+                "email": "test_cli@example.com",
+                "email_verified": False,
+                "username": "CLI Legacy",
+                "preferences": dict(empty_preferences(), location=["Rivervale Plaza"]),
+            }
+            dup_record = dict(cli_record, userID="legacy-cli-dup", username="Duplicate Ignored")
+            users_path.write_text(
+                json.dumps({"legacy-cli-1": cli_record, "legacy-cli-dup": dup_record}),
+                encoding="utf-8",
+            )
+            sync = CliUserFileSync(self.conn, users_path)
+            sync.sync_from_file(force=True)
+
+            data = DataManager(
+                self.users, self.gateway, self.sessions, self.favorites,
+                MongoCredentialStore(self.conn), self.proposals, user_sync=sync,
+            )
+            cfg = dict(self.config, smtp_bypass=True)
+            verif = EmailVerificationService(data, VerificationChallengeManager(),
+                                             SimpleNamespace(send_verification_email=lambda *a: None))
+            auth = WebAuthService(data, verif, PasswordHasher(), cfg)
+            app_svc = BISApplicationService(
+                data, self.ai, LogicManager(), SimpleNamespace(search=lambda *_: {}),
+                SimpleNamespace(route_to=lambda *_: {}), self.history, self.scope, cfg, lambda: None,
+            )
+            io = WebIOManager(data, auth, app_svc, FavoriteService(data), self.conn.ready)
+            with TestClient(create_app(lambda: WebRuntime(io, self.conn))) as client:
+                login = client.post("/api/auth/login", json={"email": "test_cli@example.com", "password": "password123"})
+                self.assertEqual(login.status_code, 200, login.text)
+                body = login.json()
+                self.assertFalse(body["otp_required"])
+                self.assertTrue(body["user"]["email_verified"])
+                token = body["token"]
+
+                bad = client.post("/api/auth/login", json={"email": "test_cli@example.com", "password": "wrong"})
+                self.assertEqual(bad.status_code, 401)
+
+                prof = client.post(
+                    "/api/profile",
+                    json={"location": ["828761"], "budget_per_person": 25},
+                    headers={"Authorization": "Bearer " + token},
+                )
+                self.assertEqual(prof.status_code, 200, prof.text)
+                self.assertEqual(prof.json()["user"]["location"], ["singapore 828761"])
+
+                saved_json = json.loads(users_path.read_text(encoding="utf-8"))
+                self.assertEqual(
+                    saved_json["legacy-cli-1"]["preferences"]["location"],
+                    ["singapore 828761"],
+                )
+                self.assertTrue(saved_json["legacy-cli-1"]["email_verified"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
