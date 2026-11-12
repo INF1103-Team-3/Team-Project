@@ -328,6 +328,63 @@ class WebIntegrationTests(unittest.TestCase):
                 )
                 self.assertTrue(saved_json["legacy-cli-1"]["email_verified"])
 
+    def test_concurrent_searches_do_not_block_with_in_progress_error(self):
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+
+        barrier = threading.Barrier(2, timeout=3)
+        headers, _ = self.account("concurrent@example.com")
+        original_brns = self.application._brns
+
+        def slow_search(payload):
+            barrier.wait(timeout=3)
+            return original_brns.search(payload)
+
+        self.application._brns = SimpleNamespace(search=slow_search)
+        payload = self.search_payload()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f1 = pool.submit(self.client.post, "/api/search", json=payload, headers=headers)
+            f2 = pool.submit(self.client.post, "/api/search", json=payload, headers=headers)
+            r1, r2 = f1.result(timeout=5), f2.result(timeout=5)
+        self.assertEqual(r1.status_code, 200, r1.text)
+        self.assertEqual(r2.status_code, 200, r2.text)
+
+    def test_halal_coordinator_batches_when_verifier_supports_verify_batch(self):
+        from BRNS.classes.halal_verification_coordinator import HalalVerificationCoordinator
+        from shared import debug_log
+
+        batch_calls = []
+
+        class BatchVerifier:
+            def database_missing(self):
+                return False
+
+            def verify_batch(self, items):
+                batch_calls.append(len(items))
+                return [
+                    {
+                        "halal_certification": "official",
+                        "muis_check": {"status": "verified", "certificate_number": "C1"},
+                        "cuisines": ["malay"],
+                    }
+                    for _ in items
+                ]
+
+        io_stub = SimpleNamespace(
+            show_halal_verification_start=lambda *_a: None,
+            show_halal_verification_summary=lambda *_a: None,
+        )
+        logic_stub = SimpleNamespace(recommendation_order=lambda cands, _recs: list(range(len(cands))))
+        coord = HalalVerificationCoordinator(logic_stub, io_stub, BatchVerifier(), debug_log)
+        checked, summary = coord.verify(
+            [{"name": "A", "dietary_requirements": []}, {"name": "B", "dietary_requirements": []}],
+            {"dietary_requirements": ["halal"]},
+            {"ordered_ids": [0, 1]},
+        )
+        self.assertEqual(batch_calls, [2])
+        self.assertEqual(summary["verified"], 2)
+        self.assertEqual([c["halal_certification"] for c in checked], ["official", "official"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -9,8 +9,9 @@ class BuildDatabaseWorkflow(BaseBRCWorkflow):
 
     name = "build_database"
 
-    def __init__(self, snapshot):
+    def __init__(self, snapshot, use_ai=True):
         self._snapshot = snapshot
+        self._use_ai = use_ai
         self._cache = None
         self._save_cache = None
 
@@ -31,6 +32,12 @@ class BuildDatabaseWorkflow(BaseBRCWorkflow):
         self._report = report
 
     def ask_ai(self, ai):
+        if not self._use_ai:
+            tags, _pending = self._logic.prepare_cuisine_tags(
+                self._snapshot.listings, self._cache)
+            if self._save_cache:
+                self._save_cache(self._cache)
+            return tags
         return CuisineTaggingWorkflow(self._report).run(
             self._snapshot.listings, self._cache, ai, self._logic,
             self._save_cache)

@@ -30,6 +30,14 @@ class BRCHTTPClient:
     def verify(self, restaurant):
         return self._request("/check", restaurant)
 
+    def verify_batch(self, restaurants):
+        if not restaurants:
+            return []
+        result = self._request("/check", list(restaurants))
+        if not isinstance(result, list) or len(result) != len(restaurants):
+            raise RuntimeError("BRC batch check returned an unexpected payload.")
+        return result
+
     def _request(self, path, payload=None):
         data = None
         headers = {}

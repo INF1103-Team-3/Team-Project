@@ -12,17 +12,28 @@ class AIProviderRouter:
 
     def __init__(
             self, gemini_call, chat_completions_call,
-            clock=time.monotonic):
+            clock=time.monotonic, cooldown_seconds=0):
         self._gemini_call = gemini_call
         self._chat_completions_call = chat_completions_call
         self._clock = clock
+        self._cooldown_seconds = float(cooldown_seconds or 0)
+        self._cooldowns = {}
 
     def request(self, prompt, settings, validator=None):
         if settings is None:
             raise ValueError("BRC AI manager state is required.")
         deadline = self._clock() + settings["chain_timeout_seconds"]
         failures = []
-        for entry in settings["providers"]:
+        entries = list(settings["providers"])
+        if self._cooldown_seconds > 0 and len(entries) > 1:
+            now = self._clock()
+            active = [
+                entry for entry in entries
+                if self._cooldowns.get((entry["provider"], entry["model"]), 0) <= now
+            ]
+            if active:
+                entries = active
+        for entry in entries:
             remaining = deadline - self._clock()
             if remaining <= 0:
                 failures.append("provider chain deadline reached")
@@ -41,6 +52,9 @@ class AIProviderRouter:
                 else:
                     continue
             except Exception as error:
+                if self._cooldown_seconds > 0:
+                    self._cooldowns[(provider, model)] = (
+                        self._clock() + self._cooldown_seconds)
                 failures.append(
                     f"{provider}/{model}: {type(error).__name__}")
                 debug_log.debug_log(
@@ -55,6 +69,7 @@ class AIProviderRouter:
                     "data; trying the next provider.",
                     "WARNING", "BRC.ai_manager.fallback")
                 continue
+            self._cooldowns.pop((provider, model), None)
             debug_log.debug_log(
                 f"BRC accepted {provider}/{model} response.",
                 "INFO", "BRC.ai_manager.fallback")

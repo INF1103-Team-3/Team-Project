@@ -38,6 +38,8 @@ services:
       target: brc
       args:
         SEED_ACCOUNTS: "no"
+    environment:
+      BRC_BUILD_CUISINES_WITH_AI: "0"
     env_file:
       - path: .env
         required: false
