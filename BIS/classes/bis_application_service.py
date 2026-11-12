@@ -2,14 +2,20 @@
 from copy import deepcopy
 import math
 from BIS.sources.profile_schema import CUISINES, PREFERENCE_FIELDS, normalize_username
+from BIS.classes.bis_chatbot_service import BISChatbotService
 
 
 class BISApplicationService:
     def __init__(self, data, ai, logic, brns, navigator, history, history_scope,
-                 config, model_reader=lambda: None):
+                 config, model_reader=lambda: None, chatbot=None):
         self._data, self._ai, self._logic = data, ai, logic
         self._brns, self._navigator, self._history = brns, navigator, history
         self._history_scope, self._config, self._model = history_scope, config, model_reader
+        self._chatbot = chatbot or BISChatbotService(
+            ai, logic, config, model_reader=model_reader, profile_saver=self.save_profile)
+
+    def chat(self, user, payload):
+        return self._chatbot.respond(user, payload)
 
     def save_profile(self, user, payload):
         if payload.get("user_id") not in (None, user["userID"]):

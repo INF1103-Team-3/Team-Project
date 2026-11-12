@@ -100,6 +100,13 @@
         </div>
       </div>
       <div class="flex items-center gap-2">
+        <!-- BIS Chatbot Quick Focus Button -->
+        <button id="navChatFocusBtn" type="button" title="Ask BiteFinder AI Chatbot"
+          class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-500/15 hover:bg-brand-100 dark:hover:bg-brand-500/25 rounded-lg transition-colors border border-brand-200 dark:border-brand-500/30">
+          <i data-lucide="message-square-sparkles" class="w-4 h-4 text-brand-600 dark:text-brand-400"></i>
+          <span class="hidden sm:inline">AI Chat</span>
+        </button>
+
         <!-- Saved Favorites Button -->
         <button id="favoritesOpenBtn" type="button" title="View Saved Restaurants"
           class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700">
@@ -150,15 +157,85 @@
   <!-- Main Container -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 w-full">
 
-    <!-- Left Column: Search & Filters (5 cols) -->
+    <!-- Left Column: BIS Chatbot & Search Filters (5 cols) -->
     <div class="lg:col-span-5 flex flex-col gap-6">
       <div
-        class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors duration-200">
-        <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-          <i data-lucide="sliders-horizontal" class="w-5 h-5 text-brand-600"></i>
-          Search Preferences
-        </h2>
+        class="bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors duration-200">
+        <!-- Mode Switcher: Conversational BIS Chatbot vs Manual Filter Controls -->
+        <div class="flex items-center justify-between gap-2 pb-4 mb-4 border-b border-slate-100 dark:border-slate-800">
+          <div class="grid grid-cols-2 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-full">
+            <button type="button" id="tabChatModeBtn"
+              class="py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-300 shadow-sm transition">
+              <i data-lucide="message-square" class="w-3.5 h-3.5"></i>
+              <span>BIS Chatbot</span>
+            </button>
+            <button type="button" id="tabFiltersModeBtn"
+              class="py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition">
+              <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i>
+              <span>Search Filters</span>
+            </button>
+          </div>
+        </div>
 
+        <!-- Conversational BIS Chatbot Panel -->
+        <div id="chatbotPanel" class="space-y-4">
+          <div class="flex items-center justify-between gap-2">
+            <div>
+              <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span class="inline-flex w-6 h-6 rounded-lg bg-gradient-to-tr from-brand-600 to-amber-500 text-white items-center justify-center text-xs shadow-sm">
+                  <i data-lucide="bot" class="w-3.5 h-3.5"></i>
+                </span>
+                BiteFinder Assistant
+              </h2>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400">Chat naturally to search, refine filters, or save defaults</p>
+            </div>
+            <div class="flex items-center gap-1">
+              <button type="button" id="chatHelpBtn" title="Show example prompts"
+                class="px-2 py-1 rounded-lg text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+                Help
+              </button>
+              <button type="button" id="chatResetBtn" title="Reset conversation & filters"
+                class="px-2 py-1 rounded-lg text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+                Reset
+              </button>
+            </div>
+          </div>
+
+          <!-- Live Synced Filter Summary -->
+          <div id="chatFilterSummaryBar"
+            class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Synced Active Filters</span>
+              <button type="button" id="chatOpenFiltersBtn"
+                class="text-[10px] font-bold text-brand-600 dark:text-brand-400 hover:underline">
+                Edit Sliders →
+              </button>
+            </div>
+            <div id="chatFilterSummary" class="flex flex-wrap gap-1.5"></div>
+          </div>
+
+          <!-- Conversation History -->
+          <div id="chatMessages"
+            class="h-[380px] overflow-y-auto space-y-3 pr-1 scroll-smooth rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-3">
+          </div>
+
+          <!-- Chat Composer -->
+          <form id="chatForm" class="space-y-2">
+            <div class="flex items-center gap-2">
+              <input type="text" id="chatInput" required autocomplete="off"
+                placeholder="Ask e.g. 'Halal Japanese near Bugis under $20'..."
+                class="flex-1 px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+              <button type="submit" id="chatSendBtn"
+                class="px-4 py-2.5 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-brand-600 to-amber-600 hover:from-brand-700 hover:to-amber-700 shadow-md shadow-brand-500/20 flex items-center justify-center gap-1.5 transition shrink-0">
+                <i data-lucide="send" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Ask</span>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Manual Filter Controls (Kept synced with Chatbot) -->
+        <div id="filtersPanel" class="hidden">
         <form id="searchForm" class="space-y-5">
           <!-- Location Input (Single or Meet-in-the-Middle Multi-Location) -->
           <div>
@@ -447,6 +524,7 @@
             Find Matching Restaurants
           </button>
         </form>
+        </div>
       </div>
     </div>
 
@@ -1352,15 +1430,21 @@
 
     function applyUserToSearchForm(user) {
       if (!user) return;
-      document.getElementById('locationInput').value = (user.location && user.location.length)
-        ? user.location[0]
-        : '';
-      if (user.max_distance_km) {
+      if (typeof setEnteredLocations === 'function') {
+        setEnteredLocations(Array.isArray(user.location) && user.location.length ? user.location : ['']);
+      } else {
+        document.getElementById('locationInput').value = (user.location && user.location.length)
+          ? user.location[0]
+          : '';
+      }
+      if (user.max_distance_km && !user.max_travel_time_minutes) {
+        if (typeof setLimitType === 'function') setLimitType('distance');
         const dist = Math.min(15.0, Math.max(0.5, Math.round(user.max_distance_km * 2) / 2));
         distanceSlider.value = dist;
         distanceDisplay.textContent = `${dist.toFixed(1)} km`;
       }
       if (user.max_travel_time_minutes) {
+        if (typeof setLimitType === 'function') setLimitType('time');
         const mins = Math.min(90, Math.max(5, Math.round(user.max_travel_time_minutes / 5) * 5));
         timeSlider.value = mins;
         timeDisplay.textContent = `${mins} mins`;
@@ -1387,6 +1471,8 @@
       document.getElementById('specialInput').value = (user.other_preferences && user.other_preferences.length)
         ? user.other_preferences.join(', ')
         : '';
+      if (typeof renderChatFilterSummary === 'function') renderChatFilterSummary();
+      if (typeof refreshGreetingIfIdle === 'function') refreshGreetingIfIdle();
     }
 
     function updateAuthUI() {
@@ -1641,6 +1727,8 @@
       updateAuthUI();
       initRecentSearches();
       loadFavorites();
+      if (typeof renderChatFilterSummary === 'function') renderChatFilterSummary();
+      if (typeof refreshGreetingIfIdle === 'function') refreshGreetingIfIdle();
     });
 
     // Profile Modal Controls
@@ -1841,37 +1929,27 @@
       renderRecentSearches(list);
     }
 
-    // Search Handler
-    document.getElementById('searchForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
+    let searchTriggeredFromChat = false;
+    let pendingChatSearchBubble = null;
 
-      const searchBtn = document.getElementById('searchBtn');
-      const emptyState = document.getElementById('emptyState');
-      const statusBanner = document.getElementById('statusBanner');
-      const statusText = document.getElementById('statusText');
-      const statusIcon = document.getElementById('statusIcon');
-      const resultsHeader = document.getElementById('resultsHeader');
-      const resultsCount = document.getElementById('resultsCount');
-
-      // Dietary
+    function collectCurrentFormPayload() {
       const dietary = [];
       if (document.getElementById('halalCheck').checked) dietary.push('halal');
       if (document.getElementById('vegCheck').checked) dietary.push('vegetarian');
 
-      // Special request
       const special = document.getElementById('specialInput').value.trim();
-      const otherPreferences = special ? [special] : [];
+      const otherPreferences = special
+        ? special.split(',').map(s => s.trim()).filter(Boolean)
+        : [];
 
-      // Include any pending text typed into the custom cuisine input
       if (customCuisineInput && customCuisineInput.value.trim()) {
         addCustomCuisinesFromInput();
       }
       const selectedLiked = Array.from(preferredCuisines);
       const allLocations = getAllEnteredLocations();
       const primaryLoc = allLocations[0] || document.getElementById('locationInput').value.trim();
-      activeSearchMode = currentMode;
 
-      const payload = {
+      return {
         location: primaryLoc,
         locations: allLocations,
         mode: currentMode,
@@ -1885,6 +1963,77 @@
         other_preferences: otherPreferences,
         traffic_aware: currentMode === 'drive' && trafficAwareCheck.checked
       };
+    }
+
+    function applyFiltersToSearchForm(filters) {
+      if (!filters || typeof filters !== 'object') return;
+      const locs = Array.isArray(filters.locations) && filters.locations.length
+        ? filters.locations
+        : (filters.location ? [filters.location] : ['']);
+      setEnteredLocations(locs);
+
+      const targetMode = ['walk', 'drive', 'transit'].includes(filters.mode) ? filters.mode : 'walk';
+      document.querySelectorAll('.mode-btn').forEach(btn => {
+        if (btn.dataset.mode === targetMode) btn.click();
+      });
+      if (targetMode === 'drive') {
+        trafficAwareCheck.checked = Boolean(filters.traffic_aware);
+      }
+
+      if (filters.max_distance_km && !filters.max_travel_minutes) {
+        setLimitType('distance');
+        const dist = Math.min(15.0, Math.max(0.5, Math.round(filters.max_distance_km * 2) / 2));
+        distanceSlider.value = dist;
+        distanceDisplay.textContent = `${dist.toFixed(1)} km`;
+      } else {
+        setLimitType('time');
+        const mins = Math.min(90, Math.max(5, Math.round((filters.max_travel_minutes || 30) / 5) * 5));
+        timeSlider.value = mins;
+        timeDisplay.textContent = `${mins} mins`;
+      }
+
+      const bud = Math.min(100, Math.max(5, Math.round((filters.budget_per_person || 30) / 5) * 5));
+      budgetSlider.value = bud;
+      budgetDisplay.textContent = `SGD $${bud}`;
+
+      const diet = filters.dietary_requirements || [];
+      document.getElementById('halalCheck').checked = diet.includes('halal');
+      document.getElementById('vegCheck').checked = diet.includes('vegetarian');
+
+      preferredCuisines.clear();
+      (filters.liked_cuisines || []).forEach(c => {
+        const clean = String(c || '').trim().toLowerCase();
+        if (clean) {
+          ensurePreferredChipExists(clean);
+          preferredCuisines.add(clean);
+        }
+      });
+      updatePreferredChipsUI();
+      dislikedCuisines = new Set((filters.disliked_cuisines || []).map(c => String(c).toLowerCase()));
+      updateDislikedChipsUI();
+      document.getElementById('specialInput').value = (filters.other_preferences || []).join(', ');
+      if (typeof renderChatFilterSummary === 'function') renderChatFilterSummary();
+    }
+
+    // Search Handler
+    document.getElementById('searchForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const fromChat = searchTriggeredFromChat;
+      searchTriggeredFromChat = false;
+
+      const searchBtn = document.getElementById('searchBtn');
+      const emptyState = document.getElementById('emptyState');
+      const statusBanner = document.getElementById('statusBanner');
+      const statusText = document.getElementById('statusText');
+      const statusIcon = document.getElementById('statusIcon');
+      const resultsHeader = document.getElementById('resultsHeader');
+      const resultsCount = document.getElementById('resultsCount');
+
+      const payload = collectCurrentFormPayload();
+      const allLocations = payload.locations || [];
+      activeSearchMode = payload.mode;
+      if (typeof renderChatFilterSummary === 'function') renderChatFilterSummary();
 
       // Save recent location search
       saveLocalRecent(allLocations.length > 1 ? allLocations.join(' + ') : payload.location);
@@ -1953,6 +2102,9 @@
           lastMatches = [];
           lastAlternatives = [];
           renderResults([], []);
+          if (typeof postChatSearchOutcome === 'function') {
+            postChatSearchOutcome({ emptyMessage: data.message, fromChat });
+          }
           return;
         }
 
@@ -1991,12 +2143,18 @@
         }
 
         renderResults(lastMatches, lastAlternatives);
+        if (typeof postChatSearchOutcome === 'function') {
+          postChatSearchOutcome({ matches, alternatives, modelUsed, fromChat });
+        }
 
       } catch (error) {
         statusBanner.className = "p-4 rounded-2xl border text-sm flex items-center gap-3 bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200";
         statusIcon.innerHTML = `<i data-lucide="alert-circle" class="w-4 h-4 text-rose-600 dark:text-rose-400"></i>`;
         statusText.textContent = error.message;
         lucide.createIcons();
+        if (typeof postChatSearchOutcome === 'function') {
+          postChatSearchOutcome({ errorMessage: error.message, fromChat });
+        }
       } finally {
         clearInterval(modelPollTimer);
         searchBtn.disabled = false;
@@ -3139,6 +3297,359 @@
         console.warn('Clear history error:', err);
       }
     });
+
+    // =========================================================================
+    // BIS Conversational Chatbot Integration (Synced with Search Form & Profile)
+    // =========================================================================
+    const chatbotPanel = document.getElementById('chatbotPanel');
+    const filtersPanel = document.getElementById('filtersPanel');
+    const tabChatModeBtn = document.getElementById('tabChatModeBtn');
+    const tabFiltersModeBtn = document.getElementById('tabFiltersModeBtn');
+    const chatMessagesEl = document.getElementById('chatMessages');
+    const chatFilterSummaryEl = document.getElementById('chatFilterSummary');
+    const chatForm = document.getElementById('chatForm');
+    const chatInput = document.getElementById('chatInput');
+    const chatSendBtn = document.getElementById('chatSendBtn');
+
+    let chatHistory = [];
+    let chatHasUserTurn = false;
+
+    function setLeftPanelMode(mode) {
+      const isChat = mode === 'chat';
+      chatbotPanel.classList.toggle('hidden', !isChat);
+      filtersPanel.classList.toggle('hidden', isChat);
+
+      const activeCls = 'py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-300 shadow-sm transition';
+      const inactiveCls = 'py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition';
+      tabChatModeBtn.className = isChat ? activeCls : inactiveCls;
+      tabFiltersModeBtn.className = isChat ? inactiveCls : activeCls;
+
+      renderChatFilterSummary();
+      if (isChat && chatInput) {
+        chatInput.focus();
+      }
+      lucide.createIcons();
+    }
+
+    function renderChatFilterSummary() {
+      if (!chatFilterSummaryEl) return;
+      const p = collectCurrentFormPayload();
+      const pills = [];
+      const locLabel = (p.locations && p.locations.length)
+        ? p.locations.join(' + ')
+        : (p.location || 'Location not set');
+      pills.push(`📍 ${locLabel}`);
+
+      const modeIcon = p.mode === 'drive' ? '🚗 Drive' : (p.mode === 'transit' ? '🚆 Transit' : '🚶 Walk');
+      const limitLabel = p.max_distance_km
+        ? `${p.max_distance_km}km`
+        : `${Math.round(p.max_travel_minutes || 30)}m`;
+      pills.push(`${modeIcon} · ${limitLabel}`);
+      pills.push(`💰 $${Math.round(p.budget_per_person || 30)}`);
+
+      (p.dietary_requirements || []).forEach(d => {
+        pills.push(d === 'halal' ? '🕌 Halal' : '🥗 Vegetarian');
+      });
+      if (p.liked_cuisines && p.liked_cuisines.length) {
+        pills.push(`🍽️ ${p.liked_cuisines.map(formatCuisineLabel).join(', ')}`);
+      }
+      if (p.disliked_cuisines && p.disliked_cuisines.length) {
+        pills.push(`🚫 No ${p.disliked_cuisines.map(formatCuisineLabel).join(', ')}`);
+      }
+      if (p.other_preferences && p.other_preferences.length) {
+        pills.push(`✨ ${p.other_preferences.join(', ')}`);
+      }
+
+      chatFilterSummaryEl.innerHTML = pills.map(text => `
+        <button type="button" data-open-filters="1"
+          class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-brand-400 transition">
+          ${escapeHtml(text)}
+        </button>
+      `).join('');
+
+      chatFilterSummaryEl.querySelectorAll('[data-open-filters]').forEach(btn => {
+        btn.addEventListener('click', () => setLeftPanelMode('filters'));
+      });
+    }
+
+    function appendChatBubble(role, text, options = {}) {
+      if (!chatMessagesEl) return null;
+      const isUser = role === 'user';
+      const wrapper = document.createElement('div');
+      wrapper.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
+
+      const bubble = document.createElement('div');
+      bubble.className = isUser
+        ? 'max-w-[88%] px-3.5 py-2.5 rounded-2xl rounded-br-sm text-xs leading-relaxed bg-gradient-to-r from-brand-600 to-amber-600 text-white shadow-sm'
+        : 'max-w-[92%] px-3.5 py-2.5 rounded-2xl rounded-bl-sm text-xs leading-relaxed bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 shadow-sm space-y-2';
+
+      const textEl = document.createElement('div');
+      textEl.className = options.pending ? 'flex items-center gap-2 text-slate-500 dark:text-slate-400 italic' : '';
+      if (options.pending) {
+        textEl.innerHTML = `<svg class="animate-spin h-3.5 w-3.5 text-brand-600 shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>${escapeHtml(text)}</span>`;
+      } else {
+        textEl.textContent = text;
+      }
+      bubble.appendChild(textEl);
+
+      if (Array.isArray(options.changes) && options.changes.length) {
+        const changesWrap = document.createElement('div');
+        changesWrap.className = 'flex flex-wrap gap-1 pt-0.5';
+        changesWrap.innerHTML = options.changes.map(c =>
+          `<span class="px-1.5 py-0.5 rounded bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-500/30 text-[10px] font-semibold">${escapeHtml(c)}</span>`
+        ).join('');
+        bubble.appendChild(changesWrap);
+      }
+
+      if (Array.isArray(options.topPicks) && options.topPicks.length) {
+        const picksWrap = document.createElement('div');
+        picksWrap.className = 'space-y-1.5 pt-1';
+        options.topPicks.forEach(pick => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'w-full text-left p-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 hover:bg-brand-50 dark:hover:bg-brand-500/10 border border-slate-200 dark:border-slate-700 transition flex items-center justify-between gap-2';
+          btn.innerHTML = `
+            <div class="min-w-0">
+              <div class="font-bold text-slate-900 dark:text-white truncate">${escapeHtml(pick.name)}</div>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400 truncate">${escapeHtml(pick.meta)}</div>
+            </div>
+            <span class="text-[10px] font-bold text-brand-600 dark:text-brand-400 shrink-0">${pick.isMatch ? 'Match' : 'Alt'} →</span>
+          `;
+          btn.addEventListener('click', () => {
+            if (typeof pick.idx === 'number') {
+              const card = document.getElementById(`resCard-${pick.idx}`);
+              if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              if (typeof window.focusRestaurantOnMap === 'function') {
+                window.focusRestaurantOnMap(pick.idx);
+              }
+            }
+          });
+          picksWrap.appendChild(btn);
+        });
+        bubble.appendChild(picksWrap);
+      }
+
+      if (Array.isArray(options.quickReplies) && options.quickReplies.length) {
+        const qrWrap = document.createElement('div');
+        qrWrap.className = 'flex flex-wrap gap-1.5 pt-1';
+        options.quickReplies.forEach(promptText => {
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-brand-100 dark:hover:bg-brand-500/20 hover:text-brand-700 dark:hover:text-brand-300 border border-slate-200 dark:border-slate-700 transition';
+          chip.textContent = promptText;
+          chip.addEventListener('click', () => submitChatMessage(promptText));
+          qrWrap.appendChild(chip);
+        });
+        bubble.appendChild(qrWrap);
+      }
+
+      wrapper.appendChild(bubble);
+      chatMessagesEl.appendChild(wrapper);
+      chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+      return wrapper;
+    }
+
+    function buildGreetingState() {
+      if (currentUser && currentUser.username) {
+        const prefs = currentUser;
+        const locs = Array.isArray(prefs.location) && prefs.location.length
+          ? prefs.location.join(' + ')
+          : 'Singapore';
+        const budget = prefs.budget_per_person ? `SGD $${prefs.budget_per_person}` : 'SGD $30';
+        return {
+          text: `Hi ${prefs.username}! Your saved defaults (${locs}, ${budget}) are loaded. Tell me what you're craving today, or ask to meet a friend in the middle.`,
+          quickReplies: [
+            `Search near ${locs}`,
+            'Halal Japanese under $20',
+            'Meet between Tampines and Jurong East',
+            'At least 4.5 stars'
+          ]
+        };
+      }
+      return {
+        text: "Hi! I'm your BiteFinder restaurant assistant. Tell me what you want to eat — combine area, cuisine, budget, halal/vegetarian, travel mode, or ratings!",
+        quickReplies: [
+          'Halal Japanese near Bugis under $20',
+          'Meet between Tampines and Jurong East',
+          'Vegetarian at least 4.5 stars near Compass One',
+          'Help'
+        ]
+      };
+    }
+
+    function resetChatThread(resetFilters = false) {
+      if (resetFilters) {
+        if (currentUser) {
+          applyUserToSearchForm(currentUser);
+        } else {
+          applyFiltersToSearchForm({
+            location: 'Compass One',
+            locations: ['Compass One'],
+            mode: 'walk',
+            traffic_aware: false,
+            max_travel_minutes: 30,
+            max_distance_km: null,
+            budget_per_person: 30,
+            dietary_requirements: [],
+            liked_cuisines: [],
+            disliked_cuisines: [],
+            other_preferences: []
+          });
+        }
+      }
+      chatHistory = [];
+      chatHasUserTurn = false;
+      chatMessagesEl.innerHTML = '';
+      const greeting = buildGreetingState();
+      appendChatBubble('assistant', greeting.text, { quickReplies: greeting.quickReplies });
+      renderChatFilterSummary();
+    }
+
+    function refreshGreetingIfIdle() {
+      if (!chatHasUserTurn) {
+        resetChatThread(false);
+      }
+    }
+
+    function postChatSearchOutcome({ matches = [], alternatives = [], modelUsed = '', emptyMessage = '', errorMessage = '', fromChat = false }) {
+      if (pendingChatSearchBubble) {
+        pendingChatSearchBubble.remove();
+        pendingChatSearchBubble = null;
+      }
+      if (errorMessage) {
+        appendChatBubble('assistant', `Search hit a snag: ${errorMessage}`, {
+          quickReplies: ['Retry search', 'Help']
+        });
+        return;
+      }
+      if (emptyMessage && matches.length === 0 && alternatives.length === 0) {
+        appendChatBubble('assistant', emptyMessage, {
+          quickReplies: ['Rivervale Plaza', 'Jewel Changi', 'Under $40', 'Max 45 mins']
+        });
+        return;
+      }
+      const picks = [];
+      displayedItems.slice(0, 3).forEach((item, idx) => {
+        const r = item.restaurant || {};
+        const rating = getRatingValue(r);
+        const mins = getTravelMinutes(r);
+        const price = getPriceValue(r);
+        const parts = [];
+        if (rating) parts.push(`${rating.toFixed(1)}★`);
+        if (mins !== null) parts.push(`${Math.round(mins)}m`);
+        if (price !== null) parts.push(`~$${Math.round(price)}`);
+        if (r.halal_certification === 'official') parts.push('MUIS Halal');
+        picks.push({
+          idx,
+          name: r.name || 'Restaurant',
+          meta: parts.join(' • ') || (r.address || ''),
+          isMatch: Boolean(item.isMatch)
+        });
+      });
+
+      const summaryText = `Found ${matches.length} direct match${matches.length === 1 ? '' : 'es'} and ${alternatives.length} close alternative${alternatives.length === 1 ? '' : 's'}${modelUsed ? ` (ranked by ${modelUsed})` : ''}. Click a top pick below or refine your search:`;
+      const followUps = ['Under $15', 'At least 4.5 stars', 'Switch to transit'];
+      if (currentUser) followUps.push('Save to profile');
+
+      appendChatBubble('assistant', summaryText, {
+        topPicks: picks,
+        quickReplies: followUps.slice(0, 4)
+      });
+      if (!fromChat) {
+        chatHistory.push({ role: 'assistant', text: summaryText });
+      }
+    }
+
+    async function submitChatMessage(rawText) {
+      const message = String(rawText || '').trim();
+      if (!message || chatSendBtn.disabled) return;
+
+      setLeftPanelMode('chat');
+      chatHasUserTurn = true;
+      appendChatBubble('user', message);
+      chatHistory.push({ role: 'user', text: message });
+      if (chatInput) chatInput.value = '';
+
+      chatSendBtn.disabled = true;
+      const thinkingBubble = appendChatBubble('assistant', 'Understanding your request...', { pending: true });
+
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            message,
+            current_filters: collectCurrentFormPayload(),
+            history: chatHistory.slice(-6)
+          })
+        });
+        const data = await response.json();
+        if (thinkingBubble) thinkingBubble.remove();
+
+        if (!response.ok) {
+          throw new Error(data.detail || data.error || 'Chatbot request failed');
+        }
+
+        if (data.filters) {
+          applyFiltersToSearchForm(data.filters);
+        }
+
+        const shouldRunSearch = data.action === 'search';
+        appendChatBubble('assistant', data.reply, {
+          changes: data.changes || [],
+          quickReplies: shouldRunSearch ? [] : (data.quick_replies || [])
+        });
+        chatHistory.push({ role: 'assistant', text: data.reply });
+
+        if (data.saved_to_profile && currentUser) {
+          checkSession();
+        }
+
+        if (shouldRunSearch) {
+          pendingChatSearchBubble = appendChatBubble(
+            'assistant',
+            'Searching Google Places, travel routes & MUIS records...',
+            { pending: true }
+          );
+          searchTriggeredFromChat = true;
+          document.getElementById('searchForm').requestSubmit();
+        }
+      } catch (err) {
+        if (thinkingBubble) thinkingBubble.remove();
+        appendChatBubble('assistant', `Sorry, I couldn't process that: ${err.message}`, {
+          quickReplies: ['Try again', 'Help']
+        });
+      } finally {
+        chatSendBtn.disabled = false;
+        if (chatInput) chatInput.focus();
+      }
+    }
+
+    chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      submitChatMessage(chatInput.value);
+    });
+
+    tabChatModeBtn.addEventListener('click', () => setLeftPanelMode('chat'));
+    tabFiltersModeBtn.addEventListener('click', () => setLeftPanelMode('filters'));
+    document.getElementById('chatOpenFiltersBtn').addEventListener('click', () => setLeftPanelMode('filters'));
+    document.getElementById('navChatFocusBtn').addEventListener('click', () => {
+      setLeftPanelMode('chat');
+      chatbotPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    document.getElementById('chatResetBtn').addEventListener('click', () => resetChatThread(true));
+    document.getElementById('chatHelpBtn').addEventListener('click', () => submitChatMessage('/help'));
+
+    // Keep synced summary pills updated when manual filters are adjusted
+    ['searchForm'].forEach(id => {
+      const formEl = document.getElementById(id);
+      if (formEl) {
+        formEl.addEventListener('input', renderChatFilterSummary);
+        formEl.addEventListener('change', renderChatFilterSummary);
+      }
+    });
+
+    resetChatThread(false);
   </script>
 </body>
 

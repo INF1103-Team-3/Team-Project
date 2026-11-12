@@ -78,3 +78,8 @@ class AIManager(BISAIManagerInterface):
         return self._request(
             payload, config,
             lambda parsed: self._validate_search(parsed))
+
+    def chat_turn(self, message, current_filters, history, saved_profile, config):
+        from BIS import ai_manager as bis_ai
+        return bis_ai.interpret_chat_turn(
+            message, current_filters, history, saved_profile, config)

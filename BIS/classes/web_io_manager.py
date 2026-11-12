@@ -91,6 +91,9 @@ class WebIOManager:
     def search(self, authorization, payload):
         return self._application.search(self.user(authorization, required=False), payload)
 
+    def chat(self, authorization, payload):
+        return self._application.chat(self.user(authorization, required=False), payload)
+
     def route(self, payload):
         return dict(self._application.route(payload), success=True)
 

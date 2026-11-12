@@ -6,6 +6,7 @@ from BIS.classes.verify_otp_model import VerifyOtpModel
 from BIS.classes.resend_otp_model import ResendOtpModel
 from BIS.classes.profile_model import ProfileModel
 from BIS.classes.search_request_model import SearchRequestModel
+from BIS.classes.chat_request_model import ChatRequestModel
 from BIS.classes.favorite_toggle_model import FavoriteToggleModel
 from BRNS.classes.route_request_model import RouteRequestModel
 
@@ -64,6 +65,10 @@ def register_routes(app):
     @router.post("/search")
     def search(payload: SearchRequestModel, authorization: str | None = Header(default=None), io=Depends(get_web_io)):
         return io.search(authorization, payload.model_dump())
+
+    @router.post("/chat")
+    def chat(payload: ChatRequestModel, authorization: str | None = Header(default=None), io=Depends(get_web_io)):
+        return io.chat(authorization, payload.model_dump())
 
     @router.post("/route")
     def route(payload: RouteRequestModel, io=Depends(get_web_io)):
