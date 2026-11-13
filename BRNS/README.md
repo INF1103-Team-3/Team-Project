@@ -54,14 +54,15 @@ retrieval, or AI ranking cannot be completed safely.
 
 | Path | Purpose |
 | --- | --- |
-| `main.py` | Search orchestration, BRC verification, result sorting, selected-result routing, and standalone entry point |
-| `io_manager.py` | BIS request boundary, Google Places and Routes clients, saved-record enrichment, and restaurant/result displays |
+| `main.py` | Search orchestration, BRC verification adapter (`BRCHTTPClient` when `BRC_SERVICE_URL` is set, else `BRC.main`), result sorting, selected-result routing, and gated internal entry point (`--internal` / `BITEFINDER_INTERNAL_CLI=1`) |
+| `runtime.py` | Headless `BRNSService` composition factories (`build_web_brns_service`, `build_cli_brns_service`) exposing `BRNSGatewayInterface` to BIS |
+| `io_manager.py` | BIS request boundary, Google Places and Routes clients, saved-record enrichment, and internal restaurant/result displays |
 | `ai_manager.py` | Provider/model chain, ranking prompt, JSON parsing, schema validation, and grounded reason-code contract |
 | `logic_manager.py` | Hard and soft requirements, scoring, matches, alternatives, exclusions, opening hours, sorting, and required interfaces |
-| `data_manager.py` | Restaurant schema conversion, upserts, search-history summaries, and generic save/load/query functions |
-| `config.py` | Root environment loading, endpoints, provider chain, display limits, and data paths |
-| `data/restaurants.json` | Saved live facts and offline restaurant fallback |
-| `data/search_history.json` | Validated search summaries; ignored by Git |
+| `data_manager.py` | Restaurant schema conversion, upserts, search-history summaries, and MongoDB/JSON store wiring (`common.storage_dependencies.mongo_connection()`) |
+| `config.py` | Root environment loading, endpoints, provider chain, display limits, and fallback JSON paths |
+| `classes/` | Granular OOP packages: `io/` (`contracts/`, `adapters/`, `gateways/{google,verification}/`), `ai/` (`contracts/`, `fallback/`, `providers/{contracts,clients}/`), `logic/` (`contracts/`, `evaluation/`, `sorting/{contracts,strategies}/`), `data/` (`contracts/`, `helpers/`, `stores/{contracts,json,mongo}/`), and `services/` (`gateway/`, `workflows/`, `cli/`) |
+| MongoDB `restaurants`, `search_history` | Persistent restaurant facts and per-user search summaries when `BITEFINDER_STORAGE=mongo` |
 
 ## Accepted request contract
 
@@ -101,10 +102,11 @@ With `USE_LIVE_GOOGLE=true`, BRNS requires `GOOGLE_MAPS_API_KEY` and:
 
 ### Offline restaurant mode
 
-With `USE_LIVE_GOOGLE=false`, BRNS loads `data/restaurants.json`. Offline mode
-is a demonstration and outage fallback; it does not remove the BRNS AI
-requirement. Saved route data is cleared rather than presented as a current
-verified route.
+With `USE_LIVE_GOOGLE=false`, BRNS loads saved restaurants from the active
+store (MongoDB `restaurants` collection when `BITEFINDER_STORAGE=mongo`, or the
+configured JSON store path in JSON test mode). Offline mode is a demonstration
+and outage fallback; it does not remove the BRNS AI requirement. Saved route data
+is cleared rather than presented as a current verified route.
 
 ## BRNS AI contract
 
@@ -184,9 +186,11 @@ When halal is requested:
 7. If BRC fails or times out, remaining Google-indicated candidates may
    continue only as visibly unofficial fallback results.
 
-In local Python, BRNS imports `BRC.main` directly. In Docker Compose,
-`sitecustomize.py` substitutes a compatible client that calls the private BRC
-container service.
+In local Python without `BRC_SERVICE_URL`, `BRNS/runtime.py` wires `BRC.main`. In
+Docker Compose (`BRC_SERVICE_URL=http://brc:8000`), `BRNS/runtime.py` (used by both
+BIS CLI and web via `BRNSGatewayInterface`) uses `BRCHTTPClient` to call the `brc`
+HTTP service. Direct `python BRNS/main.py` execution is restricted to internal
+tests and diagnostics (`--internal` or `BITEFINDER_INTERNAL_CLI=1`).
 
 ## Result presentation
 
@@ -289,6 +293,7 @@ Run BRNS-focused suites from the repository root:
 docker compose exec bis-brns python tests/run_tests.py brns
 docker compose exec bis-brns python tests/run_tests.py blackbox
 docker compose exec bis-brns python tests/run_tests.py integration
+docker compose exec bis-brns python tests/run_tests.py oop
 ```
 
 The black box suite starts the real standalone entry point, posts fixed AI,

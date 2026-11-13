@@ -92,6 +92,8 @@ GOOGLE_MAPS_API_KEY=...
 
 ### Run All API Tests:
 ```bash
+docker compose exec bis-brns python tests/run_tests.py api
+# or locally from repo root:
 python "tests/API/run_api_tests.py"
 ```
 

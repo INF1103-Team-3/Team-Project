@@ -9,7 +9,7 @@ from sources.profile_schema import (
     PREFERENCE_FIELDS, clean_text, validate_preferences, validate_updates,
     validate_value, validate_travel_minutes,
 )
-from BIS.classes.logic_manager import LogicManager
+from BIS.classes.logic.logic_manager import LogicManager
 
 COORDINATES = re.compile(
     r"\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)\s*"

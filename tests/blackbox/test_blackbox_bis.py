@@ -1500,7 +1500,7 @@ def test_legacy_passwordless_user_enrolls_password_on_signin():
             "Hi Tester!",
         )
 
-        from BIS.classes.password_hasher import PasswordHasher
+        from BIS.classes.logic.security.password_hasher import PasswordHasher
 
         credentials = read_credentials(context)
         saved_cred = credentials.get(user["userID"])

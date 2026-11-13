@@ -1,19 +1,20 @@
 # Common Infrastructure
 
-`common` contains reusable cross-program services and web deployment assets
+`common` contains reusable cross-program services and shared infrastructure
 used across BiteFinder programs. These modules provide terminal presentation,
-operational logging, geocode caching, Groq model discovery, the static web UI,
-nginx configuration, and optional JSON-to-Mongo import.
+operational logging, geocode caching, Groq model discovery, shared MongoDB
+connection wiring, nginx configuration, and optional JSON-to-Mongo import.
 
 ## Modules and Assets
 
 | Path | Purpose | Main users |
 | --- | --- | --- |
 | `terminal_ui.py` | Consistent prompts, headings, fields, numbered items, status roles, and optional ANSI color. | BIS and BRNS |
+| `recommendation_ui.py` | Shared terminal result card, numbered summary, exclusion, and route formatting. | BIS and internal BRNS |
 | `debug_log.py` | One global log file and one trace identifier across a search. | BIS, BRNS, BRC |
-| `geocode_cache.py` | One durable location query to coordinate cache with cross platform locking. | BIS, BRNS, BRC |
+| `geocode_cache.py` | One durable location query to coordinate cache backed by MongoDB (`geocode_cache`) or JSON. | BIS, BRNS, BRC |
 | `groq_models.py` | Discovers currently active Groq text chat models suitable for structured prompts. | BIS and BRNS AI managers |
-| `frontend/` | Static browser UI assets (`index.html`, CSS, JS modules) served by nginx. | Web UI |
+| `storage_dependencies.py` | Lazy process-level `mongo_connection()` factory shared by Mongo-backed stores and geocode cache. | `BIS/data_manager.py`, `BRNS/data_manager.py`, `geocode_cache.py` |
 | `nginx.conf` | nginx server and `/api/` reverse-proxy configuration for the web container. | Docker `web` service |
 | `migrate_to_mongo.py` | Optional CLI tool to import external JSON exports into MongoDB. | Operators |
 
@@ -56,9 +57,9 @@ nested BRNS or BRC calls reuse the identifier started by BIS. `end_trace()`
 clears only a trace created by that caller, which keeps one search connected in
 the log without mixing later commands.
 
-Docker Compose mounts the named `bitefinder-logs` volume at `/data/logs` in
-both containers. Their `/app/logs` links therefore resolve to the same physical
-log file.
+Docker Compose persists `/data/logs` inside the `application-data` volume for
+`api` / `bis-brns` (and `brc-data` for `brc`). Their `/app/logs` symlinks
+resolve to `/data/logs/bitefinder.log`.
 
 `configure_python_logging()` attaches existing Python loggers, including BRC
 logging, to the shared file. `configure(display=...)` may mirror records through
@@ -72,22 +73,20 @@ the relevant sequence without exposing the record contents.
 
 ## Global geocode cache
 
-`geocode_cache.py` stores successful query aliases in:
+`geocode_cache.py` persists successful query aliases in:
 
-```text
-data/geocode_cache.json
-```
+- MongoDB (`bitefinder.geocode_cache` collection) when `BITEFINDER_STORAGE=mongo`
+  (the default for Compose and interactive CLI `run_cli()`), avoiding disk writes; or
+- `data/geocode_cache.json` under `BITEFINDER_STORAGE=json` (unit/black-box tests),
+  using cross-platform file locking (`fcntl` on Unix, `msvcrt` on Windows) and atomic replacement.
 
-The JSON maps a normalized lowercase query to `[latitude, longitude]`.
+Each entry maps a normalized lowercase query to `[latitude, longitude]`.
 `lookup(query)` validates cached coordinates before returning them.
-`remember(queries, latitude, longitude)` can save several equivalent aliases,
+`remember(queries, latitude, longitude)` saves several equivalent aliases,
 such as the user's query, formatted address, and postal code, for one point.
 
-Writes hold a small lock file across the read, update, and atomic replacement.
-Unix uses `fcntl`; Windows uses `msvcrt`. Brief Windows `PermissionError`
-failures are retried. Because caching is an optimization, a final write failure
-is logged and returns `False`; it does not discard the freshly resolved
-location or fail the user's search.
+Because caching is an optimization, read or write failures are logged and fail
+safely without discarding freshly resolved coordinates.
 
 Callers should cache only a successful, validated geocode. They remain
 responsible for Singapore specific interpretation and for deciding when a
@@ -109,10 +108,14 @@ manager owns the final configured fallback list and provider request policy.
 
 ## Design rules
 
-Keep shared modules generic and procedural:
+Keep shared helper modules generic and procedural:
 
 - accept ordinary values and return ordinary values;
-- avoid importing BIS, BRNS, or BRC modules;
+- keep core helpers (`debug_log.py`, `terminal_ui.py`, `groq_models.py`,
+  `geocode_cache.py`) free of domain imports (`storage_dependencies.py` is the
+  only helper that lazily imports
+  `BIS.classes.data.stores.mongo.mongo_connection.MongoConnection` when
+  `mongo_connection()` is called);
 - leave restaurant, account, and halal rules in their owning subsystem;
 - avoid hidden network calls except in a helper whose name and contract make
   the request explicit;

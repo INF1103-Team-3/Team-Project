@@ -15,26 +15,26 @@ for key in ("GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "OPENROUTER_
 
 import mongomock
 from fastapi.testclient import TestClient
-from BIS.classes.mongo_connection import MongoConnection
-from BIS.classes.mongo_user_store import MongoUserStore
-from BIS.classes.mongo_session_store import MongoSessionStore
-from BIS.classes.mongo_favorite_store import MongoFavoriteStore
-from BIS.classes.mongo_credential_store import MongoCredentialStore
-from BIS.classes.mongo_search_proposal_store import MongoSearchProposalStore
-from BIS.classes.data_manager import DataManager
-from BIS.classes.logic_manager import LogicManager
-from BIS.classes.password_hasher import PasswordHasher
-from BIS.classes.web_auth_service import WebAuthService
-from BIS.classes.favorite_service import FavoriteService
-from BIS.classes.bis_application_service import BISApplicationService
-from BIS.classes.web_io_manager import WebIOManager
-from BIS.classes.web_runtime import WebRuntime
-from BIS.support.email_verification.classes.email_verification_service import EmailVerificationService
-from BIS.support.email_verification.classes.verification_challenge_manager import VerificationChallengeManager
-from BRNS.classes.mongo_recommendation_store import MongoRecommendationStore
-from BRNS.classes.search_history_scope import SearchHistoryScope
-from BRNS.classes.data_manager import DataManager as RecommendationData
-from web_api import create_app
+from BIS.classes.data.stores.mongo.mongo_connection import MongoConnection
+from BIS.classes.data.stores.mongo.mongo_user_store import MongoUserStore
+from BIS.classes.data.stores.mongo.mongo_session_store import MongoSessionStore
+from BIS.classes.data.stores.mongo.mongo_favorite_store import MongoFavoriteStore
+from BIS.classes.data.stores.mongo.mongo_credential_store import MongoCredentialStore
+from BIS.classes.data.stores.mongo.mongo_search_proposal_store import MongoSearchProposalStore
+from BIS.classes.data.data_manager import DataManager
+from BIS.classes.logic.logic_manager import LogicManager
+from BIS.classes.logic.security.password_hasher import PasswordHasher
+from BIS.classes.services.web.web_auth_service import WebAuthService
+from BIS.classes.services.web.favorite_service import FavoriteService
+from BIS.classes.services.web.bis_application_service import BISApplicationService
+from BIS.classes.io.web.web_io_manager import WebIOManager
+from BIS.classes.services.web.web_runtime import WebRuntime
+from BIS.support.email_verification.classes.service.email_verification_service import EmailVerificationService
+from BIS.support.email_verification.classes.challenge.verification_challenge_manager import VerificationChallengeManager
+from BRNS.classes.data.stores.mongo.mongo_recommendation_store import MongoRecommendationStore
+from BRNS.classes.data.helpers.search_history_scope import SearchHistoryScope
+from BRNS.classes.data.data_manager import DataManager as RecommendationData
+from http_gateway.main import create_app
 
 
 class WebIntegrationTests(unittest.TestCase):
@@ -63,21 +63,47 @@ class WebIntegrationTests(unittest.TestCase):
             self.ai_calls.append(request)
             return request
         self.ai = SimpleNamespace(interpret_search_request=interpret)
-        def search(payload):
+        def search(payload, previous_restaurants=(), user_id=None, max_matches=None, max_alternatives=None):
             import json
             request = json.loads(payload)
             self.ranking_calls.append(request)
             results = {"matches": [], "alternatives": [], "hidden": 0}
-            self.history.save_search_results(request, results, "live-google")
+            with self.scope.for_user(user_id):
+                self.history.save_search_results(request, results, "live-google")
             return results
-        self.application = BISApplicationService(self.data, self.ai, LogicManager(),
-            SimpleNamespace(search=search), SimpleNamespace(route_to=lambda r, q: {
-                "name": r["name"], "mode": q["mode"], "route": None, "link": "https://www.google.com/maps"}),
-            self.history, self.scope, self.config, lambda: "fixture/provider")
-        self.io = WebIOManager(self.data, self.auth, self.application, FavoriteService(self.data), self.conn.ready)
+
+        self.application = BISApplicationService(
+            self.data,
+            self.ai,
+            LogicManager(),
+            self._make_brns_gateway(search),
+            self.config,
+            lambda: "fixture/provider",
+        )
+        self.io = WebIOManager(self.auth, self.application, FavoriteService(self.data), self.conn.ready)
         self.client = TestClient(create_app(lambda: WebRuntime(self.io, self.conn)))
         self.client.__enter__()
         self.addCleanup(self.client.__exit__, None, None, None)
+
+    def _make_brns_gateway(self, search_fn, route_fn=None):
+        def save_history_summary(user_id, req, res, source="live-google"):
+            with self.scope.for_user(user_id):
+                return self.history.save_search_results(req, res, source)
+
+        return SimpleNamespace(
+            search=search_fn,
+            route_to=route_fn or (lambda r, q: {
+                "name": r["name"],
+                "mode": q["mode"],
+                "route": None,
+                "link": "https://www.google.com/maps",
+            }),
+            load_history=lambda uid: self.history.load_user_history(uid),
+            save_history_summary=save_history_summary,
+            clear_history=lambda uid: self.history.clear_user_history(uid),
+            active_model=lambda: "fixture/provider",
+            last_used_model=lambda: "fixture/provider",
+        )
 
     def account(self, email="user@example.com"):
         response = self.client.post("/api/auth/register", json={
@@ -224,10 +250,10 @@ class WebIntegrationTests(unittest.TestCase):
 
     def test_production_composition_uses_oop_services_without_real_network(self):
         from unittest.mock import patch
-        from BIS.web_dependencies import build_runtime
+        from http_gateway.dependencies import build_runtime
         with patch.dict(os.environ, {"BITEFINDER_STORAGE": "mongo"}), \
                 patch("dotenv.load_dotenv", return_value=False), \
-                patch("BIS.classes.mongo_connection.MongoConnection", return_value=self.conn):
+                patch("BIS.classes.data.stores.mongo.mongo_connection.MongoConnection", return_value=self.conn):
             runtime = build_runtime()
             self.assertTrue(runtime.io.health()["mongodb"])
             self.assertIsInstance(runtime.io, WebIOManager)
@@ -269,7 +295,7 @@ class WebIntegrationTests(unittest.TestCase):
     def test_smtp_bypass_claims_legacy_cli_user_and_syncs_with_users_json(self):
         import json
         import tempfile
-        from BIS.classes.cli_user_file_sync import CliUserFileSync
+        from BIS.classes.data.sync.cli_user_file_sync import CliUserFileSync
         from BIS.sources.profile_schema import empty_preferences
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -298,10 +324,14 @@ class WebIntegrationTests(unittest.TestCase):
                                              SimpleNamespace(send_verification_email=lambda *a: None))
             auth = WebAuthService(data, verif, PasswordHasher(), cfg)
             app_svc = BISApplicationService(
-                data, self.ai, LogicManager(), SimpleNamespace(search=lambda *_: {}),
-                SimpleNamespace(route_to=lambda *_: {}), self.history, self.scope, cfg, lambda: None,
+                data,
+                self.ai,
+                LogicManager(),
+                self._make_brns_gateway(lambda *_, **_kw: {}, lambda *_: {}),
+                cfg,
+                lambda: None,
             )
-            io = WebIOManager(data, auth, app_svc, FavoriteService(data), self.conn.ready)
+            io = WebIOManager(auth, app_svc, FavoriteService(data), self.conn.ready)
             with TestClient(create_app(lambda: WebRuntime(io, self.conn))) as client:
                 login = client.post("/api/auth/login", json={"email": "test_cli@example.com", "password": "password123"})
                 self.assertEqual(login.status_code, 200, login.text)
@@ -336,11 +366,15 @@ class WebIntegrationTests(unittest.TestCase):
         headers, _ = self.account("concurrent@example.com")
         original_brns = self.application._brns
 
-        def slow_search(payload):
+        def slow_search(payload, *args, **kwargs):
             barrier.wait(timeout=3)
-            return original_brns.search(payload)
+            return original_brns.search(payload, *args, **kwargs)
 
-        self.application._brns = SimpleNamespace(search=slow_search)
+        self.application._brns = SimpleNamespace(
+            search=slow_search,
+            last_used_model=original_brns.last_used_model,
+            active_model=original_brns.active_model,
+        )
         payload = self.search_payload()
         with ThreadPoolExecutor(max_workers=2) as pool:
             f1 = pool.submit(self.client.post, "/api/search", json=payload, headers=headers)
@@ -350,7 +384,7 @@ class WebIntegrationTests(unittest.TestCase):
         self.assertEqual(r2.status_code, 200, r2.text)
 
     def test_halal_coordinator_batches_when_verifier_supports_verify_batch(self):
-        from BRNS.classes.halal_verification_coordinator import HalalVerificationCoordinator
+        from BRNS.classes.services.workflows.halal_verification_coordinator import HalalVerificationCoordinator
         from common import debug_log
 
         batch_calls = []
@@ -855,6 +889,11 @@ class WebIntegrationTests(unittest.TestCase):
         ok = self.client.post("/api/auth/login", json={"email": "cli_pw@example.com", "password": "cli-password-1"})
         self.assertEqual(ok.status_code, 200, ok.text)
         self.assertEqual(ok.json()["user"]["userID"], user["userID"])
+
+    def test_swagger_docs_disabled_by_default(self):
+        for path in ("/docs", "/redoc", "/openapi.json"):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 404, f"{path} should return 404 by default")
 
 
 if __name__ == "__main__":

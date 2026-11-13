@@ -11,13 +11,14 @@ from sources.prompts import (
 )
 
 from BIS import ai_manager, data_manager, logic_manager
-from BIS.classes.io_manager import IOManager
-from BIS.classes.password_hasher import PasswordHasher
+from BIS.classes.io.cli.io_manager import IOManager
+from BIS.classes.logic.security.password_hasher import PasswordHasher
 from BIS.support.email_verification import challenge as email_challenge
 from BIS.support.email_verification import service as email_service
+from common import recommendation_ui
 from common import terminal_ui as ui
 from common import geocode_cache
-from BIS.classes.location_gateway import LocationGateway
+from BIS.classes.io.gateways.location_gateway import LocationGateway
 from sources.profile_schema import (
     CUISINES, CUISINE_FIELDS, OTHER_PREFERENCES, PREFERENCE_FIELDS,
     clean_text, normalize_email, normalize_username, validate_updates,
@@ -911,6 +912,28 @@ def confirm_search_request(request, config=None):
     """Require explicit approval of the interpreted live search."""
     display_search_summary(request)
     return ask_yes_no("Search with these choices?", config, default=True)
+
+
+def display_results(results, announce_no_matches=True):
+    """Display ranked restaurants without collecting any input."""
+    recommendation_ui.show_results(
+        results, announce_no_matches=announce_no_matches)
+
+
+def display_result_list(results):
+    """Show a compact numbered list before optional details or routing."""
+    recommendation_ui.show_result_list(results)
+
+
+def display_no_matches(results):
+    """Explain why the leading alternative is not a verified match."""
+    recommendation_ui.show_no_matches(results)
+
+
+def display_route(name, route, link, mode, traffic_aware=False):
+    """Print step-by-step route guidance and Maps link."""
+    recommendation_ui.show_route(
+        name, route, link, mode, traffic_aware=traffic_aware)
 
 
 def resolve_cuisine_token(token, field, config=None):

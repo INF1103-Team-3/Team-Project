@@ -12,10 +12,10 @@ sys.path[:0] = [str(ROOT), str(ROOT / "BIS")]
 @unittest.skipUnless(os.getenv("MONGO_TEST_URI"), "Set MONGO_TEST_URI for isolated real-Mongo verification")
 class LiveMongoTests(unittest.TestCase):
     def test_separate_clients_share_cli_and_web_domain_records(self):
-        from BIS.classes.mongo_connection import MongoConnection
-        from BIS.classes.mongo_user_store import MongoUserStore
-        from BIS.classes.mongo_credential_store import MongoCredentialStore
-        from BIS.classes.password_hasher import PasswordHasher
+        from BIS.classes.data.stores.mongo.mongo_connection import MongoConnection
+        from BIS.classes.data.stores.mongo.mongo_user_store import MongoUserStore
+        from BIS.classes.data.stores.mongo.mongo_credential_store import MongoCredentialStore
+        from BIS.classes.logic.security.password_hasher import PasswordHasher
         name = "bitefinder_test_" + uuid4().hex
         first = MongoConnection(uri=os.environ["MONGO_TEST_URI"], database=name)
         second = MongoConnection(uri=os.environ["MONGO_TEST_URI"], database=name)

@@ -4,9 +4,9 @@ import os
 from pathlib import Path
 
 from BIS import logic_manager
-from BIS.classes.data_manager import DataManager
-from BIS.classes.json_user_store import JsonUserStore
-from BIS.classes.location_gateway import LocationGateway
+from BIS.classes.data.data_manager import DataManager
+from BIS.classes.data.stores.json.json_user_store import JsonUserStore
+from BIS.classes.io.gateways.location_gateway import LocationGateway
 from common import geocode_cache
 
 
@@ -21,13 +21,13 @@ GEOCODE_URL = os.getenv(
 
 _BACKEND = os.getenv("BITEFINDER_STORAGE", "json").strip().lower()
 if _BACKEND == "json":
-    from BIS.classes.json_credential_store import JsonCredentialStore
+    from BIS.classes.data.stores.json.json_credential_store import JsonCredentialStore
     _STORE = JsonUserStore(USERS_FILE, STATE_FILE)
     _CREDENTIALS = JsonCredentialStore(CREDENTIALS_FILE)
 elif _BACKEND == "mongo":
-    from BIS.storage_dependencies import mongo_connection
-    from BIS.classes.mongo_user_store import MongoUserStore
-    from BIS.classes.mongo_credential_store import MongoCredentialStore
+    from common.storage_dependencies import mongo_connection
+    from BIS.classes.data.stores.mongo.mongo_user_store import MongoUserStore
+    from BIS.classes.data.stores.mongo.mongo_credential_store import MongoCredentialStore
     _CONNECTION = mongo_connection()
     _STORE = MongoUserStore(_CONNECTION)
     _STORE.ensure_indexes()
