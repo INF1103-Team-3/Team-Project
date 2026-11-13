@@ -20,3 +20,5 @@ project_overview/uml/
 
 # Local project documentation
 BIS/docs/
+
+push_github.py
