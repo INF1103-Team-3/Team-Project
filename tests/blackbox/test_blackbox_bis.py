@@ -1360,7 +1360,7 @@ def test_signup_rejects_short_and_mismatched_passwords():
             "1",
             "new@example.com",
             "New User",
-            "short",
+            "seven77",
             "validpass1",
             "different1",
             "validpass1",
@@ -1377,7 +1377,7 @@ def test_signup_rejects_short_and_mismatched_passwords():
         assert_shows(
             context,
             output,
-            "Password must be 6–128 characters.",
+            "Password must be 8–128 characters.",
             "Passwords do not match.",
             "Signed up.",
         )

@@ -154,6 +154,19 @@ class WebIntegrationTests(unittest.TestCase):
             self.assertEqual(self.client.post("/api/auth/verify-otp", json={"email": user["email"], "code": "wrong"}).status_code, 400)
         self.assertEqual(self.client.post("/api/auth/verify-otp", json={"email": user["email"], "code": self.sent[-1][1]}).status_code, 400)
 
+    def test_registration_and_legacy_enrollment_enforce_8_char_minimum(self):
+        short_reg = self.client.post("/api/auth/register", json={
+            "username": "Short", "email": "short7@example.com", "password": "seven77"})
+        self.assertEqual(short_reg.status_code, 422)
+        legacy = self.data.register_user("legacy7@example.com", "Legacy")
+        short_claim = self.client.post("/api/auth/login", json={
+            "email": legacy["email"], "password": "seven77"})
+        self.assertEqual(short_claim.status_code, 400)
+        self.assertIn("8", short_claim.json()["detail"])
+        ok_reg = self.client.post("/api/auth/register", json={
+            "username": "Eight", "email": "eight88@example.com", "password": "eight888"})
+        self.assertEqual(ok_reg.status_code, 200, ok_reg.text)
+
     def test_profiles_share_cli_data_without_json_sync(self):
         headers, user = self.account()
         payload = dict(user, username="Updated")
