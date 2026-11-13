@@ -5,7 +5,7 @@ import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from shared.debug_log import debug_log
+from common.debug_log import debug_log
 
 
 class BaseJsonStore(ABC):

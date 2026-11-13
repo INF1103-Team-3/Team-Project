@@ -43,7 +43,7 @@ def create_manager(api_key, model):
     # Put fast Groq models ahead of secondary Gemini/OpenRouter fallbacks so
     # 503/504 Gemini failures complete in ~1s instead of stalling for ~80s.
     if groq_key:
-        from shared.groq_models import fetch_chat_models
+        from common.groq_models import fetch_chat_models
         groq_models = fetch_chat_models(groq_key)
         explicit_groq = os.getenv("BRC_GROQ_MODEL", "").strip()
         if explicit_groq and explicit_groq not in groq_models:

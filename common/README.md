@@ -1,18 +1,21 @@
-# Shared Infrastructure
+# Common Infrastructure
 
-`shared` contains small, reusable services used across BiteFinder programs.
-These modules provide terminal presentation, operational logging, geocode
-caching, and Groq model discovery. They do not decide what restaurants qualify
-or how user preferences should be interpreted.
+`common` contains reusable cross-program services and web deployment assets
+used across BiteFinder programs. These modules provide terminal presentation,
+operational logging, geocode caching, Groq model discovery, the static web UI,
+nginx configuration, and optional JSON-to-Mongo import.
 
-## Modules
+## Modules and Assets
 
-| File | Purpose | Main users |
+| Path | Purpose | Main users |
 | --- | --- | --- |
 | `terminal_ui.py` | Consistent prompts, headings, fields, numbered items, status roles, and optional ANSI color. | BIS and BRNS |
 | `debug_log.py` | One global log file and one trace identifier across a search. | BIS, BRNS, BRC |
 | `geocode_cache.py` | One durable location query to coordinate cache with cross platform locking. | BIS, BRNS, BRC |
 | `groq_models.py` | Discovers currently active Groq text chat models suitable for structured prompts. | BIS and BRNS AI managers |
+| `frontend/` | Static browser UI assets (`index.html`, CSS, JS modules) served by nginx. | Web UI |
+| `nginx.conf` | nginx server and `/api/` reverse-proxy configuration for the web container. | Docker `web` service |
+| `migrate_to_mongo.py` | Optional CLI tool to import external JSON exports into MongoDB. | Operators |
 
 ## Terminal UI
 

@@ -116,7 +116,7 @@ class DataManager:
         try:
             return list(self.load_clean_database())
         except (DataUnavailableError, OSError):
-            from shared.debug_log import debug_log
+            from common.debug_log import debug_log
             debug_log(
                 "Cleaned BRC database is unavailable; returning no records.",
                 "ERROR", "BRC.data.load")

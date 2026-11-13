@@ -43,7 +43,7 @@ sys.modules["ai_manager"] = bis_ai
 import BIS.support.config as bis_config
 import BRNS.ai_manager as brns_ai
 import BRNS.config as brns_config
-from shared.groq_models import fetch_chat_models
+from common.groq_models import fetch_chat_models
 
 
 # ---------------------------------------------------------------------------

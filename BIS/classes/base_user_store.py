@@ -5,7 +5,7 @@ from BIS.sources.profile_schema import (
     MINUTES_PER_KM, empty_preferences, normalize_email, normalize_username,
     validate_preferences,
 )
-from shared.debug_log import debug_log
+from common.debug_log import debug_log
 
 
 class BaseUserStore(ABC):

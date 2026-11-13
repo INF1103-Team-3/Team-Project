@@ -10,7 +10,7 @@ from BRC.classes.brc_application import BRCApplication
 from BRC.classes.console_progress import ConsoleProgress
 from BRC.classes.io_manager import NO_INPUT, IOManager
 from BRC.classes.json_file import JsonFile
-from shared import debug_log
+from common import debug_log
 
 
 class CommandLine:

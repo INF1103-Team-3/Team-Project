@@ -27,7 +27,7 @@ def _initialize_cli():
     from sources.profile_schema import OTHER_PREFERENCES
     from support import config as settings
     from support.email_verification import email_delivery
-    from shared import debug_log, terminal_ui
+    from common import debug_log, terminal_ui
     _INITIALIZED = True
 
 

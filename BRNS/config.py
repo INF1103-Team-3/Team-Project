@@ -42,7 +42,7 @@ def _extend_chain_with_groq():
     """Fetch Groq chat models at startup and put them before slow fallbacks."""
     if not GROQ_API_KEY:
         return
-    from shared.groq_models import fetch_chat_models
+    from common.groq_models import fetch_chat_models
     for model_id in fetch_chat_models(GROQ_API_KEY):
         MODEL_CHAIN.append({"provider": "groq", "model": model_id})
 

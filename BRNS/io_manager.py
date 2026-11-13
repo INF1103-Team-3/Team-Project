@@ -11,9 +11,9 @@ from BRNS import config, logic_manager
 from BRNS.classes.google_route_gateway import GoogleRouteGateway
 from BRNS.classes.io_manager import IOManager
 from BRNS.classes.restaurant_enricher import RestaurantEnricher
-from shared import geocode_cache
-from shared import debug_log as log
-from shared import terminal_ui as ui
+from common import geocode_cache
+from common import debug_log as log
+from common import terminal_ui as ui
 from BIS.sources.profile_schema import (
     CUISINES, clean_text, validate_travel_minutes, validate_value,
 )

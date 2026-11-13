@@ -4,7 +4,7 @@ import json
 import re
 import time
 
-from shared import debug_log
+from common import debug_log
 
 
 class AIProviderRouter:

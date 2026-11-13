@@ -7,7 +7,7 @@ from BIS.classes.base_json_store import BaseJsonStore
 from BIS.classes.base_user_store import BaseUserStore
 from BIS.classes.record_store_interface import RecordStoreInterface
 from BIS.classes.user_store_interface import UserStoreInterface
-from shared.debug_log import debug_log
+from common.debug_log import debug_log
 from sources.profile_schema import (
     MINUTES_PER_KM,
     empty_preferences,

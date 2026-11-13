@@ -57,7 +57,7 @@ This directory contains automated live validation tests for all external API key
   - Geocodes a Singapore landmark (`"10 Bayfront Ave, Singapore 018956"`).
   - Asserts HTTP 200, status `OK`, and coordinates within the Singapore bounding box (`lat 1.15–1.48`, `lng 103.55–104.10`).
 - **API-GOOGLE-02: Geocode Cache Integration**
-  - Verifies `shared.geocode_cache.remember()` and `shared.geocode_cache.lookup()`.
+  - Verifies `common.geocode_cache.remember()` and `common.geocode_cache.lookup()`.
   - Confirms cached coordinates are retrieved without hitting the network.
 - **API-GOOGLE-03: Google Places API (New) Text Search**
   - Queries `places.googleapis.com/v1/places:searchText` with `X-Goog-Api-Key` and `X-Goog-FieldMask`.

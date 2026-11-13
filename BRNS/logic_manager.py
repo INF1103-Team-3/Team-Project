@@ -10,7 +10,7 @@ from BRNS import config
 from BRNS.classes.logic_manager import LogicManager
 from BRNS.classes.restaurant_outcome_policy import RestaurantOutcomePolicy
 from BRNS.classes.opening_hours_service import OpeningHoursService
-from shared import debug_log as log
+from common import debug_log as log
 
 
 _RATING_FLOOR = re.compile(

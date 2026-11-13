@@ -5,7 +5,7 @@ from BRC.classes.muis_snapshot import MuisSnapshot
 from BRC.classes.no_geocoder import NoGeocoder
 from BRC.classes.one_map_geocoder import OneMapGeocoder
 from BRC.classes.postal_prefix_crawler import PostalPrefixCrawler
-from shared import debug_log
+from common import debug_log
 
 
 class MuisScraper:

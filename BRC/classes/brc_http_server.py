@@ -6,7 +6,7 @@ import threading
 from http.server import ThreadingHTTPServer
 
 from BRC.classes.brc_http_handler import BRCRequestHandler
-from shared import debug_log
+from common import debug_log
 
 
 class BRCHTTPServer:

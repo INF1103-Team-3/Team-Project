@@ -58,7 +58,7 @@ RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
 FROM base AS brc
 
 COPY --from=source --chown=10001:10001 /src/BRC /app/BRC
-COPY --from=source --chown=10001:10001 /src/shared /app/shared
+COPY --from=source --chown=10001:10001 /src/common /app/common
 
 RUN mkdir -p /opt/seed/brc
 COPY --from=source --chown=10001:10001 /seed/brc/ /opt/seed/brc/
@@ -116,8 +116,8 @@ USER 10001:10001
 CMD ["uvicorn", "web_api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 
 FROM nginx:alpine AS web
-COPY frontend /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY common/frontend /usr/share/nginx/html
+COPY common/nginx.conf /etc/nginx/conf.d/default.conf
 
 FROM api AS web-test
 USER root

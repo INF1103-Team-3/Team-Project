@@ -11,8 +11,8 @@ from BRC import main as brc_main
 from BRC.classes.brc_http_client import BRCHTTPClient
 from BRNS import ai_manager, config, data_manager, io_manager, logic_manager
 from BRNS.classes.recommendation_system import RecommendationSystem
-from shared import debug_log as log
-from shared import terminal_ui as ui
+from common import debug_log as log
+from common import terminal_ui as ui
 
 
 _BRC_CHECKER = (

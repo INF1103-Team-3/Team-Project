@@ -6,7 +6,7 @@ import time
 import urllib.error
 import urllib.request
 
-from shared import debug_log
+from common import debug_log
 
 
 class BRCHTTPClient:

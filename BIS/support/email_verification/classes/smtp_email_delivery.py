@@ -4,7 +4,7 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
-from shared.debug_log import debug_log
+from common.debug_log import debug_log
 from sources.profile_schema import normalize_email
 
 from .email_delivery_interface import EmailDeliveryInterface

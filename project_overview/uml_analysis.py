@@ -57,7 +57,7 @@ class SourceAnalysis:
         return names
 
     def _index(self):
-        for subsystem in (*SUBSYSTEMS, 'shared'):
+        for subsystem in (*SUBSYSTEMS, 'common'):
             for path in sorted((self.root / subsystem).rglob('*.py')):
                 if '__pycache__' in path.parts or '.venv' in path.parts:
                     continue
