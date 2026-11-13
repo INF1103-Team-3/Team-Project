@@ -818,6 +818,32 @@ class WebIntegrationTests(unittest.TestCase):
         r9 = self.client.post("/api/chat", json={"message": "add another location, marina bay", "current_filters": base}).json()
         self.assertEqual(r9["filters"]["locations"], ["Singapore 530967", "Marina Bay"])
 
+    def test_geocode_cache_uses_mongo_without_writing_disk_files_and_cli_defaults_mongo(self):
+        import tempfile
+        from unittest.mock import patch
+        from BIS import main as bis_main
+        from shared import geocode_cache
+
+        with tempfile.TemporaryDirectory() as tmp:
+            missing_cache_file = Path(tmp) / "data" / "geocode_cache.json"
+            with patch.dict(os.environ, {"BITEFINDER_STORAGE": "mongo"}), \
+                    patch.object(geocode_cache, "CACHE_FILE", missing_cache_file), \
+                    patch.object(geocode_cache, "_mongo_collection", return_value=self.conn):
+                self.assertTrue(geocode_cache.remember(["Marina Bay", "marina bay sg"], 1.2834, 103.8607))
+                self.assertEqual(geocode_cache.lookup("marina bay"), (1.2834, 103.8607))
+                self.assertFalse(missing_cache_file.parent.exists())
+
+        seen = {}
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("BITEFINDER_STORAGE", None)
+            with patch.object(bis_main, "_initialize_cli", side_effect=lambda: seen.setdefault("storage", os.environ.get("BITEFINDER_STORAGE"))), \
+                    patch("BIS.main.debug_log", create=True), \
+                    patch("BIS.main.io_manager", create=True), \
+                    patch("BIS.main.settings", create=True) as mock_settings:
+                mock_settings.load_config.side_effect = KeyboardInterrupt
+                bis_main.run_cli()
+        self.assertEqual(seen.get("storage"), "mongo")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

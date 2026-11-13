@@ -33,29 +33,25 @@ not require a Docker socket or open a browser in the container.
 Explicit first build/update:
 
 ```powershell
-docker compose -f docker-compose.web.yml up -d --build --wait web
+docker compose up -d --build --wait web
 ```
 
-The stack contains nginx, the FastAPI API, MongoDB, and the unchanged independent
-BRC service. MongoDB has a named volume and is not published on a host port.
-The website is bound to host loopback port 8080. No accounts or database records
-are automatically imported at startup.
+The stack contains nginx, the FastAPI API, MongoDB, `mongo-express`, `bis-brns`,
+and the unchanged independent BRC service in a single `docker-compose.yml`.
+MongoDB uses a named `mongo-data` volume and is bound to `127.0.0.1:27017`.
+The website is bound to host loopback port 8080.
 
-Start the optional CLI against the same Mongo database (it does not require the
-API/nginx services to be running):
+Run the interactive CLI against the same Mongo database:
 
 ```powershell
-docker compose -f docker-compose.web.yml --profile cli up -d --build bis-brns
-docker compose -f docker-compose.web.yml exec bis-brns python main.py --cli
+docker compose up -d --build bis-brns
+docker compose exec bis-brns python main.py --cli
 ```
 
-The original `docker-compose.yml` remains the independent JSON CLI/BRC stack.
-Use it with the explicit `-f docker-compose.yml` option when choosing that mode.
-
-Stop the web stack without deleting stored data:
+Stop the stack without deleting stored data:
 
 ```powershell
-docker compose -f docker-compose.web.yml --profile cli down
+docker compose --profile test down
 ```
 
 Closing a browser or exiting the launcher does not stop shared containers.
@@ -210,8 +206,8 @@ A mock pass is not a real Mongo/container verification result.
 Container checks:
 
 ```powershell
-docker compose -f docker-compose.web.yml --profile test run --rm -e MONGO_TEST_URI=mongodb://mongodb:27017/ web-test
-docker compose -f docker-compose.web.yml exec -T api python tests/web/smoke_stack.py
+docker compose --profile test run --rm -e MONGO_TEST_URI=mongodb://mongodb:27017/ web-test
+docker compose exec -T api python tests/web/smoke_stack.py
 ```
 
 The original CI workflow retains its CLI/container suite. `web-tests.yml` adds

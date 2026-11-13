@@ -10,17 +10,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Build and start the OOP web stack
-        run: docker compose -f docker-compose.web.yml up -d --build --wait web
+        run: docker compose up -d --build --wait web
       - name: Test web contracts and isolated real MongoDB
         run: >-
-          docker compose -f docker-compose.web.yml --profile test run --rm
+          docker compose --profile test run --rm
           -e MONGO_TEST_URI=mongodb://mongodb:27017/
           web-test
       - name: Test nginx to API and independent BRC HTTP boundaries
-        run: docker compose -f docker-compose.web.yml exec -T api python tests/web/smoke_stack.py
+        run: docker compose exec -T api python tests/web/smoke_stack.py
       - name: Show logs after failure
         if: failure()
-        run: docker compose -f docker-compose.web.yml logs --tail=100
+        run: docker compose logs --tail=100
       - name: Stop disposable CI stack
         if: always()
-        run: docker compose -f docker-compose.web.yml --profile test down -v
+        run: docker compose --profile test down -v

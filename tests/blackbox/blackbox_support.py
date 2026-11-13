@@ -1004,6 +1004,7 @@ def create_blackbox_context():
                     "GROQ_",
                     "SMTP_",
                     "BITEFINDER_",
+                    "MONGO_",
                 )
             )
 
@@ -1025,6 +1026,9 @@ def create_blackbox_context():
         {
             "NO_COLOR":
                 "1",
+
+            "BITEFINDER_STORAGE":
+                "json",
 
             "AI_BYPASS":
                 "false",
