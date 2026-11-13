@@ -9,16 +9,16 @@ from copy import deepcopy
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / "BIS")]
 import mongomock
-from BIS.classes.json_user_store import JsonUserStore
-from BIS.classes.json_credential_store import JsonCredentialStore
-from BIS.classes.mongo_user_store import MongoUserStore
-from BIS.classes.mongo_credential_store import MongoCredentialStore
-from BIS.classes.mongo_connection import MongoConnection
-from BIS.classes.password_hasher import PasswordHasher
-from BIS.classes.json_mongo_migration import JsonMongoMigration
-from BRNS.classes.json_recommendation_store import JsonRecommendationStore
-from BRNS.classes.mongo_recommendation_store import MongoRecommendationStore
-from BRNS.classes.search_history_scope import SearchHistoryScope
+from BIS.classes.data.stores.json.json_user_store import JsonUserStore
+from BIS.classes.data.stores.json.json_credential_store import JsonCredentialStore
+from BIS.classes.data.stores.mongo.mongo_user_store import MongoUserStore
+from BIS.classes.data.stores.mongo.mongo_credential_store import MongoCredentialStore
+from BIS.classes.data.stores.mongo.mongo_connection import MongoConnection
+from BIS.classes.logic.security.password_hasher import PasswordHasher
+from BIS.classes.data.sync.json_mongo_migration import JsonMongoMigration
+from BRNS.classes.data.stores.json.json_recommendation_store import JsonRecommendationStore
+from BRNS.classes.data.stores.mongo.mongo_recommendation_store import MongoRecommendationStore
+from BRNS.classes.data.helpers.search_history_scope import SearchHistoryScope
 
 
 class StorageContractTests(unittest.TestCase):

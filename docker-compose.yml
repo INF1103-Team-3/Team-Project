@@ -44,6 +44,7 @@ services:
 
   mongo-express:
     image: mongo-express:1.0.2-20-alpine3.19
+    profiles: ["dev"]
     restart: unless-stopped
     ports:
       - "127.0.0.1:8081:8081"

@@ -939,20 +939,27 @@ def create_blackbox_context():
         "BRC",
         "common",
     ):
+        source_dir = ROOT / folder
+
+        def _ignore_copy_entries(
+            src,
+            names,
+            _top=source_dir,
+        ):
+            ignored = {
+                name
+                for name in names
+                if name in {"__pycache__", ".gitignore"}
+                or name.endswith(".pyc")
+            }
+            if Path(src) == _top:
+                ignored.update({"data", "docs"} & set(names))
+            return ignored
 
         shutil.copytree(
-            ROOT / folder,
+            source_dir,
             root / folder,
-
-            ignore=
-                shutil.ignore_patterns(
-                    "__pycache__",
-                    "*.pyc",
-                    "data",
-                    "docs",
-                    ".gitignore",
-                    "frontend",
-                ),
+            ignore=_ignore_copy_entries,
         )
 
     (
@@ -1169,7 +1176,7 @@ def run_cli(
                         / application
                         / "main.py"
                     ),
-                    *(["--cli"] if application == "BIS" else []),
+                    *(["--cli"] if application == "BIS" else ["--internal"] if application == "BRNS" else []),
                 ],
 
                 input=
@@ -1395,7 +1402,7 @@ def seed_complete_user(
     )
 
     if password is not None:
-        from BIS.classes.password_hasher import PasswordHasher
+        from BIS.classes.logic.security.password_hasher import PasswordHasher
 
         credentials_path.write_text(
             json.dumps(

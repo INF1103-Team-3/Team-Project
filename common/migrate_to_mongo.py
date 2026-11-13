@@ -7,8 +7,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from BIS.classes.json_mongo_migration import JsonMongoMigration
-from BIS.classes.migration_io_manager import MigrationIOManager
+from BIS.classes.data.sync.json_mongo_migration import JsonMongoMigration
+from BIS.classes.io.cli.helpers.migration_io_manager import MigrationIOManager
 
 
 def main(argv=None):
@@ -28,8 +28,8 @@ def main(argv=None):
         migration = JsonMongoMigration()
         records = migration.prepare(args.users, args.states, args.restaurants, args.history)
         if args.apply:
-            from BIS.classes.mongo_connection import MongoConnection
-            from BIS.classes.mongo_user_store import MongoUserStore
+            from BIS.classes.data.stores.mongo.mongo_connection import MongoConnection
+            from BIS.classes.data.stores.mongo.mongo_user_store import MongoUserStore
             connection = MongoConnection(database=args.database)
             try:
                 MongoUserStore(connection).ensure_indexes()

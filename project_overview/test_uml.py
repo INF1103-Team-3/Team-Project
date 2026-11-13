@@ -189,10 +189,10 @@ class UMLGeneratorTests(unittest.TestCase):
             self.assertIn(target, analysis.classes)
             self.assertTrue(evidence)
         links = {(s, t, k) for s, t, k, *_ in analysis.edges}
-        self.assertIn(('BIS.classes.bis_search_workflow.BISSearchWorkflow',
-                       'BIS.classes.io_manager.IOManager', 'association'), links)
-        self.assertIn(('BRNS.classes.result_sorter_registry.ResultSorterRegistry',
-                       'BRNS.classes.rating_result_sorter.RatingResultSorter', 'aggregation'), links)
+        self.assertIn(('BIS.classes.services.cli.bis_search_workflow.BISSearchWorkflow',
+                       'BIS.classes.io.cli.io_manager.IOManager', 'association'), links)
+        self.assertIn(('BRNS.classes.logic.sorting.result_sorter_registry.ResultSorterRegistry',
+                       'BRNS.classes.logic.sorting.strategies.rating_result_sorter.RatingResultSorter', 'aggregation'), links)
         print(f'\nGenerated {len(analysis.classes)} classes and {len(analysis.edges)} '
               f'source-evidenced relationships in {OUTPUT_DIR}.\n'
               f'{len(analysis.unresolved)} dynamic call sites remain unresolved; see analysis.json.')

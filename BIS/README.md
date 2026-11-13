@@ -4,22 +4,31 @@ BIS is BiteFinder's account, profile, command, and search-input application. It
 owns the interactive CLI, validates what the user confirms, persists reusable
 preferences, and hands one structured JSON search request to BRNS.
 
-Start the Compose services, then run BIS through the repository root launcher:
+Start the Compose stack (MongoDB, BRC, web stack, and CLI container), then run
+BIS through the repository root launcher:
 
 ```bash
 docker compose up -d --build
-docker compose exec bis-brns python main.py
+docker compose exec bis-brns python main.py --cli
+```
+
+Or launch directly on a host with `requirements.txt` installed:
+
+```bash
+python main.py          # interactive menu (1 = CLI, 2 = Web, 0 = Exit)
+python main.py --cli    # CLI mode (defaults BITEFINDER_STORAGE to mongo)
+python main.py --web    # ensure Docker web stack is healthy and open http://localhost:8080
 ```
 
 To work from a shell inside the running application container:
 
 ```bash
 docker compose exec bis-brns sh
-python main.py
+python main.py --cli
 ```
 
-The root launcher imports `BIS.main`. BiteFinder is designed to run in this
-container so its BRC service connection and persistent volumes are available.
+The root launcher imports `BIS.main`. In Compose, `bis-brns` shares the same
+MongoDB database (`bitefinder`) and `brc` service with the FastAPI web backend.
 
 ## Responsibilities
 
@@ -64,28 +73,29 @@ I/O confirmation and Logic validation occur before Data saves the update.
 
 | Path | Purpose |
 | --- | --- |
-| `main.py` | Account loop, session loop, command dispatch, search orchestration, and result actions |
-| `io_manager.py` | All BIS terminal prompts and displays, account selection, profile input, search collection, and result menus |
+| `main.py` | CLI/web launcher, session bootstrap, and compatibility entry points |
+| `runtime.py` | Web composition boundary (`build_web_runtime`) wiring `BIS` (`WebIOManager` / `BISApplicationService`) to `BRNS.runtime` |
+| `io_manager.py` | All BIS terminal prompts and displays, account selection, profile input, search collection, result/route display, and result menus |
 | `ai_manager.py` | BIS-owned provider chain, prompts, JSON parsing, response validation, spelling review, command interpretation, and search interpretation |
-| `logic_manager.py` | Profile updates, cuisine conflict checks, location rules, search validation, and required `evaluate`, `score`, and `route` interfaces |
-| `data_manager.py` | Account registry, profile state, atomic JSON writes, shared geocoding cache access, and search serialization |
+| `logic_manager.py` | Profile updates, cuisine conflict checks, location rules, search validation, web multi-cuisine merging, and required `evaluate`, `score`, and `route` interfaces |
+| `data_manager.py` | Account registry, credentials, profile state, shared geocoding cache access, and search serialization |
+| `classes/` | Granular OOP packages: `io/` (`contracts/`, `cli/`, `cli/helpers/`, `web/`, `web/models/{auth,preferences,search}/`, `gateways/`), `ai/` (`contracts/`, `fallback/`, `providers/{contracts,clients}/`), `logic/` (`contracts/`, `validators/`, `security/`), `data/` (`contracts/`, `stores/{contracts,json,mongo}/`, `sync/`), and `services/` (`cli/`, `web/`, `launcher/`) |
 | `sources/profile_schema.py` | Canonical profile fields, accepted cuisines, normalization, types, and value validation |
 | `sources/prompts.py` | Profile questions, command help, labels, AI intents, and prompt text |
 | `support/config.py` | Root `.env` loading and BIS configuration validation |
-| `support/email_verification/challenge.py` | Verification-code hashing, expiry, resend, and attempt-window rules |
-| `support/email_verification/email_delivery.py` | SMTP verification and Maps-link delivery |
-| `support/email_verification/service.py` | Challenge persistence and interactive verification service |
-| `data/users.json` | Local account and preference registry; ignored by Git |
-| `data/profile_state.json` | Verification, first-search, and display state; ignored by Git |
+| `support/email_verification/` | Challenge hashing, SMTP delivery, and interactive/web verification objects (`classes/{contracts,delivery,challenge,service}/`) |
+| `../common/storage_dependencies.py` | Lazy shared `MongoConnection` factory for Mongo-backed CLI/geocoding |
+| `../http_gateway/main.py`, `../http_gateway/routes.py`, `../http_gateway/dependencies.py` | FastAPI ASGI entrypoint (`uvicorn http_gateway.main:app`), `/api/*` endpoints, and `BIS.runtime` composition delegate |
 
 ## Account and verification flow
 
 1. The account menu asks the user to sign up, resume, or quit.
-2. Signup validates a unique normalized email and a username from 1–50
-   characters.
-3. Resume loads the account associated with the normalized email.
-4. When SMTP bypass is disabled, BIS creates a salted, hashed six-digit
-   challenge and sends the code through the configured SMTP server.
+2. Signup validates a unique normalized email, username (1–50 characters), and
+   account password (confirmed twice, hashed with PBKDF2-SHA256 in `web_credentials`).
+3. Resume loads the account associated with the normalized email and verifies
+   its password (legacy accounts without stored credentials are prompted to enroll a password).
+4. When SMTP bypass is disabled (and always for Web verification), BIS creates a
+   salted, hashed six-digit challenge and sends the code via SMTP.
 5. Incorrect attempts are counted across resends. The resend cooldown does not
    erase failed attempts.
 6. When the configured attempt window is exhausted, guesses and resends remain
@@ -156,6 +166,7 @@ BRNS.
 | `/add-location` | Add one or more saved locations |
 | `/remove-location` | Remove saved locations while retaining at least one |
 | `/reset` | Clear preferences while retaining account identity |
+| `/password` | Change your account password |
 | `/color off` / `/color on` | Persist terminal color preference |
 | `/logout` | Return to the account menu |
 | `/quit` / `/exit` | Save and close BiteFinder |
@@ -229,8 +240,8 @@ flowchart TD
 
 ## BRNS request boundary
 
-`data_manager.serialize_search_request()` produces the JSON passed to
-`BRNS.main.search()`. It includes:
+`data_manager.serialize_search_request()` produces the JSON passed through
+`BRNSGatewayInterface` (`BRNSService.search()`, wired via `BRNS/runtime.py`). It includes:
 
 - validated origin label, latitude, and longitude;
 - `walk`, `drive`, or `transit` mode;
@@ -302,11 +313,16 @@ settings and requires a verified account plus restaurant coordinates.
 
 ## Persistence and error handling
 
-- Account and state writes use temporary files and atomic replacement.
+- In interactive CLI (`run_cli()`) and Compose, `BITEFINDER_STORAGE` defaults
+  to `mongo`, persisting accounts (`users`), synced passwords (`web_credentials`),
+  state (`profile_state`), favorites, search proposals, and sessions in MongoDB.
+- Isolated test suites run with `BITEFINDER_STORAGE=json` in temporary folders,
+  using atomic temp-file writes and locking (`JsonUserStore`, `JsonCredentialStore`).
 - A missing registry starts empty.
 - Invalid or unreadable saved account data blocks writes to protect existing
   records.
-- Successful geocodes are stored in the shared root cache.
+- Successful geocodes are saved through the shared geocode cache (MongoDB
+  `geocode_cache` when `BITEFINDER_STORAGE=mongo`, JSON under test/JSON mode).
 - Invalid user input returns to the same prompt.
 - Declined AI corrections save nothing.
 - `EOFError` and `Ctrl+C` close the CLI with a concise goodbye message.
@@ -321,6 +337,9 @@ Relevant suites from the repository root:
 docker compose exec bis-brns python tests/run_tests.py bis
 docker compose exec bis-brns python tests/run_tests.py blackbox
 docker compose exec bis-brns python tests/run_tests.py integration
+docker compose exec bis-brns python tests/run_tests.py oop
+docker compose exec bis-brns python tests/run_tests.py launcher
+docker compose --profile test run --rm -e MONGO_TEST_URI=mongodb://mongodb:27017/ web-test
 ```
 
 Black box tests launch the real `BIS/main.py` inside a temporary project copy.

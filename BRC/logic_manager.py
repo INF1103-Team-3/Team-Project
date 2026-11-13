@@ -1,7 +1,7 @@
 """Compatibility façade for BRC's object-oriented Logic Manager."""
 
-from BRC.classes.logic_manager import LogicManager
-from BRC.classes.outlet_matcher import OutletMatcher
+from BRC.classes.logic.logic_manager import LogicManager
+from BRC.classes.logic.outlet_matcher import OutletMatcher
 from BRC.models import HalalDatabase, HalalOutlet, RestaurantRecord
 
 

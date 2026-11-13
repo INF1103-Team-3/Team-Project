@@ -1,6 +1,6 @@
 """Compatibility façade for object-oriented verification challenges."""
 
-from .classes.verification_challenge_manager import (
+from .classes.challenge.verification_challenge_manager import (
     VerificationChallengeManager,
 )
 

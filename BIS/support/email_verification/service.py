@@ -2,9 +2,9 @@
 
 import data_manager
 
-from .classes.email_verification_service import EmailVerificationService
-from .classes.smtp_email_delivery import SMTPEmailDelivery
-from .classes.verification_challenge_manager import (
+from .classes.service.email_verification_service import EmailVerificationService
+from .classes.delivery.smtp_email_delivery import SMTPEmailDelivery
+from .classes.challenge.verification_challenge_manager import (
     VerificationChallengeManager,
 )
 

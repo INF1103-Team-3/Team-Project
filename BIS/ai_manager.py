@@ -11,12 +11,12 @@ from pathlib import Path
 
 import requests
 
-from BIS.classes.ai_provider_router import AIProviderRouter
-from BIS.classes.ai_provider_factory_registry import AIProviderFactoryRegistry
-from BIS.classes.ai_manager import AIManager
-from BIS.classes.gemini_ai_provider import GeminiAIProvider
-from BIS.classes.groq_ai_provider import GroqAIProvider
-from BIS.classes.openrouter_ai_provider import OpenRouterAIProvider
+from BIS.classes.ai.fallback.ai_provider_router import AIProviderRouter
+from BIS.classes.ai.fallback.ai_provider_factory_registry import AIProviderFactoryRegistry
+from BIS.classes.ai.ai_manager import AIManager
+from BIS.classes.ai.providers.clients.gemini_ai_provider import GeminiAIProvider
+from BIS.classes.ai.providers.clients.groq_ai_provider import GroqAIProvider
+from BIS.classes.ai.providers.clients.openrouter_ai_provider import OpenRouterAIProvider
 
 from sources.prompts import INTENTS, SYSTEM_PROMPT
 

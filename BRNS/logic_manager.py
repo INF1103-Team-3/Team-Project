@@ -3,13 +3,13 @@
 import json
 import re
 import sys
-from BRNS.classes.recommendation_context import RecommendationContext
+from BRNS.classes.logic.evaluation.recommendation_context import RecommendationContext
 from datetime import datetime, timedelta, timezone
 
 from BRNS import config
-from BRNS.classes.logic_manager import LogicManager
-from BRNS.classes.restaurant_outcome_policy import RestaurantOutcomePolicy
-from BRNS.classes.opening_hours_service import OpeningHoursService
+from BRNS.classes.logic.logic_manager import LogicManager
+from BRNS.classes.logic.evaluation.restaurant_outcome_policy import RestaurantOutcomePolicy
+from BRNS.classes.logic.evaluation.opening_hours_service import OpeningHoursService
 from common import debug_log as log
 
 

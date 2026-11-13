@@ -1,6 +1,6 @@
 """Compatibility façade for object-oriented SMTP email delivery."""
 
-from .classes.smtp_email_delivery import SMTPEmailDelivery
+from .classes.delivery.smtp_email_delivery import SMTPEmailDelivery
 
 
 _email_delivery = SMTPEmailDelivery()

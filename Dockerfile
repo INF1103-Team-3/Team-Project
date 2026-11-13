@@ -78,7 +78,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
     CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200 else 1)"]
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["python", "-m", "BRC.classes.brc_http_server"]
+CMD ["python", "-m", "BRC.classes.io.http.server.brc_http_server"]
 
 
 FROM base AS bis-brns
@@ -113,10 +113,10 @@ CMD ["python", "main.py"]
 
 FROM bis-brns AS api
 USER 10001:10001
-CMD ["uvicorn", "web_api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["uvicorn", "http_gateway.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 
 FROM nginx:alpine AS web
-COPY common/frontend /usr/share/nginx/html
+COPY frontend /usr/share/nginx/html
 COPY common/nginx.conf /etc/nginx/conf.d/default.conf
 
 FROM api AS web-test

@@ -14,7 +14,7 @@ search path.
 | `function_graphs/all_functions.png` | Static view of functions discovered throughout the project. |
 | `function_graphs/bis_to_brns.png` | High level BIS to BRNS manager flow. |
 | `function_graphs/bis_to_brns_functions.png` | Detailed function level path across BIS and BRNS. |
-| `function_graphs/project_workflow.png` | Whole project view including BIS, BRNS, BRC, and shared code. |
+| `function_graphs/project_workflow.png` | Whole project view including BIS, BRNS, BRC, and common code. |
 | `function_graphs/live_sessions/` | Locally generated timestamped runtime traces; ignored by Git. |
 
 The authoritative text workflow is [ProjectFlow.md](../ProjectFlow.md). The
@@ -86,7 +86,7 @@ Run:
 python project_overview/visualise_functions.py
 ```
 
-The script inspects BIS, BRNS, BRC, and shared Python files and writes four PNG
+The script inspects BIS, BRNS, BRC, and `common` Python files and writes four PNG
 files into `project_overview/function_graphs`. Functions are grouped below
 their program and, where applicable, below Main, IO, AI, Logic, and Data. The
 whole project graph shows the main data flow from account interaction through
@@ -115,7 +115,7 @@ function calls and saves a new folder under
 - `bis_functions.png`, grouped by BIS manager;
 - `brns_functions.png`, when BRNS was reached;
 - `brc_functions.png`, when official halal checking was reached; and
-- `shared_functions.png`, for shared cache, UI, logging, and model helpers.
+- `common_functions.png`, for common cache, UI, logging, and model helpers.
 
 Programs that were not reached in the chosen session are marked accordingly.
 For example, BRC normally appears only when a halal constrained search checks

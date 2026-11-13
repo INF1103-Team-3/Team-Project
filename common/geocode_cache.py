@@ -34,7 +34,7 @@ def _use_mongo():
 
 
 def _mongo_collection():
-    from BIS.storage_dependencies import mongo_connection
+    from common.storage_dependencies import mongo_connection
     return mongo_connection()
 
 

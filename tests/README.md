@@ -29,13 +29,15 @@ Run a smaller group by replacing `all` with one of the following names:
 | `bis` | BIS validation, preferences, travel, cuisine, and structured AI interpretation |
 | `brns` | BRNS eligibility, dietary rules, ranking, opening hours, missing-data handling, sorting, and AI fallback |
 | `brc` | BRC MUIS halal verification and official restaurant outlet matching |
-| `core` | BIS,BRNS and BRC function tests together; this is the default group |
+| `core` | `bis`, `brns`, `brc`, `oop`, and `launcher` test suites together; default group |
 | `blackbox` | Real BIS and BRNS processes with controlled HTTP fixtures |
 | `integration` | BIS-to-BRNS JSON contract and shared rules |
-| `oop` | BIS/BRNS manager contracts and pipeline order, provider factories/fallback, email collaboration, action dispatch, sorting strategies and JSON stores |
-| `deployment` | Image contents, writable volumes, imports, BRC networking, and core tests inside Docker |
+| `oop` | BIS/BRNS manager contracts, OOP classes, AI fallback, email verification, password stores, and sorting strategies |
+| `launcher` | CLI/Web launcher menu and container readiness checks without Docker or browser IO |
+| `web` | FastAPI API integration, storage/password/migration contracts, and optional live MongoDB (`MONGO_TEST_URI`) |
+| `deployment` | Image contents, writable container paths, imports, BRC networking, and core tests inside Docker |
 | `api` | Live API key connectivity (OpenRouter, Gemini, Groq, Google Maps), AI multi-tier fallback chains, and Google Maps services |
-| `all` | Every group above |
+| `all` | Every offline/container group (`bis`, `brns`, `brc`, `blackbox`, `integration`, `oop`, `launcher`, `deployment`) |
 
 Examples:
 
@@ -44,6 +46,10 @@ docker compose exec bis-brns python tests/run_tests.py core
 docker compose exec bis-brns python tests/run_tests.py brc
 docker compose exec bis-brns python tests/run_tests.py blackbox
 docker compose exec bis-brns python tests/run_tests.py integration
+
+# Web + isolated live MongoDB tests and nginx -> api smoke check
+docker compose --profile test run --rm -e MONGO_TEST_URI=mongodb://mongodb:27017/ web-test
+docker compose exec -T api python tests/web/smoke_stack.py
 ```
 
 ## Color controls
@@ -69,6 +75,9 @@ The standard `NO_COLOR` environment variable also disables color.
 | `brc/` | BRC halal-verification and official outlet-matching tests |
 | `blackbox/` | End-to-end CLI tests that run BIS and BRNS as real processes using controlled local HTTP services instead of live APIs |
 | `integration/` | Tests that BIS output can be passed correctly into BRNS and that shared request fields and business rules remain consistent |
+| `oop/` | Structural and behavioral OOP refactor contract tests |
+| `launcher/` | Tests for `BISLauncher`, `LauncherIO`, and `WebInterfaceLauncher` |
+| `web/` | FastAPI route, auth, chatbot, credential-store, and live MongoDB tests plus `smoke_stack.py` |
 | `deployment/` | Smoke tests that verify the deployed Docker environment starts correctly and that the main services can import, communicate, and run basic checks |
 | `API/` | Live validation tests for AI keys (OpenRouter, Gemini, Groq), multi-tier fallback cascades, and Google Maps Platform services |
 

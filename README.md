@@ -1,14 +1,10 @@
-> **WEB-OOP branch:** see [WEB_OOP.md](WEB_OOP.md) for the CLI/web launcher,
-> optional FastAPI/nginx/Mongo stack, migration and integration tests. `python
-> main.py` now offers a mode menu; `python main.py --cli` starts the CLI directly.
-
 # BiteFinder
 
-BiteFinder is a procedural command-line application that helps people choose
-restaurants in Singapore when several practical requirements must be considered
-together. It combines saved preferences, today's request, restaurant facts,
-route information, AI-assisted ranking, and official MUIS halal verification
-in one guided workflow.
+BiteFinder is an object-oriented restaurant discovery system for Singapore that
+provides both an interactive command-line application and a web interface backed
+by MongoDB. It combines saved preferences, today's request, restaurant facts,
+route information, AI-assisted ranking, and official MUIS halal verification in
+one guided workflow.
 
 The system is designed for students, staff, office workers, visitors,
 budget-conscious diners, Halal or vegetarian diners, public-transport users,
@@ -17,7 +13,9 @@ single unexplained result.
 
 ## Features
 
-- Create or resume an account using six-digit email verification.
+- Create or resume an account with a password and six-digit email verification.
+- Share account credentials, profiles, favorites, geocode cache, restaurant facts,
+  and search history between the CLI and web UI through MongoDB.
 - Save locations, budget, travel limits, dietary requirements, liked and
   disliked cuisines, and reusable special requests.
 - Enter locations as Singapore postal codes, addresses, landmarks, or latitude
@@ -86,8 +84,9 @@ implementations behind compatibility façades:
 `main.py` coordinates the managers and decides whether processing continues or
 returns safely to the user after a failure.
 
-Production BIS/BRNS classes live one per module under `BIS/classes/` and
-`BRNS/classes/`.
+Production BIS, BRNS, and BRC classes live one per module inside functional
+subpackages (`io/`, `ai/`, `logic/`, `data/`, `services/`) under
+`BIS/classes/`, `BRNS/classes/`, and `BRC/classes/`.
 
 ## Detailed documentation
 
@@ -100,9 +99,11 @@ test commands:
 | BIS account, profile, and search interaction | [BIS/README.md](BIS/README.md) |
 | BRNS recommendation, routing, and result processing | [BRNS/README.md](BRNS/README.md) |
 | BRC MUIS database and halal verification | [BRC/README.md](BRC/README.md) |
+| Web API ASGI app, routes, and composition boundary | [http_gateway/README.md](http_gateway/README.md) |
+| Browser UI static frontend assets | [frontend/README.md](frontend/README.md) |
 | Function, integration, black-box, and deployment tests | [tests/README.md](tests/README.md) |
 | Static and live function visualizations | [project_overview/README.md](project_overview/README.md) |
-| Common infrastructure (logging, geocoding, UI, frontend, nginx) | [common/README.md](common/README.md) |
+| Common infrastructure (logging, geocoding, UI, storage, nginx) | [common/README.md](common/README.md) |
 | End-to-end data states, AI payloads, and file storage | [DataFlowDiagram.md](DataFlowDiagram.md) |
 
 Start with this root README for setup and operation. Use
@@ -120,47 +121,64 @@ The current project statement is in
 ```text
 BIS/                         account, profile, search-input, and email workflow
   README.md                  detailed BIS workflow and manager documentation
-  main.py                    BIS compatibility façade and object wiring
-  classes/                   workflows, manager contracts and domain services
+  main.py                    BIS compatibility façade, CLI/web launcher, and wiring
+  runtime.py                 web runtime composition boundary (`build_web_runtime`)
+  classes/                   nested by layer (`io/`, `ai/`, `logic/`, `data/`, `services/`) with contracts, fallback, validators, stores, and models
   io_manager.py              CLI input and display boundary
   ai_manager.py              BIS interpretation and model fallback chain
   logic_manager.py           profile and search-request rules
-  data_manager.py            user, state, and search JSON persistence
+  data_manager.py            user, state, credential, and search persistence
   sources/                   prompts and profile schema
   support/                   configuration and SMTP verification façades
-    email_verification/classes/  challenge, delivery, verification objects
+    email_verification/classes/  `contracts/`, `delivery/`, `challenge/`, `service/`
 
 BRNS/                        restaurant recommendation and navigation
   README.md                  detailed BRNS search, ranking, and route guide
-  main.py                    BRNS compatibility façade and object wiring
-  classes/                   workflows, adapters, contracts and domain services
-  io_manager.py              BIS JSON, Google Places, Routes, and result display
+  main.py                    BRNS compatibility façade and gated internal CLI (`--internal`)
+  runtime.py                 headless `BRNSService` gateway wiring for BIS CLI and web
+  classes/                   nested by layer (`io/`, `ai/`, `logic/`, `data/`, `services/`) with adapters, gateways, fallback, evaluation, sorting, and stores
+  io_manager.py              BIS JSON, Google Places, Routes, and internal result display
   ai_manager.py              candidate ranking and provider fallback chain
   logic_manager.py           matching, alternatives, scores, and opening hours
   data_manager.py            restaurant facts and search history
-  data/restaurants.json      saved facts and offline restaurant fallback
 
 BRC/                         MUIS halal database and outlet checker
-  README.md                  detailed BRC build and verification guide
-  main.py                    database-build and restaurant-check workflows
+  README.md                  detailed BRC build, HTTP service, and check guide
+  main.py                    database-build and restaurant-check workflows (gated internal CLI)
   scraper.py                 raw MUIS and OneMap collection
+  classes/                   nested by layer (`io/`, `ai/`, `logic/`, `data/`, `services/`) with HTTP server/client, geocoding, scraping, AI fallback, models, and caches
   io_manager.py              scenario selection and JSON validation
   ai_manager.py              cuisine tagging and ambiguous outlet matching
   logic_manager.py           deterministic certification checks
   data_manager.py            raw, cleaned, cached, and checked JSON records
 
-common/                      geocode cache, model discovery, terminal UI, frontend, nginx
+http_gateway/                FastAPI ASGI app, routes, and composition boundary
+  README.md                  web backend API and runtime dependency guide
+  main.py                    FastAPI ASGI entrypoint (`uvicorn http_gateway.main:app`)
+  routes.py                  `/api/*` FastAPI route registrations (BIS IO only)
+  dependencies.py            delegates `build_runtime()` to `BIS.runtime.build_web_runtime()`
+
+frontend/                    static browser UI served by nginx
+  README.md                  frontend ES-module architecture and nginx proxy notes
+  index.html                 single-page UI entry point
+  css/                       compiled Tailwind and custom styles
+  js/                        API client, auth, chat, filter, map, results modules
+
+common/                      geocode cache, model discovery, UI, storage, nginx
   README.md                  common-infrastructure contracts and design rules
-  frontend/                  static web UI assets
+  recommendation_ui.py       shared terminal recommendation and route cards
+  storage_dependencies.py    shared lazy `MongoConnection` factory
   nginx.conf                 nginx reverse-proxy configuration
   migrate_to_mongo.py        optional JSON-to-MongoDB import CLI
-tests/                       function, integration, black-box, and Docker tests
+tests/                       function, integration, black-box, web, and Docker tests
   README.md                  test groups, commands, isolation, and color controls
 project_overview/            function-graph generators and local graph output
   README.md                  static and live visualization instructions
 .github/workflows/tests.yml  host and Docker CI checks
-Dockerfile                   `brc` and `bis-brns` image targets
-docker-compose.yml           two-container deployment and persistent volumes
+Dockerfile                   `brc`, `bis-brns`, `api`, `web`, and `web-test` targets
+docker-compose.yml           MongoDB, mongo-express, BRC, API, nginx web, CLI stack
+requirements.txt             runtime CLI, web API, and MongoDB dependencies
+requirements-dev.txt         test, lint, and visualization development tools
 main.py                      repository-root BIS launcher
 ProjectFlow.md               complete project and decision flow
 DataFlowDiagram.md           data transformations, AI payloads, and file stores
@@ -206,40 +224,92 @@ comments are in [`.env.example`](.env.example).
 | `GOOGLE_MAPS_API_KEY` | Geocoding, Places, route matrices, and directions |
 | `USE_LIVE_GOOGLE=true` | Use current Google restaurant and route data |
 | `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL` | Email verification and Maps-link delivery |
-| `SMTP_BYPASS=true` | Skip SMTP delivery during local testing |
+| `SMTP_BYPASS=true` | Skip SMTP delivery during local CLI testing (never bypasses web OTP auth) |
 | `AI_BYPASS=true` | Test BIS profile interaction without AI or BRNS search |
+| `BITEFINDER_STORAGE` | `mongo` (default in Compose and `run_cli()`) or `json` |
+| `MONGO_URI` | MongoDB connection string (Compose supplies `mongodb://mongodb:27017/`) |
+| `MONGO_DATABASE` | MongoDB database name (default `bitefinder`) |
 | `DEBUG=true` | Mirror shared operational logs to the terminal |
 
 `.env` is excluded from Git and the Docker build context. Never commit API keys
 or SMTP credentials.
 
-## Run the complete project with Docker Compose
+## Run MongoDB, the Web Server, and the CLI with Docker Compose
 
-The commands shown at the top of `docker-compose.yml` are the canonical way to
-run BiteFinder. On Windows, open PowerShell in the repository root and run:
+[docker-compose.yml](docker-compose.yml) orchestrates the full BiteFinder stack on
+the `bitefinder-web` bridge network:
+
+| Service | Port on host | Role |
+| --- | --- | --- |
+| `mongodb` | `127.0.0.1:27017` | MongoDB 7.0 database storing accounts, credentials, state, favorites, restaurants, search history, and geocode cache (`mongo-data` volume) |
+| `mongo-express` (`dev` profile) | `http://localhost:8081` | Optional web admin UI to inspect MongoDB collections |
+| `brc` | internal `8000` | Always-on MUIS halal verification HTTP service (`brc-data` volume) |
+| `api` | internal `8000` | FastAPI backend (`uvicorn http_gateway.main:app`) wired strictly through BIS (`BIS.runtime`) to MongoDB and BRC |
+| `web` | `http://localhost:8080` | nginx webserver serving `frontend/` and proxying `/api/` -> `api:8000` (`/docs` and `/openapi.json` disabled by default) |
+| `bis-brns` | — | Interactive CLI & test container backed by the same MongoDB database |
+| `web-test` (`test` profile) | — | Ephemeral container runner for `tests/run_tests.py web` |
+
+### Start MongoDB and the web stack
+
+Build and start MongoDB, BRC, FastAPI (`api`), nginx (`web`),
+and the CLI container (`bis-brns`) (add `--profile dev` to include `mongo-express`):
 
 ```powershell
 docker compose up -d --build
-docker compose exec bis-brns python main.py
 ```
 
-The same Docker commands also work in macOS and Linux terminals. Do not add
-`-T` to the interactive BiteFinder command because it disables the terminal
-used for prompts and colors.
+Or wait specifically until the webserver is healthy at `http://localhost:8080`:
 
-The first command builds and starts two containers on `bitefinder-net`:
+```powershell
+docker compose up -d --build --wait web
+```
 
-| Container | Runtime role |
-| --- | --- |
-| `bitefinder-brc` | Runs the BRC halal-checking HTTP service continuously and reports its health to Compose. |
-| `bitefinder-bis-brns` | Remains running with an interactive terminal available; it contains BIS and BRNS. |
+Then open in your browser:
+- **BiteFinder Web UI:** `http://localhost:8080`
+- **API health check:** `http://localhost:8080/api/health` (`{"status":"ok","mongodb":true}`)
+- **Mongo Express DB UI (when started with `--profile dev`):** `http://localhost:8081`
 
-Compose waits for BRC to become healthy before starting the BIS/BRNS container.
-The second command opens the root BiteFinder launcher inside that running
-container. When the user exits BiteFinder, the container stays available, so
-the command can be run again without rebuilding it.
+### Launch interactively via `main.py`
 
-Check container state at any time with:
+If Python dependencies are installed locally (`pip install -r requirements.txt`),
+the root launcher can start/reuse the Docker Compose web stack or run CLI directly:
+
+```powershell
+python main.py          # interactive menu: 1 = CLI, 2 = Web, 0 = Exit
+python main.py --web    # ensure MongoDB/BRC/API/web are running and open http://localhost:8080
+python main.py --cli    # start CLI directly (defaults to MongoDB on 127.0.0.1:27017)
+```
+
+### Run the CLI inside Docker (sharing MongoDB with the web UI)
+
+```powershell
+docker compose exec bis-brns python main.py --cli
+```
+
+Do not add `-T` to interactive CLI commands because it disables the TTY used for
+prompts and ANSI colors. Exiting the CLI leaves `mongodb`, `web`, and other
+background services running.
+
+### Run the FastAPI webserver on the host (optional local development)
+
+When `mongodb` (and optionally `brc`) are running via Docker Compose (`mongodb`
+is published on `127.0.0.1:27017`):
+
+```powershell
+python -m pip install -r requirements.txt
+$env:BITEFINDER_STORAGE = "mongo"
+$env:MONGO_URI = "mongodb://127.0.0.1:27017/"
+$env:MONGO_DATABASE = "bitefinder"
+uvicorn http_gateway.main:app --host 127.0.0.1 --port 8000 --workers 1
+```
+
+Inspect MongoDB collections directly using `mongosh` inside the `mongodb` container:
+
+```powershell
+docker compose exec mongodb mongosh --quiet --eval "db.getSiblingDB('bitefinder').getCollectionNames()"
+```
+
+Check container status at any time with:
 
 ```powershell
 docker compose ps
@@ -247,36 +317,33 @@ docker compose ps
 
 ### Test Docker networking
 
-Check external internet access from the BIS/BRNS container:
+Check external internet access from the `bis-brns` or `brc` containers:
 
 ```powershell
 docker compose exec bis-brns python -c "import urllib.request; r=urllib.request.urlopen('https://www.google.com/generate_204', timeout=10); print('Internet working, HTTP', r.status)"
-```
-
-Check external internet access from the BRC container:
-
-```powershell
 docker compose exec brc python -c "import urllib.request; r=urllib.request.urlopen('https://www.google.com/generate_204', timeout=10); print('Internet working, HTTP', r.status)"
 ```
 
-Check that BIS/BRNS can reach the BRC service over `bitefinder-net`:
+Verify internal service reachability across `bitefinder-web`:
 
 ```powershell
 docker compose exec bis-brns python -c "import urllib.request; print(urllib.request.urlopen('http://brc:8000/health', timeout=5).read().decode())"
+docker compose exec bis-brns python -c "import urllib.request; print(urllib.request.urlopen('http://api:8000/api/health', timeout=5).read().decode())"
 ```
 
-Successful external checks print `Internet working, HTTP 204`. A successful
-BRC health check prints `{"status": "ok"}`.
+Successful external checks print `Internet working, HTTP 204`. Service health
+checks return `{"status": "ok"}` (BRC) and `{"status":"ok","mongodb":true}` (API).
 
-Inspect network and BRC errors with:
+Inspect container logs and shared BiteFinder trace logs with:
 
 ```powershell
 docker compose logs --tail=100 brc
+docker compose logs --tail=100 api
 docker compose exec bis-brns tail -n 100 logs/bitefinder.log
 ```
 
 If a transferred Windows checkout reports an entrypoint `bad interpreter` or
-`exec format` error, rebuild the image after confirming Git uses LF endings:
+`exec format` error, rebuild after confirming Git uses LF endings:
 
 ```powershell
 git ls-files --eol Dockerfile docker-compose.yml
@@ -285,50 +352,43 @@ docker compose up -d --build
 ```
 
 Both files should show `w/lf`. The repository enforces LF through
-`.gitattributes`, and the Docker build also removes stray carriage returns
-from the generated entrypoint as a defensive check.
+`.gitattributes`, and the Docker build removes stray carriage returns from the
+generated entrypoint.
 
 ### First halal search
 
 If the cleaned MUIS database does not exist, BRC prepares it automatically when
-the first halal verification is requested. That first check may take longer
-because BRC may need to scrape MUIS data and process uncached cuisine tags in
-paced AI batches. Completed batches are saved in the
-`bitefinder-brc-data` volume, so an interrupted or rate-limited build can
-resume without retagging completed restaurants.
+started or on the first halal verification request. Completed batches are saved
+in the `brc-data` volume so interrupted builds can resume without retagging.
 
-To build or refresh the BRC database manually, open its menu and choose option
-`1`:
+To build or refresh the BRC database manually:
 
 ```powershell
-docker compose exec brc python -m BRC.main
+docker compose exec brc python -m BRC.main --internal
 ```
 
-### Container data and shutdown
+### Container data, named volumes, and shutdown
 
-`bitefinder-brc-data` preserves the raw and cleaned MUIS data, cuisine tags,
-and restaurant-check caches. `bitefinder-bis-brns-data` preserves accounts,
-profile state, restaurant facts, search history, and the shared geocode cache.
-`bitefinder-logs` is mounted into both containers so BIS, BRNS, and BRC append
-to the same `logs/bitefinder.log` file and share search trace IDs.
+- `mongo-data`: persistent MongoDB database backing (`users`, `web_credentials`,
+  `profile_state`, `favorites`, `search_proposals`, `sessions`, `restaurants`,
+  `search_history`, `geocode_cache`).
+- `brc-data`: MUIS snapshots, cleaned halal database, and AI cuisine/check caches.
+- `application-data`: container-local scratch directories and operational logs (`logs/bitefinder.log`).
 
-Stop both containers while keeping those named volumes:
+Stop containers while keeping all MongoDB and BRC volumes:
 
 ```powershell
 docker compose down
 ```
 
-Delete the containers and all saved named-volume data only when a complete
-reset is intended:
+Delete containers **and** all saved MongoDB/BRC volumes (destructive reset):
 
 ```powershell
 docker compose down -v
 ```
 
-BRNS sends halal checks to `http://brc:8000` over the Compose network. The BRC
-port is available to the BIS/BRNS container but is not published to the host.
-Both containers can still reach configured AI, Google, MUIS, OneMap, and SMTP
-services on the internet.
+BRC listens on `http://brc:8000` over `bitefinder-web` and is not published to the host.
+The FastAPI backend listens on `http://api:8000` internally and is exposed to the browser via nginx at `http://localhost:8080/api/`.
 
 ## Work inside the application container
 
@@ -371,6 +431,7 @@ field. A complete profile enters the command loop.
 | `/add-location` | Add a saved location |
 | `/remove-location` | Remove a saved location while retaining at least one |
 | `/reset` | Clear profile preferences while retaining the account |
+| `/password` | Change your account password |
 | `/color off` or `/color on` | Save the user's terminal-color preference |
 | `/logout` | Return to the account menu |
 | `/quit` or `/exit` | Save and close BiteFinder |
@@ -415,33 +476,42 @@ Run all process-level black-box tests:
 docker compose exec bis-brns python tests/run_tests.py blackbox
 ```
 
-Run the BIS-to-BRNS integration tests or Docker deployment checks:
+Run the BIS-to-BRNS integration tests, web/MongoDB tests, or Docker checks:
 
 ```powershell
 docker compose exec bis-brns python tests/run_tests.py integration
 docker compose exec bis-brns python tests/run_tests.py deployment
+docker compose --profile test run --rm -e MONGO_TEST_URI=mongodb://mongodb:27017/ web-test
+docker compose exec -T api python tests/web/smoke_stack.py
 ```
 
-GitHub Actions builds the application image and runs the complete suite inside
-that image for every push and pull request.
+For local host testing outside Docker, install `pip install -r requirements-dev.txt`.
+
+GitHub Actions builds the application images and runs the core, black-box,
+deployment, and web/Mongo test suites on push and pull request.
 
 ## Saved data and logs
 
-| Path | Purpose |
+| Store / Path | Purpose |
 | --- | --- |
-| `BIS/data/users.json` | Accounts and profile preferences |
-| `BIS/data/profile_state.json` | Email, search, and display state |
-| `BRNS/data/restaurants.json` | Saved restaurant facts and offline fallback |
-| `BRNS/data/search_history.json` | Validated search summaries |
-| `BRC/data/muis_establishments.json` | Raw MUIS snapshot |
-| `BRC/data/halal_restaurants.json` | Cleaned official halal database |
-| `BRC/data/cuisine_tags_cache.json` | Resumable cuisine tags |
-| `BRC/data/checked_restaurants_cache.json` | Previous restaurant checks |
-| `data/geocode_cache.json` | Shared successful geocoding results |
+| MongoDB `bitefinder.users` | Accounts and profile preferences |
+| MongoDB `bitefinder.web_credentials` | Password hashes synced across CLI and Web |
+| MongoDB `bitefinder.profile_state` | Email verification, first-search, and display state |
+| MongoDB `bitefinder.favorites` | User bookmarked restaurants |
+| MongoDB `bitefinder.search_proposals` | One-use search confirmation tokens |
+| MongoDB `bitefinder.sessions` | Web bearer auth sessions |
+| MongoDB `bitefinder.restaurants` | Saved restaurant facts and offline catalog |
+| MongoDB `bitefinder.search_history` | Validated per-user search summaries |
+| MongoDB `bitefinder.geocode_cache` | Shared normalized geocode aliases |
+| `BRC/data/muis_establishments.json` | Raw MUIS snapshot (`brc-data` volume) |
+| `BRC/data/halal_restaurants.json` | Cleaned official halal database (`brc-data` volume) |
+| `BRC/data/cuisine_tags_cache.json` | Resumable cuisine tags (`brc-data` volume) |
+| `BRC/data/checked_restaurants_cache.json` | Previous restaurant checks (`brc-data` volume) |
 | `logs/bitefinder.log` | Shared BIS, BRNS, and BRC operational log |
 
-Docker stores these runtime files under the `bis-brns-data` and `brc-data`
-named volumes. Local runtime files and secrets are ignored by Git.
+Docker persists MongoDB collections in `mongo-data`, BRC files in `brc-data`,
+and container logs in `application-data` / `brc-data`. Workspace `data/`
+directories are not stored on the host.
 
 Each search receives a trace ID. Logs record manager stages, provider attempts,
 candidate counts, rejected reason codes, and error types without logging API
@@ -450,11 +520,11 @@ keys or raw provider responses.
 Follow the application logs from the host:
 
 ```powershell
-# Shared BIS, BRNS, and BRC file log
-docker compose exec bis-brns tail -f logs/bitefinder.log
+# BIS and BRNS file log
+docker compose exec bis-brns tail -n 100 -f logs/bitefinder.log
 
-# The same shared file viewed from the BRC container
-docker compose exec brc tail -f logs/bitefinder.log
+# FastAPI API container output
+docker compose logs -f api
 
 # BRC container output and service errors
 docker compose logs -f brc

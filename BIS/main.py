@@ -13,17 +13,16 @@ def _initialize_cli():
     global _INITIALIZED
     global ai_manager, data_manager, io_manager, logic_manager
     global BISSearchWorkflow, InteractionSession, SearchPreferenceRecorder
-    global SearchResultsController, brns_io, brns_main, OTHER_PREFERENCES
+    global SearchResultsController, build_cli_brns_service, OTHER_PREFERENCES
     global settings, email_delivery, debug_log, terminal_ui
     if _INITIALIZED:
         return
     from BIS import ai_manager, data_manager, io_manager, logic_manager
-    from BIS.classes.bis_search_workflow import BISSearchWorkflow
-    from BIS.classes.interaction_session import InteractionSession
-    from BIS.classes.search_preference_recorder import SearchPreferenceRecorder
-    from BIS.classes.search_results_controller import SearchResultsController
-    from BRNS import io_manager as brns_io
-    from BRNS import main as brns_main
+    from BIS.classes.services.cli.bis_search_workflow import BISSearchWorkflow
+    from BIS.classes.services.cli.interaction_session import InteractionSession
+    from BIS.classes.data.search_preference_recorder import SearchPreferenceRecorder
+    from BIS.classes.services.cli.search_results_controller import SearchResultsController
+    from BRNS.runtime import build_cli_brns_service
     from sources.profile_schema import OTHER_PREFERENCES
     from support import config as settings
     from support.email_verification import email_delivery
@@ -55,7 +54,7 @@ def _search_workflow():
     io, ai, logic, data = _search_managers()
     preferences = _search_preference_recorder(data)
     results = SearchResultsController(
-        io, ai, logic, data, preferences, brns_main, brns_io,
+        io, ai, logic, data, preferences, build_cli_brns_service(),
         email_delivery, debug_log, OTHER_PREFERENCES,
     )
     return BISSearchWorkflow(
@@ -67,9 +66,7 @@ def _search_workflow():
 def run_search(session, config, automatic=False):
     """Run the IO → AI → Logic → Data BIS search workflow."""
     _initialize_cli()
-    from BRNS.data_manager import history_scope
-    with history_scope.for_user(session["user"]["userID"]):
-        return _search_workflow().run(session, config, automatic)
+    return _search_workflow().run(session, config, automatic)
 
 
 def remember_search_wishes(session, today_request, config):
@@ -170,9 +167,9 @@ def run_cli():
 def main(argv=None):
     """Choose CLI or web; importing the module never launches either mode."""
     import argparse
-    from BIS.classes.bis_launcher import BISLauncher
-    from BIS.classes.launcher_io import LauncherIO
-    from BIS.classes.web_interface_launcher import WebInterfaceLauncher
+    from BIS.classes.services.launcher.bis_launcher import BISLauncher
+    from BIS.classes.io.cli.helpers.launcher_io import LauncherIO
+    from BIS.classes.services.launcher.web_interface_launcher import WebInterfaceLauncher
     parser = argparse.ArgumentParser(description="BiteFinder CLI and web launcher")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--cli", action="store_true")

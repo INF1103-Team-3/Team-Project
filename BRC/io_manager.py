@@ -1,7 +1,7 @@
 """Compatibility façade for BRC terminal interaction classes."""
 
-from BRC.classes.console_progress import ConsoleProgress
-from BRC.classes.io_manager import (
+from BRC.classes.io.console.console_progress import ConsoleProgress
+from BRC.classes.io.console.io_manager import (
     DEFAULT_RESTAURANTS_PATH,
     NO_INPUT,
     IOManager,

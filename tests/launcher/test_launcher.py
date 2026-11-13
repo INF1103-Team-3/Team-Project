@@ -9,9 +9,9 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from BIS.classes.launcher_io import LauncherIO
-from BIS.classes.bis_launcher import BISLauncher
-from BIS.classes.web_interface_launcher import WebInterfaceLauncher
+from BIS.classes.io.cli.helpers.launcher_io import LauncherIO
+from BIS.classes.services.launcher.bis_launcher import BISLauncher
+from BIS.classes.services.launcher.web_interface_launcher import WebInterfaceLauncher
 
 
 class LauncherTests(unittest.TestCase):

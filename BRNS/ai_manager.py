@@ -11,13 +11,13 @@ from contextlib import contextmanager
 
 import requests
 from BRNS import config, logic_manager
-from BRNS.classes.ai_manager import AIManager
-from BRNS.classes.ai_provider_router import AIProviderRouter
-from BRNS.classes.ai_provider_factory_registry import AIProviderFactoryRegistry
-from BRNS.classes.gemini_ai_provider import GeminiAIProvider
-from BRNS.classes.groq_ai_provider import GroqAIProvider
-from BRNS.classes.openrouter_ai_provider import OpenRouterAIProvider
-from BRNS.classes.unsupported_ai_provider import UnsupportedAIProvider
+from BRNS.classes.ai.ai_manager import AIManager
+from BRNS.classes.ai.fallback.ai_provider_router import AIProviderRouter
+from BRNS.classes.ai.fallback.ai_provider_factory_registry import AIProviderFactoryRegistry
+from BRNS.classes.ai.providers.clients.gemini_ai_provider import GeminiAIProvider
+from BRNS.classes.ai.providers.clients.groq_ai_provider import GroqAIProvider
+from BRNS.classes.ai.providers.clients.openrouter_ai_provider import OpenRouterAIProvider
+from BRNS.classes.ai.providers.clients.unsupported_ai_provider import UnsupportedAIProvider
 from common import debug_log as log
 
 SYSTEM_PROMPT = """You convert a user's food request into strict JSON.

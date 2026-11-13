@@ -8,9 +8,9 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from BRC import main as brc_main
-from BRC.classes.brc_http_client import BRCHTTPClient
+from BRC.classes.io.http.client.brc_http_client import BRCHTTPClient
 from BRNS import ai_manager, config, data_manager, io_manager, logic_manager
-from BRNS.classes.recommendation_system import RecommendationSystem
+from BRNS.classes.services.workflows.recommendation_system import RecommendationSystem
 from common import debug_log as log
 from common import terminal_ui as ui
 
@@ -53,8 +53,8 @@ def sort_results(results, sort_by):
     return _APPLICATION.sort_results(results, sort_by)
 
 
-def main():
-    return _APPLICATION.run_cli()
+def main(argv=None):
+    return _APPLICATION.run_cli(argv)
 
 
 if __name__ == "__main__":

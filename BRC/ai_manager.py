@@ -8,12 +8,12 @@ import os
 import re
 import time
 
-from BRC.classes.ai_client_interface import AIClientInterface
-from BRC.classes.ai_manager import AIManager, CUISINES, CUISINE_PROMPT, MATCH_PROMPT
-from BRC.classes.ai_provider_router import AIProviderRouter
-from BRC.classes.ai_response_error import AIResponseError
-from BRC.classes.ai_service_error import AIServiceError
-from BRC.classes.gemini_client import GeminiClient
+from BRC.classes.ai.providers.contracts.ai_client_interface import AIClientInterface
+from BRC.classes.ai.ai_manager import AIManager, CUISINES, CUISINE_PROMPT, MATCH_PROMPT
+from BRC.classes.ai.providers.fallback.ai_provider_router import AIProviderRouter
+from BRC.classes.ai.errors.ai_response_error import AIResponseError
+from BRC.classes.ai.errors.ai_service_error import AIServiceError
+from BRC.classes.ai.providers.clients.gemini_client import GeminiClient
 
 
 AIClient = AIClientInterface

@@ -12,79 +12,79 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "BIS"))
 
-from BIS.classes.base_search_request_validator import (
+from BIS.classes.logic.validators.base_search_request_validator import (
     BaseSearchRequestValidator,
 )
-from BIS.classes.bis_ai_manager_interface import BISAIManagerInterface
-from BIS.classes.bis_data_manager_interface import BISDataManagerInterface
-from BIS.classes.bis_logic_manager_interface import BISLogicManagerInterface
-from BIS.classes.bis_search_workflow import BISSearchWorkflow
-from BIS.classes.ai_provider_interface import AIProviderInterface
-from BIS.classes.ai_provider_factory_registry import (
+from BIS.classes.ai.contracts.bis_ai_manager_interface import BISAIManagerInterface
+from BIS.classes.data.contracts.bis_data_manager_interface import BISDataManagerInterface
+from BIS.classes.logic.contracts.bis_logic_manager_interface import BISLogicManagerInterface
+from BIS.classes.services.cli.bis_search_workflow import BISSearchWorkflow
+from BIS.classes.ai.providers.contracts.ai_provider_interface import AIProviderInterface
+from BIS.classes.ai.fallback.ai_provider_factory_registry import (
     AIProviderFactoryRegistry as BISAIProviderFactoryRegistry,
 )
-from BIS.classes.ai_provider_router import AIProviderRouter
-from BIS.classes.base_ai_provider import BaseAIProvider
-from BIS.classes.gemini_ai_provider import GeminiAIProvider
-from BIS.classes.openrouter_ai_provider import OpenRouterAIProvider
-from BIS.classes.json_user_store import JsonUserStore
-from BIS.classes.search_request_validator import (
+from BIS.classes.ai.fallback.ai_provider_router import AIProviderRouter
+from BIS.classes.ai.providers.contracts.base_ai_provider import BaseAIProvider
+from BIS.classes.ai.providers.clients.gemini_ai_provider import GeminiAIProvider
+from BIS.classes.ai.providers.clients.openrouter_ai_provider import OpenRouterAIProvider
+from BIS.classes.data.stores.json.json_user_store import JsonUserStore
+from BIS.classes.logic.validators.search_request_validator import (
     SearchRequestValidator,
     create_search_request_validator,
 )
-from BIS.classes.search_request_validator_interface import (
+from BIS.classes.logic.validators.search_request_validator_interface import (
     SearchRequestValidatorInterface,
 )
-from BIS.classes.session_action_dispatcher import SessionActionDispatcher
-from BIS.support.email_verification.classes.challenge_manager_interface import (
+from BIS.classes.io.cli.helpers.session_action_dispatcher import SessionActionDispatcher
+from BIS.support.email_verification.classes.contracts.challenge_manager_interface import (
     ChallengeManagerInterface,
 )
-from BIS.support.email_verification.classes.email_delivery_interface import (
+from BIS.support.email_verification.classes.contracts.email_delivery_interface import (
     EmailDeliveryInterface,
 )
-from BIS.support.email_verification.classes.email_verification_service import (
+from BIS.support.email_verification.classes.service.email_verification_service import (
     EmailVerificationService,
 )
-from BIS.support.email_verification.classes.smtp_email_delivery import (
+from BIS.support.email_verification.classes.delivery.smtp_email_delivery import (
     SMTPEmailDelivery,
 )
-from BIS.support.email_verification.classes.verification_challenge_manager import (
+from BIS.support.email_verification.classes.challenge.verification_challenge_manager import (
     VerificationChallengeManager,
 )
-from BRNS.classes.base_result_sorter import BaseResultSorter
-from BRNS.classes.brns_ai_manager_interface import BRNSAIManagerInterface
-from BRNS.classes.brns_data_manager_interface import BRNSDataManagerInterface
-from BRNS.classes.brns_logic_manager_interface import (
+from BRNS.classes.logic.sorting.contracts.base_result_sorter import BaseResultSorter
+from BRNS.classes.ai.contracts.brns_ai_manager_interface import BRNSAIManagerInterface
+from BRNS.classes.data.contracts.brns_data_manager_interface import BRNSDataManagerInterface
+from BRNS.classes.logic.contracts.brns_logic_manager_interface import (
     BRNSLogicManagerInterface,
 )
-from BRNS.classes.brns_recommendation_workflow import (
+from BRNS.classes.services.workflows.brns_recommendation_workflow import (
     BRNSRecommendationWorkflow,
 )
-from BRNS.classes.ai_provider_interface import (
+from BRNS.classes.ai.providers.contracts.ai_provider_interface import (
     AIProviderInterface as BRNSAIProviderInterface,
 )
-from BRNS.classes.ai_provider_factory_registry import (
+from BRNS.classes.ai.fallback.ai_provider_factory_registry import (
     AIProviderFactoryRegistry as BRNSAIProviderFactoryRegistry,
 )
-from BRNS.classes.ai_provider_router import (
+from BRNS.classes.ai.fallback.ai_provider_router import (
     AIProviderRouter as BRNSAIProviderRouter,
 )
-from BRNS.classes.base_ai_provider import (
+from BRNS.classes.ai.providers.contracts.base_ai_provider import (
     BaseAIProvider as BRNSBaseAIProvider,
 )
-from BRNS.classes.distance_result_sorter import DistanceResultSorter
-from BRNS.classes.gemini_ai_provider import (
+from BRNS.classes.logic.sorting.strategies.distance_result_sorter import DistanceResultSorter
+from BRNS.classes.ai.providers.clients.gemini_ai_provider import (
     GeminiAIProvider as BRNSGeminiAIProvider,
 )
-from BRNS.classes.json_recommendation_store import JsonRecommendationStore
-from BRNS.classes.openrouter_ai_provider import (
+from BRNS.classes.data.stores.json.json_recommendation_store import JsonRecommendationStore
+from BRNS.classes.ai.providers.clients.openrouter_ai_provider import (
     OpenRouterAIProvider as BRNSOpenRouterAIProvider,
 )
-from BRNS.classes.rating_result_sorter import RatingResultSorter
-from BRNS.classes.recommendation_sorter import RecommendationSorter
-from BRNS.classes.result_sorter_interface import ResultSorterInterface
-from BRNS.classes.result_sorter_registry import ResultSorterRegistry
-from BRC.classes.fallback_ai_client import FallbackAIClient
+from BRNS.classes.logic.sorting.strategies.rating_result_sorter import RatingResultSorter
+from BRNS.classes.logic.sorting.recommendation_sorter import RecommendationSorter
+from BRNS.classes.logic.sorting.contracts.result_sorter_interface import ResultSorterInterface
+from BRNS.classes.logic.sorting.result_sorter_registry import ResultSorterRegistry
+from BRC.classes.ai.providers.fallback.fallback_ai_client import FallbackAIClient
 
 
 def search_request():
@@ -126,7 +126,7 @@ def result_set():
 
 class OOPRefactorTests(unittest.TestCase):
     def test_bis_logic_retains_omitted_wish_without_mutation(self):
-        from BIS.classes.logic_manager import LogicManager
+        from BIS.classes.logic.logic_manager import LogicManager
         from copy import deepcopy
         request = search_request()
         request["other_preferences"] = []
@@ -156,7 +156,7 @@ class OOPRefactorTests(unittest.TestCase):
             router.route({}, {})
 
     def test_brns_logic_rejects_missing_required_readers_at_construction(self):
-        from BRNS.classes.logic_manager import LogicManager
+        from BRNS.classes.logic.logic_manager import LogicManager
         with self.assertRaisesRegex(TypeError, "must be callable"):
             LogicManager(lambda x: x, lambda *_a: None, lambda *_a: [],
                          3, 3, None, None, lambda *_a: None, SimpleNamespace())
@@ -201,9 +201,9 @@ class OOPRefactorTests(unittest.TestCase):
                          logic_manager.confidence_adjusted_rating(4.6, 100))
 
     def test_brc_cuisine_job_preserves_skips_checkpoints_and_partial_failure(self):
-        from BRC.classes.cuisine_tagging_workflow import CuisineTaggingWorkflow
-        from BRC.classes.logic_manager import LogicManager
-        from BRC.classes.ai_response_error import AIResponseError
+        from BRC.classes.ai.workflows.cuisine_tagging_workflow import CuisineTaggingWorkflow
+        from BRC.classes.logic.logic_manager import LogicManager
+        from BRC.classes.ai.errors.ai_response_error import AIResponseError
         rows = [SimpleNamespace(name=name, category="")
                 for name in ("Cached", "Nasi Cafe", "Unknown One", "Unknown Two")]
         values = {"Cached": ["chinese"]}
@@ -226,8 +226,8 @@ class OOPRefactorTests(unittest.TestCase):
         self.assertNotIn("Unknown One", values)
 
     def test_brc_outlet_job_preserves_exact_and_service_failure_policy(self):
-        from BRC.classes.outlet_matching_workflow import OutletMatchingWorkflow
-        from BRC.classes.ai_service_error import AIServiceError
+        from BRC.classes.ai.workflows.outlet_matching_workflow import OutletMatchingWorkflow
+        from BRC.classes.ai.errors.ai_service_error import AIServiceError
         rows = [SimpleNamespace(to_dict=lambda: {"name": "Cafe"}) for _ in range(3)]
         calls = []
 
@@ -245,7 +245,7 @@ class OOPRefactorTests(unittest.TestCase):
         import http.client
         from http.server import ThreadingHTTPServer
         from unittest.mock import patch
-        from BRC.classes.brc_http_handler import BRCRequestHandler
+        from BRC.classes.io.http.server.brc_http_handler import BRCRequestHandler
         received = []
 
         def check(value):
@@ -286,8 +286,8 @@ class OOPRefactorTests(unittest.TestCase):
                     server.server_close()
 
     def test_wish_collector_handles_plain_text_without_constraint_classification(self):
-        from BIS.classes.search_wish_collector import SearchWishCollector
-        from BIS.classes.logic_manager import LogicManager
+        from BIS.classes.io.cli.helpers.search_wish_collector import SearchWishCollector
+        from BIS.classes.logic.logic_manager import LogicManager
         from unittest.mock import Mock
         ui = SimpleNamespace(section=Mock(), item=Mock())
         io = SimpleNamespace(read_input=lambda *_a: "quiet seating",
@@ -304,8 +304,8 @@ class OOPRefactorTests(unittest.TestCase):
         io.ask_yes_no.assert_not_called()
 
     def test_wish_collector_confirms_and_encodes_soft_rating_as_minimum(self):
-        from BIS.classes.search_wish_collector import SearchWishCollector
-        from BIS.classes.logic_manager import LogicManager
+        from BIS.classes.io.cli.helpers.search_wish_collector import SearchWishCollector
+        from BIS.classes.logic.logic_manager import LogicManager
         from unittest.mock import Mock
         io = SimpleNamespace(read_input=lambda *_a: "4.5 stars",
                              _cancelled=lambda _v: False, display_message=Mock(),
@@ -322,7 +322,7 @@ class OOPRefactorTests(unittest.TestCase):
         io.ask_yes_no.assert_called_once()
 
     def test_restaurant_enrichment_preserves_live_precedence_and_missing_facts(self):
-        from BRNS.classes.restaurant_enricher import RestaurantEnricher
+        from BRNS.classes.logic.evaluation.restaurant_enricher import RestaurantEnricher
         from copy import deepcopy
         enricher = RestaurantEnricher()
         place = dict(name="Cafe", address="1 Road", lat=1.3, lng=103.8,
@@ -347,7 +347,7 @@ class OOPRefactorTests(unittest.TestCase):
         self.assertEqual(place, original)
 
     def test_outcome_policy_preserves_scoring_order_and_estimate_rejection(self):
-        from BRNS.classes.restaurant_outcome_policy import RestaurantOutcomePolicy
+        from BRNS.classes.logic.evaluation.restaurant_outcome_policy import RestaurantOutcomePolicy
         from copy import deepcopy
         rules = SimpleNamespace(has_hard_preferences=lambda _p: False,
                                 hard_required_cuisines=lambda _p: [],
@@ -838,10 +838,10 @@ class OOPRefactorTests(unittest.TestCase):
             self.assertEqual([item["google_place_id"] for item in results], ["near-midpoint"])
 
     def test_json_credential_store_and_session_change_password(self):
-        from BIS.classes.data_manager import DataManager
-        from BIS.classes.interaction_session import InteractionSession
-        from BIS.classes.json_credential_store import JsonCredentialStore
-        from BIS.classes.password_hasher import PasswordHasher
+        from BIS.classes.data.data_manager import DataManager
+        from BIS.classes.services.cli.interaction_session import InteractionSession
+        from BIS.classes.data.stores.json.json_credential_store import JsonCredentialStore
+        from BIS.classes.logic.security.password_hasher import PasswordHasher
         from BIS.sources.profile_schema import empty_preferences
         from BIS import logic_manager
 
@@ -873,6 +873,131 @@ class OOPRefactorTests(unittest.TestCase):
             saved = JsonCredentialStore(root / "credentials.json").get(user["userID"])
             self.assertTrue(hasher.verify("updated-pass-2", saved))
             self.assertFalse(hasher.verify("initial-pass-1", saved))
+
+    def test_subsystem_import_and_layer_boundaries(self):
+        def iter_imports(path):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        yield alias.name
+                elif isinstance(node, ast.ImportFrom):
+                    mod = node.module or ""
+                    for alias in node.names:
+                        yield f"{mod}.{alias.name}" if mod and alias.name != "*" else (mod or alias.name)
+
+        targets = []
+        for folder in ("http_gateway", "BIS", "BRNS", "BRC"):
+            targets.extend((ROOT / folder).rglob("*.py"))
+
+        for path in targets:
+            rel = path.relative_to(ROOT).as_posix()
+            top = rel.split("/")[0].replace(".py", "")
+            for mod in iter_imports(path):
+                mod_top = mod.split(".")[0]
+                if top == "http_gateway":
+                    self.assertNotIn(mod_top, {"BRNS", "BRC", "pymongo", "web", "web_api", "api"}, f"{rel} must not import {mod}")
+                    if mod_top == "BIS":
+                        self.assertTrue(
+                            rel == "http_gateway/dependencies.py" and mod.startswith("BIS.runtime")
+                            or rel == "http_gateway/routes.py" and mod.endswith("Model") and mod.startswith("BIS.classes.io.web.models."),
+                            f"{rel} imported forbidden BIS module {mod}",
+                        )
+                elif top == "BIS":
+                    self.assertNotIn(mod_top, {"BRC", "http_gateway", "api", "web", "web_api"}, f"{rel} must not import {mod}")
+                    if mod_top == "pymongo":
+                        self.assertEqual(rel, "BIS/classes/data/stores/mongo/mongo_connection.py", f"{rel} imported {mod}")
+                    if mod_top == "BRNS":
+                        self.assertIn(rel, {"BIS/main.py", "BIS/runtime.py"}, f"{rel} imported {mod}")
+                        self.assertTrue(mod.startswith("BRNS.runtime"), f"{rel} imported internal BRNS module {mod}")
+                elif top == "BRNS":
+                    self.assertNotIn(mod_top, {"http_gateway", "api", "web", "web_api", "pymongo"}, f"{rel} must not import {mod}")
+                    if mod_top == "BIS":
+                        self.assertTrue(mod.startswith("BIS.sources.profile_schema"), f"{rel} imported forbidden BIS module {mod}")
+                    if mod_top == "BRC":
+                        self.assertIn(rel, {"BRNS/main.py", "BRNS/runtime.py"}, f"{rel} imported {mod}")
+                        self.assertTrue(
+                            mod.startswith("BRC.main") or mod.startswith("BRC.classes.io.http.client.brc_http_client"),
+                            f"{rel} imported internal BRC module {mod}",
+                        )
+                elif top == "BRC":
+                    self.assertNotIn(mod_top, {"BIS", "BRNS", "http_gateway", "api", "web", "web_api", "pymongo"}, f"{rel} must not import {mod}")
+
+    def test_bis_web_search_workflow_orders_io_ai_logic_data(self):
+        from BIS.classes.services.web.bis_application_service import BISApplicationService
+        from BIS.classes.io.contracts.bis_web_io_interface import BISWebIOInterface
+        from BIS.classes.logic.logic_manager import LogicManager
+        from BIS.classes.io.web.web_io_manager import WebIOManager
+
+        events = []
+        base_logic = LogicManager()
+
+        class TrackingLogic:
+            def __getattr__(self, name):
+                return getattr(base_logic, name)
+
+            def build_base_search_request(self, payload, origin, cuisine_target):
+                events.append("logic_base")
+                return base_logic.build_base_search_request(payload, origin, cuisine_target)
+
+            def validate_search_request(self, request, ai_response=None):
+                events.append("logic_validate")
+                return base_logic.validate_search_request(request, ai_response)
+
+        def interpret(request, _wishes, _config):
+            events.append("ai")
+            return request
+
+        data_mgr = SimpleNamespace(
+            resolve_location=lambda loc, _key: events.append("data_geo") or {
+                "query": loc, "label": loc, "latitude": 1.35, "longitude": 103.94},
+            serialize_search_request=lambda req: events.append("data_serialize") or json.dumps(req),
+        )
+        brns_gw = SimpleNamespace(
+            search=lambda payload, **_kw: events.append("brns") or {
+                "matches": [], "alternatives": [], "hidden": 0},
+            active_model=lambda: "gemini/gemini-2.5-flash",
+            last_used_model=lambda: "gemini/gemini-2.5-flash",
+        )
+        app_svc = BISApplicationService(
+            data_mgr,
+            SimpleNamespace(interpret_search_request=interpret),
+            TrackingLogic(),
+            brns_gw,
+            {"google_maps_api_key": ""},
+        )
+        io_mgr = WebIOManager(
+            auth=SimpleNamespace(authenticate=lambda _tok: None),
+            application=app_svc,
+            favorites=SimpleNamespace(),
+            health=lambda: True,
+        )
+        self.assertIsInstance(io_mgr, BISWebIOInterface)
+        res = io_mgr.search(None, {
+            "location": "Tampines",
+            "mode": "walk",
+            "max_travel_minutes": 15,
+            "budget_per_person": 20,
+            "cuisine": "japanese",
+        })
+        self.assertTrue(res["success"])
+        self.assertEqual(events, ["data_geo", "logic_base", "ai", "logic_validate", "data_serialize", "brns"])
+        self.assertEqual(io_mgr.active_model(), {"active_model": "Gemini AI (gemini-2.5-flash)"})
+
+    def test_direct_brns_and_brc_cli_require_internal_flag(self):
+        import io as python_io
+        import os
+        from unittest.mock import patch
+        from BRNS import main as brns_main
+        from BRC.classes.services.cli.command_line import CommandLine
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("BITEFINDER_INTERNAL_CLI", None)
+            with patch("sys.stderr", new=python_io.StringIO()), patch("sys.stdout", new=python_io.StringIO()):
+                with self.assertRaises(SystemExit) as ctx:
+                    brns_main.main([])
+                self.assertEqual(ctx.exception.code, 1)
+                self.assertEqual(CommandLine().run([]), 1)
 
 
 if __name__ == "__main__":
