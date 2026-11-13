@@ -81,9 +81,13 @@ class DataManager(BISDataManagerInterface):
         return self._location_gateway.remember(queries, location)
 
     def get_credentials(self, user_id):
+        if self._credentials is None:
+            raise RuntimeError("Credential storage is not configured.")
         return self._credentials.get(user_id)
 
     def save_credentials(self, user_id, credential):
+        if self._credentials is None:
+            raise RuntimeError("Credential storage is not configured.")
         return self._credentials.save(user_id, credential)
 
     def issue_session(self, user_id):

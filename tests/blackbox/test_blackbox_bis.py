@@ -15,6 +15,7 @@ sys.path.insert(0, str(TESTS_ROOT))
 from reporting import show_case
 
 from blackbox_support import (
+    TEST_PASSWORD,
     assert_shows,
     clear_fixture_calls,
     close_blackbox_context,
@@ -35,6 +36,26 @@ def read_users(context):
         / "BIS"
         / "data"
         / "users.json"
+    )
+
+    if not path.exists():
+        return {}
+
+    return json.loads(
+        path.read_text(
+            encoding="utf-8"
+        )
+    )
+
+
+def read_credentials(context):
+    """Read BIS password credentials saved during a black-box test."""
+
+    path = (
+        context["root"]
+        / "BIS"
+        / "data"
+        / "credentials.json"
     )
 
     if not path.exists():
@@ -82,6 +103,8 @@ def test_signup_rejects_bad_email_without_saving_it():
             "1",
             "new@example.com",
             "New User",
+            TEST_PASSWORD,
+            TEST_PASSWORD,
             "/quit",
         ]
 
@@ -151,6 +174,8 @@ def test_profile_setup_retries_invalid_budget():
             "1",
             "new@example.com",
             "New User",
+            TEST_PASSWORD,
+            TEST_PASSWORD,
             "Tampines",
             "yes",
             "2 km",
@@ -250,6 +275,8 @@ def test_bare_travel_number_gets_unit_and_space_separated_cuisines():
             "1",
             "new@example.com",
             "New User",
+            TEST_PASSWORD,
+            TEST_PASSWORD,
             "Tampines",
             "yes",
             "20",
@@ -364,6 +391,7 @@ def test_written_travel_number_requires_explicit_unit_choice():
         test_input = [
             "2",
             "tester@example.com",
+            TEST_PASSWORD,
             "ten",
             "2",
             "yes",
@@ -461,6 +489,7 @@ def test_declined_written_travel_interpretation_is_not_saved():
         test_input = [
             "2",
             "tester@example.com",
+            TEST_PASSWORD,
             "ten",
             "1",
             "no",
@@ -549,6 +578,7 @@ def test_ai_unit_conflict_with_explicit_minutes_is_rejected():
         test_input = [
             "2",
             "tester@example.com",
+            TEST_PASSWORD,
             "ten minutes",
             "/quit",
         ]
@@ -618,6 +648,8 @@ def test_ai_extracted_locations_are_saved_after_confirmation():
             "1",
             "new@example.com",
             "New User",
+            TEST_PASSWORD,
+            TEST_PASSWORD,
             "punggol sengkang nex",
             "yes",
             "/quit",
@@ -697,6 +729,8 @@ def test_declined_location_list_is_not_saved():
             "1",
             "new@example.com",
             "New User",
+            TEST_PASSWORD,
+            TEST_PASSWORD,
             "punggol sengkang nex",
             "no",
             "/quit",
@@ -786,6 +820,7 @@ def test_ai_corrects_cuisine_typo_only_after_confirmation():
         test_input = [
             "2",
             "tester@example.com",
+            TEST_PASSWORD,
             "wesaten italian",
             "yes",
             "yes",
@@ -887,6 +922,7 @@ def test_declined_cuisine_correction_does_not_save():
         test_input = [
             "2",
             "tester@example.com",
+            TEST_PASSWORD,
             "wesaten italian",
             "no",
             "/quit",
@@ -967,6 +1003,7 @@ def test_invalid_search_answers_retry_and_valid_search_is_saved():
         test_input = [
             "2",
             "tester@example.com",
+            TEST_PASSWORD,
             "/search",
             "1.352,103.944",
             "yes",
@@ -1070,6 +1107,7 @@ def test_transit_search_uses_profile_time_when_enter_pressed():
         test_input = [
             "2",
             "tester@example.com",
+            TEST_PASSWORD,
             "/search",
             "1.352,103.944",
             "yes",
@@ -1148,6 +1186,7 @@ def test_drive_search_uses_profile_time_when_enter_pressed():
         test_input = [
             "2",
             "tester@example.com",
+            TEST_PASSWORD,
             "/search",
             "1.352,103.944",
             "yes",
@@ -1224,6 +1263,7 @@ def test_ai_search_interpretation_can_be_declined_before_brns():
         test_input = [
             "2",
             "tester@example.com",
+            TEST_PASSWORD,
             "/search",
             "1.352,103.944",
             "yes",
@@ -1308,6 +1348,267 @@ def test_ai_search_interpretation_can_be_declined_before_brns():
         )
 
 
+def test_signup_rejects_short_and_mismatched_passwords():
+    """CLI signup enforces password length and confirmation before saving."""
+
+    context = create_blackbox_context()
+
+    try:
+        context["env"]["AI_BYPASS"] = "true"
+
+        test_input = [
+            "1",
+            "new@example.com",
+            "New User",
+            "short",
+            "validpass1",
+            "different1",
+            "validpass1",
+            "validpass1",
+            "/quit",
+        ]
+
+        output = run_cli(
+            context,
+            "BIS",
+            test_input,
+        )
+
+        assert_shows(
+            context,
+            output,
+            "Password must be 6–128 characters.",
+            "Passwords do not match.",
+            "Signed up.",
+        )
+
+        accounts = read_users(context)
+        credentials = read_credentials(context)
+        user_id = next(iter(accounts))
+        cred = credentials.get(user_id, {})
+
+        actual = {
+            "saved_emails": [u["email"] for u in accounts.values()],
+            "has_salt": isinstance(cred.get("password_salt"), str),
+            "has_hash": isinstance(cred.get("password_hash"), str),
+            "plaintext_absent": "validpass1" not in json.dumps(credentials),
+        }
+        expected = {
+            "saved_emails": ["new@example.com"],
+            "has_salt": True,
+            "has_hash": True,
+            "plaintext_absent": True,
+        }
+
+        show_case(
+            "BB-BIS-15: Signup password validation",
+            "BIS main.py signup password flow",
+            "Checks that short or mismatched passwords retry cleanly and "
+            "only a salted hash is persisted in credentials.json.",
+            test_input,
+            expected,
+            actual,
+        )
+
+        assert actual == expected
+
+    finally:
+        close_blackbox_context(context)
+
+
+def test_signin_rejects_wrong_password_and_allows_retry():
+    """CLI sign-in checks saved passwords even when SMTP_BYPASS is enabled."""
+
+    context = create_blackbox_context()
+
+    try:
+        seed_complete_user(context)
+
+        test_input = [
+            "2",
+            "tester@example.com",
+            "wrong-password",
+            TEST_PASSWORD,
+            "/quit",
+        ]
+
+        output = run_cli(
+            context,
+            "BIS",
+            test_input,
+        )
+
+        assert_shows(
+            context,
+            output,
+            "Incorrect password.",
+            "Hi Tester!",
+        )
+
+        actual = {
+            "rejected_wrong_password": "Incorrect password." in output,
+            "signed_in": "Hi Tester!" in output,
+        }
+        expected = {
+            "rejected_wrong_password": True,
+            "signed_in": True,
+        }
+
+        show_case(
+            "BB-BIS-16: Sign-in rejects wrong password",
+            "BIS main.py sign-in flow",
+            "Checks that a wrong password is rejected and the correct "
+            "password completes sign-in.",
+            test_input,
+            expected,
+            actual,
+        )
+
+        assert actual == expected
+
+    finally:
+        close_blackbox_context(context)
+
+
+def test_legacy_passwordless_user_enrolls_password_on_signin():
+    """Existing passwordless users set a password during sign-in."""
+
+    context = create_blackbox_context()
+
+    try:
+        user = seed_complete_user(context, password=None)
+
+        test_input = [
+            "2",
+            "tester@example.com",
+            "enrolled-secret-7",
+            "enrolled-secret-7",
+            "/quit",
+        ]
+
+        output = run_cli(
+            context,
+            "BIS",
+            test_input,
+        )
+
+        assert_shows(
+            context,
+            output,
+            "No password is set for this account yet.",
+            "Password saved.",
+            "Hi Tester!",
+        )
+
+        from BIS.classes.password_hasher import PasswordHasher
+
+        credentials = read_credentials(context)
+        saved_cred = credentials.get(user["userID"])
+
+        actual = {
+            "prompted_to_create": "No password is set for this account yet." in output,
+            "credential_saved": saved_cred is not None,
+            "password_verified": (
+                PasswordHasher().verify("enrolled-secret-7", saved_cred)
+                if saved_cred else False
+            ),
+        }
+        expected = {
+            "prompted_to_create": True,
+            "credential_saved": True,
+            "password_verified": True,
+        }
+
+        show_case(
+            "BB-BIS-17: Legacy account password enrollment",
+            "BIS main.py sign-in enrollment flow",
+            "Checks that an account without saved credentials creates and "
+            "saves a password on sign-in.",
+            test_input,
+            expected,
+            actual,
+        )
+
+        assert actual == expected
+
+    finally:
+        close_blackbox_context(context)
+
+
+def test_change_password_command_verifies_current_and_updates_hash():
+    """Users can change their password via /edit password and sign in with it."""
+
+    context = create_blackbox_context()
+
+    try:
+        seed_complete_user(context)
+
+        test_input = [
+            "2",
+            "tester@example.com",
+            TEST_PASSWORD,
+            "/edit password",
+            "wrong-current",
+            "/cancel",
+            "/password",
+            TEST_PASSWORD,
+            "short",
+            "updated-secret-99",
+            "mismatch-secret-99",
+            "updated-secret-99",
+            "updated-secret-99",
+            "/logout",
+            "2",
+            "tester@example.com",
+            TEST_PASSWORD,
+            "updated-secret-99",
+            "/quit",
+        ]
+
+        output = run_cli(
+            context,
+            "BIS",
+            test_input,
+        )
+
+        assert_shows(
+            context,
+            output,
+            "Password unchanged.",
+            "Password updated.",
+            "Logged out.",
+            "Incorrect password.",
+        )
+
+        actual = {
+            "cancelled_keeps_old": "Password unchanged." in output,
+            "updated_password": "Password updated." in output,
+            "old_password_rejected_after_logout": output.count("Incorrect password.") >= 2,
+            "re_authenticated": output.count("Hi Tester!") == 2,
+        }
+        expected = {
+            "cancelled_keeps_old": True,
+            "updated_password": True,
+            "old_password_rejected_after_logout": True,
+            "re_authenticated": True,
+        }
+
+        show_case(
+            "BB-BIS-18: Password change inside active session",
+            "BIS /edit password & /password flow",
+            "Checks that changing password requires the current password, "
+            "updates credentials, and rejects the old password after logout.",
+            test_input,
+            expected,
+            actual,
+        )
+
+        assert actual == expected
+
+    finally:
+        close_blackbox_context(context)
+
+
 TESTS = (
     test_signup_rejects_bad_email_without_saving_it,
     test_profile_setup_retries_invalid_budget,
@@ -1323,6 +1624,10 @@ TESTS = (
     test_transit_search_uses_profile_time_when_enter_pressed,
     test_drive_search_uses_profile_time_when_enter_pressed,
     test_ai_search_interpretation_can_be_declined_before_brns,
+    test_signup_rejects_short_and_mismatched_passwords,
+    test_signin_rejects_wrong_password_and_allows_retry,
+    test_legacy_passwordless_user_enrolls_password_on_signin,
+    test_change_password_command_verifies_current_and_updates_hash,
 )
 
 

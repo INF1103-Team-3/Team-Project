@@ -12,6 +12,7 @@ from sources.prompts import (
 
 from BIS import ai_manager, data_manager, logic_manager
 from BIS.classes.io_manager import IOManager
+from BIS.classes.password_hasher import PasswordHasher
 from BIS.support.email_verification import challenge as email_challenge
 from BIS.support.email_verification import service as email_service
 from shared import terminal_ui as ui
@@ -23,6 +24,7 @@ from sources.profile_schema import (
     validate_value, validate_travel_minutes,
 )
 
+_PASSWORD_HASHER = PasswordHasher()
 _color_handler = None
 _MANAGER = None
 _LOCATION_GATEWAY = LocationGateway(
@@ -127,6 +129,64 @@ def prompt_username():
             return normalize_username(value)
         except ValueError as error:
             display_message(error)
+
+
+def read_secret_input(prompt="Password: "):
+    try:
+        return ui.read_secret(prompt)
+    except EOFError:
+        return None
+
+
+def prompt_new_password(confirm=True, *, cancel_raises=False):
+    while True:
+        value = read_secret_input("Password (6-128 characters, or /cancel): ")
+        if value is None or value.strip().lower() in {"/quit", "/exit"}:
+            return None
+        if value.strip().lower() == "/cancel":
+            if cancel_raises:
+                raise ValueError("Password setup cancelled.")
+            return None
+        try:
+            credential = _PASSWORD_HASHER.create(value)
+        except ValueError as error:
+            display_message(error)
+            continue
+        if not confirm:
+            return credential
+        repeated = read_secret_input("Confirm password (or /cancel): ")
+        if repeated is None or repeated.strip().lower() in {"/quit", "/exit"}:
+            return None
+        if repeated.strip().lower() == "/cancel":
+            if cancel_raises:
+                raise ValueError("Password setup cancelled.")
+            return None
+        if repeated != value:
+            display_message("Passwords do not match. Please try again.")
+            continue
+        return credential
+
+
+def verify_user_password(user_id, *, max_attempts=5, cancel_raises=True):
+    credential = data_manager.get_credentials(user_id)
+    if credential is None:
+        return "enroll"
+    for _ in range(max_attempts):
+        password = read_secret_input("Password (or /cancel): ")
+        if password is None or password.strip().lower() in {"/quit", "/exit"}:
+            return None
+        if password.strip().lower() == "/cancel":
+            if cancel_raises:
+                raise ValueError("Sign-in cancelled.")
+            return False
+        if _PASSWORD_HASHER.verify(password, credential):
+            return True
+        display_message("Incorrect password.", role="error")
+    message = "Too many incorrect password attempts."
+    if cancel_raises:
+        raise ValueError(message)
+    display_message(message, role="error")
+    return False
 
 
 def format_preference_value(field, value):
@@ -236,12 +296,16 @@ def find_or_register_user(choice, email):
     if choice == "2":
         return data_manager.find_user(email)
     if data_manager.email_exists(email):
-        raise ValueError("This email is already registered. Choose resume.")
+        raise ValueError("This email is already registered. Choose sign in.")
     username = prompt_username()
     if username is None:
         return None
+    credential = prompt_new_password(confirm=True, cancel_raises=True)
+    if credential is None:
+        return None
     user = data_manager.register_user(email, username)
-    display_message("Signed up. Resume this account using your email.")
+    data_manager.save_credentials(user["userID"], credential)
+    display_message("Signed up. Sign in using your email and password.")
     return user
 
 
@@ -259,11 +323,32 @@ def complete_account(user, config):
     return data_manager.save(dict(user, username=username))
 
 
+def _signin_with_password(user, config):
+    password_status = verify_user_password(user["userID"], cancel_raises=True)
+    if password_status is None:
+        return None
+    if password_status == "enroll":
+        verified_user = complete_account(user, config)
+        if verified_user is None:
+            return None
+        display_message(
+            "No password is set for this account yet. "
+            "Create a password to secure your account."
+        )
+        credential = prompt_new_password(confirm=True, cancel_raises=True)
+        if credential is None:
+            return None
+        data_manager.save_credentials(verified_user["userID"], credential)
+        display_message("Password saved.")
+        return verified_user
+    return complete_account(user, config)
+
+
 def select_user(config):
     while True:
         ui.section("Welcome to BiteFinder")
         ui.item(1, "Sign up")
-        ui.item(2, "Resume by email")
+        ui.item(2, "Sign in")
         ui.item(3, "Quit")
         choice = read_input("Choose 1, 2, or 3: ")
         if choice is None or choice.lower() in {
@@ -278,6 +363,10 @@ def select_user(config):
             return None
         try:
             user = find_or_register_user(choice, email)
+            if user is None:
+                return None
+            if choice == "2":
+                return _signin_with_password(user, config)
             return complete_account(user, config)
         except (ValueError, RuntimeError) as error:
             display_message(error)
@@ -949,13 +1038,16 @@ def command_action(text):
     if lowered.startswith("/edit "):
         target = lowered[6:].strip()
         target = EDIT_ALIASES.get(target, target)
-        if target not in PREFERENCE_FIELDS + ("username",):
+        if target not in PREFERENCE_FIELDS + ("username", "password"):
             raise ValueError(
                 "Unknown field. Try /edit budget, "
                 "or /help edit for all options."
             )
-        return {"action": "rename" if target == "username" else "edit",
-                "field": target, "location_action": "replace"}
+        if target == "username":
+            return {"action": "rename", "field": target, "location_action": "replace"}
+        if target == "password":
+            return {"action": "change_password"}
+        return {"action": "edit", "field": target, "location_action": "replace"}
     if text.startswith("/"):
         raise ValueError("Unknown command. Use /help.")
     return None
@@ -973,6 +1065,8 @@ def _interpreted_command_action(command, field=None):
         return {"action": "reset_profile"}
     if command == "logout":
         return {"action": "logout"}
+    if command == "change_password":
+        return {"action": "change_password"}
     if command == "quit":
         return {"action": "exit"}
     if command in {"color_on", "color_off"}:
@@ -986,6 +1080,8 @@ def _interpreted_command_action(command, field=None):
             return {"action": "edit_menu"}
         if field == "username":
             return {"action": "rename"}
+        if field == "password":
+            return {"action": "change_password"}
         return {"action": "edit", "field": field,
                 "location_action": "replace"}
     return None
@@ -1026,6 +1122,9 @@ def natural_command_action(text, config, *, allow_ai=False):
         local = ("help", None)
     elif lowered in {"logout", "log out", "sign out"}:
         local = ("logout", None)
+    elif re.fullmatch(
+            r"(?:change|update|edit) (?:my )?password", lowered):
+        local = ("change_password", None)
     elif lowered in {"quit", "exit", "close bitefinder", "goodbye"}:
         local = ("quit", None)
     elif re.fullmatch(
@@ -1075,6 +1174,7 @@ def choose_profile_edit():
         ("liked_cuisines", "Liked cuisines"),
         ("disliked_cuisines", "Disliked cuisines"),
         (OTHER_PREFERENCES, "Other preferences"),
+        ("password", "Password"),
     )
     while True:
         ui.section("Edit profile")
@@ -1090,6 +1190,8 @@ def choose_profile_edit():
             field = choices[int(answer) - 1][0]
             if field == "username":
                 return {"action": "rename"}
+            if field == "password":
+                return {"action": "change_password"}
             return {"action": "edit", "field": field,
                     "location_action": "replace"}
         display_message("Choose one of the numbers shown, or press Enter.")

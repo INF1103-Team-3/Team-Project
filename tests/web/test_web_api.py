@@ -844,6 +844,18 @@ class WebIntegrationTests(unittest.TestCase):
                 bis_main.run_cli()
         self.assertEqual(seen.get("storage"), "mongo")
 
+    def test_cli_created_credentials_authenticate_on_web_login(self):
+        user = self.data.register_user("cli_pw@example.com", "CLI Password User")
+        user = self.data.save(dict(user, email_verified=True))
+        self.data.save_credentials(user["userID"], PasswordHasher().create("cli-password-1"))
+        self.config["smtp_bypass"] = True
+
+        bad = self.client.post("/api/auth/login", json={"email": "cli_pw@example.com", "password": "wrong"})
+        self.assertEqual(bad.status_code, 401)
+        ok = self.client.post("/api/auth/login", json={"email": "cli_pw@example.com", "password": "cli-password-1"})
+        self.assertEqual(ok.status_code, 200, ok.text)
+        self.assertEqual(ok.json()["user"]["userID"], user["userID"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

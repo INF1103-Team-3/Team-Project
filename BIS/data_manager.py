@@ -13,6 +13,7 @@ from shared import geocode_cache
 DATA_DIR = Path(__file__).resolve().parent / "data"
 USERS_FILE = DATA_DIR / "users.json"
 STATE_FILE = DATA_DIR / "profile_state.json"
+CREDENTIALS_FILE = DATA_DIR / "credentials.json"
 GEOCODE_URL = os.getenv(
     "BITEFINDER_GEOCODE_URL",
     "https://maps.googleapis.com/maps/api/geocode/json",
@@ -20,17 +21,22 @@ GEOCODE_URL = os.getenv(
 
 _BACKEND = os.getenv("BITEFINDER_STORAGE", "json").strip().lower()
 if _BACKEND == "json":
+    from BIS.classes.json_credential_store import JsonCredentialStore
     _STORE = JsonUserStore(USERS_FILE, STATE_FILE)
+    _CREDENTIALS = JsonCredentialStore(CREDENTIALS_FILE)
 elif _BACKEND == "mongo":
     from BIS.storage_dependencies import mongo_connection
     from BIS.classes.mongo_user_store import MongoUserStore
-    _STORE = MongoUserStore(mongo_connection())
+    from BIS.classes.mongo_credential_store import MongoCredentialStore
+    _CONNECTION = mongo_connection()
+    _STORE = MongoUserStore(_CONNECTION)
     _STORE.ensure_indexes()
+    _CREDENTIALS = MongoCredentialStore(_CONNECTION)
 else:
     raise ValueError("BITEFINDER_STORAGE must be json or mongo.")
 _LOCATION_GATEWAY = LocationGateway(
     logic_manager, geocode_cache, GEOCODE_URL)
-_MANAGER = DataManager(_STORE, _LOCATION_GATEWAY)
+_MANAGER = DataManager(_STORE, _LOCATION_GATEWAY, credentials=_CREDENTIALS)
 LAST_ERROR = None
 
 
@@ -84,6 +90,14 @@ def find_user(email):
 
 def get_user(user_id):
     return _MANAGER.get_user(user_id)
+
+
+def get_credentials(user_id):
+    return _MANAGER.get_credentials(user_id)
+
+
+def save_credentials(user_id, credential):
+    return _MANAGER.save_credentials(user_id, credential)
 
 
 def save_preferences(user_id, preferences, config):

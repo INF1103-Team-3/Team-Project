@@ -837,6 +837,43 @@ class OOPRefactorTests(unittest.TestCase):
             )
             self.assertEqual([item["google_place_id"] for item in results], ["near-midpoint"])
 
+    def test_json_credential_store_and_session_change_password(self):
+        from BIS.classes.data_manager import DataManager
+        from BIS.classes.interaction_session import InteractionSession
+        from BIS.classes.json_credential_store import JsonCredentialStore
+        from BIS.classes.password_hasher import PasswordHasher
+        from BIS.sources.profile_schema import empty_preferences
+        from BIS import logic_manager
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            users = JsonUserStore(root / "users.json", root / "state.json")
+            creds = JsonCredentialStore(root / "credentials.json")
+            data = DataManager(users, SimpleNamespace(), credentials=creds)
+            user = data.register_user("pw_oop@example.com", "PW User")
+            user = data.save(dict(user, email_verified=True))
+            hasher = PasswordHasher()
+            data.save_credentials(user["userID"], hasher.create("initial-pass-1"))
+
+            messages = []
+            io_stub = SimpleNamespace(
+                display_message=lambda msg, **_kw: messages.append(msg),
+                verify_user_password=lambda _uid, **_kw: True,
+                prompt_new_password=lambda **_kw: hasher.create("updated-pass-2"),
+            )
+            session = InteractionSession(
+                user, {}, SimpleNamespace(), data, io_stub,
+                logic_manager.manager(), SimpleNamespace(set_color_enabled=lambda *_: None),
+                SimpleNamespace(start_trace=lambda: None, end_trace=lambda *_: None, debug_log=lambda *_: None),
+                lambda *_a, **_kw: None,
+            )
+            result = session.handle_action({"action": "change_password"})
+            self.assertIsNone(result)
+            self.assertEqual(messages[-1], "Password updated.")
+            saved = JsonCredentialStore(root / "credentials.json").get(user["userID"])
+            self.assertTrue(hasher.verify("updated-pass-2", saved))
+            self.assertFalse(hasher.verify("initial-pass-1", saved))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

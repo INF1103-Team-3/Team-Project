@@ -16,6 +16,7 @@ from reporting import show_case
 
 from blackbox_support import (
     PLACE_NAMES,
+    TEST_PASSWORD,
     assert_shows,
     close_blackbox_context,
     create_blackbox_context,
@@ -41,6 +42,7 @@ def test_bis_to_brns_retries_input_and_shows_route():
         test_input = [
             "2",
             "tester@example.com",
+            TEST_PASSWORD,
             "/search",
             "0,0",
             "530912",
@@ -275,6 +277,7 @@ def test_enter_starts_search_and_repeat_uses_same_choices_with_new_top_match():
         test_input = [
             "2",
             "tester@example.com",
+            TEST_PASSWORD,
             "/search",
             "1.352,103.944",
             "yes",
@@ -450,6 +453,7 @@ def test_repeat_explains_when_no_new_restaurants_are_available():
         test_input = [
             "2",
             "tester@example.com",
+            TEST_PASSWORD,
             "/search",
             "1.352,103.944",
             "yes",

@@ -177,6 +177,12 @@ class IOManager(BISSessionIOInterface, BISSearchIOInterface):
     def prompt_username(self):
         return self._helpers.prompt_username()
 
+    def prompt_new_password(self, *args, **kwargs):
+        return self._helpers.prompt_new_password(*args, **kwargs)
+
+    def verify_user_password(self, *args, **kwargs):
+        return self._helpers.verify_user_password(*args, **kwargs)
+
     def display_profile(self, user):
         return self._helpers.display_profile(user)
 

@@ -4,9 +4,10 @@ Rich styles are used only on an interactive terminal. Redirected output and
 test captures remain ordinary text, including the same labels and numbering.
 """
 
+import builtins
+import getpass
 import re
 import sys
-import builtins
 
 from rich.console import Console
 from rich.rule import Rule
@@ -140,3 +141,13 @@ def read_input(prompt):
         return getattr(builtins, "input")()
     else:
         return getattr(builtins, "input")(prompt)
+
+
+def read_secret(prompt):
+    """Read sensitive input without echoing on interactive terminals."""
+    if sys.stdin.isatty():
+        if _interactive():
+            _write_rich(_content(prompt, "prompt"), end="")
+            return getpass.getpass("")
+        return getpass.getpass(prompt)
+    return getattr(builtins, "input")(prompt)

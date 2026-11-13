@@ -34,6 +34,7 @@ class InteractionSession:
         dispatcher.register(("edit_menu",), self._handle_edit_menu)
         dispatcher.register(("edit",), self._handle_edit)
         dispatcher.register(("rename",), self._handle_rename)
+        dispatcher.register(("change_password",), self._handle_change_password)
         dispatcher.register(("reset_profile",), self._handle_reset)
         dispatcher.register(("profile_update",), self._handle_profile_update)
         return dispatcher
@@ -90,6 +91,19 @@ class InteractionSession:
         self.__state["user"] = self._data.save(updated)
         self._io.display_message("Username saved.")
 
+    def change_password(self):
+        user_id = self.__state["user"]["userID"]
+        verified = self._io.verify_user_password(user_id, cancel_raises=False)
+        if not verified:
+            self._io.display_message("Password unchanged.")
+            return
+        credential = self._io.prompt_new_password(confirm=True)
+        if credential is None:
+            self._io.display_message("Password unchanged.")
+            return
+        self._data.save_credentials(user_id, credential)
+        self._io.display_message("Password updated.")
+
     def reset_preferences(self):
         saved = self._data.save_preferences(
             self.__state["user"]["userID"], empty_preferences(),
@@ -141,6 +155,9 @@ class InteractionSession:
         if selected["action"] == "rename":
             self.rename_user()
             return
+        if selected["action"] == "change_password":
+            self.change_password()
+            return
         self.__state.update(
             field=selected["field"],
             location_action=selected["location_action"],
@@ -154,6 +171,9 @@ class InteractionSession:
 
     def _handle_rename(self, _action, _from_ai):
         self.rename_user()
+
+    def _handle_change_password(self, _action, _from_ai):
+        self.change_password()
 
     def _handle_reset(self, _action, _from_ai):
         self.reset_preferences()
