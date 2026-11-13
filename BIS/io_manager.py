@@ -141,7 +141,9 @@ def read_secret_input(prompt="Password: "):
 
 def prompt_new_password(confirm=True, *, cancel_raises=False):
     while True:
-        value = read_secret_input("Password (6-128 characters, or /cancel): ")
+        value = read_secret_input(
+            f"Password ({PasswordHasher.MIN_LENGTH}-{PasswordHasher.MAX_LENGTH} characters, or /cancel): "
+        )
         if value is None or value.strip().lower() in {"/quit", "/exit"}:
             return None
         if value.strip().lower() == "/cancel":

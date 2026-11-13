@@ -5,9 +5,15 @@ import re
 
 
 class PasswordHasher:
+    MIN_LENGTH = 8
+    MAX_LENGTH = 128
+
     def create(self, password):
-        if not isinstance(password, str) or not 6 <= len(password) <= 128:
-            raise ValueError("Password must be 6–128 characters.")
+        if (not isinstance(password, str)
+                or not self.MIN_LENGTH <= len(password) <= self.MAX_LENGTH):
+            raise ValueError(
+                f"Password must be {self.MIN_LENGTH}–{self.MAX_LENGTH} characters."
+            )
         salt = secrets.token_hex(16)
         return {"password_salt": salt, "password_hash": self._hash(password, salt)}
 
