@@ -1,6 +1,6 @@
 # Unified BiteFinder Docker Compose stack (CLI + Web + MongoDB + BRC):
 #   mongodb       - MongoDB 7.0 database (localhost:27017, persistent mongo-data volume)
-#   mongo-express - MongoDB web admin UI (http://localhost:8081)
+#   mongo-express - Optional MongoDB web admin UI (http://localhost:8081, profile: dev)
 #   brc           - BRC MUIS halal checker HTTP service (always running)
 #   api           - FastAPI backend for the BiteFinder web UI (port 8000 internal)
 #   web           - nginx frontend & API proxy (http://localhost:8080)
@@ -9,6 +9,7 @@
 #
 # Quick start (build & start all runtime services):
 #   docker compose up -d --build
+#   docker compose --profile dev up -d mongo-express  # Optional MongoDB web admin UI
 #   docker compose exec bis-brns python main.py --cli
 #   docker compose exec bis-brns python tests/run_tests.py all
 #   docker compose --profile test run --rm web-test
