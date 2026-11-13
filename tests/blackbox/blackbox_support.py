@@ -26,6 +26,8 @@ PLACE_NAMES = (
     "Far Cafe",
 )
 
+TEST_PASSWORD = "password123"
+
 
 def search_request(**changes):
     """Return one valid BIS-to-BRNS request."""
@@ -1300,6 +1302,7 @@ def assert_shows(
 
 def seed_complete_user(
     context,
+    password=TEST_PASSWORD,
 ):
     """Create one complete verified BIS user for black-box testing."""
 
@@ -1384,6 +1387,26 @@ def seed_complete_user(
         encoding=
             "utf-8",
     )
+
+    credentials_path = (
+        context["root"]
+        / "BIS/data/credentials.json"
+    )
+
+    if password is not None:
+        from BIS.classes.password_hasher import PasswordHasher
+
+        credentials_path.write_text(
+            json.dumps(
+                {
+                    user_id:
+                        PasswordHasher().create(password),
+                }
+            ),
+            encoding="utf-8",
+        )
+    elif credentials_path.exists():
+        credentials_path.unlink()
 
     return user
 

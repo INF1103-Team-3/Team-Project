@@ -10,8 +10,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / "BIS")]
 import mongomock
 from BIS.classes.json_user_store import JsonUserStore
+from BIS.classes.json_credential_store import JsonCredentialStore
 from BIS.classes.mongo_user_store import MongoUserStore
+from BIS.classes.mongo_credential_store import MongoCredentialStore
 from BIS.classes.mongo_connection import MongoConnection
+from BIS.classes.password_hasher import PasswordHasher
 from BIS.classes.json_mongo_migration import JsonMongoMigration
 from BRNS.classes.json_recommendation_store import JsonRecommendationStore
 from BRNS.classes.mongo_recommendation_store import MongoRecommendationStore
@@ -89,6 +92,22 @@ class StorageContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             migration.prepare(restaurants=path)
         self.assertEqual(self.conn.db.restaurants.count_documents({}), 0)
+
+    def test_credential_stores_preserve_credentials_and_reload(self):
+        hasher = PasswordHasher()
+        json_creds = JsonCredentialStore(self.root / "credentials.json")
+        mongo_creds = MongoCredentialStore(self.conn)
+        for index, store in enumerate((json_creds, mongo_creds)):
+            user_id = f"user-{index}"
+            with self.subTest(store=type(store).__name__):
+                self.assertIsNone(store.get(user_id))
+                credential = hasher.create("secret-pass-1")
+                store.save(user_id, credential)
+                reloaded = JsonCredentialStore(self.root / "credentials.json") if store is json_creds else MongoCredentialStore(self.conn)
+                saved = reloaded.get(user_id)
+                self.assertEqual(saved, credential)
+                self.assertTrue(hasher.verify("secret-pass-1", saved))
+                self.assertFalse(hasher.verify("wrong-pass", saved))
 
 
 if __name__ == "__main__":

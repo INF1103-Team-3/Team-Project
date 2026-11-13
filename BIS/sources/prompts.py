@@ -39,12 +39,12 @@ LABELS = {
 
 COMMANDS = {
     "/profile": "show_profile", "/help": "help", "/reset": "reset_profile",
-    "/search": "search",
+    "/search": "search", "/password": "change_password",
     "/logout": "logout", "/quit": "exit", "/exit": "exit",
 }
 
 INTENTS = {"profile_update", "show_profile", "reset_profile", "search", "help",
-           "exit", "logout", "unknown"}
+           "change_password", "exit", "logout", "unknown"}
 
 SYSTEM_PROMPT = (
     "You assist BiteFinder profile collection, not recommendations. "
@@ -87,6 +87,7 @@ EDIT_ALIASES = {
     "budget": "budget_per_person", "travel": "max_distance_km",
     "diet": "dietary_requirements", "likes": "liked_cuisines",
     "dislikes": "disliked_cuisines", "other": OTHER_PREFERENCES,
+    "password": "password",
 }
 
 
@@ -94,7 +95,8 @@ HELP_TEXT = """What would you like to do?
 /profile — View your saved profile.
 /search — Choose today's search options and describe what you want.
 /color off — Turn off terminal colors for your account. Use /color on to restore them.
-/edit — See how to change an answer, such as your budget.
+/edit — See how to change an answer, such as your budget or password.
+/password — Change your account password.
 /add-location — Add an area to your saved locations.
 /remove-location — Remove an area from your saved locations.
 /reset — Clear all preferences. Keep your account and username.
@@ -117,6 +119,7 @@ EDIT_HELP = """To change an answer:
 
 Command           What it changes            Example answer
 /edit username    Your display name          John
+/edit password    Your account password      (prompted securely)
 /edit location    Your entire location list  Punggol, Tampines
 /edit budget      Budget per person          10
 /edit travel      Maximum walking distance   1 km or 20 mins
