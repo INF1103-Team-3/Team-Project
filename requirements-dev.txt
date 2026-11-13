@@ -1,4 +1,6 @@
 -r requirements.txt
+httpx>=0.27,<1
+mongomock>=4,<5
 pycodestyle>=2.11,<3
 python-call-graph==2.1.6
 Pillow>=10,<13

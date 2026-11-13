@@ -1,4 +1,0 @@
-# Optional web/Mongo integration; standalone JSON CLI needs only requirements.txt.
-fastapi>=0.110,<1
-uvicorn>=0.20,<1
-pymongo>=4,<5

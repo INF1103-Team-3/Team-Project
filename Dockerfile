@@ -112,16 +112,13 @@ CMD ["python", "main.py"]
 
 
 FROM bis-brns AS api
-USER root
-COPY requirements-web.txt .
-RUN pip install --no-cache-dir -r requirements-web.txt
 USER 10001:10001
 CMD ["uvicorn", "web_api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 
 FROM api AS web-test
 USER root
-COPY requirements-test.txt .
-RUN pip install --no-cache-dir -r requirements-test.txt
+COPY requirements.txt requirements-dev.txt .
+RUN pip install --no-cache-dir -r requirements-dev.txt
 USER 10001:10001
 CMD ["python", "tests/run_tests.py", "web"]
 

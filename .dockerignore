@@ -15,7 +15,6 @@ __pycache__/
 .pytest_cache/
 *.log
 
-requirements-dev.txt
 project_overview/
 
 # Local planning/agent state and credentials are never image inputs.

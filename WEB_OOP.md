@@ -18,8 +18,7 @@ Choose CLI, start the web interface, or exit. Enter chooses CLI. Automation can
 use `python main.py --cli` or `python main.py --web`. Importing BIS or FastAPI
 never prompts, starts containers, or opens a browser.
 
-JSON CLI mode requires only `requirements.txt` and keeps existing JSON formats,
-paths, and interaction. Web dependencies are optional:
+JSON CLI and web API dependencies are combined in `requirements.txt` (with dev and test tools in `requirements-dev.txt`):
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -78,7 +77,7 @@ or CLI SMTP bypass setting does not bypass web authentication.
 | `BITEFINDER_WEB_URL` | Host-facing browser URL, default `http://localhost:8080`. |
 | `BITEFINDER_WEB_READY_URL` | Optional internal readiness address for the launcher. |
 
-For API-only host development, install `requirements-web.txt`, set
+For API-only host development, install `requirements.txt`, set
 `BITEFINDER_STORAGE=mongo`, configure reachable Mongo and BRC endpoints, then run
 `uvicorn web_api:app --host 127.0.0.1 --port 8000 --workers 1`. The Compose/nginx
 route remains the supported same-origin browser setup.
@@ -195,10 +194,10 @@ python tests/run_tests.py integration
 python tests/run_tests.py launcher
 ```
 
-For web and repository contracts:
+For web, dev, and repository contracts:
 
 ```powershell
-python -m pip install -r requirements.txt -r requirements-test.txt
+python -m pip install -r requirements-dev.txt
 python tests/run_tests.py web
 ```
 
