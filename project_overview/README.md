@@ -9,6 +9,7 @@ search path.
 
 | Path | Purpose |
 | --- | --- |
+| `test_uml.py`, `uml_analysis.py`, `uml_rendering.py` | Source-derived class analysis, diagram generation and analyzer tests. |
 | `visualise_functions.py` | Reads Python source with the AST and generates static architecture and function call diagrams. |
 | `visualise_live_functions.py` | Starts BIS with a Python profiler and renders only calls observed during that interactive session. |
 | `function_graphs/all_functions.png` | Static view of functions discovered throughout the project. |
@@ -17,8 +18,10 @@ search path.
 | `function_graphs/project_workflow.png` | Whole project view including BIS, BRNS, BRC, and common code. |
 | `function_graphs/live_sessions/` | Locally generated timestamped runtime traces; ignored by Git. |
 
-The authoritative text workflow is [ProjectFlow.md](../ProjectFlow.md). The
-images here provide a presentation view of the same architecture.
+The authoritative text workflow is [ProjectFlow.md](../ProjectFlow.md), with
+record/storage details in [DataFlowDiagram.md](../DataFlowDiagram.md). Regenerate
+and inspect images after architecture changes; previously generated artifacts
+are not evidence that the current source has been diagrammed.
 
 ## Install visualization dependencies
 
@@ -157,3 +160,21 @@ inspect the images before intentionally updating a tracked example.
 Do not place application state, credentials, restaurant data, or copied log
 contents in this directory.
 
+
+## Current architecture coverage
+
+Classes now live under subsystem layer packages such as `classes/io/`,
+`classes/ai/`, `classes/logic/`, `classes/data/` and `classes/services/`.
+The analyzers recursively inspect BIS, BRNS, BRC and `common`. The HTTP gateway
+and JavaScript frontend are not included in those Python source sets; use the
+maintained root flow/data diagrams for browser/nginx/HTTP deployment boundaries.
+
+The live tracer starts the BIS CLI/Web selection menu. Choose CLI when tracing
+an in-process interaction. Calls performed by separate API/BRC containers or
+browser JavaScript are not observed by that Python process; an absent trace
+edge does not prove that a service was not involved.
+
+Visualization scripts can write ignored output and live tracing executes the
+real application. Use controlled data/providers for demonstrations; static UML
+analysis itself does not import application modules or call paid services.
+The generators are development tools excluded from the Docker build context.

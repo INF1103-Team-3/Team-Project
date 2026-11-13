@@ -14,8 +14,10 @@ single unexplained result.
 ## Features
 
 - Create or resume an account with a password and six-digit email verification.
-- Share account credentials, profiles, favorites, geocode cache, restaurant facts,
-  and search history between the CLI and web UI through MongoDB.
+- Share account credentials, profiles, geocode cache, restaurant facts and
+  search storage through MongoDB; use favorites and history from the web UI.
+- Use the web chatbot for onboarding and filter edits, search around multiple
+  origins, combine cuisine searches, and compare up to three restaurants.
 - Save locations, budget, travel limits, dietary requirements, liked and
   disliked cuisines, and reusable special requests.
 - Enter locations as Singapore postal codes, addresses, landmarks, or latitude
@@ -59,7 +61,7 @@ is the main flow reference for account setup, profile creation, BIS search,
 BRNS recommendation and navigation, BRC halal verification, failures, result
 actions, shared services, and Docker deployment.
 
-The three applications have separate responsibilities:
+The three subsystems have separate responsibilities:
 
 - **BIS — BiteFinder Interaction System:** owns accounts, email verification,
   profiles, natural-language commands, search collection, and user interaction.
@@ -70,19 +72,19 @@ The three applications have separate responsibilities:
   cleaned official halal database, caches cuisine tags, and checks restaurant
   objects or arrays against that database.
 
-Each application keeps the four manager interfaces while BIS and BRNS use
-object-oriented session, recommendation, validation, sorting and persistence
-implementations behind compatibility façades:
+Each subsystem keeps identifiable four-manager responsibilities, supported by
+session, recommendation, validation, sorting and persistence objects:
 
 | Manager | Responsibility |
 | --- | --- |
 | `io_manager.py` | Validate external input and present user-facing output |
 | `ai_manager.py` | Build prompts, call providers, parse JSON, and validate AI output |
 | `logic_manager.py` | Apply domain rules, scores, classifications, and routes |
-| `data_manager.py` | Save, load, and query JSON records |
+| `data_manager.py` | Save, load and query MongoDB or JSON through the configured repositories |
 
-`main.py` coordinates the managers and decides whether processing continues or
-returns safely to the user after a failure.
+The root launcher selects CLI or web. CLI workflows and subsystem runtime
+factories coordinate managers and supporting services. Browser routes delegate
+only to BIS; BIS calls `BRNSService`, and BRNS owns the BRC boundary.
 
 Production BIS, BRNS, and BRC classes live one per module inside functional
 subpackages (`io/`, `ai/`, `logic/`, `data/`, `services/`) under
@@ -104,12 +106,12 @@ test commands:
 | Function, integration, black-box, and deployment tests | [tests/README.md](tests/README.md) |
 | Static and live function visualizations | [project_overview/README.md](project_overview/README.md) |
 | Common infrastructure (logging, geocoding, UI, storage, nginx) | [common/README.md](common/README.md) |
-| End-to-end data states, AI payloads, and file storage | [DataFlowDiagram.md](DataFlowDiagram.md) |
+| End-to-end data states, AI payloads, and database/file storage | [DataFlowDiagram.md](DataFlowDiagram.md) |
 
 Start with this root README for setup and operation. Use
 [ProjectFlow.md](ProjectFlow.md) to follow the whole application from the user
 through BIS, BRNS, and BRC. Use [DataFlowDiagram.md](DataFlowDiagram.md) to see
-how user and provider data becomes validated AI payloads and stored JSON. Open
+how user/provider data becomes validated AI payloads and MongoDB/JSON records. Open
 the relevant folder README when implementing, testing, or troubleshooting one
 subsystem.
 
@@ -174,7 +176,7 @@ tests/                       function, integration, black-box, web, and Docker t
   README.md                  test groups, commands, isolation, and color controls
 project_overview/            function-graph generators and local graph output
   README.md                  static and live visualization instructions
-.github/workflows/tests.yml  host and Docker CI checks
+.github/workflows/           CLI/container and web/Mongo CI workflows
 Dockerfile                   `brc`, `bis-brns`, `api`, `web`, and `web-test` targets
 docker-compose.yml           MongoDB, mongo-express, BRC, API, nginx web, CLI stack
 requirements.txt             runtime CLI, web API, and MongoDB dependencies
@@ -185,6 +187,24 @@ DataFlowDiagram.md           data transformations, AI payloads, and file stores
 ProjectInitialDetails.md     problem, users, AI use, and business rules
 ```
 
+## Web workflow
+
+Open `http://localhost:8080` after the stack is ready. The browser supports
+filter-based search, chatbot onboarding/follow-up questions, multiple origins
+with a midpoint search, multiple/custom cuisine terms, map/routes, comparison
+of up to three restaurants, and authenticated profile/favorites/history actions.
+CLI and browser presentation differ while sharing subsystem services.
+
+The web form calls `/api/search` directly by default. The API also supports
+`confirm_only=true`, which returns a one-use proposal token for later confirmed
+submission. Chat confirmation is conversational and triggers the form; it is
+not the same mechanism as storing/consuming a proposal token.
+
+Chat can fall back to deterministic parsing when its AI task fails. BRC has
+cache, keyword and exact-match paths, and Compose disables AI cuisine batch
+building. These guides describe current behavior, not proof that every
+operation meets the university's every-record AI requirement.
+
 ## Requirements
 
 The application is designed to run through Docker Compose. The host requires:
@@ -192,7 +212,7 @@ The application is designed to run through Docker Compose. The host requires:
 - Docker Desktop or Docker Engine.
 - Docker Compose 2.24 or newer.
 - At least one supported AI provider key for BIS and BRNS.
-- A Gemini key when building or using BRC AI workflows.
+- A supported provider key for ambiguous BRC matching or optional AI cuisine tagging.
 - A Google Maps Platform key for live Places, geocoding, and routes.
 - Gmail or another SMTP account when email verification is enabled.
 
@@ -224,12 +244,14 @@ comments are in [`.env.example`](.env.example).
 | `GOOGLE_MAPS_API_KEY` | Geocoding, Places, route matrices, and directions |
 | `USE_LIVE_GOOGLE=true` | Use current Google restaurant and route data |
 | `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL` | Email verification and Maps-link delivery |
-| `SMTP_BYPASS=true` | Skip SMTP delivery during local CLI testing (never bypasses web OTP auth) |
+| `SMTP_BYPASS=true` | Test shortcut that bypasses email/OTP in both CLI and web, including legacy credential enrollment; it does not prove inbox ownership |
 | `AI_BYPASS=true` | Test BIS profile interaction without AI or BRNS search |
 | `BITEFINDER_STORAGE` | `mongo` (default in Compose and `run_cli()`) or `json` |
 | `MONGO_URI` | MongoDB connection string (Compose supplies `mongodb://mongodb:27017/`) |
 | `MONGO_DATABASE` | MongoDB database name (default `bitefinder`) |
-| `DEBUG=true` | Mirror shared operational logs to the terminal |
+| `BRC_BUILD_CUISINES_WITH_AI` | Compose sets `0` to skip AI cuisine batch building; ambiguous outlet matching can still use AI |
+| `BRC_AUTO_WARM` | Background preparation when BRC data is absent; set `0` to disable |
+| `DEBUG=true` | Mirror operational logs through terminal IO |
 
 `.env` is excluded from Git and the Docker build context. Never commit API keys
 or SMTP credentials.
@@ -258,6 +280,12 @@ and the CLI container (`bis-brns`) (add `--profile dev` to include `mongo-expres
 docker compose up -d --build
 ```
 
+Start the optional MongoDB web admin interface separately:
+
+```powershell
+docker compose --profile dev up -d mongo-express
+```
+
 Or wait specifically until the webserver is healthy at `http://localhost:8080`:
 
 ```powershell
@@ -265,6 +293,7 @@ docker compose up -d --build --wait web
 ```
 
 Then open in your browser:
+
 - **BiteFinder Web UI:** `http://localhost:8080`
 - **API health check:** `http://localhost:8080/api/health` (`{"status":"ok","mongodb":true}`)
 - **Mongo Express DB UI (when started with `--profile dev`):** `http://localhost:8081`
@@ -303,16 +332,22 @@ $env:MONGO_DATABASE = "bitefinder"
 uvicorn http_gateway.main:app --host 127.0.0.1 --port 8000 --workers 1
 ```
 
+The Compose BRC port is internal. Host API halal checks need an independently
+reachable `BRC_SERVICE_URL`; the default `http://brc:8000` is a container address.
+Use the full Compose API for the documented ready-wired service network.
+FastAPI schema/docs are disabled by default, and nginx proxies only `/api/`.
+
 Inspect MongoDB collections directly using `mongosh` inside the `mongodb` container:
 
 ```powershell
 docker compose exec mongodb mongosh --quiet --eval "db.getSiblingDB('bitefinder').getCollectionNames()"
 ```
 
-Check container status at any time with:
+Check all profile containers and the MongoDB web admin port with:
 
 ```powershell
-docker compose ps
+docker compose --profile "*" ps
+docker compose --profile dev port mongo-express 8081
 ```
 
 ### Test Docker networking
@@ -367,6 +402,12 @@ To build or refresh the BRC database manually:
 docker compose exec brc python -m BRC.main --internal
 ```
 
+This opens the maintenance menu; choose build/refresh. For a noninteractive
+build, use `docker compose exec -T brc python -m BRC.main --internal --stdout`.
+Compose sets `BRC_BUILD_CUISINES_WITH_AI=0`, so routine builds use cached/keyword
+tags without AI batch tagging. Set that service environment value to `1` and
+recreate the service only if AI tagging is intended.
+
 ### Container data, named volumes, and shutdown
 
 - `mongo-data`: persistent MongoDB database backing (`users`, `web_credentials`,
@@ -375,17 +416,24 @@ docker compose exec brc python -m BRC.main --internal
 - `brc-data`: MUIS snapshots, cleaned halal database, and AI cuisine/check caches.
 - `application-data`: container-local scratch directories and operational logs (`logs/bitefinder.log`).
 
-Stop containers while keeping all MongoDB and BRC volumes:
+Stop and remove all containers, including mongo-express and other profiled
+services, while keeping all saved data volumes:
 
 ```powershell
-docker compose down
+docker compose --profile "*" down
 ```
+
+Plain `docker compose down` excludes services whose profiles are inactive. If
+mongo-express is still running, it can keep the network in use. The command
+above includes every profile so the stack can shut down completely.
 
 Delete containers **and** all saved MongoDB/BRC volumes (destructive reset):
 
 ```powershell
-docker compose down -v
+docker compose --profile "*" down -v
 ```
+
+Use `-v` only when you intentionally want to delete saved data.
 
 BRC listens on `http://brc:8000` over `bitefinder-web` and is not published to the host.
 The FastAPI backend listens on `http://api:8000` internally and is exposed to the browser via nginx at `http://localhost:8080/api/`.
@@ -401,10 +449,10 @@ docker compose exec bis-brns sh
 The shell starts in `/app`. From there, choose the operation needed:
 
 ```bash
-# Start the complete BiteFinder CLI.
-python main.py
+# Start the CLI directly (omit --cli to see the CLI/Web menu).
+python main.py --cli
 
-# Run the complete automated test suite.
+# Run the standard CLI and container suite; web tests run separately.
 python tests/run_tests.py all
 
 # Follow the BIS and BRNS application log. Press Ctrl+C to stop following it.
@@ -453,7 +501,7 @@ fixture servers. They do not call live AI, Google, or SMTP services. The runner
 disables the BRC HTTP adapter except for deployment tests that intentionally
 check communication between the containers.
 
-Run every test:
+Run the standard CLI and container suite (`all` excludes `web` and live `api` checks):
 
 ```powershell
 docker compose exec bis-brns python tests/run_tests.py all
@@ -464,7 +512,7 @@ results in an interactive terminal. Set `BITEFINDER_TEST_COLOR=always` or
 `never` with `docker compose exec -e` to override automatic detection; see the
 [test guide](tests/README.md) for examples.
 
-Run only the BIS and BRNS function tests:
+Run the core BIS/BRNS/BRC, OOP and launcher tests:
 
 ```powershell
 docker compose exec bis-brns python tests/run_tests.py core
@@ -507,11 +555,12 @@ deployment, and web/Mongo test suites on push and pull request.
 | `BRC/data/halal_restaurants.json` | Cleaned official halal database (`brc-data` volume) |
 | `BRC/data/cuisine_tags_cache.json` | Resumable cuisine tags (`brc-data` volume) |
 | `BRC/data/checked_restaurants_cache.json` | Previous restaurant checks (`brc-data` volume) |
-| `logs/bitefinder.log` | Shared BIS, BRNS, and BRC operational log |
+| `logs/bitefinder.log` | Per-volume operational log path; API/CLI share a file, BRC has its own |
 
 Docker persists MongoDB collections in `mongo-data`, BRC files in `brc-data`,
-and container logs in `application-data` / `brc-data`. Workspace `data/`
-directories are not stored on the host.
+and operational file logs in `application-data` / `brc-data`. Compose does not
+bind-mount host source/data folders. Explicit host JSON mode can create local
+`data/` directories; those are separate from Docker volumes.
 
 Each search receives a trace ID. Logs record manager stages, provider attempts,
 candidate counts, rejected reason codes, and error types without logging API
@@ -529,6 +578,32 @@ docker compose logs -f api
 # BRC container output and service errors
 docker compose logs -f brc
 ```
+
+## JSON compatibility and explicit import
+
+For a standalone CLI with JSON rather than MongoDB, set the storage backend
+before starting it (PowerShell):
+
+```powershell
+$env:BITEFINDER_STORAGE = "json"
+python main.py --cli
+```
+
+JSON mode uses BIS users/state/credential files and configured BRNS JSON paths;
+it does not share state automatically with the Mongo-backed website. The
+optional `CliUserFileSync` helper is not injected by current runtime factories.
+Restore `$env:BITEFINDER_STORAGE = "mongo"` when returning to normal host CLI.
+
+To validate an approved JSON export without writing to MongoDB:
+
+```powershell
+python common/migrate_to_mongo.py --database bitefinder --users path/to/users.json
+```
+
+Applying requires `--apply --confirm-database bitefinder` with the same selected
+database. Review counts/conflicts and back up that database first. This tool is
+an explicit import of supported records, not an automatic JSON/Mongo sync or
+an import of arbitrary old web schemas. See [DataFlowDiagram.md](DataFlowDiagram.md).
 
 ## Function visualizations
 

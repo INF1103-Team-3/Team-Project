@@ -14,6 +14,10 @@
 #   docker compose exec bis-brns python tests/run_tests.py all
 #   docker compose --profile test run --rm web-test
 #
+# Shut down all services, including mongo-express and other profiled services:
+#   docker compose --profile "*" down
+#   Saved data volumes are retained. Add -v only to intentionally delete them.
+#
 # Test container internet and service networking:
 #   docker compose exec bis-brns python -c "import urllib.request; r=urllib.request.urlopen('https://www.google.com/generate_204', timeout=10); print('Internet working, HTTP', r.status)"
 #   docker compose exec brc python -c "import urllib.request; r=urllib.request.urlopen('https://www.google.com/generate_204', timeout=10); print('Internet working, HTTP', r.status)"

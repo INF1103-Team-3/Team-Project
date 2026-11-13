@@ -2,6 +2,12 @@
 
 This directory contains automated live validation tests for all external API keys used by BiteFinder (`OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, and `GOOGLE_MAPS_API_KEY`), as well as comprehensive verification of the multi-provider AI fallback chain and Google offline fallback resilience.
 
+These are opt-in integration checks, not the offline regression suite. They
+use the configured provider/Maps endpoints and credentials and can consume
+quota. The geocode-cache case writes through the configured cache backend;
+use an isolated test environment. The `all` group and normal web tests do not
+include this live group. See [the test guide](../README.md).
+
 ---
 
 ## Directory Map
@@ -75,13 +81,16 @@ This directory contains automated live validation tests for all external API key
   - Passes an invalid key to test API failure handling.
   - Verifies that BRNS catches the error safely, logs the rejection, and returns `None` without crashing.
 - **API-GOOGLE-08: Offline Restaurant Fallback**
-  - Verifies candidate loading from `BRNS/data/restaurants.json` when live Google search is disabled (`USE_LIVE_GOOGLE=false`).
+  - Verifies saved-candidate loading with live Google disabled (`USE_LIVE_GOOGLE=false`). The active backend is MongoDB `restaurants` or the configured JSON store; no default catalog is shipped in the current repository.
 
 ---
 
 ## How to Run
 
-Ensure your `.env` file at the root of the project contains your API keys:
+From the repository root, install `requirements-dev.txt` for host execution.
+Configure your untracked environment for the services under test; actual model
+selection follows the subsystem chains, not a promise of a particular provider.
+The following are placeholder variable names, not supplied credentials:
 
 ```bash
 OPENROUTER_API_KEY=...
@@ -105,3 +114,18 @@ python "tests/API/test_ai_keys_and_fallback.py"
 # Run Google Maps Platform API tests:
 python "tests/API/test_google_api.py"
 ```
+
+## Docker operation
+
+Start the full runtime stack before container-based checks:
+
+```powershell
+docker compose up -d --build
+docker compose exec bis-brns python tests/run_tests.py api
+docker compose --profile "*" down
+```
+
+Normal shutdown preserves MongoDB, BRC and application volumes. Configure
+`MONGO_DATABASE`/JSON paths intentionally if exercising cache or saved-catalog
+behavior. Provider models, availability and quota are external prerequisites;
+a live connectivity failure is not automatically a regression in domain rules.

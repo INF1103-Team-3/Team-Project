@@ -1,315 +1,156 @@
 # BRNS — BiteFinder Recommendation and Navigation System
 
-BRNS accepts one confirmed BIS search request, gathers restaurant and route
-facts, requires AI to rank the current candidate set, applies deterministic
-business rules, optionally checks halal candidates through BRC, saves validated
-facts, and returns matches and alternatives.
+BRNS receives validated search JSON from BIS, gathers restaurant/route facts,
+asks AI to rank the current candidates, applies deterministic rules, coordinates
+BRC halal verification, persists results and returns matches/alternatives.
+It does not own account prompts, browser routes or user profiles.
 
-BRNS normally runs inside BIS. In the Docker deployment it can also read one
-search JSON object from standard input. `-T` allows the host file to be piped
-into the running container:
+## Runtime boundary
+
+BIS calls `BRNSGatewayInterface` through `BRNSService` in
+`classes/services/gateway/`. `runtime.py` builds CLI and headless web graphs.
+The gateway exposes search, navigation, sorting, Maps links, user history and
+model metadata. The HTTP gateway never calls BRNS directly.
+
+With `BRC_SERVICE_URL` set, BRNS uses `BRCHTTPClient` through its verification
+adapter. Without that variable, CLI composition can use in-process `BRC.main`.
+Compose sets the URL to `http://brc:8000` for both CLI and API.
+
+Direct BRNS CLI is an internal diagnostic path. From a POSIX host with a
+prepared request JSON:
 
 ```bash
-docker compose exec -T bis-brns python BRNS/main.py < search_request.json
+docker compose exec -T bis-brns python BRNS/main.py --internal < search_request.json
 ```
 
-## Responsibilities
+The `--internal` flag or `BITEFINDER_INTERNAL_CLI=1` is required. Normal users
+start [BIS](../BIS/README.md) through `python main.py`.
 
-BRNS owns:
+## Manager and class ownership
 
-- validation of the BIS-to-BRNS JSON boundary;
-- live Google Places text and nearby searches;
-- Google Routes distance and duration matrices;
-- walking, driving, traffic-aware driving, and transit route retrieval;
-- normalization and enrichment using saved restaurant facts;
-- AI ordering of every current candidate identifier;
-- grounding of AI reason codes in known restaurant facts;
-- hard and soft requirement evaluation;
-- confidence-adjusted rating comparisons using review counts;
-- open-now checks using Singapore time and weekly hours;
-- classification into matches, alternatives, and exclusions;
-- BRC handoff for halal searches;
-- result sorting, Google Maps links, and selected-result routes;
-- restaurant-fact upserts and search-history persistence.
-
-BRNS does not collect an interactive profile or ask the user search questions.
-BIS owns that interaction and passes a complete request.
-
-## Manager flow
-
-```text
-BIS JSON
-  -> BRNS I/O: validate request and gather current candidates
-  -> BRNS AI: return every candidate ID once in ranked order
-  -> BRC when halal is requested: add official or unofficial evidence
-  -> BRNS Logic: validate reasons and classify each candidate
-  -> BRNS Data: save facts and a validated search summary
-  -> BRNS I/O: display results or return them to BIS
-```
-
-`main.py` coordinates the stages and stops the search when input, candidate
-retrieval, or AI ranking cannot be completed safely.
-
-## Files
-
-| Path | Purpose |
+| Area | Responsibility |
 | --- | --- |
-| `main.py` | Search orchestration, BRC verification adapter (`BRCHTTPClient` when `BRC_SERVICE_URL` is set, else `BRC.main`), result sorting, selected-result routing, and gated internal entry point (`--internal` / `BITEFINDER_INTERNAL_CLI=1`) |
-| `runtime.py` | Headless `BRNSService` composition factories (`build_web_brns_service`, `build_cli_brns_service`) exposing `BRNSGatewayInterface` to BIS |
-| `io_manager.py` | BIS request boundary, Google Places and Routes clients, saved-record enrichment, and internal restaurant/result displays |
-| `ai_manager.py` | Provider/model chain, ranking prompt, JSON parsing, schema validation, and grounded reason-code contract |
-| `logic_manager.py` | Hard and soft requirements, scoring, matches, alternatives, exclusions, opening hours, sorting, and required interfaces |
-| `data_manager.py` | Restaurant schema conversion, upserts, search-history summaries, and MongoDB/JSON store wiring (`common.storage_dependencies.mongo_connection()`) |
-| `config.py` | Root environment loading, endpoints, provider chain, display limits, and fallback JSON paths |
-| `classes/` | Granular OOP packages: `io/` (`contracts/`, `adapters/`, `gateways/{google,verification}/`), `ai/` (`contracts/`, `fallback/`, `providers/{contracts,clients}/`), `logic/` (`contracts/`, `evaluation/`, `sorting/{contracts,strategies}/`), `data/` (`contracts/`, `helpers/`, `stores/{contracts,json,mongo}/`), and `services/` (`gateway/`, `workflows/`, `cli/`) |
-| MongoDB `restaurants`, `search_history` | Persistent restaurant facts and per-user search summaries when `BITEFINDER_STORAGE=mongo` |
+| `io_manager.py`, `classes/io/adapters/` | BIS request validation, presentation and external gateway delegation |
+| `classes/io/gateways/google/` | Candidate retrieval and route gateway operations |
+| `classes/io/gateways/verification/` | Focused BRC adapter and verification capability |
+| `ai_manager.py`, `classes/ai/` | Ranking prompts, parsing/schema checks, provider objects and fallback routing |
+| `logic_manager.py`, `classes/logic/evaluation/` | Candidate normalization, opening hours, factual grounding, outcome and enrichment policy |
+| `classes/logic/sorting/` | Rating/distance strategies and registry |
+| `data_manager.py`, `classes/data/` | Restaurant/history repositories, record mapping and request-local history scope |
+| `classes/services/workflows/` | Recommendation pipeline, halal coordination and navigation |
+| `classes/services/gateway/` | Headless subsystem contract and service |
+| `classes/services/cli/`, `main.py` | Internal CLI and compatibility/bootstrap paths |
 
-## Accepted request contract
+## BIS request contract
 
-`io_manager.accept_bis_json()` accepts a JSON object with only the supported
-search fields. The request contains:
+Each BRNS call takes exactly these fields:
 
 | Field | Meaning |
 | --- | --- |
-| `origin` | Confirmed label, Singapore latitude, and longitude |
-| `mode` | `walk`, `drive`, or `transit` |
-| `max_distance_km` | Active distance limit or `null` |
-| `max_travel_minutes` | Active time limit or `null` |
-| `traffic_aware` | Boolean used only by supported driving-time searches |
+| `origin` | `query`, `label`, Singapore `latitude` and `longitude` |
+| `mode` | `walk`, `drive` or `transit` |
+| `max_distance_km` | Distance limit or `null` |
+| `max_travel_minutes` | Time limit or `null`; exactly one travel limit active |
+| `traffic_aware` | Driving-time traffic option |
 | `cuisine` | Supported cuisine or `none` |
-| `budget_per_person` | Positive SGD maximum |
-| `dietary_requirements` | `halal`, `vegetarian`, both, or neither |
-| `disliked_cuisines` | Cuisines that must be rejected |
-| `other_preferences` | Confirmed soft and hard natural-language requests |
+| `budget_per_person` | Required positive SGD limit |
+| `dietary_requirements` | Supported dietary values |
+| `disliked_cuisines` | Cuisines to avoid |
+| `other_preferences` | Confirmed free-text wishes and constraints |
 
-The boundary rejects extra or missing fields, invalid types and ranges,
-overseas coordinates, incompatible limit combinations, and unsupported modes
-before Places or BRNS AI is called.
+Web multi-origin/multi-cuisine orchestration belongs to BIS. BRNS still
+processes one origin and one cuisine target per call; it does not accept the
+web transport's extra fields. See [DataFlowDiagram.md](../DataFlowDiagram.md)
+for the full JSON example.
 
-## Candidate sources
+## Candidate preparation and AI
 
-### Live Google mode
-
-With `USE_LIVE_GOOGLE=true`, BRNS requires `GOOGLE_MAPS_API_KEY` and:
-
-1. Builds a nearby-search radius from the active travel limit.
-2. Uses the complete special-request wording in Google text search when useful.
-3. Retrieves restaurant names, addresses, place IDs, types, coordinates,
-   ratings, review counts, price data, accessibility, and opening information.
-4. Merges saved fields by Google place ID where live data is missing.
-5. Requests a route matrix for the selected mode.
-6. Excludes live candidates without usable current opening evidence.
-
-### Offline restaurant mode
-
-With `USE_LIVE_GOOGLE=false`, BRNS loads saved restaurants from the active
-store (MongoDB `restaurants` collection when `BITEFINDER_STORAGE=mongo`, or the
-configured JSON store path in JSON test mode). Offline mode is a demonstration
-and outage fallback; it does not remove the BRNS AI requirement. Saved route data
-is cleared rather than presented as a current verified route.
-
-## BRNS AI contract
-
-Before spending a Places request, BRNS checks that at least one provider is
-configured. The provider chain can use direct Gemini, OpenRouter, and optional
-Groq models from separate credential pools.
-
-The ranking prompt receives:
-
-- the validated search request;
-- one factual summary for each candidate;
-- minimum and preferred rating interpretation;
-- hard cuisine and hard-preference flags;
-- confidence-adjusted rating values;
-- previously returned restaurant names for repeat searches.
-
-The AI must return:
+1. Validate the BIS request and provider configuration.
+2. Load saved facts through Data and interpret them through Logic.
+3. With `USE_LIVE_GOOGLE=true`, retrieve Places results and Routes matrices.
+   `RestaurantEnricher` owns saved/live merge policy; outlet matching uses
+   normalized name/address, while persistence uses Google place IDs.
+4. With `USE_LIVE_GOOGLE=false`, use the active saved catalog (MongoDB or
+   configured JSON). No catalog is shipped by default; saved route times are
+   not claimed as current routes. Offline source selection still requires AI.
+5. Prepare domain context through Logic, including rating/review confidence,
+   constraints and previous names. AI returns candidate IDs and reason codes.
 
 ```json
-{
-  "recommendations": [
-    {"id": 0, "reason_codes": ["within_budget", "within_route"]}
-  ]
-}
+{"recommendations": [{"id": 0, "reason_codes": ["within_budget", "within_route"]}]}
 ```
 
-Every supplied ID must appear exactly once. Duplicate, missing, unknown, or
-wrongly typed IDs invalidate the response. Reason codes are limited to the
-documented set and are checked again by Logic against candidate facts.
+Every input ID must occur once. Unknown/duplicate/missing IDs and malformed
+schemas are rejected. Provider fallback preserves the subsystem's configured
+chain and deadline. `reason_codes` are validated and grounded against known
+facts before presentation; model wording cannot invent official certification.
 
-Supported reason codes include cuisine match, verified budget and route fit,
-rating evidence, vegetarian options, unofficial halal indication, and spicy
-options. An unsupported claim is dropped and logged with the candidate facts.
+## Rules and outcomes
 
-## Recommendation rules
+`RestaurantOutcomePolicy` owns match/alternative/reject decisions. Examples:
 
-`logic_manager.rank_restaurants()` normalizes each candidate and calls
-`decide_outcome()`.
+- Live candidates need confirmed opening evidence; disliked cuisines reject.
+- Cuisine, price/range, rating floor and selected route limit are checked.
+- Missing facts remain unknown; transit routes are not invented from speed estimates.
+- Hard wishes can turn budget/travel issues into explicit advisories. Depending
+  on the remaining checks, these can accompany matches or alternatives; the
+  code does not promise every over-budget result is always an alternative.
+- Official halal requires BRC evidence. Google halal indications remain
+  unofficial. Missing vegetarian evidence produces an explicit uncertainty.
+- AI order influences results while deterministic eligibility still applies.
+  Previous results can be deprioritized for repeat searches.
 
-Important rules include:
+The CLI uses configured display limits. The web gateway can supply per-call
+limits without changing global configuration; BIS handles combined cuisine
+limits and result annotations.
 
-- disliked cuisines reject a candidate;
-- `only`, `must`, `exclusively`, `minimum`, and `at least` can create hard
-  requirements after BIS confirmation;
-- hard cuisine and minimum-rating requirements are enforced;
-- when hard special requests exist, budget and travel limits can be relaxed
-  only into clearly labelled alternatives;
-- official halal is accepted only after BRC verification;
-- a Google halal indication remains unofficial;
-- vegetarian matches require supported dietary facts;
-- price checks use the known restaurant range rather than assuming a starting
-  price proves the entire meal fits;
-- rating quality combines stars and review count by shrinking small samples
-  toward a 4/5 prior;
-- live candidates must be open at the current Singapore day and time;
-- missing transit routes are never replaced with speed estimates;
-- repeat searches prefer suitable unseen restaurants but still return every AI
-  ranked candidate to Logic.
+## BRC, navigation and presentation
 
-Results contain separate `matches`, `alternatives`, hidden/excluded counts,
-travel metadata, requested dietary requirements, and optional halal
-verification details.
+`HalalVerificationCoordinator` runs only when halal is requested. It uses a
+batch verification capability where available and validates returned MUIS
+status/certification. If BRC fails, Google-indicated candidates remain visibly
+unofficial; no failure creates official evidence.
 
-## BRC integration
+`NavigationService.route_to()` requests directions and constructs a Google
+Maps link from known coordinates. `RecommendationSorter` uses rating/distance
+strategies without re-running AI or Places. CLI presentation delegates to
+`common/recommendation_ui.py`; web presentation is returned through BIS IO.
 
-When halal is not requested, BRNS does not call BRC.
+## Storage and configuration
 
-When halal is requested:
+MongoDB `restaurants` stores facts keyed by `google_place_id`. Fields include
+name, address, postal/contact data, Google rating/review count, cuisine/dietary
+information, price range, weekly hours, accessibility, halal status and
+coordinates. The shared record mapper preserves the JSON-format domain fields.
+Missing new values can retain known saved values.
 
-1. BRNS follows the validated AI recommendation order.
-2. Each candidate is shaped as one BRC restaurant object.
-3. BRC checks it against the cleaned MUIS database.
-4. A verified certificate and matching outlet set
-   `halal_certification` to `official`.
-5. An unverified Google-indicated candidate stays `unofficial`.
-6. A candidate with neither accepted MUIS nor Google evidence is excluded.
-7. If BRC fails or times out, remaining Google-indicated candidates may
-   continue only as visibly unofficial fallback results.
+`search_history` stores request/summary metadata under request-local user
+identity. BIS retrieves/deletes web history through `BRNSService`, not by
+accessing the BRNS store directly. JSON mode uses the configured restaurant
+and history paths. `BITEFINDER_AUTO_SEED` controls optional catalog seeding when
+an external catalog exists and the Mongo collection is empty.
 
-In local Python without `BRC_SERVICE_URL`, `BRNS/runtime.py` wires `BRC.main`. In
-Docker Compose (`BRC_SERVICE_URL=http://brc:8000`), `BRNS/runtime.py` (used by both
-BIS CLI and web via `BRNSGatewayInterface`) uses `BRCHTTPClient` to call the `brc`
-HTTP service. Direct `python BRNS/main.py` execution is restricted to internal
-tests and diagnostics (`--internal` or `BITEFINDER_INTERNAL_CLI=1`).
+Configuration is in `config.py` and the root environment: `BITEFINDER_STORAGE`,
+`MONGO_URI`, `MONGO_DATABASE`, `USE_LIVE_GOOGLE`, provider keys, Maps key,
+`BRNS_AI_REQUEST_TIMEOUT_SECONDS`, `BRNS_AI_CHAIN_TIMEOUT_SECONDS`,
+`BRC_SERVICE_URL` and endpoint overrides. See [root setup](../README.md).
 
-## Result presentation
-
-Compact cards show restaurant name, location, cuisine, Google rating, route
-distance or time, and important cautions. Full details can include:
-
-- address and phone number;
-- rating and review count;
-- estimated price range;
-- today's and weekly opening hours;
-- dietary and halal status;
-- wheelchair-accessibility evidence;
-- factual fit reasons and checks;
-- route steps and transit line details.
-
-If no match exists, BRNS explains exclusion totals, official verification
-status, and why the leading alternative is not an exact match before offering
-alternatives.
-
-## Routing and sorting
-
-`route_to()` requests a selected restaurant route only when verified
-coordinates are available. A Google Maps URL is always prepared from the
-confirmed origin, destination, and mode. Traffic-aware driving is passed to
-the route provider when selected.
-
-`sort_results()` reorders the existing matches and alternatives by rating or
-distance. It preserves the match/alternative classification and does not spend
-another Places or AI request.
-
-## Restaurant persistence schema
-
-Saved records are upserted by `google_place_id` and include available values
-for:
-
-```text
-google_place_id
-name
-postal_code
-address
-number
-g_rating
-g_no_reviews
-cuisine
-dietary
-avg_price_low_sgd
-avg_price_high_sgd
-opening_hours
-wheelchair_accessible
-halal_certification
-latitude
-longitude
-```
-
-Known values are retained when a later response omits them. Weekly opening
-hours use compact `HHMM` ranges. Halal certification from Google remains
-`unofficial`; only verified BRC output can become `official`.
-
-Search history stores a small validated summary instead of raw API responses.
-Live searches store top Google place IDs, while offline searches store top
-restaurant names.
-
-## Configuration
-
-Key settings from the root `.env`:
-
-```text
-DEBUG
-OPENROUTER_API_KEY
-GEMINI_API_KEY
-GROQ_API_KEY
-BITEFINDER_OPENROUTER_URL
-BITEFINDER_GEMINI_URL
-BITEFINDER_GROQ_URL
-GOOGLE_MAPS_API_KEY
-USE_LIVE_GOOGLE
-```
-
-Endpoint environment overrides allow black box tests to redirect geocoding,
-Places, matrices, routes, and AI calls to local fixture servers.
-
-## Failure behavior
-
-- Invalid BIS JSON stops before external requests or saved search history.
-- Missing provider credentials stop before Places spending.
-- No usable candidates returns an explicit search error.
-- Invalid AI output stops recommendation and does not save a completed search.
-- Unsupported AI reasons are removed rather than displayed.
-- Missing route coordinates disable routing for that result.
-- Corrupt or missing restaurant/history files log the problem and return empty
-  collections where safe.
-- BRC failure is summarized and only evidence-backed Google fallback survives.
-- All search events share the BIS trace ID in `logs/bitefinder.log`.
+Required provider/schema failures stop recommendation. BRNS JSON stores can
+return empty collections for missing/corrupt files; Mongo failures raise explicit
+unavailable errors. Web BIS can translate recognized no-open-restaurant errors
+into empty results with a message. Those policies are distinct from successful
+AI ranking.
 
 ## Tests
 
-Run BRNS-focused suites from the repository root:
-
-```bash
+```powershell
 docker compose exec bis-brns python tests/run_tests.py brns
 docker compose exec bis-brns python tests/run_tests.py blackbox
 docker compose exec bis-brns python tests/run_tests.py integration
 docker compose exec bis-brns python tests/run_tests.py oop
+docker compose --profile test run --rm web-test
 ```
 
-The black box suite starts the real standalone entry point, posts fixed AI,
-Places, and Routes responses from a local server, and verifies both visible
-output and external call order.
-
-## Extending BRNS
-
-- Add external restaurant and route calls to `io_manager.py`.
-- Add AI fields only with prompt, parser, schema, Logic, and test changes in the
-  same update.
-- Keep final acceptance, scoring, and factual reason checks in
-  `logic_manager.py`.
-- Persist only normalized evaluated facts through `data_manager.py`.
-- Maintain the exact BIS request boundary and update both applications
-  together when it changes.
-- Update [the root flow document](../ProjectFlow.md) for new result or failure
-  branches.
-
+Fixtures exercise the request boundary, ranking/reason validation, outcome
+policy, enrichment, provider fallback, sorting, BRC isolation and persistence.
+[ProjectFlow.md](../ProjectFlow.md) maps these stages to the complete application.
