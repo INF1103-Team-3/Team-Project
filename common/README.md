@@ -11,7 +11,7 @@ connection wiring, nginx configuration, and optional JSON-to-Mongo import.
 | --- | --- | --- |
 | `terminal_ui.py` | Consistent prompts, headings, fields, numbered items, status roles, and optional ANSI color. | BIS and BRNS |
 | `recommendation_ui.py` | Shared terminal result card, numbered summary, exclusion, and route formatting. | BIS and internal BRNS |
-| `debug_log.py` | One global log file and one trace identifier across a search. | BIS, BRNS, BRC |
+| `debug_log.py` | Per-process file logging and trace identifiers propagated across a search. | BIS, BRNS, BRC |
 | `geocode_cache.py` | One durable location query to coordinate cache backed by MongoDB (`geocode_cache`) or JSON. | BIS, BRNS, BRC |
 | `groq_models.py` | Discovers currently active Groq text chat models suitable for structured prompts. | BIS and BRNS AI managers |
 | `storage_dependencies.py` | Lazy process-level `mongo_connection()` factory shared by Mongo-backed stores and geocode cache. | `BIS/data_manager.py`, `BRNS/data_manager.py`, `geocode_cache.py` |
@@ -33,6 +33,7 @@ redirects and tests. Its public functions are:
 | `field(label, value)` | Displays one labeled value. |
 | `item(number, value)` | Displays a numbered option or result. |
 | `read_input(prompt)` | Reads input while styling `You:` and question prompts when supported. |
+| `read_secret(prompt)` | Uses hidden password entry on an interactive terminal with test-compatible fallback. |
 
 Colors appear only when enabled and standard output is an interactive terminal.
 Captured test output and redirected output retain the same words and numbering
@@ -59,7 +60,9 @@ the log without mixing later commands.
 
 Docker Compose persists `/data/logs` inside the `application-data` volume for
 `api` / `bis-brns` (and `brc-data` for `brc`). Their `/app/logs` symlinks
-resolve to `/data/logs/bitefinder.log`.
+resolve to `/data/logs/bitefinder.log`. API and CLI share their application
+volume; BRC has a separate file in `brc-data`. Trace headers correlate their
+records; there is not one filesystem log shared by all containers.
 
 `configure_python_logging()` attaches existing Python loggers, including BRC
 logging, to the shared file. `configure(display=...)` may mirror records through
@@ -108,7 +111,7 @@ manager owns the final configured fallback list and provider request policy.
 
 ## Design rules
 
-Keep shared helper modules generic and procedural:
+Keep common infrastructure focused on reusable capabilities:
 
 - accept ordinary values and return ordinary values;
 - keep core helpers (`debug_log.py`, `terminal_ui.py`, `groq_models.py`,
@@ -123,7 +126,8 @@ Keep shared helper modules generic and procedural:
   directory; and
 - preserve useful plain text behavior for automated tests.
 
-These rules prevent circular imports and let each subsystem run independently.
+These rules keep subsystem dependencies explicit. The optional storage factory
+is infrastructure wiring, not a fourth domain subsystem.
 
 ## Testing
 
@@ -136,3 +140,32 @@ docker compose exec bis-brns python tests/run_tests.py all
 
 See [ProjectFlow.md](../ProjectFlow.md) for where each shared service appears in
 the complete application workflow.
+
+## nginx and database tools
+
+`nginx.conf` serves frontend assets and proxies `/api/` to `api:8000`; it does
+not proxy FastAPI schema/docs URLs. Current proxy connect/read/send timeouts
+are 300 seconds. The web image copies this file, so configuration edits need
+an image rebuild/recreation.
+
+`storage_dependencies.mongo_connection()` owns the shared lazy Mongo connection
+used by standalone manager/cache wiring. Web runtime composition separately
+owns its connection lifecycle. JSON mode is explicit; Mongo outages do not
+silently select it as an alternate application store.
+
+Run the import tool from the repository root:
+
+```powershell
+python common/migrate_to_mongo.py --database bitefinder --users path/to/users.json
+```
+
+The default validates/counts selected supported JSON exports without connecting.
+Applying needs `--apply --confirm-database bitefinder` with a matching database
+name. Back up and review conflicts first. The importer is insert-only/idempotent
+for matching records, rejects conflicts, and is not a multi-collection
+transaction. It does not automatically run at application startup or replace
+BRC's authoritative JSON store. See [data flow](../DataFlowDiagram.md).
+
+For normal shutdown of every service/profile, use
+`docker compose --profile "*" down`. It preserves `mongo-data`, `brc-data` and
+`application-data`; adding `-v` intentionally removes them.
