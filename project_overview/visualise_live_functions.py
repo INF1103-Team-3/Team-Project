@@ -27,7 +27,7 @@ from visualise_functions import draw_graph
 OVERVIEW_DIR = Path(__file__).resolve().parent
 ROOT = OVERVIEW_DIR.parent
 ENTRY = "BIS.main.session_entry"
-PROGRAMS = ("BIS", "BRNS", "BRC", "shared")
+PROGRAMS = ("BIS", "BRNS", "BRC", "common")
 MANAGERS = ("io_manager", "ai_manager", "logic_manager", "data_manager")
 OUTPUT_ROOT = OVERVIEW_DIR / "function_graphs" / "live_sessions"
 
@@ -93,7 +93,7 @@ def stage(module):
         return "Main"
     if filename in MANAGERS:
         return filename.removesuffix("_manager").upper()
-    if package == "shared":
+    if package == "common":
         return filename + ".py"
     return rest.replace(".", "/") + ".py"
 

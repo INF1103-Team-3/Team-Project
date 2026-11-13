@@ -937,7 +937,7 @@ def create_blackbox_context():
         "BIS",
         "BRNS",
         "BRC",
-        "shared",
+        "common",
     ):
 
         shutil.copytree(
@@ -951,6 +951,7 @@ def create_blackbox_context():
                     "data",
                     "docs",
                     ".gitignore",
+                    "frontend",
                 ),
         )
 

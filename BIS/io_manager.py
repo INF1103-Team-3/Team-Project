@@ -15,8 +15,8 @@ from BIS.classes.io_manager import IOManager
 from BIS.classes.password_hasher import PasswordHasher
 from BIS.support.email_verification import challenge as email_challenge
 from BIS.support.email_verification import service as email_service
-from shared import terminal_ui as ui
-from shared import geocode_cache
+from common import terminal_ui as ui
+from common import geocode_cache
 from BIS.classes.location_gateway import LocationGateway
 from sources.profile_schema import (
     CUISINES, CUISINE_FIELDS, OTHER_PREFERENCES, PREFERENCE_FIELDS,

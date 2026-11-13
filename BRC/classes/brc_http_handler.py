@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler
 
 from BRC import main as brc_main
 from BRC.classes.data_manager import CLEAN_DATABASE_PATH
-from shared import debug_log
+from common import debug_log
 
 
 MAX_BODY_BYTES = 5 * 1024 * 1024

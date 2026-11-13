@@ -37,7 +37,7 @@ load_dotenv(ROOT / ".env")
 from reporting import show_case, show_summary, style
 import BRNS.config as brns_config
 import BRNS.io_manager as brns_io
-from shared import geocode_cache
+from common import geocode_cache
 
 
 # Singapore geographic boundary constants for validation
@@ -127,7 +127,7 @@ def test_geocode_cache_integration():
 
     show_case(
         "API-GOOGLE-02: Geocode Cache Integration",
-        "shared.geocode_cache.lookup()",
+        "common.geocode_cache.lookup()",
         "Verify that geocoded coordinates are stored and retrieved without network calls.",
         {"query": test_query, "stored": (test_lat, test_lng)},
         expected,

@@ -20,7 +20,7 @@ from BIS.classes.openrouter_ai_provider import OpenRouterAIProvider
 
 from sources.prompts import INTENTS, SYSTEM_PROMPT
 
-from shared.debug_log import debug_log
+from common.debug_log import debug_log
 from sources.profile_schema import PREFERENCE_FIELDS, validate_updates
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -62,7 +62,7 @@ def _extend_bis_chain_with_groq():
     load_dotenv(BASE_DIR.parent / ".env")
     api_key = os.getenv("GROQ_API_KEY", "").strip()
     if api_key:
-        from shared.groq_models import fetch_chat_models
+        from common.groq_models import fetch_chat_models
         for model_id in fetch_chat_models(api_key):
             MODEL_CHAIN.append({"provider": "groq", "model": model_id})
     MODEL_CHAIN.extend([

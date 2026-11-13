@@ -1,7 +1,7 @@
 # WEB-OOP: independent CLI and web entry points
 
 This branch starts from OOP commit `c16badc` and selectively reuses
-`frontend/index.html` and nginx infrastructure from web reference commit
+`common/frontend/index.html` and nginx infrastructure from web reference commit
 `e604f76`. It does not merge the old procedural BIS/BRNS/BRC implementation.
 
 ## Start BiteFinder
@@ -156,13 +156,13 @@ back up the selected database before applying. Default execution validates
 approved JSON files and prints counts without connecting to Mongo:
 
 ```powershell
-python migrate_to_mongo.py --database bitefinder --users BIS/data/users.json --states BIS/data/profile_state.json
+python common/migrate_to_mongo.py --database bitefinder --users BIS/data/users.json --states BIS/data/profile_state.json
 ```
 
 Apply only after reviewing those counts and existing-record conflicts:
 
 ```powershell
-python migrate_to_mongo.py --database bitefinder --confirm-database bitefinder --apply --users BIS/data/users.json --states BIS/data/profile_state.json
+python common/migrate_to_mongo.py --database bitefinder --confirm-database bitefinder --apply --users BIS/data/users.json --states BIS/data/profile_state.json
 ```
 
 Optional `--restaurants` and `--history` accept the current JSON arrays. Inputs

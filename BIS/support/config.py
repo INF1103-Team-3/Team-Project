@@ -6,7 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 import ai_manager
-from shared.debug_log import debug_log
+from common.debug_log import debug_log
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 ENV_FILE = BASE_DIR / ".env"

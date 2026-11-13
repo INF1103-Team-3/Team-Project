@@ -41,7 +41,7 @@ except ModuleNotFoundError as error:
         "Then run visualise_functions.py again."
     ) from error
 
-SOURCE_DIRS = ("BIS", "BRNS", "BRC", "shared")
+SOURCE_DIRS = ("BIS", "BRNS", "BRC", "common")
 OUTPUT_DIR = OVERVIEW_DIR / "function_graphs"
 ENTRY = "BIS.main.main"
 NODE_WIDTH = 290
@@ -54,7 +54,7 @@ COLORS = {
     "BIS": "#dceeff",
     "BRNS": "#dbf5e6",
     "BRC": "#fff0d7",
-    "shared": "#eee5ff",
+    "common": "#eee5ff",
 }
 
 
@@ -744,7 +744,7 @@ def create_live_trace():
     known, _ = build_graph()
     names = {node.split(".")[-1] for node in known}
     config = Config(trace_filter=lambda name: (
-        name.startswith(("BRNS.", "BRC.", "shared.", "sources.", "support."))
+        name.startswith(("BRNS.", "BRC.", "common.", "sources.", "support."))
         or name.split(".")[-1] in names
     ))
     sys.path.insert(0, str(ROOT / "BIS"))

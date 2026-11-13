@@ -58,7 +58,7 @@ def test_required_application_files_are_packaged():
         "BRNS/main.py",
         "BRNS/logic_manager.py",
         "BRC/main.py",
-        "shared/terminal_ui.py",
+        "common/terminal_ui.py",
         "tests/bis/test_bis.py",
         "tests/brns/test_brns.py",
     ]

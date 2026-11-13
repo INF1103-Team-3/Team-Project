@@ -102,7 +102,7 @@ test commands:
 | BRC MUIS database and halal verification | [BRC/README.md](BRC/README.md) |
 | Function, integration, black-box, and deployment tests | [tests/README.md](tests/README.md) |
 | Static and live function visualizations | [project_overview/README.md](project_overview/README.md) |
-| Shared logging, geocoding, terminal UI, and model discovery | [shared/README.md](shared/README.md) |
+| Common infrastructure (logging, geocoding, UI, frontend, nginx) | [common/README.md](common/README.md) |
 | End-to-end data states, AI payloads, and file storage | [DataFlowDiagram.md](DataFlowDiagram.md) |
 
 Start with this root README for setup and operation. Use
@@ -149,8 +149,11 @@ BRC/                         MUIS halal database and outlet checker
   logic_manager.py           deterministic certification checks
   data_manager.py            raw, cleaned, cached, and checked JSON records
 
-shared/                      geocode cache, model discovery, terminal UI, logs
-  README.md                  shared-service contracts and design rules
+common/                      geocode cache, model discovery, terminal UI, frontend, nginx
+  README.md                  common-infrastructure contracts and design rules
+  frontend/                  static web UI assets
+  nginx.conf                 nginx reverse-proxy configuration
+  migrate_to_mongo.py        optional JSON-to-MongoDB import CLI
 tests/                       function, integration, black-box, and Docker tests
   README.md                  test groups, commands, isolation, and color controls
 project_overview/            function-graph generators and local graph output

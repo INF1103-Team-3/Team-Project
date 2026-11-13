@@ -351,7 +351,7 @@ class WebIntegrationTests(unittest.TestCase):
 
     def test_halal_coordinator_batches_when_verifier_supports_verify_batch(self):
         from BRNS.classes.halal_verification_coordinator import HalalVerificationCoordinator
-        from shared import debug_log
+        from common import debug_log
 
         batch_calls = []
 
@@ -822,7 +822,7 @@ class WebIntegrationTests(unittest.TestCase):
         import tempfile
         from unittest.mock import patch
         from BIS import main as bis_main
-        from shared import geocode_cache
+        from common import geocode_cache
 
         with tempfile.TemporaryDirectory() as tmp:
             missing_cache_file = Path(tmp) / "data" / "geocode_cache.json"

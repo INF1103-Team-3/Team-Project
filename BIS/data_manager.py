@@ -7,7 +7,7 @@ from BIS import logic_manager
 from BIS.classes.data_manager import DataManager
 from BIS.classes.json_user_store import JsonUserStore
 from BIS.classes.location_gateway import LocationGateway
-from shared import geocode_cache
+from common import geocode_cache
 
 
 DATA_DIR = Path(__file__).resolve().parent / "data"

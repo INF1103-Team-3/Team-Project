@@ -15,7 +15,7 @@ from BRC.classes.fallback_ai_client import FallbackAIClient
 from BRC.classes.io_manager import NO_INPUT, IOManager
 from BRC.classes.logic_manager import LogicManager
 from BRC.models import RestaurantRecord
-from shared import debug_log
+from common import debug_log
 
 
 class BRCApplication:

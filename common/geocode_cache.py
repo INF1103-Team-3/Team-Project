@@ -8,7 +8,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from shared.debug_log import debug_log
+from common.debug_log import debug_log
 
 CACHE_FILE = Path(__file__).resolve().parent.parent / "data" / "geocode_cache.json"
 
@@ -62,7 +62,7 @@ def lookup(query):
             return _point(row.get("point")) if isinstance(row, dict) else None
         except (RuntimeError, OSError):
             debug_log("Mongo geocode cache lookup unavailable.",
-                      "WARNING", "shared.geocode_cache.lookup")
+                      "WARNING", "common.geocode_cache.lookup")
             return None
     return _point(_read().get(key))
 
@@ -114,7 +114,7 @@ def remember(queries, latitude, longitude):
             return True
         except (RuntimeError, OSError):
             debug_log("Mongo geocode cache write unavailable; using resolved location.",
-                      "WARNING", "shared.geocode_cache.remember")
+                      "WARNING", "common.geocode_cache.remember")
             return False
     temporary = None
     try:
@@ -149,7 +149,7 @@ def remember(queries, latitude, longitude):
                 temporary.unlink(missing_ok=True)
             except OSError:
                 debug_log("Temporary geocode cache file could not be removed.",
-                          "WARNING", "shared.geocode_cache.remember")
+                          "WARNING", "common.geocode_cache.remember")
     debug_log("Geocode cache write unavailable; using resolved location.",
-              "WARNING", "shared.geocode_cache.remember")
+              "WARNING", "common.geocode_cache.remember")
     return False

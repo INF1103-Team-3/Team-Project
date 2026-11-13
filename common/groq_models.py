@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import requests
-from shared import debug_log as log
+from common import debug_log as log
 
 GROQ_MODELS_URL = "https://api.groq.com/openai/v1/models"
 
@@ -34,14 +34,14 @@ def fetch_chat_models(api_key, timeout=(3, 10)):
         if resp.status_code != 200:
             log.debug_log(
                 f"Groq /models returned HTTP {resp.status_code}.",
-                "WARNING", "shared.groq_models",
+                "WARNING", "common.groq_models",
             )
             return []
         data = resp.json().get("data", [])
     except requests.RequestException as err:
         log.debug_log(
             f"Groq /models request failed: {err}",
-            "WARNING", "shared.groq_models",
+            "WARNING", "common.groq_models",
         )
         return []
 
@@ -67,6 +67,6 @@ def fetch_chat_models(api_key, timeout=(3, 10)):
 
     log.debug_log(
         f"Groq: discovered {len(ids)} chat model(s): {ids}",
-        "INFO", "shared.groq_models",
+        "INFO", "common.groq_models",
     )
     return ids

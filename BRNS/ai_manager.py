@@ -18,7 +18,7 @@ from BRNS.classes.gemini_ai_provider import GeminiAIProvider
 from BRNS.classes.groq_ai_provider import GroqAIProvider
 from BRNS.classes.openrouter_ai_provider import OpenRouterAIProvider
 from BRNS.classes.unsupported_ai_provider import UnsupportedAIProvider
-from shared import debug_log as log
+from common import debug_log as log
 
 SYSTEM_PROMPT = """You convert a user's food request into strict JSON.
 

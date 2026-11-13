@@ -57,7 +57,7 @@ def build_runtime():
     from BRNS.classes.brc_restaurant_checker_adapter import BRCRestaurantCheckerAdapter
     from BRNS.classes.navigation_service import NavigationService
     from BRC.classes.brc_http_client import BRCHTTPClient
-    from shared import geocode_cache, debug_log
+    from common import geocode_cache, debug_log
 
     connection = MongoConnection()
     try:
