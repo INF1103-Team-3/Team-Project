@@ -1,6 +1,7 @@
 """Function tests for BiteFinder BRNS recommendation and ranking logic."""
 import json
 import importlib
+import os
 import sys
 import types
 from pathlib import Path
@@ -1218,6 +1219,7 @@ def test_brc_error_does_not_skip_later_candidates():
     """One provider error must not prevent later exact MUIS checks."""
     original_brns_main = sys.modules.pop("BRNS.main", None)
     original_brc_main = sys.modules.get("BRC.main")
+    original_brc_service_url = os.environ.pop("BRC_SERVICE_URL", None)
     brc_stub = types.ModuleType("BRC.main")
     brc_stub.data_manager = types.SimpleNamespace(
         CLEAN_DATABASE_PATH=Path("missing-test-database.json"))
@@ -1292,6 +1294,8 @@ def test_brc_error_does_not_skip_later_candidates():
             sys.modules.pop("BRC.main", None)
         else:
             sys.modules["BRC.main"] = original_brc_main
+        if original_brc_service_url is not None:
+            os.environ["BRC_SERVICE_URL"] = original_brc_service_url
 
 TESTS = (
     test_explicit_minimum_rating_is_read,

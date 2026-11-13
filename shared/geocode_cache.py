@@ -29,6 +29,15 @@ def _point(value):
     return latitude, longitude
 
 
+def _use_mongo():
+    return os.getenv("BITEFINDER_STORAGE", "json").strip().lower() == "mongo"
+
+
+def _mongo_collection():
+    from BIS.storage_dependencies import mongo_connection
+    return mongo_connection()
+
+
 def _read():
     try:
         data = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
@@ -44,7 +53,18 @@ def _read():
 def lookup(query):
     """Return validated coordinates, or None when the query is not cached."""
     key = _key(query)
-    return _point(_read().get(key)) if key else None
+    if not key:
+        return None
+    if _use_mongo():
+        try:
+            row = _mongo_collection().execute(
+                lambda db, k=key: db.geocode_cache.find_one({"_id": k}))
+            return _point(row.get("point")) if isinstance(row, dict) else None
+        except (RuntimeError, OSError):
+            debug_log("Mongo geocode cache lookup unavailable.",
+                      "WARNING", "shared.geocode_cache.lookup")
+            return None
+    return _point(_read().get(key))
 
 
 @contextmanager
@@ -84,6 +104,18 @@ def remember(queries, latitude, longitude):
     keys.discard("")
     if not keys:
         return
+    if _use_mongo():
+        try:
+            conn = _mongo_collection()
+            pts = list(point)
+            for key in keys:
+                conn.execute(lambda db, k=key: db.geocode_cache.update_one(
+                    {"_id": k}, {"$set": {"_id": k, "point": pts}}, upsert=True))
+            return True
+        except (RuntimeError, OSError):
+            debug_log("Mongo geocode cache write unavailable; using resolved location.",
+                      "WARNING", "shared.geocode_cache.remember")
+            return False
     temporary = None
     try:
         CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)

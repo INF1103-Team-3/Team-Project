@@ -115,6 +115,10 @@ FROM bis-brns AS api
 USER 10001:10001
 CMD ["uvicorn", "web_api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 
+FROM nginx:alpine AS web
+COPY frontend /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 FROM api AS web-test
 USER root
 COPY requirements.txt requirements-dev.txt .

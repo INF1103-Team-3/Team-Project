@@ -1,78 +1,165 @@
-# Two containers on one network:
-#   brc      - BRC halal checker service (always running)
-#   bis-brns - BIS + BRNS (kept running; open the chatbot with `docker compose exec`)
+# Unified BiteFinder Docker Compose stack (CLI + Web + MongoDB + BRC):
+#   mongodb       - MongoDB 7.0 database (localhost:27017, persistent mongo-data volume)
+#   mongo-express - MongoDB web admin UI (http://localhost:8081)
+#   brc           - BRC MUIS halal checker HTTP service (always running)
+#   api           - FastAPI backend for the BiteFinder web UI (port 8000 internal)
+#   web           - nginx frontend & API proxy (http://localhost:8080)
+#   bis-brns      - BIS + BRNS interactive CLI & test container (open with `docker compose exec`)
+#   web-test      - Ephemeral web/Mongo contract test runner (profile: test)
 #
+# Quick start (build & start all runtime services):
 #   docker compose up -d --build
-#   docker compose exec bis-brns python main.py
+#   docker compose exec bis-brns python main.py --cli
 #   docker compose exec bis-brns python tests/run_tests.py all
+#   docker compose --profile test run --rm web-test
 #
 # Test container internet and service networking:
 #   docker compose exec bis-brns python -c "import urllib.request; r=urllib.request.urlopen('https://www.google.com/generate_204', timeout=10); print('Internet working, HTTP', r.status)"
 #   docker compose exec brc python -c "import urllib.request; r=urllib.request.urlopen('https://www.google.com/generate_204', timeout=10); print('Internet working, HTTP', r.status)"
 #   docker compose exec bis-brns python -c "import urllib.request; print(urllib.request.urlopen('http://brc:8000/health', timeout=5).read().decode())"
+#   docker compose exec bis-brns python -c "import urllib.request; print(urllib.request.urlopen('http://api:8000/api/health', timeout=5).read().decode())"
 #
-# Inspect network and BRC errors:
+# Inspect network and service logs:
 #   docker compose logs --tail=100 brc
+#   docker compose logs --tail=100 api
 #   docker compose exec bis-brns tail -n 100 logs/bitefinder.log
-name: bitefinder
+name: bitefinder-web-oop
 
 services:
+  mongodb:
+    image: mongo:7.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: bitefinder
+    volumes:
+      - mongo-data:/data/db
+    networks: [bitefinder-web]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mongo-express:
+    image: mongo-express:1.0.2-20-alpine3.19
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_SERVER: mongodb
+      ME_CONFIG_MONGODB_PORT: 27017
+      ME_CONFIG_MONGODB_URL: mongodb://mongodb:27017/
+      ME_CONFIG_BASICAUTH: "false"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks: [bitefinder-web]
+
   brc:
     build:
       context: .
       target: brc
-    image: bitefinder-brc
-    container_name: bitefinder-brc
-    hostname: brc
+      args:
+        SEED_ACCOUNTS: "no"
     restart: unless-stopped
+    environment:
+      BRC_BUILD_CUISINES_WITH_AI: "0"
     env_file:
       - path: .env
         required: false
     volumes:
       - brc-data:/data
-      - bitefinder-logs:/data/logs
-    networks:
-      - bitefinder-net
+    networks: [bitefinder-web]
+
+  api:
+    build:
+      context: .
+      target: api
+      args:
+        SEED_ACCOUNTS: "no"
+    restart: unless-stopped
+    environment:
+      BITEFINDER_STORAGE: mongo
+      MONGO_URI: mongodb://mongodb:27017/
+      MONGO_DATABASE: bitefinder
+      BRC_SERVICE_URL: http://brc:8000
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      brc:
+        condition: service_healthy
+    volumes:
+      - application-data:/data
+    networks: [bitefinder-web]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  web:
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [bitefinder-web]
 
   bis-brns:
     build:
       context: .
-      target: bis-brns
+      target: api
       args:
-        SEED_ACCOUNTS: ${SEED_ACCOUNTS:-yes}   # set to "no" to leave users.json out of the image
-    image: bitefinder
-    container_name: bitefinder-bis-brns
-    hostname: bis-brns
+        SEED_ACCOUNTS: "no"
     restart: unless-stopped
+    command: ["sleep", "infinity"]
     stdin_open: true
     tty: true
-    command: ["sleep", "infinity"]
+    environment:
+      BITEFINDER_STORAGE: mongo
+      MONGO_URI: mongodb://mongodb:27017/
+      MONGO_DATABASE: bitefinder
+      BRC_SERVICE_URL: http://brc:8000
+      BITEFINDER_WEB_READY_URL: http://web/api/health
+      BITEFINDER_WEB_URL: http://localhost:8080
+      TERM: xterm-256color
+      COLORTERM: truecolor
     env_file:
       - path: .env
         required: false
-    environment:
-      BRC_SERVICE_URL: http://brc:8000
-      TERM: xterm-256color
-      COLORTERM: truecolor
     depends_on:
+      mongodb:
+        condition: service_healthy
       brc:
         condition: service_healthy
     volumes:
-      - bis-brns-data:/data
-      - bitefinder-logs:/data/logs
-    networks:
-      - bitefinder-net
+      - application-data:/data
+    networks: [bitefinder-web]
+
+  web-test:
+    profiles: [test]
+    build:
+      context: .
+      target: web-test
+      args:
+        SEED_ACCOUNTS: "no"
+    environment:
+      BITEFINDER_STORAGE: json
+    networks: [bitefinder-web]
 
 networks:
-  bitefinder-net:
-    name: bitefinder-net
-    driver: bridge
-    internal: false   # containers can reach each other AND the internet
+  bitefinder-web:
 
 volumes:
+  mongo-data:
   brc-data:
-    name: bitefinder-brc-data
-  bis-brns-data:
-    name: bitefinder-bis-brns-data
-  bitefinder-logs:
-    name: bitefinder-logs
+  application-data:

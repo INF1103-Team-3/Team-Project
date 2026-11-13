@@ -32,7 +32,6 @@ def build_runtime():
     from BIS.classes.mongo_credential_store import MongoCredentialStore
     from BIS.classes.mongo_favorite_store import MongoFavoriteStore
     from BIS.classes.mongo_search_proposal_store import MongoSearchProposalStore
-    from BIS.classes.cli_user_file_sync import CliUserFileSync
     from BIS.classes.data_manager import DataManager
     from BIS.classes.location_gateway import LocationGateway
     from BIS.classes.password_hasher import PasswordHasher
@@ -45,7 +44,7 @@ def build_runtime():
     from BIS.support.email_verification.classes.email_verification_service import EmailVerificationService
     from BIS.support.email_verification.classes.verification_challenge_manager import VerificationChallengeManager
     from BIS.support.email_verification.classes.smtp_email_delivery import SMTPEmailDelivery
-    from BIS import ai_manager as bis_ai, data_manager as bis_data, logic_manager as bis_logic
+    from BIS import ai_manager as bis_ai, logic_manager as bis_logic
     from BRNS import config, ai_manager, io_manager, logic_manager
     from BRNS.classes.data_manager import DataManager as RecommendationData
     from BRNS.classes.io_manager import IOManager as RecommendationIO
@@ -67,11 +66,9 @@ def build_runtime():
         favorites, proposals = MongoFavoriteStore(connection), MongoSearchProposalStore(connection)
         for repository in (users, sessions, favorites, proposals):
             repository.ensure_indexes()
-        user_sync = CliUserFileSync(connection, bis_data.USERS_FILE, debug_log)
-        user_sync.sync_from_file(force=True)
         data = DataManager(users, LocationGateway(bis_logic, geocode_cache,
                            os.getenv("BITEFINDER_GEOCODE_URL", "https://maps.googleapis.com/maps/api/geocode/json")),
-                           sessions, favorites, MongoCredentialStore(connection), proposals, user_sync=user_sync)
+                           sessions, favorites, MongoCredentialStore(connection), proposals)
         settings = load_config()
         verification = EmailVerificationService(data, VerificationChallengeManager(), SMTPEmailDelivery())
         auth = WebAuthService(data, verification, PasswordHasher(), settings)

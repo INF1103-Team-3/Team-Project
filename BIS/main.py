@@ -1,5 +1,6 @@
 """BIS compatibility façade and four-manager application bootstrap."""
 
+import os
 import sys
 from pathlib import Path
 
@@ -147,6 +148,7 @@ def run_accounts(config):
 
 def run_cli():
     """Start the existing CLI using environment configuration."""
+    os.environ.setdefault("BITEFINDER_STORAGE", "mongo")
     _initialize_cli()
     debug_log.configure()
     try:

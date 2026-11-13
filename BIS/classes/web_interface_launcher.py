@@ -34,19 +34,19 @@ class WebInterfaceLauncher:
         if self._container:
             if not self._ready():
                 raise RuntimeError("Web stack is unavailable. On the host run: "
-                                   "docker compose -f docker-compose.web.yml up -d --build")
+                                   "docker compose up -d --build")
         else:
             if not self._ready():
                 try:
                     self._runner(["docker", "compose", "version"], cwd=self._root,
                                  check=True, capture_output=True, text=True, timeout=20)
-                    self._runner(["docker", "compose", "-f", "docker-compose.web.yml",
+                    self._runner(["docker", "compose",
                                   "up", "-d", "--no-recreate", "mongodb", "brc", "api", "web"],
                                  cwd=self._root, check=True, capture_output=True,
                                  text=True, timeout=300)
                 except (OSError, subprocess.SubprocessError) as error:
                     raise RuntimeError("Could not start the web stack. Check Docker/Compose "
-                                       "and run docker compose -f docker-compose.web.yml logs on the host.") from error
+                                       "and run docker compose logs on the host.") from error
                 deadline = self._clock() + self._timeout
                 while not self._ready():
                     if self._clock() >= deadline:
