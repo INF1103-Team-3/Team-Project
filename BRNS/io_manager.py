@@ -10,6 +10,7 @@ from pathlib import Path
 from BRNS import config, logic_manager
 from BRNS.classes.io.gateways.google.google_route_gateway import GoogleRouteGateway
 from BRNS.classes.io.adapters.io_manager import IOManager
+from BRNS.classes.logic.evaluation.budget_fit_policy import BudgetFitPolicy
 from BRNS.classes.logic.evaluation.restaurant_enricher import RestaurantEnricher
 from common import geocode_cache
 from common import debug_log as log
@@ -316,7 +317,7 @@ def _parse_place(p):
 def _travel_radius(req):
     """Radius in meters implied by the user's travel mode and limit."""
     if req.get("max_travel_minutes") is not None:
-        speed = {"walk": 100, "drive": 650, "transit": 650}[req["mode"]]
+        speed = {"walk": 80, "drive": 650, "transit": 400}[req["mode"]]
         return max(500, min(int(req["max_travel_minutes"] * speed), 50000))
     if req.get("mode") == "drive" and req.get("max_drive_km"):
         return max(1000, min(int(req["max_drive_km"] * 1000 * 0.8), 50000))
@@ -324,7 +325,7 @@ def _travel_radius(req):
     if distance is not None:
         return max(500, min(int(distance * 1000), 50000))
     walk = req.get("max_walk_minutes")
-    return max(500, min((walk if walk else 15) * 100, 20000))
+    return max(500, min((walk if walk else 15) * 80, 20000))
 
 
 def _search_radius(req):
@@ -403,8 +404,10 @@ def _build_text_query(req, default_query=None):
     return query
 
 
-def _run_text_search(origin, query, radius_m, error_tag, max_pages=1):
-    """Execute Google Places Text Search anchored by DISTANCE bias around origin."""
+def _run_text_search(origin, query, radius_m, error_tag, max_pages=1,
+                     price_levels=None, rank_preference="RELEVANCE",
+                     return_status=False):
+    """Execute Google Places Text Search anchored by locationBias around origin."""
     lat, lng = origin
     headers = {
         "Content-Type": "application/json",
@@ -417,19 +420,21 @@ def _run_text_search(origin, query, radius_m, error_tag, max_pages=1):
                              "places.accessibilityOptions,places.servesVegetarianFood,"
                              "nextPageToken"),
     }
-    # A circle *bias* anchors DISTANCE ranking on origin (a rectangle restriction
-    # does not and scatters results island-wide for drive/transit searches).
+    # A circle *bias* anchors search around origin while letting Haversine
+    # bounds enforce exact radius without island-wide scatter.
     body = {
         "textQuery": query,
         "languageCode": "en",
         "pageSize": 20,
         "openNow": True,
-        "rankPreference": "DISTANCE",
+        "rankPreference": rank_preference,
         "locationBias": {"circle": {
             "center": {"latitude": lat, "longitude": lng},
             "radius": radius_m,
         }},
     }
+    if price_levels:
+        body["priceLevels"] = list(price_levels)
     places = []
     try:
         for _ in range(max_pages):
@@ -447,43 +452,77 @@ def _run_text_search(origin, query, radius_m, error_tag, max_pages=1):
             body = dict(body, pageToken=token)
     except (requests.RequestException, KeyError, ValueError, AttributeError) as err:
         _log_api_error(error_tag, err)
-        return []
-    return places
+        return ([], False) if return_status else []
+    return (places, True) if return_status else places
+
+
+def _merge_unique_places(primary, secondary):
+    """Merge place lists preserving primary items first and deduping by ID/name."""
+    merged, seen = [], set()
+    for place in list(primary) + list(secondary):
+        if not isinstance(place, dict):
+            continue
+        pid = str(place.get("google_place_id") or "").strip()
+        key = pid or _norm(place.get("name", ""))
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        merged.append(place)
+    return merged
 
 
 def fetch_by_profile_text(origin, req):
-    """Places Text Search scoped by dietary/cuisine and/or the user's
-    free-text query (e.g. 'spicy', 'cafe', 'hawker centre').
-    Returns [] on failure or when nothing is set."""
-    query = _build_text_query(req, default_query=None)
+    """Places Text Search scoped by dietary, cuisine, free-text, and budget tier.
+    Backfills unlabelled venues when priceLevels yields fewer than 6 open places."""
+    budget = req.get("budget_per_person")
+    default_query = None
+    if isinstance(budget, (int, float)) and not isinstance(budget, bool) and budget > 25:
+        default_query = "fine dining restaurants" if budget > 100 else "restaurants"
+    query = _build_text_query(req, default_query=default_query)
     if not query:
         return []
     log.debug_log("Text Places request started.", "INFO",
                   "BRNS.io_manager.fetch_by_profile_text")
     radius_m = float(min(_search_radius(req), 50000))
-    places = _run_text_search(origin, query, radius_m, "places_profile_text", max_pages=1)
+    price_levels = BudgetFitPolicy.price_levels_for_budget(budget)
+    max_pages = 2 if radius_m > 3000 else 1
+    places, ok = _run_text_search(
+        origin, query, radius_m, "places_profile_text",
+        max_pages=max_pages, price_levels=price_levels,
+        rank_preference="RELEVANCE", return_status=True,
+    )
+    open_count = sum(1 for p in places if p.get("open_now") is True)
+    if ok and price_levels and open_count < 6:
+        broad_query = (
+            "restaurants" if query == "fine dining restaurants" else query
+        )
+        backfill = _run_text_search(
+            origin, broad_query, radius_m, "places_profile_text_backfill",
+            max_pages=1, price_levels=None, rank_preference="RELEVANCE",
+        )
+        places = _merge_unique_places(places, backfill)
     log.debug_log(f"Text Places returned {len(places)} usable records.",
                   "INFO", "BRNS.io_manager.fetch_by_profile_text")
     return places
 
 
-OPEN_SEARCH_MAX_PAGES = 1   # 1 page x 20 open places keeps AI ranking fast and within token limits
+OPEN_SEARCH_MAX_PAGES = 1   # Keep open-now fallback fast within API budget
 
 
 def fetch_open_places(origin, req):
-    """Text Search restricted to places open right now, nearest first.
-
-    Nearby Search returns only the 20 closest places and cannot filter by
-    opening status, so late at night most of them are closed and discarded.
-    When Nearby Search drops closed slots, asking Text Search for openNow=True
-    with DISTANCE ranking fills the candidate pool with nearby open venues.
-    """
+    """Text Search restricted to places open right now, using RELEVANCE + priceLevels."""
     query = _build_text_query(req, default_query="restaurants")
     log.debug_log("Open-now Text Places request started.", "INFO",
                   "BRNS.io_manager.fetch_open_places")
     radius_m = float(min(_travel_radius(req), 50000))
+    price_levels = BudgetFitPolicy.price_levels_for_budget(
+        req.get("budget_per_person")
+    )
     places = _run_text_search(
-        origin, query, radius_m, "places_open_text", max_pages=OPEN_SEARCH_MAX_PAGES)
+        origin, query, radius_m, "places_open_text",
+        max_pages=2 if radius_m > 3000 else OPEN_SEARCH_MAX_PAGES,
+        price_levels=price_levels, rank_preference="RELEVANCE",
+    )
     log.debug_log(f"Open-now Text Places returned {len(places)} usable records.",
                   "INFO", "BRNS.io_manager.fetch_open_places")
     return places
@@ -542,6 +581,56 @@ def build_maps_link(origin, destination, mode):
     return _ROUTE_GATEWAY.build_maps_link(origin, destination, mode)
 
 
+def _select_zone_places(places, origin, radius_m, limit=20):
+    """Filter confirmed-open unique places and sample across near/mid/outer zones."""
+    open_unique, seen = [], set()
+    for p in places:
+        if not isinstance(p, dict) or "name" not in p:
+            _log_api_error("candidate_build", "malformed place skipped")
+            continue
+        if p.get("open_now") is not True:
+            log.debug_log("Skipped a place without confirmed open status.",
+                          "INFO", "BRNS.io_manager.build_candidates")
+            continue
+        key = _norm(p["name"]) or str(p.get("google_place_id") or "")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        open_unique.append(p)
+
+    if len(open_unique) <= limit or radius_m <= 0:
+        return open_unique[:limit]
+
+    radius_km = max(radius_m / 1000.0, 0.5)
+    near, mid, outer = [], [], []
+    for p in open_unique:
+        dist_km = _haversine_km(origin, (p["lat"], p["lng"]))
+        ratio = dist_km / radius_km
+        if ratio <= 0.35:
+            near.append(p)
+        elif ratio <= 0.70:
+            mid.append(p)
+        else:
+            outer.append(p)
+
+    # Take balanced slices per zone (keeping relevance order), then backfill any remaining slots.
+    selected = []
+    chosen_ids = set()
+    for bucket, quota in ((near, 7), (mid, 7), (outer, 6)):
+        for p in bucket[:quota]:
+            selected.append(p)
+            chosen_ids.add(id(p))
+
+    if len(selected) < limit:
+        for p in open_unique:
+            if id(p) not in chosen_ids:
+                selected.append(p)
+                chosen_ids.add(id(p))
+                if len(selected) >= limit:
+                    break
+    return selected
+
+
 # ---------- candidate builder ----------
 
 def build_candidates(origin, req, saved_restaurants):
@@ -558,8 +647,14 @@ def build_candidates(origin, req, saved_restaurants):
     cuisine = (req.get("cuisine") or "any").lower()
     dietary = req.get("dietary_requirements") or []
     free_text = (req.get("free_text") or "").strip()
+    budget = req.get("budget_per_person")
+    has_higher_budget = (
+        isinstance(budget, (int, float))
+        and not isinstance(budget, bool)
+        and budget > 25
+    )
     places = []
-    if cuisine not in ("any", "none", "") or dietary or free_text:
+    if cuisine not in ("any", "none", "") or dietary or free_text or has_higher_budget:
         places = fetch_by_profile_text(origin, req)
         if places and not any(
                 isinstance(place, dict) and place.get("open_now") is True
@@ -571,30 +666,33 @@ def build_candidates(origin, req, saved_restaurants):
         log.debug_log("Text search empty; trying nearby Places.", "INFO",
                       "BRNS.io_manager.build_candidates")
         places = fetch_nearby_restaurants(origin, req)
-        # Nearby Search returns at most 20 closest venues without an openNow
-        # filter. When closed venues consume those slots, supplement with
-        # openNow=True Text Search so surrounding open places are discovered.
-        if any(isinstance(p, dict) and p.get("open_now") is not True for p in places):
-            places = list(places) + fetch_open_places(origin, req)
+        radius_m = float(min(_search_radius(req), 50000))
+        need_open_backfill = any(
+            isinstance(p, dict) and p.get("open_now") is not True
+            for p in places
+        )
+        # If Nearby Search packed all 20 slots tightly around origin in a wider search,
+        # supplement with RELEVANCE + priceLevels Text Search to reach mid/outer zones.
+        crammed_near_origin = (
+            len(places) >= 20
+            and radius_m > 3000
+            and max(
+                (_haversine_km(origin, (p["lat"], p["lng"])) * 1000
+                 for p in places if isinstance(p, dict) and "lat" in p and "lng" in p),
+                default=0.0,
+            ) < 0.35 * radius_m
+        )
+        if need_open_backfill or crammed_near_origin:
+            places = _merge_unique_places(places, fetch_open_places(origin, req))
     if not places:
         return []
-    candidates, seen = [], set()
-    for p in places:
-        if len(candidates) >= 20:
-            break
-        if not isinstance(p, dict) or "name" not in p:
-            _log_api_error("candidate_build", "malformed place skipped")
-            continue
-        if p.get("open_now") is not True:
-            log.debug_log("Skipped a place without confirmed open status.",
-                          "INFO", "BRNS.io_manager.build_candidates")
-            continue
+    radius_m = float(min(_search_radius(req), 50000))
+    sampled = _select_zone_places(places, origin, radius_m, limit=20)
+    candidates = []
+    for p in sampled:
         c = enrich_place(p, saved_restaurants)
         c["google_search_rank"] = len(candidates) + 1
-        key = _norm(c["name"])
-        if key not in seen:
-            seen.add(key)
-            candidates.append(c)
+        candidates.append(c)
     travel_times_matrix(origin, candidates, req.get("mode", "walk"),
                         req.get("traffic_aware", False))
     _fill_travel_estimates(origin, candidates)

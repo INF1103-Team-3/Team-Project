@@ -2,6 +2,7 @@
 
 import re
 from BIS.sources.profile_schema import CUISINES
+from BRNS.classes.logic.evaluation.budget_fit_policy import BudgetFitPolicy
 
 
 class RestaurantEnricher:
@@ -43,6 +44,13 @@ class RestaurantEnricher:
             band = (self.price_to_band(avg_price) if avg_price is not None
                     else (place.get("price_level")
                           or self._band_from_range(place.get("price_start"), place.get("price_end"))))
+            est_price, _ = BudgetFitPolicy.estimate_price({
+                "avg_price": avg_price,
+                "price_start": place.get("price_start"),
+                "price_end": place.get("price_end"),
+                "price_level": place.get("price_level"),
+                "price_band": band,
+            })
             return {
                 **live_fields,
                 "name": entry.get("name", place["name"]),
@@ -54,9 +62,11 @@ class RestaurantEnricher:
                     + (["vegetarian"] if place.get("serves_vegetarian_food") else []))),
                 "avg_price": avg_price,
                 "price_band": band,
+                "price_level": place.get("price_level"),
                 "price_start": place.get("price_start"),
                 "price_end": place.get("price_end"),
                 "price_range": place.get("price_range"),
+                "estimated_price": est_price,
                 "rating": place.get("rating"),
                 "open_hours": entry.get("open_hours"),
                 "spicy_options": entry.get("spicy_options"),
@@ -66,6 +76,14 @@ class RestaurantEnricher:
                 "transit_minutes": None, "transit_meters": None,
                 "source": "saved + google places",
             }
+        live_band = (place.get("price_level")
+                     or self._band_from_range(place.get("price_start"), place.get("price_end")))
+        live_est_price, _ = BudgetFitPolicy.estimate_price({
+            "price_start": place.get("price_start"),
+            "price_end": place.get("price_end"),
+            "price_level": place.get("price_level"),
+            "price_band": live_band,
+        })
         return {
             **live_fields,
             "name": place["name"],
@@ -75,11 +93,12 @@ class RestaurantEnricher:
             "dietary_requirements": (
                 ["vegetarian"] if place.get("serves_vegetarian_food") else []),
             "avg_price": None,
-            "price_band": (place.get("price_level")
-                           or self._band_from_range(place.get("price_start"), place.get("price_end"))),
+            "price_band": live_band,
+            "price_level": place.get("price_level"),
             "price_start": place.get("price_start"),
             "price_end": place.get("price_end"),
             "price_range": place.get("price_range"),
+            "estimated_price": live_est_price,
             "rating": place.get("rating"),
             "open_hours": None,
             "spicy_options": None,

@@ -2,7 +2,10 @@
 
 from copy import deepcopy
 
-from BIS.classes.services.web.bis_chatbot_service import BISChatbotService
+from BIS.classes.services.web.bis_chatbot_service import (
+    BISChatbotService,
+    validate_special_preferences,
+)
 from BIS.support.config import is_smtp_bypass
 
 
@@ -63,12 +66,12 @@ class BISApplicationService:
                         f"Default location '{loc}' must be a valid Singapore location."
                     )
         wishes = updated["preferences"].get("other_preferences") or []
-        if (wishes and not self._config.get("ai_bypass")
-                and hasattr(self._ai, "review_profile_wishes")):
-            try:
-                self._ai.review_profile_wishes(wishes, deepcopy(self._config))
-            except RuntimeError:
-                pass
+        validate_special_preferences(
+            wishes,
+            ai=self._ai,
+            config=self._config,
+            field_label="Default special wishes",
+        )
         return self._data.save(updated)
 
     def _resolve_origins(self, raw_locations):
@@ -226,6 +229,12 @@ class BISApplicationService:
         raw_locations = self._logic.collect_search_locations(payload)
         origin, resolved_origins = self._resolve_origins(raw_locations)
         selected_cuisines = self._logic.collect_search_cuisines(payload)
+        validate_special_preferences(
+            payload.get("other_preferences"),
+            ai=self._ai,
+            config=self._config,
+            field_label="Special requests",
+        )
 
         if payload.get("confirm_only"):
             single_c = selected_cuisines[0] if len(selected_cuisines) == 1 else None

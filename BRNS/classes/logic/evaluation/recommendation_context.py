@@ -1,5 +1,7 @@
 """Prepare domain facts and constraints for AI without performing network IO."""
 
+from BRNS.classes.logic.evaluation.budget_fit_policy import BudgetFitPolicy
+
 
 class RecommendationContext:
     """Use the existing domain rules to build the unchanged AI input record."""
@@ -9,6 +11,7 @@ class RecommendationContext:
 
     def build(self, request, candidates, previous_restaurants=()):
         mode = request["mode"]
+        budget = request.get("budget_per_person")
         rating_floor = self._rules.minimum_rating(request["other_preferences"])
         rating_preference = self._rules.preferred_rating(
             request["other_preferences"])
@@ -18,6 +21,9 @@ class RecommendationContext:
             request["other_preferences"])
         facts = []
         for index, candidate in enumerate(candidates):
+            estimated_price, price_source = BudgetFitPolicy.estimate_price(candidate)
+            fit_score = BudgetFitPolicy.budget_fit_score(candidate, budget)
+            price_level = candidate.get("price_level") or candidate.get("price_band")
             facts.append({
                 "id": index,
                 "name": candidate.get("name"),
@@ -26,6 +32,12 @@ class RecommendationContext:
                 "halal_hint_unofficial": bool(candidate.get("halal_hint")),
                 "avg_price": candidate.get("avg_price"),
                 "price_start": candidate.get("price_start"),
+                "price_end": candidate.get("price_end"),
+                "price_range": candidate.get("price_range"),
+                "price_level": price_level,
+                "estimated_price": estimated_price,
+                "price_source": price_source,
+                "budget_fit_score": fit_score,
                 "rating": candidate.get("rating"),
                 "review_count": candidate.get("rating_count"),
                 "confidence_adjusted_rating": self._rules.confidence_adjusted_rating(

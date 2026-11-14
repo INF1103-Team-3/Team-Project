@@ -8,6 +8,7 @@ export const state = {
   currentLimitType: 'time',
   isTravelSet: false,
   isBudgetSet: false,
+  isBudgetPlus: false,
 
   preferredCuisines: new Set(),
   dislikedCuisines: new Set(),
@@ -24,6 +25,7 @@ export const state = {
     withinBudget: false,
   },
   activeBudgetLimit: null,
+  activeBudgetIsPlus: false,
 
   compareKeys: new Map(), // place_key -> { item, displayIdx }
 
@@ -112,4 +114,38 @@ export function updateThemeUI() {
   if (iconEl) iconEl.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
   if (labelEl) labelEl.textContent = isDark ? 'Light Mode' : 'Dark Mode';
   refreshIcons(document.getElementById('themeToggleBtn'));
+}
+
+export const WISH_ACRONYMS = new Set(['bbq', 'byob', 'msg', 'cbd', 'mrt', 'hrs', 'gym', 'nth', 'sgd', 'ac', 'tv', 'vip', 'wfh']);
+export const WISH_KEYBOARD_MASH = [
+  'asdf', 'sdfg', 'dfgh', 'fghj', 'ghjk', 'hjkl',
+  'qwer', 'wert', 'erty', 'tyui', 'uiop',
+  'zxcv', 'xcvb', 'cvbn', 'vbnm',
+];
+
+export function validateEnglishWishesInput(items, fieldLabel = 'Special requests') {
+  for (const raw of (items || [])) {
+    const text = String(raw || '').trim();
+    if (!text) continue;
+    if (text.length > 100 || !/^[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()+\-]*$/.test(text)) {
+      return `${fieldLabel} must use proper English letters and words (e.g. quiet seating, spicy food).`;
+    }
+    const words = text.match(/[A-Za-z]+/g) || [];
+    if (!words.length || !words.some((w) => w.length > 1)) {
+      return `${fieldLabel} must contain meaningful English words (e.g. quiet seating, spicy food).`;
+    }
+    for (const word of words) {
+      const low = word.toLowerCase();
+      if (/(.)\1\1/.test(low) || WISH_KEYBOARD_MASH.some((seq) => low.includes(seq))) {
+        return `${fieldLabel} must contain proper English words, not '${word}'.`;
+      }
+      if (low.length >= 3 && !WISH_ACRONYMS.has(low) && !/[aeiouy]/.test(low)) {
+        return `${fieldLabel} must contain proper English words, not '${word}'.`;
+      }
+      if (/[bcdfghjklmnpqrstvwxz]{6,}/.test(low)) {
+        return `${fieldLabel} must contain proper English words, not '${word}'.`;
+      }
+    }
+  }
+  return '';
 }
