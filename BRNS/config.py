@@ -61,6 +61,10 @@ TEXT_SEARCH_URL = os.getenv("BITEFINDER_TEXT_SEARCH_URL",
                             "https://places.googleapis.com/v1/places:searchText")
 PLACES_URL = os.getenv("BITEFINDER_PLACES_URL",
                         "https://places.googleapis.com/v1/places:searchNearby")
+PLACES_DETAILS_BASE_URL = os.getenv(
+    "BITEFINDER_PLACES_DETAILS_URL",
+    "https://places.googleapis.com/v1",
+).rstrip("/")
 MATRIX_URL = os.getenv("BITEFINDER_MATRIX_URL",
                         "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix")
 ROUTES_URL = os.getenv("BITEFINDER_ROUTES_URL",

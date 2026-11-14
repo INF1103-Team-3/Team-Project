@@ -23,6 +23,10 @@ class BISWebIOInterface(ABC):
         """Return the formatted display label for the active AI model."""
 
     @abstractmethod
+    def map_config(self):
+        """Return map provider settings for the web UI."""
+
+    @abstractmethod
     def register(self, payload):
         """Register a new BIS web user account."""
 
@@ -65,6 +69,10 @@ class BISWebIOInterface(ABC):
     @abstractmethod
     def route(self, payload):
         """Return route directions and map link for a selected restaurant."""
+
+    @abstractmethod
+    def place_photo(self, place_id):
+        """Return cached or freshly fetched thumbnail bytes for one place ID."""
 
     @abstractmethod
     def favorites(self, authorization):

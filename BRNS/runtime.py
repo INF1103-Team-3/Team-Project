@@ -13,8 +13,12 @@ from BRNS.classes.io.gateways.google.candidate_search import CandidateSearch
 from BRNS.classes.data.data_manager import DataManager as RecommendationData
 from BRNS.classes.services.workflows.halal_verification_coordinator import HalalVerificationCoordinator
 from BRNS.classes.io.adapters.io_manager import IOManager as RecommendationIO
+from BRNS.classes.data.stores.mongo.mongo_place_photo_store import MongoPlacePhotoStore
 from BRNS.classes.data.stores.mongo.mongo_recommendation_store import MongoRecommendationStore
+from BRNS.classes.data.stores.json.null_place_photo_store import NullPlacePhotoStore
+from BRNS.classes.io.gateways.google.google_place_photo_gateway import GooglePlacePhotoGateway
 from BRNS.classes.services.workflows.navigation_service import NavigationService
+from BRNS.classes.services.workflows.place_photo_service import PlacePhotoService
 from BRNS.classes.data.helpers.search_history_scope import SearchHistoryScope
 from BRNS.classes.io.adapters.web_io_manager import WebIOManager as RecommendationWebIO
 from common import debug_log
@@ -54,6 +58,8 @@ def build_web_brns_service(connection, brc_service_url=None):
     scope = SearchHistoryScope()
     store = MongoRecommendationStore(connection, scope)
     store.ensure_indexes()
+    photo_store = MongoPlacePhotoStore(connection)
+    photo_store.ensure_indexes()
     _seed_restaurants_if_empty(connection)
     recommendation_data = RecommendationData(store)
     logic = logic_manager.manager()
@@ -66,6 +72,11 @@ def build_web_brns_service(connection, brc_service_url=None):
     workflow = BRNSRecommendationWorkflow(
         io, ai_manager.manager(), logic, recommendation_data, verifier, config, debug_log
     )
+    photo_service = PlacePhotoService(
+        photo_store,
+        GooglePlacePhotoGateway(config, debug_log, io_manager._log_api_error),
+        debug_log,
+    )
     return BRNSService(
         workflow=workflow,
         navigator=NavigationService(io, debug_log),
@@ -76,6 +87,7 @@ def build_web_brns_service(connection, brc_service_url=None):
         logger=debug_log,
         active_model_reader=ai_manager.current_active_model,
         last_model_reader=ai_manager.last_used_model,
+        photo_service=photo_service,
     )
 
 
@@ -98,6 +110,11 @@ def build_cli_brns_service():
     workflow = BRNSRecommendationWorkflow(
         io, ai_manager.manager(), logic, recommendation_data, verifier, config, debug_log
     )
+    photo_service = PlacePhotoService(
+        NullPlacePhotoStore(),
+        GooglePlacePhotoGateway(config, debug_log, io_manager._log_api_error),
+        debug_log,
+    )
     return BRNSService(
         workflow=workflow,
         navigator=NavigationService(io, debug_log),
@@ -108,4 +125,5 @@ def build_cli_brns_service():
         logger=debug_log,
         active_model_reader=ai_manager.current_active_model,
         last_model_reader=ai_manager.last_used_model,
+        photo_service=photo_service,
     )

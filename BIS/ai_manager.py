@@ -849,8 +849,8 @@ def interpret_chat_turn(message, current_filters, history, saved_profile, config
         "locations_action ('replace', 'add', 'remove', 'clear'), "
         "mode ('walk', 'drive', 'transit' — map MRT/bus/train/public transport to 'transit'), "
         "traffic_aware (boolean), "
-        "max_travel_minutes (number 1-120), "
-        "max_distance_km (number 0.1-50), "
+        "max_travel_minutes (number: 1-90 walk, 1-120 drive, 1-150 transit), "
+        "max_distance_km (number: 0.1-15 walk, 0.1-50 drive/transit), "
         "budget_per_person (number 1-1000 SGD), "
         "dietary_requirements (subset of ['halal', 'vegetarian']), "
         "dietary_action ('replace', 'add', 'remove', 'clear'), "
@@ -904,3 +904,42 @@ def interpret_chat_turn(message, current_filters, history, saved_profile, config
 
     has_fast = bool(config.get("groq_api_key") or config.get("gemini_api_key"))
     return _call_json_with_fallback(payload, config, check, skip_primary=has_fast)
+
+
+def review_profile_wishes(wishes, config):
+    """Verify saved default special wishes are proper, meaningful English phrases."""
+    items = [str(w or "").strip() for w in (wishes or []) if str(w or "").strip()]
+    if not items or config.get("ai_bypass"):
+        return items
+    payload = {
+        "model": config.get("openrouter_model", ""),
+        "messages": [
+            {"role": "system", "content": (
+                "Validate each item in a user's saved default restaurant special wishes. "
+                "Every item must be a meaningful restaurant or dining preference written in English "
+                "(standard English words plus common Singapore dish terms like chicken rice, laksa, "
+                "dim sum, mala, halal, wifi). Reject gibberish, random letters, nonsense, or "
+                "non-English sentences/phrases (such as Malay, Chinese, French, Spanish). "
+                "Return JSON only with keys: valid (boolean), reason (string explaining what "
+                "to fix when valid is false, empty string when true)."
+            )},
+            {"role": "user", "content": json.dumps({"wishes": items}, ensure_ascii=False)},
+        ],
+        "temperature": 0,
+        "max_tokens": 120,
+    }
+
+    def check(parsed):
+        if not isinstance(parsed, dict) or not isinstance(parsed.get("valid"), bool):
+            raise ValueError("Invalid special wishes validation response.")
+        reason = str(parsed.get("reason") or "").strip()
+        return {"valid": parsed["valid"], "reason": reason}
+
+    has_fast = bool(config.get("groq_api_key") or config.get("gemini_api_key"))
+    result = _call_json_with_fallback(payload, config, check, skip_primary=has_fast)
+    if not result["valid"]:
+        raise ValueError(
+            result["reason"]
+            or "Default special wishes must be proper, meaningful English preferences."
+        )
+    return items

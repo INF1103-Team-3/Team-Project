@@ -7,6 +7,7 @@ import re
 from BIS.sources.profile_schema import (
     CUISINES,
     clean_text,
+    validate_search_distance,
     validate_travel_minutes,
     validate_value,
 )
@@ -68,13 +69,12 @@ class IOManager(
         minutes = payload["max_travel_minutes"]
         if (distance is None) == (minutes is None):
             raise ValueError("BRNS requires exactly one travel limit.")
-        if payload["mode"] == "transit" and distance is not None:
-            raise ValueError("Transit searches require a time limit.")
+        mode = payload["mode"]
         distance = (
-            validate_value("max_distance_km", distance)
+            validate_search_distance(distance, mode)
             if distance is not None else None)
         minutes = (
-            validate_travel_minutes(minutes)
+            validate_travel_minutes(minutes, mode)
             if minutes is not None else None)
         traffic_aware = payload["traffic_aware"]
         if (type(traffic_aware) is not bool

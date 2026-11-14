@@ -10,6 +10,7 @@ from sources.profile_schema import (
     CUISINES,
     OTHER_PREFERENCES,
     clean_text,
+    validate_search_distance,
     validate_travel_minutes,
     validate_value,
 )
@@ -61,14 +62,14 @@ class SearchRequestValidator(
         if (distance is None) == (minutes is None):
             raise ValueError(
                 "Choose exactly one travel limit: distance or time.")
-        if request["mode"] == "transit" and distance is not None:
-            raise ValueError("Transit searches use a time limit.")
+        mode = request["mode"]
         distance = (
-            validate_value("max_distance_km", distance)
+            validate_search_distance(distance, mode)
             if distance is not None else None
         )
         minutes = (
-            validate_travel_minutes(minutes) if minutes is not None else None
+            validate_travel_minutes(minutes, mode)
+            if minutes is not None else None
         )
         traffic_aware = request["traffic_aware"]
         if type(traffic_aware) is not bool or (

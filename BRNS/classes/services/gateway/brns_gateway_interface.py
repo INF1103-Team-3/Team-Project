@@ -22,6 +22,10 @@ class BRNSGatewayInterface(ABC):
         """Return navigation directions and map link for one selected restaurant."""
 
     @abstractmethod
+    def place_photo(self, place_id):
+        """Return cached or freshly fetched thumbnail bytes for a place ID."""
+
+    @abstractmethod
     def sort_results(self, results, sort_by):
         """Sort a BRNS result set by rating or travel distance."""
 

@@ -83,3 +83,7 @@ class AIManager(BISAIManagerInterface):
         from BIS import ai_manager as bis_ai
         return bis_ai.interpret_chat_turn(
             message, current_filters, history, saved_profile, config)
+
+    def review_profile_wishes(self, wishes, config):
+        from BIS import ai_manager as bis_ai
+        return bis_ai.review_profile_wishes(wishes, config)

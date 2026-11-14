@@ -17,6 +17,7 @@ class BRNSService(BRNSGatewayInterface):
         logger,
         active_model_reader=lambda: None,
         last_model_reader=lambda: None,
+        photo_service=None,
     ):
         self._workflow = workflow
         self._navigator = navigator
@@ -27,6 +28,7 @@ class BRNSService(BRNSGatewayInterface):
         self._log = logger
         self._active_model_reader = active_model_reader
         self._last_model_reader = last_model_reader
+        self._photo_service = photo_service
 
     def search(
         self,
@@ -50,6 +52,11 @@ class BRNSService(BRNSGatewayInterface):
 
     def route_to(self, restaurant, request):
         return self._navigator.route_to(restaurant, request)
+
+    def place_photo(self, place_id):
+        if self._photo_service is None:
+            return None
+        return self._photo_service.get_or_fetch_photo(place_id)
 
     def sort_results(self, results, sort_by):
         sorted_results = self._logic.sort_results(results, sort_by)

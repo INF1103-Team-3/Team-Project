@@ -89,11 +89,69 @@ class LogicManager(BISLogicManagerInterface):
                 return field
         return None
 
-    def apply_updates(self, preferences, updates, location_action="add"):
+    @staticmethod
+    def validate_english_preferences(items, field_label="Default special wishes"):
+        """Require proper meaningful English text for profile special wishes."""
+        acronyms = {"bbq", "byob", "msg", "cbd", "mrt", "hrs", "gym", "nth", "sgd", "ac", "tv", "vip"}
+        keyboard_mash = (
+            "asdf", "sdfg", "dfgh", "fghj", "ghjk", "hjkl",
+            "qwer", "wert", "erty", "tyui", "uiop",
+            "zxcv", "xcvb", "cvbn", "vbnm",
+        )
+        for item in items:
+            text = str(item or "").strip()
+            if not text:
+                continue
+            if len(text) > 100 or not re.fullmatch(
+                r"[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()+\-]*", text
+            ):
+                raise ValueError(
+                    f"{field_label} must use proper English letters and words "
+                    "(e.g. quiet seating, spicy food)."
+                )
+            words = re.findall(r"[A-Za-z]+", text)
+            if not words or not any(len(word) > 1 for word in words):
+                raise ValueError(
+                    f"{field_label} must contain meaningful English words "
+                    "(e.g. quiet seating, spicy food)."
+                )
+            for word in words:
+                low = word.lower()
+                if re.search(r"(.)\1\1", low):
+                    raise ValueError(
+                        f"{field_label} must contain proper English words, "
+                        f"not '{word}'."
+                    )
+                if any(seq in low for seq in keyboard_mash):
+                    raise ValueError(
+                        f"{field_label} must contain proper English words, "
+                        f"not '{word}'."
+                    )
+                if len(low) >= 3 and low not in acronyms and not any(
+                    ch in "aeiouy" for ch in low
+                ):
+                    raise ValueError(
+                        f"{field_label} must contain proper English words, "
+                        f"not '{word}'."
+                    )
+                if re.search(r"[bcdfghjklmnpqrstvwxz]{6,}", low):
+                    raise ValueError(
+                        f"{field_label} must contain proper English words, "
+                        f"not '{word}'."
+                    )
+        return items
+
+    def apply_updates(self, preferences, updates, location_action="add",
+                      allow_empty_location=False):
         if location_action not in {"add", "replace", "remove"}:
             raise ValueError("Choose add, replace, or remove for locations.")
         result = deepcopy(validate_preferences(preferences))
-        updates = self.estimate_travel_limits(validate_updates(updates))
+        updates = self.estimate_travel_limits(
+            validate_updates(
+                updates, profile_mode=True,
+                allow_empty_location=allow_empty_location,
+            )
+        )
         if "location" in updates:
             old = result["location"] or []
             incoming = updates["location"]
@@ -182,7 +240,9 @@ class LogicManager(BISLogicManagerInterface):
                 updates["other_preferences"], list):
             updates["other_preferences"] = self.normalize_profile_items(
                 updates["other_preferences"], is_location=False)
-        preferences = self.apply_updates(user["preferences"], updates, "replace")
+            self.validate_english_preferences(updates["other_preferences"])
+        preferences = self.apply_updates(
+            user["preferences"], updates, "replace", allow_empty_location=True)
         username = normalize_username(payload.get("username") or user["username"])
         return dict(user, username=username, preferences=preferences)
 

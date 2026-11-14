@@ -96,7 +96,8 @@
   </header>
 
   <!-- Main Container -->
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 w-full">
+  <main
+    class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 w-full">
 
     <!-- Left Column: BIS Chatbot & Search Filters (Sticky & Scrollable on Desktop) -->
     <div id="leftPanelColumn" class="lg:col-span-5 flex flex-col gap-6 lg:sticky lg:top-20 lg:self-start">
@@ -129,7 +130,8 @@
                 </span>
                 BiteFinder Assistant
               </h2>
-              <p class="text-[11px] text-slate-500 dark:text-slate-400">Chat naturally — I'll double-check criteria before searching</p>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400">Chat naturally — I'll double-check criteria
+                before searching</p>
             </div>
             <div class="flex items-center gap-1">
               <button type="button" id="chatHelpBtn" title="Show example prompts"
@@ -168,7 +170,9 @@
               </button>
             </div>
             <div class="w-full h-1.5 rounded-full bg-brand-100 dark:bg-slate-800 overflow-hidden">
-              <div id="onboardingProgressFill" class="h-full rounded-full bg-gradient-to-r from-brand-600 to-amber-500 transition-all duration-300" style="width: 14%"></div>
+              <div id="onboardingProgressFill"
+                class="h-full rounded-full bg-gradient-to-r from-brand-600 to-amber-500 transition-all duration-300"
+                style="width: 14%"></div>
             </div>
           </div>
 
@@ -262,50 +266,70 @@
             </div>
 
             <!-- Travel Mode & Max Limit -->
-            <div class="grid grid-cols-2 gap-3">
-              <div>
+            <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
+              <div class="sm:col-span-5">
                 <label
                   class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Travel
                   Mode</label>
                 <div class="grid grid-cols-3 gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
                   <button type="button"
-                    class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 bg-white dark:bg-slate-700 shadow-sm text-brand-600 dark:text-brand-400"
+                    class="mode-btn py-1.5 rounded-lg text-[11px] font-semibold flex flex-col items-center gap-1 bg-white dark:bg-slate-700 shadow-sm text-brand-600 dark:text-brand-400"
                     data-mode="walk">
                     <i data-lucide="footprints" class="w-4 h-4"></i> Walk
                   </button>
                   <button type="button"
-                    class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    class="mode-btn py-1.5 rounded-lg text-[11px] font-semibold flex flex-col items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                     data-mode="drive">
                     <i data-lucide="car" class="w-4 h-4"></i> Drive
                   </button>
                   <button type="button"
-                    class="mode-btn py-1.5 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    class="mode-btn py-1.5 rounded-lg text-[11px] font-semibold flex flex-col items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                     data-mode="transit">
                     <i data-lucide="train" class="w-4 h-4"></i> Transit
                   </button>
                 </div>
               </div>
 
-              <div>
-                <div class="flex justify-between items-center mb-1.5">
+              <div class="sm:col-span-7">
+                <div class="flex flex-wrap justify-between items-center gap-x-2 gap-y-1 mb-1.5">
                   <div
-                    class="inline-flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                    class="inline-flex shrink-0 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
                     <button type="button" id="limitTypeTimeBtn"
-                      class="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm transition">
+                      class="whitespace-nowrap px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm transition">
                       Max Time
                     </button>
                     <button type="button" id="limitTypeDistBtn"
-                      class="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition">
+                      class="whitespace-nowrap px-2 py-0.5 text-[10px] font-bold uppercase rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition">
                       Distance
                     </button>
                   </div>
-                  <span id="timeDisplay" class="text-xs font-bold text-slate-400 dark:text-slate-500">Not set</span>
-                  <span id="distanceDisplay" class="hidden text-xs font-bold text-slate-400 dark:text-slate-500">Not set</span>
+                  <div id="timeDisplayWrap" class="bf-limit-wrap" title="Click to type a custom travel time">
+                    <input type="text" inputmode="decimal" id="timeInput" placeholder="Not set"
+                      aria-label="Maximum travel time in minutes" class="bf-limit-input">
+                    <span id="timeUnitLabel" class="bf-limit-unit hidden">mins</span>
+                    <svg class="bf-limit-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z"></path>
+                    </svg>
+                  </div>
+                  <div id="distanceDisplayWrap" class="bf-limit-wrap hidden" title="Click to type a custom distance">
+                    <input type="text" inputmode="decimal" id="distanceInput" placeholder="Not set"
+                      aria-label="Maximum travel distance in kilometres" class="bf-limit-input">
+                    <span id="distanceUnitLabel" class="bf-limit-unit hidden">km</span>
+                    <svg class="bf-limit-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z"></path>
+                    </svg>
+                  </div>
                 </div>
-                <input type="range" id="timeSlider" min="5" max="90" step="5" value="30"
+                <input type="range" id="timeSlider" min="1" max="90" step="1" value="30"
                   class="w-full accent-brand-600 mt-2">
-                <input type="range" id="distanceSlider" min="0.5" max="15.0" step="0.5" value="2.0"
+                <input type="range" id="distanceSlider" min="0.1" max="15.0" step="0.1" value="2.0"
                   class="hidden w-full accent-brand-600 mt-2">
+                <p id="limitRangeHint"
+                  class="hidden text-[10px] font-semibold text-amber-600 dark:text-amber-400 mt-1 leading-tight"></p>
               </div>
             </div>
 
@@ -317,7 +341,8 @@
                   <i data-lucide="gauge" class="w-4 h-4 text-brand-600 dark:text-brand-400"></i>
                   <div>
                     <span class="font-bold text-slate-800 dark:text-slate-100">Real-Time Traffic Routing</span>
-                    <span class="block text-[10px] text-slate-500 dark:text-slate-400">Adjust driving durations using live Singapore traffic conditions</span>
+                    <span class="block text-[10px] text-slate-500 dark:text-slate-400">Adjust driving durations using
+                      live Singapore traffic conditions</span>
                   </div>
                 </div>
                 <input type="checkbox" id="trafficAwareCheck" class="rounded text-brand-600 focus:ring-brand-500">
@@ -327,13 +352,14 @@
             <!-- Budget per person -->
             <div>
               <div class="flex justify-between items-center mb-1.5">
-                <label class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Budget Per Person</label>
+                <label class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Budget Per
+                  Person</label>
                 <span id="budgetDisplay" class="text-xs font-bold text-slate-400 dark:text-slate-500">Not set</span>
               </div>
               <input type="range" id="budgetSlider" min="5" max="100" step="5" value="30"
                 class="w-full accent-brand-600">
               <div class="flex justify-between text-[10px] text-slate-400 mt-1">
-                <span>$5 (Hawker)</span>
+                <span>$5 (Budget)</span>
                 <span>$30 (Casual)</span>
                 <span>$100+ (Fine Dine)</span>
               </div>
@@ -342,7 +368,8 @@
             <!-- Dietary Requirements -->
             <div>
               <label
-                class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Dietary Requirements</label>
+                class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Dietary
+                Requirements</label>
               <div class="grid grid-cols-2 gap-2">
                 <label
                   class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 transition">
@@ -367,7 +394,8 @@
             <div>
               <div class="flex items-center justify-between mb-1.5">
                 <label
-                  class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Preferred Cuisines (Select Multiple or Type)</label>
+                  class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Preferred
+                  Cuisines (Select Multiple or Type)</label>
                 <div class="flex items-center gap-2">
                   <span id="preferredQuotaHint"
                     class="hidden text-[10px] font-bold text-emerald-600 dark:text-emerald-400"></span>
@@ -376,18 +404,42 @@
                 </div>
               </div>
               <div id="preferredChipsContainer" class="flex flex-wrap gap-1.5 mb-2">
-                <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="chinese">Chinese</button>
-                <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="malay">Malay</button>
-                <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="indian">Indian</button>
-                <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="japanese">Japanese</button>
-                <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="korean">Korean</button>
-                <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="western">Western</button>
-                <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="italian">Italian</button>
-                <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="thai">Thai</button>
-                <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="vietnamese">Vietnamese</button>
-                <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="peranakan">Peranakan</button>
-                <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="indonesian">Indonesian</button>
-                <button type="button" class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition" data-cuisine="middle eastern">Middle Eastern</button>
+                <button type="button"
+                  class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                  data-cuisine="chinese">Chinese</button>
+                <button type="button"
+                  class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                  data-cuisine="malay">Malay</button>
+                <button type="button"
+                  class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                  data-cuisine="indian">Indian</button>
+                <button type="button"
+                  class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                  data-cuisine="japanese">Japanese</button>
+                <button type="button"
+                  class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                  data-cuisine="korean">Korean</button>
+                <button type="button"
+                  class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                  data-cuisine="western">Western</button>
+                <button type="button"
+                  class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                  data-cuisine="italian">Italian</button>
+                <button type="button"
+                  class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                  data-cuisine="thai">Thai</button>
+                <button type="button"
+                  class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                  data-cuisine="vietnamese">Vietnamese</button>
+                <button type="button"
+                  class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                  data-cuisine="peranakan">Peranakan</button>
+                <button type="button"
+                  class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                  data-cuisine="indonesian">Indonesian</button>
+                <button type="button"
+                  class="prefer-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-emerald-400 transition"
+                  data-cuisine="middle eastern">Middle Eastern</button>
               </div>
               <div class="flex items-center gap-1.5">
                 <input type="text" id="customCuisineInput"
@@ -404,23 +456,48 @@
             <div>
               <div class="flex items-center justify-between mb-1.5">
                 <label
-                  class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Disliked Cuisines (Exclude Multiple or Type)</label>
+                  class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Disliked
+                  Cuisines (Exclude Multiple or Type)</label>
                 <button type="button" id="clearDislikedBtn"
                   class="hidden text-[10px] font-bold text-rose-600 dark:text-rose-400 hover:underline">Clear</button>
               </div>
               <div id="dislikedChipsContainer" class="flex flex-wrap gap-1.5 mb-2">
-                <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="chinese">Chinese</button>
-                <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="malay">Malay</button>
-                <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="indian">Indian</button>
-                <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="japanese">Japanese</button>
-                <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="korean">Korean</button>
-                <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="western">Western</button>
-                <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="italian">Italian</button>
-                <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="thai">Thai</button>
-                <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="vietnamese">Vietnamese</button>
-                <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="peranakan">Peranakan</button>
-                <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="indonesian">Indonesian</button>
-                <button type="button" class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition" data-cuisine="middle eastern">Middle Eastern</button>
+                <button type="button"
+                  class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                  data-cuisine="chinese">Chinese</button>
+                <button type="button"
+                  class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                  data-cuisine="malay">Malay</button>
+                <button type="button"
+                  class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                  data-cuisine="indian">Indian</button>
+                <button type="button"
+                  class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                  data-cuisine="japanese">Japanese</button>
+                <button type="button"
+                  class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                  data-cuisine="korean">Korean</button>
+                <button type="button"
+                  class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                  data-cuisine="western">Western</button>
+                <button type="button"
+                  class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                  data-cuisine="italian">Italian</button>
+                <button type="button"
+                  class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                  data-cuisine="thai">Thai</button>
+                <button type="button"
+                  class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                  data-cuisine="vietnamese">Vietnamese</button>
+                <button type="button"
+                  class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                  data-cuisine="peranakan">Peranakan</button>
+                <button type="button"
+                  class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                  data-cuisine="indonesian">Indonesian</button>
+                <button type="button"
+                  class="dislike-chip text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-rose-300 transition"
+                  data-cuisine="middle eastern">Middle Eastern</button>
               </div>
               <div class="flex items-center gap-1.5">
                 <input type="text" id="customDislikedCuisineInput"
@@ -436,7 +513,8 @@
             <!-- Special Wishes -->
             <div>
               <label
-                class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Special Requests (AI Interpreted)</label>
+                class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Special
+                Requests (AI Interpreted)</label>
               <input type="text" id="specialInput" placeholder="e.g. at least 4.5 stars, spicy food, quiet dinner"
                 class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
             </div>
@@ -466,7 +544,8 @@
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 class="text-lg font-bold text-slate-900 dark:text-white" id="resultsCount">Recommendations</h2>
-            <p class="text-xs text-slate-500 dark:text-slate-400" id="resultsSubtext">Verified with Google Places and official MUIS records.</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400" id="resultsSubtext">Verified with Google Places and
+              official MUIS records.</p>
           </div>
 
           <div class="flex flex-wrap items-center gap-2.5">
@@ -534,10 +613,15 @@
             <span class="text-sm font-bold text-slate-900 dark:text-white">Interactive Restaurant Map</span>
             <div
               class="hidden sm:flex items-center gap-3 ml-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block"></span> You</span>
-              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block"></span> Match</span>
-              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-600 inline-block"></span> Alternative</span>
+              <span class="flex items-center gap-1"><span
+                  class="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block"></span> You</span>
+              <span class="flex items-center gap-1"><span
+                  class="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block"></span> Match</span>
+              <span class="flex items-center gap-1"><span
+                  class="w-2.5 h-2.5 rounded-full bg-amber-600 inline-block"></span> Alternative</span>
             </div>
+            <span id="mapRouteStatus"
+              class="hidden text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"></span>
           </div>
           <div class="flex items-center gap-2">
             <button type="button" id="fitMapBoundsBtn"
@@ -551,7 +635,8 @@
           </div>
         </div>
         <div id="resultsMap"
-          class="w-full h-80 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 z-10"></div>
+          class="w-full h-[380px] sm:h-[420px] xl:h-[460px] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 z-10">
+        </div>
       </div>
 
       <!-- Results Container -->
@@ -564,22 +649,26 @@
               class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-brand-50 to-amber-50 dark:from-brand-500/15 dark:to-amber-500/15 text-brand-600 dark:text-brand-400 border border-brand-200/70 dark:border-brand-500/30 flex items-center justify-center mb-3 shadow-sm">
               <i data-lucide="compass" class="w-7 h-7"></i>
             </div>
-            <h3 class="text-lg font-extrabold text-slate-900 dark:text-white">Discover Singapore Dining with BiteFinder</h3>
+            <h3 class="text-lg font-extrabold text-slate-900 dark:text-white">Discover Singapore Dining with BiteFinder
+            </h3>
             <p class="text-xs text-slate-500 dark:text-slate-400 max-w-md mt-1">
-              Chat with our assistant on the left or pick a popular Singapore scenario below — I'll review your filters and check with you before running the search.
+              Chat with our assistant on the left or pick a popular Singapore scenario below — I'll review your filters
+              and check with you before running the search.
             </p>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button type="button"
-              data-prompt="Halal Japanese near Bugis under $20, 15 mins walk"
+            <button type="button" data-prompt="Halal Japanese near Bugis under $20, 15 mins walk"
               class="quick-start-btn text-left p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 hover:border-brand-400 dark:hover:border-brand-500 hover:bg-brand-50/40 dark:hover:bg-brand-500/10 transition group">
               <div class="flex items-center justify-between mb-1.5">
                 <span class="text-base">🍱</span>
-                <span class="text-[10px] font-bold text-brand-600 dark:text-brand-400 opacity-80 group-hover:opacity-100">Try in Chat →</span>
+                <span
+                  class="text-[10px] font-bold text-brand-600 dark:text-brand-400 opacity-80 group-hover:opacity-100">Try
+                  in Chat →</span>
               </div>
               <div class="text-xs font-bold text-slate-900 dark:text-white">Halal Japanese near Bugis</div>
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">MUIS verified • Under $20 • 15m walk</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">MUIS verified • Under $20 • 15m walk
+              </div>
             </button>
 
             <button type="button"
@@ -587,10 +676,13 @@
               class="quick-start-btn text-left p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-indigo-50/40 dark:hover:bg-indigo-500/10 transition group">
               <div class="flex items-center justify-between mb-1.5">
                 <span class="text-base">🎯</span>
-                <span class="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 opacity-80 group-hover:opacity-100">Try in Chat →</span>
+                <span
+                  class="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 opacity-80 group-hover:opacity-100">Try
+                  in Chat →</span>
               </div>
               <div class="text-xs font-bold text-slate-900 dark:text-white">Meet Friend in the Middle</div>
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Tampines + Jurong East • Under $25 · MRT</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Tampines + Jurong East • Under $25 ·
+                MRT</div>
             </button>
 
             <button type="button"
@@ -598,21 +690,26 @@
               class="quick-start-btn text-left p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 hover:border-emerald-400 dark:hover:border-emerald-500 hover:bg-emerald-50/40 dark:hover:bg-emerald-500/10 transition group">
               <div class="flex items-center justify-between mb-1.5">
                 <span class="text-base">⭐</span>
-                <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 opacity-80 group-hover:opacity-100">Try in Chat →</span>
+                <span
+                  class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 opacity-80 group-hover:opacity-100">Try
+                  in Chat →</span>
               </div>
               <div class="text-xs font-bold text-slate-900 dark:text-white">Top-Rated Orchard Date Night</div>
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Korean / Thai • ≥ 4.4★ • Under $35</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Korean / Thai • ≥ 4.4★ • Under $35
+              </div>
             </button>
 
-            <button type="button"
-              data-prompt="Vegetarian casual dining near Compass One under $18, 15 mins walk"
+            <button type="button" data-prompt="Vegetarian casual dining near Compass One under $18, 15 mins walk"
               class="quick-start-btn text-left p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50/40 dark:hover:bg-blue-500/10 transition group">
               <div class="flex items-center justify-between mb-1.5">
                 <span class="text-base">🥗</span>
-                <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400 opacity-80 group-hover:opacity-100">Try in Chat →</span>
+                <span
+                  class="text-[10px] font-bold text-blue-600 dark:text-blue-400 opacity-80 group-hover:opacity-100">Try
+                  in Chat →</span>
               </div>
               <div class="text-xs font-bold text-slate-900 dark:text-white">Heartland Vegetarian Near Sengkang</div>
-              <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Compass One • Plant-based • Under $18</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Compass One • Plant-based • Under $18
+              </div>
             </button>
           </div>
         </div>
@@ -675,12 +772,15 @@
 
       <form id="loginForm" class="p-6 space-y-4">
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Email Address</label>
-          <input type="email" id="loginEmail" required placeholder="you@example.com"
+          <label
+            class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Email
+            Address</label>
+          <input type="email" id="loginEmail" required maxlength="254" placeholder="you@example.com"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
         </div>
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Password</label>
+          <label
+            class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Password</label>
           <input type="password" id="loginPassword" required minlength="8" placeholder="••••••••"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
         </div>
@@ -689,25 +789,35 @@
           Sign In to BiteFinder
         </button>
         <p class="text-[11px] text-slate-400 text-center">
-          Existing CLI account (e.g. <code class="text-brand-600 dark:text-brand-400">test@gmail.com</code>)? Enter your email and an 8+ character password to set your web password.
+          Existing CLI account (e.g. <code class="text-brand-600 dark:text-brand-400">test@gmail.com</code>)? Enter your
+          email and an 8–30 character password (letters, numbers, <code class="font-semibold">.,?!$</code>) to set your
+          web password.
         </p>
       </form>
 
       <form id="registerForm" class="p-6 space-y-4 hidden">
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Display Username</label>
+          <label
+            class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Display
+            Username</label>
           <input type="text" id="registerUsername" required maxlength="50" placeholder="e.g. John"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
         </div>
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Email Address</label>
-          <input type="email" id="registerEmail" required placeholder="you@example.com"
+          <label
+            class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Email
+            Address</label>
+          <input type="email" id="registerEmail" required maxlength="254" placeholder="you@example.com"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
         </div>
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Password (Min. 8 Characters)</label>
-          <input type="password" id="registerPassword" required minlength="8" placeholder="••••••••"
+          <label
+            class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Password
+            (8–30 Characters)</label>
+          <input type="password" id="registerPassword" required minlength="8" maxlength="30" placeholder="••••••••"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+          <p class="mt-1 text-[11px] text-slate-400">Use letters, numbers, and <code class="font-semibold">.,?!$</code>
+            only.</p>
         </div>
         <button type="submit" id="registerSubmitBtn"
           class="w-full py-2.5 px-4 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-brand-600 to-amber-600 hover:from-brand-700 hover:to-amber-700 shadow-md transition">
@@ -730,7 +840,8 @@
 
         <form id="otpForm" class="space-y-4 pt-1">
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 text-center">
+            <label
+              class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 text-center">
               Enter Verification Code
             </label>
             <input type="text" id="otpCodeInput" required maxlength="6" pattern="[0-9]{6}" inputmode="numeric"
@@ -782,43 +893,54 @@
       <form id="profileForm" class="p-6 space-y-4">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Username</label>
+            <label
+              class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Username</label>
             <input type="text" id="profUsernameInput" required maxlength="50"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Location</label>
-            <input type="text" id="profLocationInput" placeholder="e.g. Compass One"
+            <label
+              class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
+              Location <span class="font-normal normal-case text-slate-400">(Optional)</span></label>
+            <input type="text" id="profLocationInput" placeholder="e.g. Compass One (or leave empty)"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
         </div>
 
         <div class="grid grid-cols-3 gap-3">
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max Distance (km)</label>
-            <input type="number" id="profDistInput" min="0.5" max="15" step="0.5" placeholder="e.g. 1.5"
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max
+              Distance (km)</label>
+            <input type="number" id="profDistInput" min="0.01" step="any" placeholder="No limit (e.g. 1.5)"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max Time (Mins)</label>
-            <input type="number" id="profTimeInput" min="5" max="120" step="5" placeholder="e.g. 30"
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max
+              Time (Mins)</label>
+            <input type="number" id="profTimeInput" min="0.01" step="any" placeholder="No limit (e.g. 30)"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Budget (SGD)</label>
-            <input type="number" id="profBudgetInput" min="5" max="200" step="5" placeholder="e.g. 20"
+            <label
+              class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Budget
+              (SGD)</label>
+            <input type="number" id="profBudgetInput" min="0.01" step="any" placeholder="No limit (e.g. 20)"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
         </div>
 
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Default Dietary Requirements</label>
+          <label
+            class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Default
+            Dietary Requirements</label>
           <div class="flex items-center gap-4">
-            <label class="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
+            <label
+              class="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
               <input type="checkbox" id="profHalalCheck" class="rounded text-emerald-600 focus:ring-emerald-500">
               <span>MUIS Halal</span>
             </label>
-            <label class="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
+            <label
+              class="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
               <input type="checkbox" id="profVegCheck" class="rounded text-blue-600 focus:ring-blue-500">
               <span>Vegetarian</span>
             </label>
@@ -827,19 +949,26 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Preferred Cuisines</label>
+            <label
+              class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
+              Preferred Cuisines</label>
             <input type="text" id="profLikedInput" placeholder="e.g. chinese, japanese"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Disliked Cuisines</label>
+            <label
+              class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
+              Disliked Cuisines</label>
             <input type="text" id="profDislikedInput" placeholder="e.g. western, italian"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
         </div>
 
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default Special Wishes</label>
+          <label
+            class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
+            Special Wishes <span class="font-normal normal-case text-slate-400">(English,
+              comma-separated)</span></label>
           <input type="text" id="profOtherInput" placeholder="e.g. at least 4 stars, cozy dinner spot"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
         </div>
@@ -865,12 +994,15 @@
       class="bg-white dark:bg-slate-900 w-full max-w-lg max-h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
         <div class="flex items-center gap-2.5">
-          <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white shadow-sm">
+          <div
+            class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white shadow-sm">
             <i data-lucide="navigation" class="w-4 h-4"></i>
           </div>
           <div>
-            <h3 id="routeModalTitle" class="text-base font-bold text-slate-900 dark:text-white">Turn-by-Turn Directions</h3>
-            <p id="routeModalSubtitle" class="text-xs text-slate-500 dark:text-slate-400">Verified via Google Routes API</p>
+            <h3 id="routeModalTitle" class="text-base font-bold text-slate-900 dark:text-white">Turn-by-Turn Directions
+            </h3>
+            <p id="routeModalSubtitle" class="text-xs text-slate-500 dark:text-slate-400">Verified via Google Routes API
+            </p>
           </div>
         </div>
         <button type="button" id="closeRouteModalBtn" aria-label="Close directions dialog"
@@ -887,7 +1019,8 @@
         class="grid grid-cols-3 gap-2 px-6 py-3 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 shrink-0">
         <div class="text-center">
           <div class="text-[10px] font-bold uppercase text-slate-400">Travel Mode</div>
-          <div id="routeModeBadge" class="text-xs font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 capitalize">—</div>
+          <div id="routeModeBadge" class="text-xs font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 capitalize">—
+          </div>
         </div>
         <div class="text-center border-x border-slate-200 dark:border-slate-700">
           <div class="text-[10px] font-bold uppercase text-slate-400">Est. Duration</div>
@@ -954,7 +1087,8 @@
       class="bg-white dark:bg-slate-900 w-full max-w-xl max-h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
         <div class="flex items-center gap-2.5">
-          <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white shadow-sm">
+          <div
+            class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white shadow-sm">
             <i data-lucide="history" class="w-4 h-4"></i>
           </div>
           <div>
@@ -995,7 +1129,8 @@
           </div>
           <div>
             <h3 class="text-base font-bold text-slate-900 dark:text-white">Side-by-Side Restaurant Comparison</h3>
-            <p class="text-xs text-slate-500 dark:text-slate-400">Compare ratings, travel time, price, MUIS Halal status &amp; match reasons</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Compare ratings, travel time, price, MUIS Halal status
+              &amp; match reasons</p>
           </div>
         </div>
         <button type="button" id="closeCompareModalBtn" aria-label="Close comparison dialog"

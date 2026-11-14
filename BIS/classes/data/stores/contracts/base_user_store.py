@@ -5,6 +5,7 @@ from BIS.sources.profile_schema import (
     MINUTES_PER_KM, empty_preferences, normalize_email, normalize_username,
     validate_preferences,
 )
+from BIS.support.config import is_smtp_bypass
 from common.debug_log import debug_log
 
 
@@ -60,7 +61,7 @@ class BaseUserStore(ABC):
     def save_preferences(self, user_id, preferences, config):
         user = self.get_user(user_id)
         if (not user["email_verified"]
-                and config.get("smtp_bypass") is not True):
+                and not is_smtp_bypass(config)):
             raise ValueError(
                 "Verify your email before changing preferences.")
         user["preferences"] = validate_preferences(preferences)

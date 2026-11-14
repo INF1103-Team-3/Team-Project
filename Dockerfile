@@ -121,7 +121,7 @@ COPY common/nginx.conf /etc/nginx/conf.d/default.conf
 
 FROM api AS web-test
 USER root
-COPY requirements.txt requirements-dev.txt .
+COPY requirements.txt requirements-dev.txt ./
 RUN pip install --no-cache-dir -r requirements-dev.txt
 USER 10001:10001
 CMD ["python", "tests/run_tests.py", "web"]

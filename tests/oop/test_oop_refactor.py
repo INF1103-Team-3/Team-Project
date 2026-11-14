@@ -853,13 +853,13 @@ class OOPRefactorTests(unittest.TestCase):
             user = data.register_user("pw_oop@example.com", "PW User")
             user = data.save(dict(user, email_verified=True))
             hasher = PasswordHasher()
-            data.save_credentials(user["userID"], hasher.create("initial-pass-1"))
+            data.save_credentials(user["userID"], hasher.create("initial.pass.1"))
 
             messages = []
             io_stub = SimpleNamespace(
                 display_message=lambda msg, **_kw: messages.append(msg),
                 verify_user_password=lambda _uid, **_kw: True,
-                prompt_new_password=lambda **_kw: hasher.create("updated-pass-2"),
+                prompt_new_password=lambda **_kw: hasher.create("updated.pass.2"),
             )
             session = InteractionSession(
                 user, {}, SimpleNamespace(), data, io_stub,
@@ -871,8 +871,8 @@ class OOPRefactorTests(unittest.TestCase):
             self.assertIsNone(result)
             self.assertEqual(messages[-1], "Password updated.")
             saved = JsonCredentialStore(root / "credentials.json").get(user["userID"])
-            self.assertTrue(hasher.verify("updated-pass-2", saved))
-            self.assertFalse(hasher.verify("initial-pass-1", saved))
+            self.assertTrue(hasher.verify("updated.pass.2", saved))
+            self.assertFalse(hasher.verify("initial.pass.1", saved))
 
     def test_subsystem_import_and_layer_boundaries(self):
         def iter_imports(path):
@@ -998,6 +998,289 @@ class OOPRefactorTests(unittest.TestCase):
                     brns_main.main([])
                 self.assertEqual(ctx.exception.code, 1)
                 self.assertEqual(CommandLine().run([]), 1)
+
+    def test_google_route_gateway_polyline_and_map_config(self):
+        from unittest.mock import Mock, patch
+        from BIS.classes.io.web.web_io_manager import WebIOManager
+        from BIS.classes.services.web.bis_application_service import BISApplicationService
+        from BRNS.classes.io.gateways.google.google_route_gateway import GoogleRouteGateway
+
+        self.assertEqual(GoogleRouteGateway.decode_polyline(""), [])
+        self.assertEqual(GoogleRouteGateway.decode_polyline(None), [])
+        self.assertEqual(
+            GoogleRouteGateway.decode_polyline("_p~iF~ps|U_ulLnnqC_mqNvxq`@"),
+            [[38.5, -120.2], [40.7, -120.95], [43.252, -126.453]],
+        )
+
+        def encode_points(points):
+            out = []
+            prev_lat = 0
+            prev_lng = 0
+            for lat, lng in points:
+                ilat = round(lat * 1e5)
+                ilng = round(lng * 1e5)
+                for delta in (ilat - prev_lat, ilng - prev_lng):
+                    value = ~(delta << 1) if delta < 0 else (delta << 1)
+                    while value >= 0x20:
+                        out.append(chr((0x20 | (value & 0x1F)) + 63))
+                        value >>= 5
+                    out.append(chr(value + 63))
+                prev_lat = ilat
+                prev_lng = ilng
+            return "".join(out)
+
+        cfg = SimpleNamespace(
+            GOOGLE_MAPS_API_KEY="test-route-key",
+            ROUTES_URL="https://routes.example.test/compute",
+            MATRIX_URL="https://routes.example.test/matrix",
+        )
+        gateway = GoogleRouteGateway(
+            cfg,
+            SimpleNamespace(debug_log=lambda *_a, **_kw: None),
+            lambda *_a, **_kw: None,
+        )
+
+        walk_a = [[1.35000, 103.94000], [1.35100, 103.94100]]
+        walk_b = [[1.35100, 103.94100], [1.35200, 103.94200]]
+        transit_pts = [[1.35200, 103.94200], [1.36000, 103.95000]]
+        walk_c = [[1.36000, 103.95000], [1.36100, 103.95100]]
+        full_pts = [[1.35000, 103.94000], [1.35200, 103.94200], [1.36100, 103.95100]]
+
+        live_resp = Mock()
+        live_resp.raise_for_status = Mock()
+        live_resp.json.return_value = {
+            "routes": [{
+                "duration": "600s",
+                "distanceMeters": 1450,
+                "polyline": {"encodedPolyline": encode_points(full_pts)},
+                "legs": [{
+                    "steps": [
+                        {
+                            "travelMode": "WALK",
+                            "navigationInstruction": {"instructions": "Head north"},
+                            "polyline": {"encodedPolyline": encode_points(walk_a)},
+                        },
+                        {
+                            "travelMode": "WALK",
+                            "navigationInstruction": {"instructions": "Cross footbridge"},
+                            "polyline": {"encodedPolyline": encode_points(walk_b)},
+                        },
+                        {
+                            "travelMode": "TRANSIT",
+                            "navigationInstruction": {"instructions": "Take MRT"},
+                            "polyline": {"encodedPolyline": encode_points(transit_pts)},
+                        },
+                        {
+                            "travelMode": "WALK",
+                            "navigationInstruction": {"instructions": "Walk to shop"},
+                            "polyline": {"encodedPolyline": encode_points(walk_c)},
+                        },
+                    ],
+                }],
+            }],
+        }
+        no_poly_resp = Mock()
+        no_poly_resp.raise_for_status = Mock()
+        no_poly_resp.json.return_value = {
+            "routes": [{
+                "duration": "300s",
+                "distanceMeters": 400,
+                "legs": [{"steps": [{"navigationInstruction": {"instructions": "Walk straight"}}]}],
+            }],
+        }
+
+        with patch(
+            "BRNS.classes.io.gateways.google.google_route_gateway.requests.post",
+            side_effect=[live_resp, no_poly_resp],
+        ) as mock_post:
+            res = gateway.get_route((1.35, 103.94), (1.361, 103.951), "transit")
+            sent_headers = mock_post.call_args_list[0].kwargs["headers"]
+            self.assertIn("routes.polyline.encodedPolyline", sent_headers["X-Goog-FieldMask"])
+            self.assertIn("routes.legs.steps.travelMode", sent_headers["X-Goog-FieldMask"])
+            self.assertIn("routes.legs.steps.polyline.encodedPolyline", sent_headers["X-Goog-FieldMask"])
+            self.assertIn("routes.legs.steps.transitDetails", sent_headers["X-Goog-FieldMask"])
+            self.assertEqual(res["duration_min"], 10)
+            self.assertEqual(res["distance_m"], 1450)
+            self.assertEqual(res["path"], full_pts)
+            self.assertEqual(
+                res["segments"],
+                [
+                    {"mode": "walk", "path": [[1.35000, 103.94000], [1.35100, 103.94100], [1.35200, 103.94200]]},
+                    {"mode": "transit", "path": transit_pts},
+                    {"mode": "walk", "path": walk_c},
+                ],
+            )
+
+            plain = gateway.get_route((1.35, 103.94), (1.353, 103.943), "walk")
+            self.assertEqual(plain["encoded_polyline"], "")
+            self.assertEqual(plain["path"], [])
+            self.assertEqual(plain["segments"], [])
+            self.assertEqual(plain["steps"], ["Walk straight"])
+
+        def make_io(cfg_dict):
+            app_svc = BISApplicationService(
+                SimpleNamespace(), SimpleNamespace(), SimpleNamespace(), SimpleNamespace(), cfg_dict,
+            )
+            return WebIOManager(
+                auth=SimpleNamespace(), application=app_svc,
+                favorites=SimpleNamespace(), health=lambda: True,
+            )
+
+        self.assertEqual(
+            make_io({"google_maps_api_key": "", "google_maps_js_api_key": ""}).map_config(),
+            {"provider": "leaflet", "google_maps_api_key": ""},
+        )
+        self.assertEqual(
+            make_io({"google_maps_api_key": "shared-key", "google_maps_js_api_key": ""}).map_config(),
+            {"provider": "google", "google_maps_api_key": "shared-key"},
+        )
+        self.assertEqual(
+            make_io({
+                "google_maps_api_key": "shared-key",
+                "google_maps_js_api_key": "browser-key",
+                "use_live_google": True,
+            }).map_config(),
+            {"provider": "google", "google_maps_api_key": "browser-key"},
+        )
+        self.assertEqual(
+            make_io({
+                "google_maps_api_key": "shared-key",
+                "google_maps_js_api_key": "browser-key",
+                "use_live_google": False,
+            }).map_config(),
+            {"provider": "leaflet", "google_maps_api_key": ""},
+        )
+
+    def test_place_photo_gateway_and_mongo_blob_cache(self):
+        from unittest.mock import Mock, patch
+        try:
+            import mongomock
+        except ImportError:
+            mongomock = None
+        from BIS.classes.data.stores.mongo.mongo_connection import MongoConnection
+        from BRNS.classes.data.stores.contracts.place_photo_store_interface import (
+            PlacePhotoStoreInterface,
+        )
+        from BRNS.classes.data.stores.json.null_place_photo_store import (
+            NullPlacePhotoStore,
+        )
+        from BRNS.classes.data.stores.mongo.mongo_place_photo_store import (
+            MongoPlacePhotoStore,
+        )
+        from BRNS.classes.io.gateways.google.google_place_photo_gateway import (
+            GooglePlacePhotoGateway,
+        )
+        from BRNS.classes.services.workflows.place_photo_service import (
+            PlacePhotoService,
+        )
+
+        if mongomock is not None:
+            conn = MongoConnection(client=mongomock.MongoClient(), database="photo_oop_test")
+        else:
+            class _InMemoryCollection:
+                def __init__(self):
+                    self.docs = {}
+
+                def create_index(self, *_args, **_kwargs):
+                    return "cached_at_1"
+
+                def find_one(self, query):
+                    doc = self.docs.get(query.get("_id"))
+                    return dict(doc) if isinstance(doc, dict) else None
+
+                def replace_one(self, query, replacement, upsert=False):
+                    key = query.get("_id")
+                    if key in self.docs or upsert:
+                        self.docs[key] = dict(replacement)
+
+            class _InMemoryClient:
+                def __init__(self):
+                    self._dbs = {}
+
+                def __getitem__(self, name):
+                    return self._dbs.setdefault(
+                        name, SimpleNamespace(place_photos=_InMemoryCollection())
+                    )
+
+                def close(self):
+                    return None
+
+            conn = MongoConnection(client=_InMemoryClient(), database="photo_oop_test")
+        self.addCleanup(conn.close)
+        store = MongoPlacePhotoStore(conn)
+        self.assertIsInstance(store, PlacePhotoStoreInterface)
+        store.ensure_indexes()
+
+        null_store = NullPlacePhotoStore()
+        self.assertIsInstance(null_store, PlacePhotoStoreInterface)
+        self.assertIsNone(null_store.get_photo("ChIJ123"))
+        self.assertFalse(null_store.save_photo("ChIJ123", {"status": "ok", "data": b"abc"}))
+
+        cfg = SimpleNamespace(
+            GOOGLE_MAPS_API_KEY="test-places-key",
+            PLACES_DETAILS_BASE_URL="https://places.example.test/v1",
+            USE_LIVE_GOOGLE=True,
+        )
+        gateway = GooglePlacePhotoGateway(
+            cfg,
+            SimpleNamespace(debug_log=lambda *_a, **_kw: None),
+            lambda *_a, **_kw: None,
+        )
+        service = PlacePhotoService(
+            store, gateway, SimpleNamespace(debug_log=lambda *_a, **_kw: None),
+        )
+
+        with self.assertRaises(ValueError):
+            service.get_or_fetch_photo("../bad-id")
+
+        details_ok = Mock(status_code=200)
+        details_ok.raise_for_status = Mock()
+        details_ok.json.return_value = {
+            "photos": [{
+                "name": "places/ChIJPin1/photos/PhotoRef1",
+                "authorAttributions": [{"displayName": "Alex Tan"}],
+            }],
+        }
+        media_meta = Mock(status_code=200, headers={"Content-Type": "application/json"})
+        media_meta.raise_for_status = Mock()
+        media_meta.json.return_value = {"photoUri": "https://img.example.test/p1.jpg"}
+        img_resp = Mock(
+            status_code=200,
+            headers={"Content-Type": "image/jpeg; charset=binary"},
+            content=b"\xff\xd8\xff\xe0TESTJPEG",
+        )
+        img_resp.raise_for_status = Mock()
+
+        details_empty = Mock(status_code=200)
+        details_empty.raise_for_status = Mock()
+        details_empty.json.return_value = {"photos": []}
+
+        with patch(
+            "BRNS.classes.io.gateways.google.google_place_photo_gateway.requests.get",
+            side_effect=[details_ok, media_meta, img_resp, details_empty],
+        ) as mock_get:
+            first = service.get_or_fetch_photo("ChIJPin1")
+            self.assertIsNotNone(first)
+            self.assertEqual(first["data"], b"\xff\xd8\xff\xe0TESTJPEG")
+            self.assertEqual(first["content_type"], "image/jpeg")
+            self.assertEqual(first["author_attribution"], "Alex Tan")
+            self.assertEqual(mock_get.call_count, 3)
+
+            # Second access hits MongoDB blob cache with zero HTTP calls.
+            cached_doc = conn.db.place_photos.find_one({"_id": "ChIJPin1"})
+            self.assertIsNotNone(cached_doc)
+            self.assertEqual(bytes(cached_doc["data"]), b"\xff\xd8\xff\xe0TESTJPEG")
+
+            second = service.get_or_fetch_photo("ChIJPin1")
+            self.assertEqual(second["data"], b"\xff\xd8\xff\xe0TESTJPEG")
+            self.assertEqual(mock_get.call_count, 3)
+
+            # Place with no photos caches not_found marker and avoids repeat lookups.
+            missing = service.get_or_fetch_photo("ChIJNoPhoto")
+            self.assertIsNone(missing)
+            self.assertEqual(mock_get.call_count, 4)
+            self.assertIsNone(service.get_or_fetch_photo("ChIJNoPhoto"))
+            self.assertEqual(mock_get.call_count, 4)
 
 
 if __name__ == "__main__":

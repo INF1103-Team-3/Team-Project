@@ -2,7 +2,12 @@
 from copy import deepcopy
 import re
 
-from BIS.sources.profile_schema import CUISINES, DIETARY_CHOICES, NUMBER_LIMITS
+from BIS.sources.profile_schema import (
+    CUISINES,
+    DIETARY_CHOICES,
+    NUMBER_LIMITS,
+    SEARCH_MODE_LIMITS,
+)
 
 
 _COMMON_CUSTOM_CUISINES = (
@@ -122,14 +127,15 @@ class BISChatbotService:
         if mode not in ("walk", "drive", "transit"):
             mode = "walk"
 
+        mode_limits = SEARCH_MODE_LIMITS[mode]
         max_mins = raw.get("max_travel_minutes") if "max_travel_minutes" in raw else defaults["max_travel_minutes"]
         max_km = raw.get("max_distance_km") if "max_distance_km" in raw else defaults["max_distance_km"]
         if isinstance(max_mins, (int, float)) and not isinstance(max_mins, bool) and max_mins > 0:
-            low, high = NUMBER_LIMITS["max_travel_time_minutes"]
+            low, high = mode_limits["max_travel_minutes"]
             max_mins = round(max(low, min(high, float(max_mins))), 1)
             max_km = None
         elif isinstance(max_km, (int, float)) and not isinstance(max_km, bool) and max_km > 0:
-            low, high = NUMBER_LIMITS["max_distance_km"]
+            low, high = mode_limits["max_distance_km"]
             max_km = round(max(low, min(high, float(max_km))), 2)
             max_mins = None
         else:
