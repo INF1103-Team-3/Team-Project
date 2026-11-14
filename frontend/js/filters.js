@@ -1,13 +1,16 @@
 import {
+  applyRatingFilterToWishesRaw,
   formatCuisineLabel,
+  getActiveRatingFilterValue,
+  normalizeWishText,
   RECENT_KEY,
   refreshIcons,
   state,
   validateEnglishWishesInput,
-} from './state.js?v=20261114-9';
-import { apiJson } from './api.js?v=20261114-9';
-import { showToast } from './toast.js?v=20261114-9';
-import { renderResults, renderResultsSkeleton } from './results.js?v=20261114-9';
+} from './state.js?v=20261114-12';
+import { apiJson } from './api.js?v=20261114-12';
+import { showToast } from './toast.js?v=20261114-12';
+import { renderResults, renderResultsSkeleton, updateResultsSkeletonModel } from './results.js?v=20261114-12';
 
 let chatCallbacks = {
   renderSummary: () => {},
@@ -639,7 +642,7 @@ export function collectCurrentFormPayload(forChat = false) {
   if (vegCheck?.checked) dietary.push('vegetarian');
 
   const special = specialInput ? specialInput.value.trim() : '';
-  const otherPreferences = special ? special.split(',').map((s) => s.trim()).filter(Boolean) : [];
+  const otherPreferences = special ? special.split(',').map(normalizeWishText).filter(Boolean) : [];
 
   if (customInput && customInput.value.trim()) {
     addCustomCuisinesFromInput();
@@ -867,8 +870,224 @@ export function applyFiltersToSearchForm(filters, { preserveBudgetPlus = false, 
   });
   updateDislikedChipsUI();
   document.getElementById('specialInput').value = (filters.other_preferences || []).join(', ');
+  searchRatingControl?.syncFromWishes();
   validateSpecialFilterInput(true);
   chatCallbacks.renderSummary();
+}
+
+const RATING_SLIDER_CONFIG = {
+  baseMin: 3.0,
+  anyNotch: 2.9,
+  minVal: 1.0,
+  maxVal: 5.0,
+  defaultStep: 0.1,
+};
+
+let searchRatingControl = null;
+
+function formatRatingBadge(num) {
+  if (!Number.isFinite(num)) return '';
+  const rounded = Math.round(num * 100) / 100;
+  return Number.isInteger(rounded) ? rounded.toFixed(1) : formatLimitNumber(rounded, 2);
+}
+
+export function createRatingSliderController({
+  wrapId,
+  inputId,
+  unitId,
+  clearBtnId,
+  sliderId,
+  scaleMinId,
+  wishInputId,
+  onSync = null,
+  onChange = null,
+}) {
+  const wrap = document.getElementById(wrapId);
+  const input = document.getElementById(inputId);
+  const unit = document.getElementById(unitId);
+  const clearBtn = document.getElementById(clearBtnId);
+  const slider = document.getElementById(sliderId);
+  const scaleMin = document.getElementById(scaleMinId);
+  const wishInput = document.getElementById(wishInputId);
+  if (!slider || !input || !wishInput) return null;
+
+  let lastMaxToastTs = 0;
+  const applyVisual = (ratingNum, { keepSliderFloor = false } = {}) => {
+    const hasRating = typeof ratingNum === 'number'
+      && Number.isFinite(ratingNum)
+      && ratingNum >= RATING_SLIDER_CONFIG.minVal
+      && ratingNum <= RATING_SLIDER_CONFIG.maxVal;
+    if (hasRating) {
+      const nextMin = ratingNum < RATING_SLIDER_CONFIG.baseMin
+        ? Math.max(0.9, Math.round((ratingNum - 0.1) * 10) / 10)
+        : RATING_SLIDER_CONFIG.anyNotch;
+      if (!keepSliderFloor) {
+        slider.min = String(nextMin);
+      }
+      slider.max = String(RATING_SLIDER_CONFIG.maxVal);
+      slider.step = countStepDecimals(ratingNum) > 1
+        ? '0.01'
+        : String(RATING_SLIDER_CONFIG.defaultStep);
+      slider.value = String(ratingNum);
+      if (document.activeElement !== input) {
+        input.value = formatRatingBadge(ratingNum);
+      }
+    } else {
+      if (!keepSliderFloor) {
+        slider.min = String(RATING_SLIDER_CONFIG.anyNotch);
+      }
+      slider.max = String(RATING_SLIDER_CONFIG.maxVal);
+      slider.step = String(RATING_SLIDER_CONFIG.defaultStep);
+      slider.value = slider.min;
+      if (document.activeElement !== input) {
+        input.value = '';
+      }
+    }
+    wrap?.classList.toggle('is-set', hasRating);
+    input.classList.toggle('is-set', hasRating);
+    unit?.classList.toggle('hidden', !hasRating);
+    clearBtn?.classList.toggle('hidden', !hasRating);
+    if (scaleMin) scaleMin.textContent = 'Any';
+    syncLimitInputWidth(input, { emptyWidth: '3.2ch' });
+    syncRangeTrackVisual(slider, hasRating);
+  };
+
+  const syncFromWishes = () => {
+    const active = getActiveRatingFilterValue(wishInput.value);
+    applyVisual(typeof active === 'number' ? active : null);
+  };
+
+  const setWishRating = (nextRating, { keepSliderFloor = false } = {}) => {
+    const valid = typeof nextRating === 'number'
+      && Number.isFinite(nextRating)
+      && nextRating >= RATING_SLIDER_CONFIG.minVal
+      && nextRating <= RATING_SLIDER_CONFIG.maxVal;
+    const cleanVal = valid ? Math.round(nextRating * 100) / 100 : '';
+    wishInput.value = applyRatingFilterToWishesRaw(wishInput.value, cleanVal);
+    applyVisual(valid ? cleanVal : null, { keepSliderFloor });
+    onSync?.(wishInput.value);
+    onChange?.();
+  };
+
+  bindRangeSliderDrag(slider);
+
+  wrap?.addEventListener('click', (e) => {
+    if (e.target !== input) {
+      input.focus();
+      input.select();
+    }
+  });
+
+  slider.addEventListener('input', () => {
+    const val = parseFloat(slider.value);
+    const curMin = parseFloat(slider.min);
+    if (!Number.isFinite(val) || val <= curMin + 1e-6) {
+      setWishRating(null, { keepSliderFloor: true });
+    } else {
+      const clamped = Math.min(RATING_SLIDER_CONFIG.maxVal, Math.max(RATING_SLIDER_CONFIG.minVal, val));
+      setWishRating(clamped, { keepSliderFloor: true });
+    }
+  });
+
+  slider.addEventListener('change', () => {
+    const val = parseFloat(slider.value);
+    const curMin = parseFloat(slider.min);
+    if (!Number.isFinite(val) || val <= curMin + 1e-6) {
+      applyVisual(null);
+    } else {
+      applyVisual(Math.min(RATING_SLIDER_CONFIG.maxVal, Math.max(RATING_SLIDER_CONFIG.minVal, val)));
+    }
+  });
+
+  clearBtn?.addEventListener('click', () => {
+    if (document.activeElement === input) input.blur();
+    setWishRating(null);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      input.blur();
+      return;
+    }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const step = e.shiftKey ? 0.5 : 0.1;
+      const cur = parseFloat(input.value);
+      let next;
+      if (!Number.isFinite(cur)) {
+        next = e.key === 'ArrowUp' ? RATING_SLIDER_CONFIG.baseMin : RATING_SLIDER_CONFIG.minVal;
+      } else {
+        const delta = e.key === 'ArrowUp' ? step : -step;
+        next = Math.min(RATING_SLIDER_CONFIG.maxVal, Math.max(RATING_SLIDER_CONFIG.minVal, Math.round((cur + delta) * 100) / 100));
+      }
+      input.value = formatRatingBadge(next);
+      setWishRating(next);
+    }
+  });
+
+  input.addEventListener('input', (e) => {
+    const stripped = String(e.target.value || '').replace(/\++$/, '');
+    const cleaned = sanitizeDecimalText(stripped);
+    if (cleaned !== e.target.value) e.target.value = cleaned;
+    const raw = e.target.value.trim();
+    if (raw === '') {
+      setWishRating(null);
+      return;
+    }
+    const val = parseFloat(raw);
+    if (!Number.isFinite(val)) return;
+    if (val > RATING_SLIDER_CONFIG.maxVal) {
+      e.target.value = formatRatingBadge(RATING_SLIDER_CONFIG.maxVal);
+      setWishRating(RATING_SLIDER_CONFIG.maxVal);
+      const now = Date.now();
+      if (now - lastMaxToastTs > 1500) {
+        lastMaxToastTs = now;
+        showToast('Maximum Google rating is 5.0 stars.', 'warning');
+      }
+    } else if (val >= RATING_SLIDER_CONFIG.minVal) {
+      setWishRating(val);
+    }
+  });
+
+  input.addEventListener('change', (e) => {
+    const raw = e.target.value.trim();
+    if (raw === '') {
+      setWishRating(null);
+      return;
+    }
+    let val = parseFloat(raw);
+    if (!Number.isFinite(val) || val < RATING_SLIDER_CONFIG.minVal) {
+      val = RATING_SLIDER_CONFIG.minVal;
+      showToast('Minimum Google rating is 1.0 stars.', 'warning');
+    } else if (val > RATING_SLIDER_CONFIG.maxVal) {
+      val = RATING_SLIDER_CONFIG.maxVal;
+      showToast('Maximum Google rating is 5.0 stars.', 'warning');
+    }
+    val = Math.round(val * 100) / 100;
+    e.target.value = formatRatingBadge(val);
+    setWishRating(val);
+  });
+
+  wishInput.addEventListener('input', () => {
+    syncFromWishes();
+  });
+
+  wishInput.addEventListener('blur', () => {
+    const normalized = wishInput.value
+      .split(',')
+      .map(normalizeWishText)
+      .filter(Boolean)
+      .join(', ');
+    if (normalized !== wishInput.value.trim()) {
+      wishInput.value = normalized;
+    }
+    syncFromWishes();
+    onSync?.(wishInput.value);
+  });
+
+  syncFromWishes();
+  return { syncFromWishes };
 }
 
 function setSpecialInputError(message = '') {
@@ -892,7 +1111,7 @@ function setSpecialInputError(message = '') {
 export function validateSpecialFilterInput(showErrorUi = true) {
   const specialInput = document.getElementById('specialInput');
   const raw = specialInput ? specialInput.value.trim() : '';
-  const items = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+  const items = raw ? raw.split(',').map(normalizeWishText).filter(Boolean) : [];
   const err = validateEnglishWishesInput(items, 'Special requests');
   if (showErrorUi) setSpecialInputError(err);
   return err;
@@ -1392,7 +1611,17 @@ export function initFiltersControls() {
 
   const specialInput = document.getElementById('specialInput');
   const specialErrEl = document.getElementById('specialInputError');
-  specialInput?.addEventListener('blur', () => validateSpecialFilterInput(true));
+  searchRatingControl = createRatingSliderController({
+    wrapId: 'ratingDisplayWrap',
+    inputId: 'ratingInput',
+    unitId: 'ratingUnitLabel',
+    clearBtnId: 'ratingClearBtn',
+    sliderId: 'ratingSlider',
+    scaleMinId: 'ratingScaleMin',
+    wishInputId: 'specialInput',
+    onSync: () => validateSpecialFilterInput(true),
+    onChange: () => chatCallbacks.renderSummary(),
+  });
   specialInput?.addEventListener('input', () => {
     if (specialErrEl && !specialErrEl.classList.contains('hidden')) {
       validateSpecialFilterInput(true);
@@ -1492,12 +1721,40 @@ export function initFiltersControls() {
 
     renderResultsSkeleton(activeModelLabel);
 
+    let pollingActive = true;
+    const pollAbort = new AbortController();
+    let pollInFlight = false;
+    const modelPollTimer = setInterval(async () => {
+      if (!pollingActive || pollInFlight) return;
+      pollInFlight = true;
+      try {
+        const pData = await apiJson('/api/active-model', { signal: pollAbort.signal });
+        if (pollingActive && pData.active_model && pData.active_model !== activeModelLabel) {
+          activeModelLabel = pData.active_model;
+          statusText.textContent = `Searching near ${allLocations.join(' & ')} (${activeModelLabel})...`;
+          updateResultsSkeletonModel(activeModelLabel);
+        }
+      } catch {
+        // Ignore transient or aborted status polls while a search request is active.
+      } finally {
+        pollInFlight = false;
+      }
+    }, 500);
+
+    const stopModelPolling = () => {
+      if (!pollingActive) return;
+      pollingActive = false;
+      clearInterval(modelPollTimer);
+      pollAbort.abort();
+    };
+
     try {
       const data = await apiJson('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      stopModelPolling();
 
       if (data.message && (!data.matches || data.matches.length === 0)) {
         statusBanner.className = 'p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200';
@@ -1551,6 +1808,7 @@ export function initFiltersControls() {
       renderResults(state.lastMatches, state.lastAlternatives);
       chatCallbacks.postSearchOutcome({ matches, alternatives, modelUsed, fromChat });
     } catch (error) {
+      stopModelPolling();
       if (/special requests?/i.test(error.message || '')) {
         setSpecialInputError(error.message);
       }
@@ -1561,6 +1819,7 @@ export function initFiltersControls() {
       document.getElementById('resultsList').innerHTML = '';
       chatCallbacks.postSearchOutcome({ errorMessage: error.message, fromChat });
     } finally {
+      stopModelPolling();
       searchBtn.disabled = false;
       searchBtn.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i> Find Matching Restaurants';
       refreshIcons(searchBtn);

@@ -7,6 +7,9 @@ from BIS.sources.profile_schema import (
     DIETARY_CHOICES,
     NUMBER_LIMITS,
     SEARCH_MODE_LIMITS,
+    extract_rating_wishes,
+    normalize_wish_text,
+    strip_rating_clauses,
     validate_english_preferences,
 )
 
@@ -63,14 +66,22 @@ _ONBOARDING_QUESTIONS = {
 
 def validate_special_preferences(items, ai=None, config=None, field_label="Special requests"):
     """Validate deterministic English wording and optional AI sense for special wishes."""
-    cleaned = [str(w or "").strip() for w in (items or []) if str(w or "").strip()]
+    cleaned = [normalize_wish_text(w) for w in (items or []) if normalize_wish_text(w)]
     if not cleaned:
         return []
-    validate_english_preferences(cleaned, field_label=field_label)
+    cleaned = validate_english_preferences(cleaned, field_label=field_label)
+    non_rating_wishes = [
+        rem for item in cleaned for rem in [strip_rating_clauses(item)] if rem
+    ]
     cfg = config or {}
-    if not cfg.get("ai_bypass") and ai is not None and hasattr(ai, "review_profile_wishes"):
+    if (
+        non_rating_wishes
+        and not cfg.get("ai_bypass")
+        and ai is not None
+        and hasattr(ai, "review_profile_wishes")
+    ):
         try:
-            ai.review_profile_wishes(cleaned, deepcopy(cfg))
+            ai.review_profile_wishes(non_rating_wishes, deepcopy(cfg))
         except RuntimeError:
             pass
         except ValueError as err:
@@ -318,13 +329,33 @@ class BISChatbotService:
                 c for c in result["liked_cuisines"] if c.casefold() not in disliked_keys
             ]
 
-        if isinstance(updates.get("other_preferences"), list) or updates.get("other_action") == "clear":
+        if (
+            isinstance(updates.get("other_preferences"), list)
+            or updates.get("other_action") in ("clear", "clear_rating")
+        ):
             action = updates.get("other_action") or "add"
-            result["other_preferences"] = cls._merge_list(
-                result["other_preferences"],
-                updates.get("other_preferences") or [],
-                action,
-            )
+            if action == "clear_rating":
+                kept = []
+                for existing in result["other_preferences"]:
+                    rem = strip_rating_clauses(existing)
+                    if rem:
+                        kept.append(rem)
+                result["other_preferences"] = kept
+            else:
+                incoming = [normalize_wish_text(x) for x in (updates.get("other_preferences") or []) if normalize_wish_text(x)]
+                has_incoming_rating = any(strip_rating_clauses(x) != x for x in incoming)
+                base_other = result["other_preferences"]
+                if action == "add" and has_incoming_rating:
+                    base_other = [
+                        rem for item in base_other
+                        for rem in [strip_rating_clauses(item)]
+                        if rem
+                    ]
+                result["other_preferences"] = cls._merge_list(
+                    base_other,
+                    incoming,
+                    action,
+                )
 
         return cls.normalize_filters(result, user=user)
 
@@ -405,7 +436,7 @@ class BISChatbotService:
     @classmethod
     def _parse_contextual_answer(cls, message, awaiting_field, current=None):
         """Parse concise direct answers when the chatbot just asked a targeted question."""
-        text = str(message or "").strip()
+        text = normalize_wish_text(message)
         lower = text.casefold()
         updates = {}
         if not awaiting_field or not text:
@@ -519,7 +550,7 @@ class BISChatbotService:
 
     @classmethod
     def _deterministic_parse(cls, message, current, user, awaiting_field=None):
-        text = str(message or "").strip()
+        text = normalize_wish_text(message)
         lower = text.casefold()
 
         if lower in ("/help", "help", "commands", "what can you do", "how does this work"):
@@ -776,17 +807,16 @@ class BISChatbotService:
             updates["disliked_action"] = "remove"
 
         other = []
-        rating_match = re.search(
-            r"\b(?:at least|minimum|min|>=)?\s*([1-5](?:\.\d+)?)\s*(?:stars?|/\s*5)\b",
+        # Only capture bare numbers with at-least/min when followed by stars|/5|rating or a decimal rating.
+        explicit_star_match = re.search(
+            r"(?:(?:\b(?:at least|minimum|min\.?|no less than|above|over)\b|>=?)\s*"
+            r"(?:google\s*)?(?:(?:rating|rated)\s*(?:of\s*)?(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:\+\s*)?(?:stars?|/\s*5|rating\b|rated\b))"
+            r"|\b(\d+(?:\.\d+)?)\s*(?:\+\s*)?(?:stars?|/\s*5|rated|rating)\b(?:\s*(?:or higher|or above|and up|or better|minimum|min\.?|\+)(?!\w))?)",
             lower,
         )
-        if rating_match:
-            rating_val = rating_match.group(1)
-            other.append(
-                f"at least {rating_val} stars"
-                if re.search(r"\b(?:at least|minimum|min|>=)\b", lower)
-                else f"{rating_val} stars"
-            )
+        if explicit_star_match:
+            rating_val = next(g for g in explicit_star_match.groups() if g is not None)
+            other.append(f"at least {rating_val} stars")
         explicit_wish = re.search(
             r"\b(?:(?:add|set)\s+(?:special\s+)?wish(?:es)?|(?:special\s+(?:request|wish)(?:es)?|wish(?:es)?|other\s+preferences?)\s*[:=-])\s*(.+)$",
             text,
@@ -808,11 +838,13 @@ class BISChatbotService:
             re.IGNORECASE,
         ):
             for part in explicit_wish.group(1).split(","):
-                clean_part = part.strip()
+                clean_part = normalize_wish_text(part)
                 if clean_part and clean_part.casefold() not in {o.casefold() for o in other}:
                     other.append(clean_part)
-        if re.search(r"\b(?:clear\s+(?:special\s+)?wish(?:es)?|no\s+(?:special\s+)?wish(?:es)?|remove\s+rating|no\s+rating\s+limit|any\s+rating)\b", lower):
+        if re.search(r"\b(?:clear\s+(?:special\s+)?wish(?:es)?|no\s+(?:special\s+)?wish(?:es)?)\b", lower):
             updates["other_action"] = "clear"
+        elif re.search(r"\b(?:remove\s+rating|no\s+rating\s+limit|any\s+rating|clear\s+rating)\b", lower):
+            updates["other_action"] = "clear_rating"
         elif other and (awaiting_field != "other_preferences" or "other_preferences" not in updates):
             updates["other_preferences"] = other
             updates["other_action"] = "add"
@@ -1074,7 +1106,7 @@ class BISChatbotService:
                         or [p.strip() for p in text.split(",") if p.strip()]
                     )
                     try:
-                        validate_special_preferences(
+                        candidate_wishes = validate_special_preferences(
                             candidate_wishes,
                             ai=self._ai,
                             config=self._config,
@@ -1602,9 +1634,9 @@ class BISChatbotService:
             }
 
         updates_dict = dict(parsed.get("updates") or {})
-        if updates_dict.get("other_action") not in ("clear", "remove") and updates_dict.get("other_preferences"):
+        if updates_dict.get("other_action") not in ("clear", "clear_rating", "remove") and updates_dict.get("other_preferences"):
             try:
-                validate_special_preferences(
+                updates_dict["other_preferences"] = validate_special_preferences(
                     updates_dict["other_preferences"],
                     ai=self._ai,
                     config=self._config,
@@ -1613,7 +1645,7 @@ class BISChatbotService:
             except ValueError as err:
                 return self._reject_invalid_wishes(current, err)
 
-        updated = self._apply_updates(current, parsed.get("updates"), user=user)
+        updated = self._apply_updates(current, updates_dict, user=user)
         changes = self._summarize_changes(current, updated)
         saved_to_profile = False
 
@@ -1658,7 +1690,7 @@ class BISChatbotService:
                     "saved_to_profile": False,
                 }
             try:
-                validate_special_preferences(
+                updated["other_preferences"] = validate_special_preferences(
                     updated.get("other_preferences") or [],
                     ai=self._ai,
                     config=self._config,

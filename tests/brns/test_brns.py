@@ -816,8 +816,8 @@ def test_missing_restaurant_facts_are_not_invented():
         "status": "alternative",
         "reasons": [
             "matches your selected cuisine",
-            "! Google rating unavailable; requested at least 4.5/5",
             "! price unavailable",
+            "! Google rating unavailable; requested at least 4.5/5",
             "! walk journey time unavailable",
         ],
     }

@@ -5,7 +5,7 @@ import {
   getSingaporeDate,
   refreshIcons,
   state,
-} from './state.js?v=20261114-8';
+} from './state.js?v=20261114-12';
 import {
   drawOriginToRestaurantLine,
   flyToMarkerForItem,
@@ -14,8 +14,8 @@ import {
   openRouteDrawer,
   setMapFormatters,
   updateInteractiveMap,
-} from './map.js?v=20261114-8';
-import { renderCompareTray, setCompareHelpers, toggleCompareItem } from './compare.js?v=20261114-8';
+} from './map.js?v=20261114-12';
+import { renderCompareTray, setCompareHelpers, toggleCompareItem } from './compare.js?v=20261114-12';
 
 let favoriteToggleHandler = async () => { };
 
@@ -319,20 +319,27 @@ export function resetResultsDisplay() {
   document.getElementById('emptyState')?.classList.remove('hidden');
 }
 
+export function updateResultsSkeletonModel(modelLabel = 'Gemini AI') {
+  const stepEl = document.getElementById('pipelineModelStepLabel');
+  if (stepEl) {
+    stepEl.textContent = `Scoring & ranking with ${modelLabel}`;
+  }
+}
+
 export function renderResultsSkeleton(modelLabel = 'Gemini AI') {
   const container = document.getElementById('resultsList');
   if (!container) return;
   const steps = [
-    'Resolving starting location(s)',
-    'Querying Google Places & route ETAs',
-    'Verifying official MUIS Halal records',
-    `Scoring & ranking with ${modelLabel}`,
+    { label: 'Resolving starting location(s)' },
+    { label: 'Querying Google Places & route ETAs' },
+    { label: 'Verifying official MUIS Halal records' },
+    { label: `Scoring & ranking with ${modelLabel}`, id: 'pipelineModelStepLabel' },
   ];
 
-  const stepsHtml = steps.map((label) => `
+  const stepsHtml = steps.map((step) => `
     <div class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 font-medium">
       <span class="w-2 h-2 rounded-full bg-brand-500/75 animate-pulse shrink-0"></span>
-      <span>${escapeHtml(label)}</span>
+      <span${step.id ? ` id="${step.id}"` : ''}>${escapeHtml(step.label)}</span>
     </div>
   `).join('');
 

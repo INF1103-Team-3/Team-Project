@@ -123,14 +123,107 @@ export const WISH_KEYBOARD_MASH = [
   'zxcv', 'xcvb', 'cvbn', 'vbnm',
 ];
 
+const RATING_WISH_SOURCE = (
+  '(?:\\b(?:minimum|min\\.?|at least|no less than|above|over)\\b|>=?)\\s*'
+  + '(?:google\\s*)?(?:(?:rating|rated)\\s*(?:of\\s*|is\\s*)?(\\d+(?:\\.\\d+)?|\\.\\d+)'
+  + '(?:\\s*(?:\\+\\s*)?(?:stars?|\\/\\s*5|\\+))?'
+  + '|(\\d+(?:\\.\\d+)?|\\.\\d+)\\s*(?:\\+\\s*)?(?:stars?|\\/\\s*5|rating\\b|rated\\b))'
+  + '|\\b(?:google\\s*)?(?:rating|rated)\\s*(?:of\\s*|is\\s*|at\\s*)?'
+  + '(?:>=?|at least|minimum|min\\.?|no less than|above|over)?\\s*'
+  + '(\\d+(?:\\.\\d+)?|\\.\\d+)(?:\\s*(?:\\+\\s*)?(?:stars?|\\/\\s*5)|\\s*\\+(?!\\w)|(?=[,.;!?\\s]|$))'
+  + '|\\b(\\d+(?:\\.\\d+)?|\\.\\d+)\\s*(?:\\+\\s*)?(?:stars?|\\/\\s*5)(?!\\w)'
+  + '(?:\\s*(?:or higher|or above|and up|or better|minimum|min\\.?|\\+)(?!\\w))?'
+  + '|\\b(\\d+(?:\\.\\d+)?|\\.\\d+)\\s*(?:\\+\\s*)?(?:rating|rated)\\b'
+  + '(?:\\s*(?:or higher|or above|and up|or better|minimum|min\\.?|\\+)(?!\\w))?'
+);
+
+export function normalizeWishText(raw) {
+  return String(raw || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/\b(\d+)\s*\.\s*(\d+)\b/g, '$1.$2');
+}
+
+export function extractRatingWishes(text) {
+  const normalized = normalizeWishText(text);
+  const rx = new RegExp(RATING_WISH_SOURCE, 'gi');
+  const values = [];
+  let match;
+  while ((match = rx.exec(normalized)) !== null) {
+    const rawNum = match.slice(1).find((g) => g !== undefined);
+    if (rawNum === undefined) continue;
+    const rating = parseFloat(rawNum);
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+      throw new Error('Google star ratings must be between 1 and 5 stars.');
+    }
+    values.push(rating);
+  }
+  return values;
+}
+
+export function stripRatingClauses(text) {
+  const normalized = normalizeWishText(text);
+  const rx = new RegExp(RATING_WISH_SOURCE, 'gi');
+  return normalized
+    .replace(rx, ' ')
+    .replace(/^(?:\s*(?:and|with|&|,|\/)\b\s*)+/gi, '')
+    .replace(/(?:\s*\b(?:and|with)\s*|\s*[,&/]\s*)+$/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[\s,;/\-]+|[\s,;/\-]+$/g, '')
+    .trim();
+}
+
+export function getActiveRatingFilterValue(rawText) {
+  const tokens = String(rawText || '').split(',').map(normalizeWishText).filter(Boolean);
+  const found = [];
+  for (const token of tokens) {
+    try {
+      found.push(...extractRatingWishes(token));
+    } catch {
+      return null;
+    }
+  }
+  if (!found.length) return '';
+  return Math.round(Math.max(...found) * 100) / 100;
+}
+
+export function applyRatingFilterToWishesRaw(rawText, ratingValue) {
+  const tokens = String(rawText || '').split(',').map(normalizeWishText).filter(Boolean);
+  const kept = [];
+  for (const token of tokens) {
+    const rem = stripRatingClauses(token);
+    if (rem) kept.push(rem);
+  }
+  const num = ratingValue !== '' && ratingValue != null ? Number(ratingValue) : NaN;
+  if (Number.isFinite(num) && num >= 1 && num <= 5) {
+    const rounded = Math.round(num * 100) / 100;
+    const labelNum = Number.isInteger(rounded)
+      ? rounded.toFixed(1)
+      : String(rounded);
+    kept.unshift(`at least ${labelNum} stars`);
+  }
+  return kept.join(', ');
+}
+
 export function validateEnglishWishesInput(items, fieldLabel = 'Special requests') {
   for (const raw of (items || [])) {
-    const text = String(raw || '').trim();
+    const text = normalizeWishText(raw);
     if (!text) continue;
-    if (text.length > 100 || !/^[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()+\-]*$/.test(text)) {
+    if (text.length > 100 || !/^[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()+\-=>]*$/.test(text)) {
       return `${fieldLabel} must use proper English letters and words (e.g. quiet seating, spicy food).`;
     }
-    const words = text.match(/[A-Za-z]+/g) || [];
+    let ratings = [];
+    try {
+      ratings = extractRatingWishes(text);
+    } catch (err) {
+      return `${fieldLabel}: ${err.message}`;
+    }
+    const remainder = stripRatingClauses(text);
+    if (ratings.length && !remainder) {
+      continue;
+    }
+    const checkText = remainder || text;
+    const words = checkText.match(/[A-Za-z]+/g) || [];
     if (!words.length || !words.some((w) => w.length > 1)) {
       return `${fieldLabel} must contain meaningful English words (e.g. quiet seating, spicy food).`;
     }

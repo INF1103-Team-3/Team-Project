@@ -920,8 +920,9 @@ def review_profile_wishes(wishes, config):
         "messages": [
             {"role": "system", "content": (
                 "Validate each item in a user's saved default restaurant special wishes. "
-                "Every item must be a meaningful restaurant or dining preference written in English "
-                "(standard English words plus common Singapore dish terms like chicken rice, laksa, "
+                "Every item must be a meaningful restaurant, dining, or Google rating preference written in English "
+                "(standard English words, rating filters such as 'minimum 4.5 stars', 'at least 4 stars', "
+                "'4.5+ stars', or '4.5/5', plus common Singapore dish terms like chicken rice, laksa, "
                 "dim sum, mala, halal, wifi). Reject gibberish, random letters, nonsense, or "
                 "non-English sentences/phrases (such as Malay, Chinese, French, Spanish). "
                 "Return JSON only with keys: valid (boolean), reason (string explaining what "

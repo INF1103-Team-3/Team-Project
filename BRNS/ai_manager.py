@@ -64,11 +64,14 @@ _MANAGER = None
 
 @contextmanager
 def _recommendation_deadline(seconds):
+    global _CURRENT_ACTIVE_MODEL
     token = _ACTIVE_CHAIN_DEADLINE.set(time.monotonic() + seconds)
     _LAST_USED_MODEL.set(None)
+    _CURRENT_ACTIVE_MODEL = None
     try:
         yield
     finally:
+        _CURRENT_ACTIVE_MODEL = None
         _ACTIVE_CHAIN_DEADLINE.reset(token)
 
 
