@@ -3,6 +3,7 @@
 from copy import deepcopy
 
 from BIS.classes.services.web.bis_chatbot_service import BISChatbotService
+from BIS.support.config import is_smtp_bypass
 
 
 class BISApplicationService:
@@ -32,12 +33,42 @@ class BISApplicationService:
                 return model
         return self._model()
 
+    def map_config(self):
+        """Return interactive map provider configuration for the web UI."""
+        use_live = self._config.get("use_live_google", True) is not False
+        js_key = (
+            self._config.get("google_maps_js_api_key")
+            or self._config.get("google_maps_api_key")
+            or ""
+        ).strip()
+        active_key = js_key if (js_key and use_live) else ""
+        return {
+            "provider": "google" if active_key else "leaflet",
+            "google_maps_api_key": active_key,
+        }
+
     def chat(self, user, payload):
         return self._chatbot.respond(user, payload)
 
     def save_profile(self, user, payload):
         updated = self._logic.prepare_profile_save(
-            user, payload, smtp_bypass=self._config.get("smtp_bypass") is True)
+            user, payload, smtp_bypass=is_smtp_bypass(self._config))
+        if hasattr(self._data, "resolve_location"):
+            api_key = self._config.get("google_maps_api_key")
+            for loc in updated["preferences"].get("location") or []:
+                try:
+                    self._data.resolve_location(loc, api_key)
+                except (ValueError, RuntimeError):
+                    raise ValueError(
+                        f"Default location '{loc}' must be a valid Singapore location."
+                    )
+        wishes = updated["preferences"].get("other_preferences") or []
+        if (wishes and not self._config.get("ai_bypass")
+                and hasattr(self._ai, "review_profile_wishes")):
+            try:
+                self._ai.review_profile_wishes(wishes, deepcopy(self._config))
+            except RuntimeError:
+                pass
         return self._data.save(updated)
 
     def _resolve_origins(self, raw_locations):
@@ -232,6 +263,12 @@ class BISApplicationService:
             "lng": payload["dest_lng"],
         }
         return self._brns.route_to(restaurant, request)
+
+    def place_photo(self, place_id):
+        fetcher = getattr(self._brns, "place_photo", None)
+        if callable(fetcher):
+            return fetcher(place_id)
+        return None
 
     def history(self, user):
         return self._brns.load_history(user["userID"])

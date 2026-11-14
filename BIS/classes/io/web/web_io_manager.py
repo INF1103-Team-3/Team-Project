@@ -64,6 +64,12 @@ class WebIOManager(BISWebIOInterface):
     def active_model(self):
         return {"active_model": self._format_model_display(self._active_model_reader())}
 
+    def map_config(self):
+        reader = getattr(self._application, "map_config", None)
+        if callable(reader):
+            return reader()
+        return {"provider": "leaflet", "google_maps_api_key": ""}
+
     def register(self, payload):
         return self._auth.register(payload["email"], payload["username"], payload["password"])
 
@@ -101,6 +107,9 @@ class WebIOManager(BISWebIOInterface):
 
     def route(self, payload):
         return dict(self._application.route(payload), success=True)
+
+    def place_photo(self, place_id):
+        return self._application.place_photo(place_id)
 
     def favorites(self, authorization):
         user = self.user(authorization, required=False)

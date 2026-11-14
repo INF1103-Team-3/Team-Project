@@ -20,6 +20,64 @@ import {
 } from './filters.js';
 import { formatHours, renderResults } from './results.js';
 
+const EMAIL_REGEX = /^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
+const PASSWORD_ALLOWED_REGEX = /^[A-Za-z0-9.,?!$]+$/;
+
+export function validateEmailFormat(email) {
+  const trimmed = String(email || '').trim();
+  const atIdx = trimmed.indexOf('@');
+  if (!trimmed || trimmed.length > 254 || atIdx <= 0 || atIdx > 64 || !EMAIL_REGEX.test(trimmed)) {
+    return 'Enter a valid email address.';
+  }
+  return '';
+}
+
+export function validateNewPassword(password) {
+  const val = String(password || '');
+  if (val.length < 8 || val.length > 30) {
+    return 'Password must be 8–30 characters.';
+  }
+  if (!PASSWORD_ALLOWED_REGEX.test(val)) {
+    return 'Password may only contain letters, numbers, and .,?!$.';
+  }
+  return '';
+}
+
+const WISH_ACRONYMS = new Set(['bbq', 'byob', 'msg', 'cbd', 'mrt', 'hrs', 'gym', 'nth', 'sgd', 'ac', 'tv', 'vip']);
+const WISH_KEYBOARD_MASH = [
+  'asdf', 'sdfg', 'dfgh', 'fghj', 'ghjk', 'hjkl',
+  'qwer', 'wert', 'erty', 'tyui', 'uiop',
+  'zxcv', 'xcvb', 'cvbn', 'vbnm',
+];
+const COORD_PAIR_REGEX = /^\s*[+-]?\d+(?:\.\d+)?\s*,\s*[+-]?\d+(?:\.\d+)?\s*$/;
+
+export function validateEnglishWishesInput(items) {
+  for (const raw of items) {
+    const text = String(raw || '').trim();
+    if (!text) continue;
+    if (text.length > 100 || !/^[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()+\-]*$/.test(text)) {
+      return 'Default special wishes must use proper English letters and words (e.g. quiet seating, spicy food).';
+    }
+    const words = text.match(/[A-Za-z]+/g) || [];
+    if (!words.length || !words.some((w) => w.length > 1)) {
+      return 'Default special wishes must contain meaningful English words (e.g. quiet seating, spicy food).';
+    }
+    for (const word of words) {
+      const low = word.toLowerCase();
+      if (/(.)\1\1/.test(low) || WISH_KEYBOARD_MASH.some((seq) => low.includes(seq))) {
+        return `Default special wishes must contain proper English words, not '${word}'.`;
+      }
+      if (low.length >= 3 && !WISH_ACRONYMS.has(low) && !/[aeiouy]/.test(low)) {
+        return `Default special wishes must contain proper English words, not '${word}'.`;
+      }
+      if (/[bcdfghjklmnpqrstvwxz]{6,}/.test(low)) {
+        return `Default special wishes must contain proper English words, not '${word}'.`;
+      }
+    }
+  }
+  return '';
+}
+
 let pendingAuthEmail = '';
 let resendCooldownTimer = null;
 
@@ -402,6 +460,11 @@ export function initAuthAndModals() {
     document.getElementById('authAlert')?.classList.add('hidden');
     const email = document.getElementById('loginEmail')?.value.trim() || '';
     const password = document.getElementById('loginPassword')?.value || '';
+    const emailErr = validateEmailFormat(email);
+    if (emailErr) {
+      showAuthAlert(emailErr, true);
+      return;
+    }
 
     try {
       const data = await apiJson('/api/auth/login', {
@@ -441,6 +504,16 @@ export function initAuthAndModals() {
     const username = document.getElementById('registerUsername')?.value.trim() || '';
     const email = document.getElementById('registerEmail')?.value.trim() || '';
     const password = document.getElementById('registerPassword')?.value || '';
+    const emailErr = validateEmailFormat(email);
+    if (emailErr) {
+      showAuthAlert(emailErr, true);
+      return;
+    }
+    const passwordErr = validateNewPassword(password);
+    if (passwordErr) {
+      showAuthAlert(passwordErr, true);
+      return;
+    }
 
     try {
       const data = await apiJson('/api/auth/register', {
@@ -613,6 +686,7 @@ export function initAuthAndModals() {
   document.getElementById('profileForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!state.currentUser) return;
+    profileAlert?.classList.add('hidden');
     const diet = [];
     if (document.getElementById('profHalalCheck')?.checked) diet.push('halal');
     if (document.getElementById('profVegCheck')?.checked) diet.push('vegetarian');
@@ -627,14 +701,49 @@ export function initAuthAndModals() {
     const timeVal = document.getElementById('profTimeInput')?.value.trim() || '';
     const budgetVal = document.getElementById('profBudgetInput')?.value.trim() || '';
 
+    const showProfileError = (msg) => {
+      if (profileAlert) {
+        profileAlert.textContent = msg;
+        profileAlert.className = 'mx-6 mt-4 p-3 rounded-xl text-xs font-medium border bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300';
+      }
+    };
+
+    const parsedDist = distVal !== '' ? parseFloat(distVal) : null;
+    const parsedTime = timeVal !== '' ? parseFloat(timeVal) : null;
+    const parsedBudget = budgetVal !== '' ? parseFloat(budgetVal) : null;
+    if (parsedDist !== null && (!Number.isFinite(parsedDist) || parsedDist <= 0)) {
+      showProfileError('Max distance must be greater than 0.');
+      return;
+    }
+    if (parsedTime !== null && (!Number.isFinite(parsedTime) || parsedTime <= 0)) {
+      showProfileError('Max time must be greater than 0.');
+      return;
+    }
+    if (parsedBudget !== null && (!Number.isFinite(parsedBudget) || parsedBudget <= 0)) {
+      showProfileError('Budget must be greater than 0.');
+      return;
+    }
+    const wishesErr = validateEnglishWishesInput(otherList);
+    if (wishesErr) {
+      showProfileError(wishesErr);
+      return;
+    }
+
+    let locations = [];
+    if (locVal) {
+      locations = COORD_PAIR_REGEX.test(locVal)
+        ? [locVal]
+        : locVal.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+
     const body = {
       user_id: state.currentUser.user_id,
       username: document.getElementById('profUsernameInput')?.value.trim() || '',
       email: state.currentUser.email,
-      location: locVal ? [locVal] : [],
-      max_distance_km: distVal !== '' ? parseFloat(distVal) : null,
-      max_travel_time_minutes: timeVal !== '' ? parseFloat(timeVal) : null,
-      budget_per_person: budgetVal !== '' ? parseFloat(budgetVal) : null,
+      location: locations,
+      max_distance_km: parsedDist,
+      max_travel_time_minutes: parsedTime,
+      budget_per_person: parsedBudget,
       dietary_requirements: diet,
       liked_cuisines: likedList,
       disliked_cuisines: dislikedList,
@@ -658,10 +767,7 @@ export function initAuthAndModals() {
       showToast('Profile preferences saved.', 'success');
       setTimeout(() => closeModal(profileModal), 750);
     } catch (err) {
-      if (profileAlert) {
-        profileAlert.textContent = err.message;
-        profileAlert.className = 'mx-6 mt-4 p-3 rounded-xl text-xs font-medium border bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300';
-      }
+      showProfileError(err.message);
     }
   });
 

@@ -129,6 +129,7 @@ def safe_test_environment(use_brc_service=False, is_api_test=False):
             "OPENROUTER_API_KEYS",
             "OPENROUTER_API_KEYS_FILE",
             "GOOGLE_MAPS_API_KEY",
+            "GOOGLE_MAPS_JS_API_KEY",
         ):
             environment.pop(key, None)
     if not use_brc_service:

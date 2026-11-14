@@ -166,8 +166,9 @@ This only displays your profile; it does not change your answers.""",
 It starts automatically once when a profile becomes complete, or on the next
 resume if it was already complete. Run /search again for new choices. You will
 confirm your current location,
-then choose walk, drive, or transit. Walking and driving let you choose a
-maximum distance in km or journey time in minutes. Transit uses time only.
+then choose walk, drive, or transit. Walking, driving, and transit let you choose a
+maximum distance in km (up to 15 km walk; 50 km drive/transit) or journey time in
+minutes (up to 90 walk; 120 drive; 150 transit).
 Driving time searches then offer live traffic (1 = no, 2 = yes; Enter = no).
 Choose one cuisine
 or none, today's budget, and one optional special request. Press Enter for

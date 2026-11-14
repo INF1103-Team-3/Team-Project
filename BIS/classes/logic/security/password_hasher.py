@@ -1,19 +1,29 @@
 """Password hashing compatible with the reference website hashes."""
 import hashlib
-import secrets
 import re
+import secrets
 
 
 class PasswordHasher:
     MIN_LENGTH = 8
-    MAX_LENGTH = 128
+    MAX_LENGTH = 30
+    ALLOWED_PATTERN = re.compile(r"^[A-Za-z0-9.,?!$]+$")
+
+    @classmethod
+    def validate_password(cls, password):
+        if (not isinstance(password, str)
+                or not cls.MIN_LENGTH <= len(password) <= cls.MAX_LENGTH):
+            raise ValueError(
+                f"Password must be {cls.MIN_LENGTH}–{cls.MAX_LENGTH} characters."
+            )
+        if not cls.ALLOWED_PATTERN.fullmatch(password):
+            raise ValueError(
+                "Password may only contain letters, numbers, and .,?!$."
+            )
+        return password
 
     def create(self, password):
-        if (not isinstance(password, str)
-                or not self.MIN_LENGTH <= len(password) <= self.MAX_LENGTH):
-            raise ValueError(
-                f"Password must be {self.MIN_LENGTH}–{self.MAX_LENGTH} characters."
-            )
+        self.validate_password(password)
         salt = secrets.token_hex(16)
         return {"password_salt": salt, "password_hash": self._hash(password, salt)}
 

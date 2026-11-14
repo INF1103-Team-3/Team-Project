@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 import ai_manager
 from common.debug_log import debug_log
@@ -16,6 +16,8 @@ def load_config():
     """Load application configuration from environment variables."""
     load_dotenv(ENV_FILE)
     ai_bypass = os.getenv("AI_BYPASS", "false").strip().lower() == "true"
+    smtp_bypass = os.getenv("SMTP_BYPASS", "false").strip().lower() == "true"
+    env_values = dotenv_values(ENV_FILE) if ENV_FILE.is_file() else {}
 
     config = {
         "app_name": (
@@ -36,10 +38,15 @@ def load_config():
         "gemini_api_key": os.getenv("GEMINI_API_KEY", "").strip(),
         "groq_api_key": os.getenv("GROQ_API_KEY", "").strip(),
         "google_maps_api_key": os.getenv("GOOGLE_MAPS_API_KEY", "").strip(),
-        "smtp_host": os.getenv("SMTP_HOST", "").strip(),
-        "smtp_bypass": (
-            os.getenv("SMTP_BYPASS", "false").strip().lower() == "true"
+        "google_maps_js_api_key": os.getenv("GOOGLE_MAPS_JS_API_KEY", "").strip(),
+        "use_live_google": (
+            os.getenv("USE_LIVE_GOOGLE", "true").strip().lower() != "false"
         ),
+        "smtp_host": os.getenv("SMTP_HOST", "").strip(),
+        "smtp_bypass": smtp_bypass,
+        "_smtp_bypass_initial": smtp_bypass,
+        "_had_env_smtp_bypass": "SMTP_BYPASS" in env_values,
+        "_env_file": str(ENV_FILE),
         "smtp_security": (
             os.getenv("SMTP_SECURITY", "starttls").strip().lower()
         ),
@@ -57,6 +64,27 @@ def load_config():
 
     debug_log("Configuration loaded.", "DEBUG", "BIS.config.load")
     return config
+
+
+def is_smtp_bypass(config):
+    """Read SMTP_BYPASS live from .env unless explicitly overridden in memory."""
+    if not isinstance(config, dict):
+        return False
+    env_path_str = config.get("_env_file")
+    if not env_path_str:
+        return config.get("smtp_bypass") is True
+    if "_smtp_bypass_initial" in config and (
+        bool(config.get("smtp_bypass")) != bool(config.get("_smtp_bypass_initial"))
+    ):
+        return config.get("smtp_bypass") is True
+    env_path = Path(env_path_str)
+    if env_path.is_file():
+        values = dotenv_values(env_path)
+        if "SMTP_BYPASS" in values and values["SMTP_BYPASS"] is not None:
+            return str(values["SMTP_BYPASS"]).strip().lower() == "true"
+        if config.get("_had_env_smtp_bypass"):
+            return False
+    return config.get("smtp_bypass") is True
 
 
 def validate_config(config):

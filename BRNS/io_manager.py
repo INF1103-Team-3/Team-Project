@@ -322,7 +322,7 @@ def _travel_radius(req):
         return max(1000, min(int(req["max_drive_km"] * 1000 * 0.8), 50000))
     distance = req.get("max_distance_km")
     if distance is not None:
-        return max(500, min(int(distance * 1000), 20000))
+        return max(500, min(int(distance * 1000), 50000))
     walk = req.get("max_walk_minutes")
     return max(500, min((walk if walk else 15) * 100, 20000))
 

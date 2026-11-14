@@ -2,6 +2,7 @@
 import time
 from threading import RLock
 from BIS.sources.profile_schema import normalize_email, normalize_username
+from BIS.support.config import is_smtp_bypass
 
 
 class WebAuthService:
@@ -36,7 +37,7 @@ class WebAuthService:
         }
 
     def _send(self, user, pending):
-        if self._config.get("smtp_bypass") is True:
+        if is_smtp_bypass(self._config):
             return self._complete_bypass(user, pending)
         pending = dict(pending, expires_at=self._clock() + 600)
         self._verification.request_code(user, self._config)

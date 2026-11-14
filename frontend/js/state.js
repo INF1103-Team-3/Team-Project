@@ -84,10 +84,9 @@ export function authHeaders(extra = {}) {
 
 export function isUserProfileIncomplete(user) {
   if (!user) return false;
-  const hasLoc = Array.isArray(user.location) && user.location.length > 0;
   const hasBudget = typeof user.budget_per_person === 'number' && user.budget_per_person > 0;
   const hasTravel = Boolean(user.max_travel_time_minutes || user.max_distance_km);
-  return !(hasLoc && hasBudget && hasTravel);
+  return !(hasBudget && hasTravel);
 }
 
 export function getSingaporeDate() {

@@ -13,6 +13,7 @@ from sources.prompts import (
 from BIS import ai_manager, data_manager, logic_manager
 from BIS.classes.io.cli.io_manager import IOManager
 from BIS.classes.logic.security.password_hasher import PasswordHasher
+from BIS.support.config import is_smtp_bypass
 from BIS.support.email_verification import challenge as email_challenge
 from BIS.support.email_verification import service as email_service
 from common import recommendation_ui
@@ -21,8 +22,9 @@ from common import geocode_cache
 from BIS.classes.io.gateways.location_gateway import LocationGateway
 from sources.profile_schema import (
     CUISINES, CUISINE_FIELDS, OTHER_PREFERENCES, PREFERENCE_FIELDS,
-    clean_text, normalize_email, normalize_username, validate_updates,
-    validate_value, validate_travel_minutes,
+    SEARCH_MODE_LIMITS, clean_text, normalize_email, normalize_username,
+    validate_search_distance, validate_travel_minutes, validate_updates,
+    validate_value,
 )
 
 _PASSWORD_HASHER = PasswordHasher()
@@ -256,7 +258,7 @@ def display_welcome(user):
 
 
 def verify_email_interactively(user, config):
-    if config.get("smtp_bypass"):
+    if is_smtp_bypass(config):
         if not user["email_verified"]:
             display_message("SMTP verification bypass is enabled for testing.",
                             role="bypass")
@@ -446,7 +448,7 @@ def ask_search_mode(config=None):
 
 def ask_search_distance(profile, mode, config=None, default_source="profile"):
     try:
-        default = validate_value("max_distance_km", profile.get("max_distance_km"))
+        default = validate_search_distance(profile.get("max_distance_km"), mode=mode)
     except ValueError:
         default = None
     while True:
@@ -460,7 +462,7 @@ def ask_search_distance(profile, mode, config=None, default_source="profile"):
         match = re.fullmatch(r"(\d+(?:\.\d{1,2})?)\s*(?:km)?", value.lower())
         if match:
             try:
-                return validate_value("max_distance_km", float(match[1]))
+                return validate_search_distance(float(match[1]), mode=mode)
             except ValueError as error:
                 display_message(error)
                 continue
@@ -469,7 +471,7 @@ def ask_search_distance(profile, mode, config=None, default_source="profile"):
                 suggested = ai_manager.interpret_search_number(
                     value, "max_distance_km", config)
                 if suggested is not None:
-                    suggested = validate_value("max_distance_km", suggested)
+                    suggested = validate_search_distance(suggested, mode=mode)
                     confirmed = ask_yes_no(
                         f"Use {suggested:g} km as your maximum {mode} distance?",
                         config)
@@ -487,6 +489,7 @@ def ask_search_distance(profile, mode, config=None, default_source="profile"):
 def ask_search_travel_minutes(mode, config=None, default=None,
                               default_source=None):
     """Ask for a verified route duration limit for the chosen mode."""
+    low, high = SEARCH_MODE_LIMITS.get(mode, {}).get("max_travel_minutes", (1, 150))
     while True:
         source = f" from {default_source}" if default_source else ""
         hint = (f" [Enter = {default:g} min{source}]"
@@ -501,7 +504,7 @@ def ask_search_travel_minutes(mode, config=None, default=None,
             r"(\d+(?:\.\d{1,2})?)\s*(?:minutes?|mins?)?", value.lower())
         if match:
             try:
-                return validate_travel_minutes(float(match[1]))
+                return validate_travel_minutes(float(match[1]), mode=mode)
             except ValueError as error:
                 display_message(error)
                 continue
@@ -510,7 +513,7 @@ def ask_search_travel_minutes(mode, config=None, default=None,
                 suggested = ai_manager.interpret_search_number(
                     value, "max_travel_minutes", config)
                 if suggested is not None:
-                    suggested = validate_travel_minutes(suggested)
+                    suggested = validate_travel_minutes(suggested, mode=mode)
                     confirmed = ask_yes_no(
                         f"Use {suggested:g} minutes as your maximum "
                         f"{mode} journey time?", config)
@@ -522,14 +525,15 @@ def ask_search_travel_minutes(mode, config=None, default=None,
             except (RuntimeError, ValueError) as error:
                 display_message(error)
                 continue
-        display_message("Enter a travel time from 1 to 240 minutes.")
+        display_message(
+            f"Enter a travel time from {low:g} to {high:g} minutes.")
 
 
 def ask_search_limit(profile, mode, config=None, current=None):
     """Return one selected distance or duration for the chosen travel mode."""
     try:
         profile_minutes = validate_travel_minutes(
-            profile.get("max_travel_time_minutes"))
+            profile.get("max_travel_time_minutes"), mode=mode)
     except ValueError:
         profile_minutes = None
     if mode == "transit":

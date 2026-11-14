@@ -40,8 +40,29 @@ export function initModalAccessibility(modalIds = []) {
   modalIds.forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
+    let pointerStartedOnBackdrop = false;
+    let pointerEndedOnBackdrop = false;
+
+    el.addEventListener('pointerdown', (e) => {
+      const isPrimary = e.pointerType !== 'mouse' || e.button === 0;
+      pointerStartedOnBackdrop = isPrimary && e.target === el;
+      pointerEndedOnBackdrop = false;
+    });
+
+    el.addEventListener('pointerup', (e) => {
+      pointerEndedOnBackdrop = e.target === el;
+    });
+
+    el.addEventListener('pointercancel', () => {
+      pointerStartedOnBackdrop = false;
+      pointerEndedOnBackdrop = false;
+    });
+
     el.addEventListener('click', (e) => {
-      if (e.target === el) {
+      const shouldClose = e.target === el && pointerStartedOnBackdrop && pointerEndedOnBackdrop;
+      pointerStartedOnBackdrop = false;
+      pointerEndedOnBackdrop = false;
+      if (shouldClose) {
         closeModal(el);
       }
     });

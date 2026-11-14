@@ -1,5 +1,8 @@
 """Thin HTTP registrations: delegate input/output to the BIS web IO Manager."""
-from fastapi import APIRouter, Depends, Header, Request
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi.responses import JSONResponse
 from BIS.classes.io.web.models.auth.register_model import RegisterModel
 from BIS.classes.io.web.models.auth.login_model import LoginModel
 from BIS.classes.io.web.models.auth.verify_otp_model import VerifyOtpModel
@@ -29,6 +32,10 @@ def register_routes(app):
     @router.get("/active-model")
     def active_model(io=Depends(get_web_io)):
         return io.active_model()
+
+    @router.get("/map-config")
+    def map_config(io=Depends(get_web_io)):
+        return io.map_config()
 
     @router.post("/auth/register")
     def register(payload: RegisterModel, io=Depends(get_web_io)):
@@ -73,6 +80,21 @@ def register_routes(app):
     @router.post("/route")
     def route(payload: RouteRequestModel, io=Depends(get_web_io)):
         return io.route(payload.model_dump())
+
+    @router.get("/places/{place_id}/photo")
+    def place_photo(place_id: str, io=Depends(get_web_io)):
+        photo = io.place_photo(place_id)
+        if not isinstance(photo, dict) or not photo.get("data"):
+            return JSONResponse({"detail": "Place photo unavailable."}, status_code=404)
+        headers = {"Cache-Control": "public, max-age=86400"}
+        author = str(photo.get("author_attribution") or "").strip()
+        if author:
+            headers["X-Photo-Author"] = quote(author, safe="")
+        return Response(
+            content=photo["data"],
+            media_type=photo.get("content_type") or "image/jpeg",
+            headers=headers,
+        )
 
     @router.get("/favorites")
     def favorites(authorization: str | None = Header(default=None), io=Depends(get_web_io)):

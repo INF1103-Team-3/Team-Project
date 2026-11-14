@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / "BIS")]
 os.environ["BITEFINDER_STORAGE"] = "json"
 for key in ("GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "OPENROUTER_API_KEYS",
-            "OPENROUTER_API_KEYS_FILE", "GOOGLE_MAPS_API_KEY"):
+            "OPENROUTER_API_KEYS_FILE", "GOOGLE_MAPS_API_KEY", "GOOGLE_MAPS_JS_API_KEY"):
     os.environ.pop(key, None)
 
 import mongomock
@@ -85,7 +85,7 @@ class WebIntegrationTests(unittest.TestCase):
         self.client.__enter__()
         self.addCleanup(self.client.__exit__, None, None, None)
 
-    def _make_brns_gateway(self, search_fn, route_fn=None):
+    def _make_brns_gateway(self, search_fn, route_fn=None, photo_fn=None):
         def save_history_summary(user_id, req, res, source="live-google"):
             with self.scope.for_user(user_id):
                 return self.history.save_search_results(req, res, source)
@@ -98,6 +98,7 @@ class WebIntegrationTests(unittest.TestCase):
                 "route": None,
                 "link": "https://www.google.com/maps",
             }),
+            place_photo=photo_fn or (lambda _place_id: None),
             load_history=lambda uid: self.history.load_user_history(uid),
             save_history_summary=save_history_summary,
             clear_history=lambda uid: self.history.clear_user_history(uid),
@@ -107,7 +108,7 @@ class WebIntegrationTests(unittest.TestCase):
 
     def account(self, email="user@example.com"):
         response = self.client.post("/api/auth/register", json={
-            "username": "Tester", "email": email, "password": "test-password"})
+            "username": "Tester", "email": email, "password": "test.password"})
         self.assertEqual(response.status_code, 200, response.text)
         self.assertTrue(response.json()["otp_required"])
         response = self.client.post("/api/auth/verify-otp", json={"email": email, "code": self.sent[-1][1]})
@@ -131,7 +132,7 @@ class WebIntegrationTests(unittest.TestCase):
 
     def test_cli_account_is_not_claimed_before_email_proof(self):
         user = self.data.register_user("cli@example.com", "CLI")
-        response = self.client.post("/api/auth/login", json={"email": user["email"], "password": "new-password"})
+        response = self.client.post("/api/auth/login", json={"email": user["email"], "password": "new.password"})
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["otp_required"])
         self.assertIsNone(self.data.get_credentials(user["userID"]))
@@ -146,7 +147,7 @@ class WebIntegrationTests(unittest.TestCase):
         headers, user = self.account()
         wrong = self.client.post("/api/auth/login", json={"email": user["email"], "password": "incorrect"})
         self.assertEqual(wrong.status_code, 401)
-        login = self.client.post("/api/auth/login", json={"email": user["email"], "password": "test-password"})
+        login = self.client.post("/api/auth/login", json={"email": user["email"], "password": "test.password"})
         self.assertEqual(login.status_code, 200)
         resend = self.client.post("/api/auth/resend-otp", json={"email": user["email"]})
         self.assertEqual(resend.status_code, 400)
@@ -894,12 +895,12 @@ class WebIntegrationTests(unittest.TestCase):
     def test_cli_created_credentials_authenticate_on_web_login(self):
         user = self.data.register_user("cli_pw@example.com", "CLI Password User")
         user = self.data.save(dict(user, email_verified=True))
-        self.data.save_credentials(user["userID"], PasswordHasher().create("cli-password-1"))
+        self.data.save_credentials(user["userID"], PasswordHasher().create("cli.password.1"))
         self.config["smtp_bypass"] = True
 
         bad = self.client.post("/api/auth/login", json={"email": "cli_pw@example.com", "password": "wrong"})
         self.assertEqual(bad.status_code, 401)
-        ok = self.client.post("/api/auth/login", json={"email": "cli_pw@example.com", "password": "cli-password-1"})
+        ok = self.client.post("/api/auth/login", json={"email": "cli_pw@example.com", "password": "cli.password.1"})
         self.assertEqual(ok.status_code, 200, ok.text)
         self.assertEqual(ok.json()["user"]["userID"], user["userID"])
 
@@ -907,6 +908,401 @@ class WebIntegrationTests(unittest.TestCase):
         for path in ("/docs", "/redoc", "/openapi.json"):
             response = self.client.get(path)
             self.assertEqual(response.status_code, 404, f"{path} should return 404 by default")
+
+    def test_map_config_and_route_geometry_contract(self):
+        from unittest.mock import patch
+
+        default_res = self.client.get("/api/map-config")
+        self.assertEqual(default_res.status_code, 200, default_res.text)
+        self.assertEqual(default_res.json(), {"provider": "leaflet", "google_maps_api_key": ""})
+
+        try:
+            self.config["google_maps_api_key"] = "backend-key"
+            fallback_key_res = self.client.get("/api/map-config")
+            self.assertEqual(fallback_key_res.status_code, 200)
+            self.assertEqual(
+                fallback_key_res.json(),
+                {"provider": "google", "google_maps_api_key": "backend-key"},
+            )
+
+            self.config["google_maps_js_api_key"] = "browser-js-key"
+            dedicated_key_res = self.client.get("/api/map-config")
+            self.assertEqual(dedicated_key_res.status_code, 200)
+            self.assertEqual(
+                dedicated_key_res.json(),
+                {"provider": "google", "google_maps_api_key": "browser-js-key"},
+            )
+
+            self.config["use_live_google"] = False
+            disabled_res = self.client.get("/api/map-config")
+            self.assertEqual(disabled_res.status_code, 200)
+            self.assertEqual(disabled_res.json(), {"provider": "leaflet", "google_maps_api_key": ""})
+        finally:
+            self.config.pop("google_maps_api_key", None)
+            self.config.pop("google_maps_js_api_key", None)
+            self.config["use_live_google"] = True
+
+        sample_route = {
+            "duration_min": 8,
+            "distance_m": 620,
+            "steps": ["Walk east"],
+            "encoded_polyline": "_p~iF~ps|U_ulLnnqC",
+            "path": [[1.35, 103.94], [1.354, 103.945]],
+            "segments": [{"mode": "walk", "path": [[1.35, 103.94], [1.354, 103.945]]}],
+        }
+        with patch.object(
+            self.application._brns,
+            "route_to",
+            return_value={
+                "name": "Target Spot",
+                "mode": "walk",
+                "route": sample_route,
+                "link": "https://www.google.com/maps",
+            },
+        ):
+            route_res = self.client.post("/api/route", json={
+                "name": "Target Spot",
+                "origin_lat": 1.35,
+                "origin_lng": 103.94,
+                "dest_lat": 1.354,
+                "dest_lng": 103.945,
+                "mode": "walk",
+            })
+        self.assertEqual(route_res.status_code, 200, route_res.text)
+        body = route_res.json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["route"]["path"], sample_route["path"])
+        self.assertEqual(body["route"]["segments"], sample_route["segments"])
+        self.assertEqual(body["route"]["encoded_polyline"], sample_route["encoded_polyline"])
+
+    def test_place_photo_endpoint_persists_blob_in_mongodb_on_first_click(self):
+        from unittest.mock import patch
+        from BRNS.classes.data.stores.mongo.mongo_place_photo_store import (
+            MongoPlacePhotoStore,
+        )
+        from BRNS.classes.io.gateways.google.google_place_photo_gateway import (
+            GooglePlacePhotoGateway,
+        )
+        from BRNS.classes.services.workflows.place_photo_service import (
+            PlacePhotoService,
+        )
+
+        photo_store = MongoPlacePhotoStore(self.conn)
+        photo_store.ensure_indexes()
+        cfg = SimpleNamespace(
+            GOOGLE_MAPS_API_KEY="test-places-key",
+            PLACES_DETAILS_BASE_URL="https://places.example.test/v1",
+            USE_LIVE_GOOGLE=True,
+        )
+        gateway = GooglePlacePhotoGateway(
+            cfg,
+            SimpleNamespace(debug_log=lambda *_a, **_kw: None),
+            lambda *_a, **_kw: None,
+        )
+        photo_service = PlacePhotoService(
+            photo_store, gateway, SimpleNamespace(debug_log=lambda *_a, **_kw: None),
+        )
+
+        details_resp = Mock(status_code=200)
+        details_resp.raise_for_status = Mock()
+        details_resp.json.return_value = {
+            "photos": [{
+                "name": "places/ChIJWebPin1/photos/Ref1",
+                "authorAttributions": [{"displayName": "Mei Lin"}],
+            }],
+        }
+        media_resp = Mock(status_code=200, headers={"Content-Type": "application/json"})
+        media_resp.raise_for_status = Mock()
+        media_resp.json.return_value = {"photoUri": "https://img.example.test/pin.webp"}
+        img_resp = Mock(
+            status_code=200,
+            headers={"Content-Type": "image/webp"},
+            content=b"RIFFWEBPTESTBLOB",
+        )
+        img_resp.raise_for_status = Mock()
+
+        with patch.object(
+            self.application._brns,
+            "place_photo",
+            side_effect=photo_service.get_or_fetch_photo,
+        ):
+            bad = self.client.get("/api/places/bad%20place/photo")
+            self.assertEqual(bad.status_code, 400)
+
+            self.assertEqual(self.conn.db.place_photos.count_documents({}), 0)
+            with patch(
+                "BRNS.classes.io.gateways.google.google_place_photo_gateway.requests.get",
+                side_effect=[details_resp, media_resp, img_resp],
+            ) as mock_get:
+                first = self.client.get("/api/places/ChIJWebPin1/photo")
+                self.assertEqual(first.status_code, 200, first.text)
+                self.assertEqual(first.content, b"RIFFWEBPTESTBLOB")
+                self.assertEqual(first.headers["content-type"], "image/webp")
+                self.assertEqual(first.headers["x-photo-author"], "Mei%20Lin")
+                self.assertEqual(mock_get.call_count, 3)
+
+                # Stored in dedicated `place_photos` collection without touching `restaurants`.
+                self.assertEqual(self.conn.db.restaurants.count_documents({}), 0)
+                doc = self.conn.db.place_photos.find_one({"_id": "ChIJWebPin1"})
+                self.assertIsNotNone(doc)
+                self.assertEqual(bytes(doc["data"]), b"RIFFWEBPTESTBLOB")
+                self.assertEqual(doc["content_type"], "image/webp")
+
+                # Subsequent pin click serves directly from MongoDB without Google HTTP calls.
+                second = self.client.get("/api/places/ChIJWebPin1/photo")
+                self.assertEqual(second.status_code, 200)
+                self.assertEqual(second.content, b"RIFFWEBPTESTBLOB")
+                self.assertEqual(mock_get.call_count, 3)
+
+    def test_password_length_and_allowed_symbols_enforced(self):
+        # Task 1: min 8, max 30 chars, only ASCII letters, digits, and .,?!$ allowed.
+        for bad_pw in (
+            "seven77",          # 7 chars
+            "a" * 31,           # 31 chars
+            "pass-word1",       # hyphen disallowed
+            "pass_word1",       # underscore disallowed
+            "pass@word1",       # @ disallowed
+            "pass word1",       # space disallowed
+        ):
+            res = self.client.post("/api/auth/register", json={
+                "username": "Pw Tester",
+                "email": "pw.bad@example.com",
+                "password": bad_pw,
+            })
+            self.assertIn(res.status_code, (400, 422), f"Expected rejection for {bad_pw!r}: {res.text}")
+            with self.assertRaises(ValueError):
+                PasswordHasher().create(bad_pw)
+
+        for idx, good_pw in enumerate((
+            "pass.12!",                 # exact 8 chars + symbols
+            ("A1b2c3.,?!" * 3),         # exact 30 chars
+            "Alpha9.,?!$",              # all allowed symbols
+        )):
+            res = self.client.post("/api/auth/register", json={
+                "username": f"PwOk{idx}",
+                "email": f"pw.ok.{idx}@example.com",
+                "password": good_pw,
+            })
+            self.assertEqual(res.status_code, 200, f"Expected acceptance for {good_pw!r}: {res.text}")
+
+    def test_email_format_validation_enforced(self):
+        # Task 2: proper email format required across auth endpoints.
+        for bad_email in (
+            "invalid-email",
+            "a@b.c",
+            "a@b.123",
+            "a..b@example.com",
+            ".lead@example.com",
+            "trail.@example.com",
+            "user@-bad.com",
+        ):
+            res = self.client.post("/api/auth/register", json={
+                "username": "EmailTester",
+                "email": bad_email,
+                "password": "ValidPass.1!",
+            })
+            self.assertIn(res.status_code, (400, 422), f"Expected rejection for {bad_email!r}: {res.text}")
+
+        for idx, good_email in enumerate((
+            "valid.user+tag@sub.example.sg",
+            "fuwei_@outlook.com",
+            "_fuwei@outlook.com",
+            "a.b+1_@sub.outlook.com",
+        )):
+            ok = self.client.post("/api/auth/register", json={
+                "username": f"EmailOk{idx}",
+                "email": good_email,
+                "password": "ValidPass.1!",
+            })
+            self.assertEqual(ok.status_code, 200, f"Expected acceptance for {good_email!r}: {ok.text}")
+
+    def test_search_mode_travel_limits_and_transit_distance_supported(self):
+        # Task 3: walk <=15km/90m, drive <=50km/120m, transit <=50km/150m (both supported).
+        headers, _ = self.account("travel.caps@example.com")
+        base = self.search_payload()
+
+        valid_cases = [
+            ("walk", 15.0, None),
+            ("walk", None, 90),
+            ("drive", 50.0, None),
+            ("drive", None, 120),
+            ("transit", 50.0, None),
+            ("transit", None, 150),
+        ]
+        for mode, dist_km, mins in valid_cases:
+            payload = dict(
+                base,
+                mode=mode,
+                max_distance_km=dist_km,
+                max_travel_minutes=mins,
+                confirm_only=True,
+            )
+            res = self.client.post("/api/search", json=payload, headers=headers)
+            self.assertEqual(res.status_code, 200, f"Expected OK for {(mode, dist_km, mins)}: {res.text}")
+
+        # Verify transit distance actually reaches BRNS search execution.
+        confirm_transit_dist = self.client.post("/api/search", json=dict(
+            base,
+            mode="transit",
+            max_distance_km=50.0,
+            max_travel_minutes=None,
+            confirm_only=True,
+        ), headers=headers)
+        self.assertEqual(confirm_transit_dist.status_code, 200, confirm_transit_dist.text)
+        run_transit_dist = self.client.post("/api/search", json=dict(
+            base,
+            mode="transit",
+            max_distance_km=50.0,
+            max_travel_minutes=None,
+            confirmation_token=confirm_transit_dist.json()["confirmation_token"],
+        ), headers=headers)
+        self.assertEqual(run_transit_dist.status_code, 200, run_transit_dist.text)
+        self.assertEqual(self.ranking_calls[-1]["mode"], "transit")
+        self.assertEqual(self.ranking_calls[-1]["max_distance_km"], 50.0)
+
+        invalid_cases = [
+            ("walk", 15.1, None),
+            ("walk", None, 91),
+            ("drive", 50.1, None),
+            ("drive", None, 121),
+            ("transit", 50.1, None),
+            ("transit", None, 151),
+        ]
+        for mode, dist_km, mins in invalid_cases:
+            payload = dict(
+                base,
+                mode=mode,
+                max_distance_km=dist_km,
+                max_travel_minutes=mins,
+                confirm_only=True,
+            )
+            res = self.client.post("/api/search", json=payload, headers=headers)
+            self.assertEqual(res.status_code, 400, f"Expected 400 for {(mode, dist_km, mins)}: {res.text}")
+
+    def test_profile_allows_empty_or_real_location_unlimited_metrics_and_english_wishes(self):
+        # Task 4: empty or real SG location, no upper limits for time/distance/budget, proper English wishes.
+        headers, user = self.account("profile.rules@example.com")
+
+        def make_profile(**overrides):
+            payload = dict(user)
+            payload.pop("email_verified", None)
+            payload.update(overrides)
+            return payload
+
+        # Valid: empty location + large positive distance/time/budget + English wishes.
+        ok = self.client.post("/api/profile", json=make_profile(
+            location=[],
+            max_distance_km=500,
+            max_travel_time_minutes=3000,
+            budget_per_person=5000,
+            other_preferences=["quiet corner", "window seat"],
+        ), headers=headers)
+        self.assertEqual(ok.status_code, 200, ok.text)
+        saved = self.client.get("/api/auth/me", headers=headers).json()["user"]
+        self.assertEqual(saved["location"], [])
+        self.assertEqual(saved["max_distance_km"], 500.0)
+        self.assertEqual(saved["max_travel_time_minutes"], 3000.0)
+        self.assertEqual(saved["budget_per_person"], 5000.0)
+        self.assertEqual(saved["other_preferences"], ["quiet corner", "window seat"])
+
+        # Valid: real SG coordinate string.
+        ok_coord = self.client.post("/api/profile", json=make_profile(
+            location=["1.352, 103.944"],
+        ), headers=headers)
+        self.assertEqual(ok_coord.status_code, 200, ok_coord.text)
+
+        # Invalid: fake / non-Singapore location rejected by location resolution.
+        orig_resolve = self.gateway.resolve
+        def resolve_sg(query, _key):
+            if "atlantis" in query.lower():
+                raise ValueError("Could not find a Singapore location for 'Atlantis'.")
+            return orig_resolve(query, _key)
+
+        with self.subTest("invalid location"):
+            self.gateway.resolve = resolve_sg
+            try:
+                bad_loc = self.client.post("/api/profile", json=make_profile(
+                    location=["Atlantis"],
+                ), headers=headers)
+                self.assertEqual(bad_loc.status_code, 400, bad_loc.text)
+            finally:
+                self.gateway.resolve = orig_resolve
+
+        # Invalid: non-English, gibberish, digits-only, or punctuation-only special wishes rejected.
+        for bad_wishes in (["你好"], ["dkdk"], ["asdfghj"], ["1234"], ["!!!"]):
+            bad_wish_res = self.client.post("/api/profile", json=make_profile(
+                other_preferences=bad_wishes,
+            ), headers=headers)
+            self.assertEqual(bad_wish_res.status_code, 400, f"Expected 400 for {bad_wishes!r}: {bad_wish_res.text}")
+
+        # AI semantic validation runs when ai_bypass is False.
+        self.config["ai_bypass"] = False
+        self.ai.review_profile_wishes = Mock(
+            side_effect=ValueError("Default special wishes must be meaningful English preferences.")
+        )
+        try:
+            ai_rejected = self.client.post("/api/profile", json=make_profile(
+                other_preferences=["blorp"],
+            ), headers=headers)
+            self.assertEqual(ai_rejected.status_code, 400, ai_rejected.text)
+            self.ai.review_profile_wishes.assert_called_once()
+        finally:
+            self.config["ai_bypass"] = True
+
+    def test_smtp_bypass_toggles_dynamically_from_env_file_without_reloading_config(self):
+        # Task 5: editing .env SMTP_BYPASS takes effect live without container/config restart.
+        import os
+        import tempfile
+        from unittest.mock import patch
+        from BIS.support import config as bis_config
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / ".env"
+            env_path.write_text("SMTP_BYPASS=true\nAI_BYPASS=true\n", encoding="utf-8")
+
+            with patch.object(bis_config, "ENV_FILE", env_path), patch.dict(
+                os.environ, {"SMTP_BYPASS": "true", "AI_BYPASS": "true"}, clear=False
+            ):
+                live_cfg = bis_config.load_config()
+
+            self.assertTrue(bis_config.is_smtp_bypass(live_cfg))
+
+            # Flip to false in .env without calling load_config() again.
+            env_path.write_text("SMTP_BYPASS=false\nAI_BYPASS=true\n", encoding="utf-8")
+            self.assertFalse(bis_config.is_smtp_bypass(live_cfg))
+
+            # Flip back to true in .env without calling load_config() again.
+            env_path.write_text("SMTP_BYPASS=true\nAI_BYPASS=true\n", encoding="utf-8")
+            self.assertTrue(bis_config.is_smtp_bypass(live_cfg))
+
+            # Verify live registration endpoint reacts to _env_file toggle without restart.
+            self.config["_env_file"] = str(env_path)
+            self.config["smtp_bypass"] = False
+            self.config["_smtp_bypass_initial"] = False
+            try:
+                env_path.write_text("SMTP_BYPASS=true\n", encoding="utf-8")
+                reg_bypass = self.client.post("/api/auth/register", json={
+                    "username": "LiveOn",
+                    "email": "live.on@example.com",
+                    "password": "ValidPass.1!",
+                })
+                self.assertEqual(reg_bypass.status_code, 200, reg_bypass.text)
+                self.assertFalse(reg_bypass.json().get("otp_required"))
+                self.assertIn("token", reg_bypass.json())
+
+                env_path.write_text("SMTP_BYPASS=false\n", encoding="utf-8")
+                reg_verify = self.client.post("/api/auth/register", json={
+                    "username": "LiveOff",
+                    "email": "live.off@example.com",
+                    "password": "ValidPass.1!",
+                })
+                self.assertEqual(reg_verify.status_code, 200, reg_verify.text)
+                self.assertTrue(reg_verify.json().get("otp_required"))
+                self.assertEqual(self.sent[-1][0], "live.off@example.com")
+            finally:
+                self.config.pop("_env_file", None)
+                self.config.pop("smtp_bypass", None)
+                self.config.pop("_smtp_bypass_initial", None)
 
 
 if __name__ == "__main__":

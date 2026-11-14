@@ -101,13 +101,13 @@ class StorageContractTests(unittest.TestCase):
             user_id = f"user-{index}"
             with self.subTest(store=type(store).__name__):
                 self.assertIsNone(store.get(user_id))
-                credential = hasher.create("secret-pass-1")
+                credential = hasher.create("secret.pass.1")
                 store.save(user_id, credential)
                 reloaded = JsonCredentialStore(self.root / "credentials.json") if store is json_creds else MongoCredentialStore(self.conn)
                 saved = reloaded.get(user_id)
                 self.assertEqual(saved, credential)
-                self.assertTrue(hasher.verify("secret-pass-1", saved))
-                self.assertFalse(hasher.verify("wrong-pass", saved))
+                self.assertTrue(hasher.verify("secret.pass.1", saved))
+                self.assertFalse(hasher.verify("wrong.pass", saved))
 
 
 if __name__ == "__main__":

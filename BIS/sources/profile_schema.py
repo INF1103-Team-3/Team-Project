@@ -23,12 +23,18 @@ NUMBER_LIMITS = {
     "max_travel_time_minutes": (0.1, 2000),
     "budget_per_person": (0.01, 1000),
 }
+SEARCH_MODE_LIMITS = {
+    "walk": {"max_distance_km": (0.01, 15.0), "max_travel_minutes": (1.0, 90.0)},
+    "drive": {"max_distance_km": (0.01, 50.0), "max_travel_minutes": (1.0, 120.0)},
+    "transit": {"max_distance_km": (0.01, 50.0), "max_travel_minutes": (1.0, 150.0)},
+}
 MINUTES_PER_KM = 20
-TRANSIT_MINUTES_RANGE = (1, 240)
+TRANSIT_MINUTES_RANGE = (1, 150)
+_COORDINATE_TEXT = re.compile(r"^\s*[+-]?\d+(?:\.\d+)?\s*,\s*[+-]?\d+(?:\.\d+)?\s*$")
 EMAIL_PATTERN = re.compile(
-    r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
-    r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
-    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+"
+    r"^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@"
+    r"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+"
+    r"[A-Za-z]{2,63}$"
 )
 
 
@@ -70,14 +76,16 @@ def normalize_email(value):
     return value
 
 
-def normalize_list(value, choices=None, required=False):
+def normalize_list(value, choices=None, required=False, allow_coordinates=False):
     """Require lists and keep all entries or reject the entire answer."""
     if not isinstance(value, list):
         raise ValueError("Expected a list of text entries.")
     result = []
     for item in value:
         item = clean_text(item, 100).lower()
-        if not any(c.isalpha() for c in item):
+        if not any(c.isalpha() for c in item) and not (
+            allow_coordinates and _COORDINATE_TEXT.fullmatch(item)
+        ):
             raise ValueError("List entries must contain letters.")
         if choices is not None and item not in choices:
             raise ValueError("Choose from: " + ", ".join(choices) + ".")
@@ -88,7 +96,7 @@ def normalize_list(value, choices=None, required=False):
     return result
 
 
-def validate_value(field, value):
+def validate_value(field, value, profile_mode=False, allow_empty_location=False):
     """Validate the exact agreed field type, returning normalized values."""
     if field not in PREFERENCE_FIELDS:
         raise ValueError(f"Unsupported preference field: {field}.")
@@ -97,13 +105,20 @@ def validate_value(field, value):
     if field in NUMBER_LIMITS:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(f"{field} must be a number.")
+        if not math.isfinite(value):
+            raise ValueError(f"{field} must be a finite number.")
+        if profile_mode:
+            if value <= 0:
+                raise ValueError(f"{field} must be greater than 0.")
+            return round(float(value), 2)
         minimum, maximum = NUMBER_LIMITS[field]
-        if not minimum <= value <= maximum or not math.isfinite(value):
+        if not minimum <= value <= maximum:
             raise ValueError(
                 f"{field} must be between {minimum} and {maximum}.")
         return round(value, 2)
     if field == "location":
-        return normalize_list(value, required=True)
+        return normalize_list(
+            value, required=not allow_empty_location, allow_coordinates=True)
     if field == "dietary_requirements":
         return normalize_list(value, DIETARY_CHOICES)
     if field == OTHER_PREFERENCES:
@@ -113,22 +128,36 @@ def validate_value(field, value):
     return clean_text(value, 1000, allow_empty=True)
 
 
-def validate_travel_minutes(value):
+def validate_search_distance(value, mode=None):
+    """Validate a search-only maximum distance in kilometres for a mode."""
+    limits = SEARCH_MODE_LIMITS.get(mode) if mode else None
+    low, high = limits["max_distance_km"] if limits else (0.01, 50.0)
+    if (isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(value) or not low <= value <= high):
+        raise ValueError(f"max_distance_km must be between {low:g} and {high:g}.")
+    return round(float(value), 2)
+
+
+def validate_travel_minutes(value, mode=None):
     """Validate a search-only maximum journey time in minutes."""
-    low, high = TRANSIT_MINUTES_RANGE
+    limits = SEARCH_MODE_LIMITS.get(mode) if mode else None
+    low, high = limits["max_travel_minutes"] if limits else TRANSIT_MINUTES_RANGE
     if (type(value) not in (int, float) or not math.isfinite(value)
             or not low <= value <= high):
-        raise ValueError(f"Travel time must be between {low} and {high} minutes.")
+        raise ValueError(f"Travel time must be between {low:g} and {high:g} minutes.")
     return round(value, 2)
 
 
-def validate_updates(updates):
+def validate_updates(updates, profile_mode=False, allow_empty_location=False):
     """Reject obsolete keys even if null; null updates never erase answers."""
     if not isinstance(updates, dict):
         raise ValueError("Preference updates must be a dictionary.")
     normalized = {}
     for field, value in updates.items():
-        value = validate_value(field, value)
+        value = validate_value(
+            field, value, profile_mode=profile_mode,
+            allow_empty_location=allow_empty_location,
+        )
         if value is not None:
             normalized[field] = value
     return normalized
@@ -140,8 +169,10 @@ def validate_preferences(preferences):
         PREFERENCE_FIELDS
     ):
         raise ValueError("Saved profile does not match the current BIS schema.")
-    result = {key: validate_value(key, value)
-              for key, value in preferences.items()}
+    result = {
+        key: validate_value(key, value, profile_mode=True, allow_empty_location=True)
+        for key, value in preferences.items()
+    }
     overlap = set(result["liked_cuisines"] or []) & set(
         result["disliked_cuisines"] or []
     )

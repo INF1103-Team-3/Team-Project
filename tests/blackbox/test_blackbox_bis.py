@@ -1377,7 +1377,7 @@ def test_signup_rejects_short_and_mismatched_passwords():
         assert_shows(
             context,
             output,
-            "Password must be 8–128 characters.",
+            "Password must be 8–30 characters.",
             "Passwords do not match.",
             "Signed up.",
         )
@@ -1481,8 +1481,8 @@ def test_legacy_passwordless_user_enrolls_password_on_signin():
         test_input = [
             "2",
             "tester@example.com",
-            "enrolled-secret-7",
-            "enrolled-secret-7",
+            "enrolled.secret7!",
+            "enrolled.secret7!",
             "/quit",
         ]
 
@@ -1509,7 +1509,7 @@ def test_legacy_passwordless_user_enrolls_password_on_signin():
             "prompted_to_create": "No password is set for this account yet." in output,
             "credential_saved": saved_cred is not None,
             "password_verified": (
-                PasswordHasher().verify("enrolled-secret-7", saved_cred)
+                PasswordHasher().verify("enrolled.secret7!", saved_cred)
                 if saved_cred else False
             ),
         }
@@ -1553,15 +1553,15 @@ def test_change_password_command_verifies_current_and_updates_hash():
             "/password",
             TEST_PASSWORD,
             "short",
-            "updated-secret-99",
-            "mismatch-secret-99",
-            "updated-secret-99",
-            "updated-secret-99",
+            "updated.secret99?",
+            "mismatch.secret99",
+            "updated.secret99?",
+            "updated.secret99?",
             "/logout",
             "2",
             "tester@example.com",
             TEST_PASSWORD,
-            "updated-secret-99",
+            "updated.secret99?",
             "/quit",
         ]
 
