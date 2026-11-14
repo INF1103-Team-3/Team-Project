@@ -653,6 +653,19 @@ body.bf-modal-open {
 #compareTableContainer,
 #chatMessages {
   overscroll-behavior: contain;
+  flex: 1 1 0%;
+  min-height: 0;
+}
+
+#chatbotPanel:not(.hidden) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  height: clamp(500px, calc(100vh - 13.75rem), 860px);
+}
+
+#chatbotPanel:not(.hidden) > :not(#chatMessages) {
+  flex-shrink: 0;
 }
 
 /* Missing Tailwind v3.4 utilities synchronized with index.html & js modules */

@@ -36,7 +36,22 @@ SEARCH_MODE_LIMITS = {
 MINUTES_PER_KM = 20
 TRANSIT_MINUTES_RANGE = (1, 150)
 _COORDINATE_TEXT = re.compile(r"^\s*[+-]?\d+(?:\.\d+)?\s*,\s*[+-]?\d+(?:\.\d+)?\s*$")
-_WISH_ALLOWED_TEXT = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()+\-]*")
+_WISH_ALLOWED_TEXT = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()+\-=>]*")
+_DECIMAL_SPACE_RX = re.compile(r"\b(\d+)\s*\.\s*(\d+)\b")
+_RATING_WISH_RX = re.compile(
+    r"(?:\b(?:minimum|min\.?|at least|no less than|above|over)\b|>=?)\s*"
+    r"(?:google\s*)?(?:(?:rating|rated)\s*(?:of\s*|is\s*)?(\d+(?:\.\d+)?|\.\d+)"
+    r"(?:\s*(?:\+\s*)?(?:stars?|/\s*5|\+))?"
+    r"|(\d+(?:\.\d+)?|\.\d+)\s*(?:\+\s*)?(?:stars?|/\s*5|rating\b|rated\b))"
+    r"|\b(?:google\s*)?(?:rating|rated)\s*(?:of\s*|is\s*)?"
+    r"(?:>=?|at least|minimum|min\.?|no less than|above|over)?\s*"
+    r"(\d+(?:\.\d+)?|\.\d+)(?:\s*(?:\+\s*)?(?:stars?|/\s*5)|\s*\+(?!\w)|(?=[,.;!?\s]|$))"
+    r"|\b(\d+(?:\.\d+)?|\.\d+)\s*(?:\+\s*)?(?:stars?|/\s*5)(?!\w)"
+    r"(?:\s*(?:or higher|or above|and up|or better|minimum|min\.?|\+)(?!\w))?"
+    r"|\b(\d+(?:\.\d+)?|\.\d+)\s*(?:\+\s*)?(?:rating|rated)\b"
+    r"(?:\s*(?:or higher|or above|and up|or better|minimum|min\.?|\+)(?!\w))?",
+    re.IGNORECASE,
+)
 _WISH_ACRONYMS = {
     "bbq", "byob", "msg", "cbd", "mrt", "hrs", "gym", "nth", "sgd", "ac", "tv", "vip", "wfh",
 }
@@ -90,16 +105,49 @@ def normalize_email(value):
     return value
 
 
-def normalize_list(value, choices=None, required=False, allow_coordinates=False):
+def normalize_wish_text(value):
+    """Collapse spacing and rejoin split decimal numbers such as '4 .5' -> '4.5'."""
+    collapsed = " ".join(str(value or "").strip().split())
+    return _DECIMAL_SPACE_RX.sub(r"\1.\2", collapsed)
+
+
+def extract_rating_wishes(text):
+    """Return numeric star ratings found in a special-request string (validating 1..5)."""
+    normalized = normalize_wish_text(text)
+    values = []
+    for match in _RATING_WISH_RX.finditer(normalized):
+        raw = next((g for g in match.groups() if g is not None), None)
+        if raw is None:
+            continue
+        rating = float(raw)
+        if not 1.0 <= rating <= 5.0:
+            raise ValueError("Google star ratings must be between 1 and 5 stars.")
+        values.append(rating)
+    return values
+
+
+def strip_rating_clauses(text):
+    """Remove valid Google star rating clauses, preserving other wish text."""
+    normalized = normalize_wish_text(text)
+    remainder = _RATING_WISH_RX.sub(" ", normalized)
+    remainder = re.sub(r"^(?:\s*(?:and|with|&|,|/)\b\s*)+", "", remainder, flags=re.IGNORECASE)
+    remainder = re.sub(r"(?:\s*\b(?:and|with)\s*|\s*[,&/]\s*)+$", "", remainder, flags=re.IGNORECASE)
+    remainder = re.sub(r"\s{2,}", " ", remainder).strip(" ,;-/")
+    return remainder
+
+
+def normalize_list(value, choices=None, required=False, allow_coordinates=False,
+                   allow_ratings=False):
     """Require lists and keep all entries or reject the entire answer."""
     if not isinstance(value, list):
         raise ValueError("Expected a list of text entries.")
     result = []
     for item in value:
-        item = clean_text(item, 100).lower()
+        item = clean_text(normalize_wish_text(item) if allow_ratings else item, 100).lower()
+        has_rating = bool(allow_ratings and extract_rating_wishes(item))
         if not any(c.isalpha() for c in item) and not (
             allow_coordinates and _COORDINATE_TEXT.fullmatch(item)
-        ):
+        ) and not has_rating:
             raise ValueError("List entries must contain letters.")
         if choices is not None and item not in choices:
             raise ValueError("Choose from: " + ", ".join(choices) + ".")
@@ -111,9 +159,10 @@ def normalize_list(value, choices=None, required=False, allow_coordinates=False)
 
 
 def validate_english_preferences(items, field_label="Special requests"):
-    """Require proper meaningful English text for special wishes or requests."""
+    """Require proper meaningful English text and valid 1..5 star wishes."""
+    normalized_items = []
     for item in items:
-        text = str(item or "").strip()
+        text = normalize_wish_text(item)
         if not text:
             continue
         if len(text) > 100 or not _WISH_ALLOWED_TEXT.fullmatch(text):
@@ -121,7 +170,16 @@ def validate_english_preferences(items, field_label="Special requests"):
                 f"{field_label} must use proper English letters and words "
                 "(e.g. quiet seating, spicy food)."
             )
-        words = re.findall(r"[A-Za-z]+", text)
+        try:
+            ratings = extract_rating_wishes(text)
+        except ValueError as err:
+            raise ValueError(f"{field_label}: {err}") from err
+        remainder = strip_rating_clauses(text)
+        if ratings and not remainder:
+            normalized_items.append(text)
+            continue
+        check_text = remainder or text
+        words = re.findall(r"[A-Za-z]+", check_text)
         if not words or not any(len(word) > 1 for word in words):
             raise ValueError(
                 f"{field_label} must contain meaningful English words "
@@ -139,7 +197,8 @@ def validate_english_preferences(items, field_label="Special requests"):
                     f"{field_label} must contain proper English words, "
                     f"not '{word}'."
                 )
-    return items
+        normalized_items.append(text)
+    return normalized_items
 
 
 def validate_value(field, value, profile_mode=False, allow_empty_location=False,
@@ -177,7 +236,7 @@ def validate_value(field, value, profile_mode=False, allow_empty_location=False,
     if field == "dietary_requirements":
         return normalize_list(value, DIETARY_CHOICES)
     if field == OTHER_PREFERENCES:
-        return normalize_list(value)
+        return normalize_list(value, allow_ratings=True)
     if field in CUISINE_FIELDS:
         return normalize_list(value, CUISINES)
     return clean_text(value, 1000, allow_empty=True)

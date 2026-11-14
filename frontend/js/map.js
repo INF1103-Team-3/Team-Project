@@ -1,12 +1,12 @@
-import { escapeHtml, getPlaceKey, refreshIcons, state } from './state.js?v=20261114-9';
-import { openModal, closeModal } from './modals.js?v=20261114-9';
-import { apiJson } from './api.js?v=20261114-9';
+import { escapeHtml, getPlaceKey, refreshIcons, state } from './state.js?v=20261114-12';
+import { openModal, closeModal } from './modals.js?v=20261114-12';
+import { apiJson } from './api.js?v=20261114-12';
 import {
   buildPinMarkerIcon,
   buildPolylineOptions,
   GOOGLE_MAP_DARK_STYLES,
   GOOGLE_MAP_LIGHT_STYLES,
-} from './map_styles.js?v=20261114-9';
+} from './map_styles.js?v=20261114-12';
 
 let activeEngine = null; // 'google' | 'leaflet' | null
 let mapConfigPromise = null;

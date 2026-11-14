@@ -822,19 +822,23 @@ class OOPRefactorTests(unittest.TestCase):
                     patch.object(brns_io.config, "GOOGLE_MAPS_API_KEY", "test-key"):
                 results = brns_io.fetch_by_profile_text(midpoint, req)
 
-            self.assertEqual(len(captured), 1)
-            _, body, _ = captured[0]
-            self.assertEqual(body["rankPreference"], "RELEVANCE")
-            self.assertNotIn("locationRestriction", body)
+            self.assertEqual(len(captured), 2)
             self.assertEqual(
-                body["locationBias"],
-                {
-                    "circle": {
-                        "center": {"latitude": midpoint[0], "longitude": midpoint[1]},
-                        "radius": expected_radius,
-                    }
-                },
+                [body["textQuery"] for _, body, _ in captured],
+                ["japanese food", "japanese restaurants"],
             )
+            for _, body, _ in captured:
+                self.assertEqual(body["rankPreference"], "RELEVANCE")
+                self.assertNotIn("locationRestriction", body)
+                self.assertEqual(
+                    body["locationBias"],
+                    {
+                        "circle": {
+                            "center": {"latitude": midpoint[0], "longitude": midpoint[1]},
+                            "radius": expected_radius,
+                        }
+                    },
+                )
             self.assertEqual([item["google_place_id"] for item in results], ["near-midpoint"])
 
     def test_json_credential_store_and_session_change_password(self):
@@ -1413,13 +1417,24 @@ class OOPRefactorTests(unittest.TestCase):
         origin = (1.300, 103.840)
         captured_bodies = []
 
-        # 1. Targeted search returning < 6 open places triggers one untargeted backfill.
+        # 1. Sparse search (< 12 open) merges food <-> restaurants, then (< 12 open) unlabelled backfill.
         sparse_payload = {
             "places": [{
                 "id": "p-targeted",
                 "displayName": {"text": "Targeted Sushi"},
                 "formattedAddress": "10 Orchard Rd",
                 "location": {"latitude": 1.302, "longitude": 103.841},
+                "priceLevel": "PRICE_LEVEL_MODERATE",
+                "types": ["japanese_restaurant"],
+                "currentOpeningHours": {"openNow": True},
+            }]
+        }
+        complement_payload = {
+            "places": [{
+                "id": "p-complement",
+                "displayName": {"text": "Complement Sushi"},
+                "formattedAddress": "11 Orchard Rd",
+                "location": {"latitude": 1.3025, "longitude": 103.8415},
                 "priceLevel": "PRICE_LEVEL_MODERATE",
                 "types": ["japanese_restaurant"],
                 "currentOpeningHours": {"openNow": True},
@@ -1435,7 +1450,7 @@ class OOPRefactorTests(unittest.TestCase):
                 "currentOpeningHours": {"openNow": True},
             }]
         }
-        responses = [sparse_payload, backfill_payload]
+        responses = [sparse_payload, complement_payload, backfill_payload]
 
         def fake_post(url, headers=None, json=None, timeout=None):
             captured_bodies.append(json)
@@ -1459,14 +1474,21 @@ class OOPRefactorTests(unittest.TestCase):
             candidates = brns_io.build_candidates(origin, req, [])
 
         self.assertEqual(captured_bodies[0]["rankPreference"], "RELEVANCE")
+        self.assertEqual(captured_bodies[0]["textQuery"], "japanese food")
         self.assertEqual(
             captured_bodies[0]["priceLevels"],
             ["PRICE_LEVEL_MODERATE", "PRICE_LEVEL_EXPENSIVE"],
         )
-        self.assertNotIn("priceLevels", captured_bodies[1])
+        self.assertEqual(captured_bodies[1]["textQuery"], "japanese restaurants")
+        self.assertEqual(
+            captured_bodies[1]["priceLevels"],
+            ["PRICE_LEVEL_MODERATE", "PRICE_LEVEL_EXPENSIVE"],
+        )
+        self.assertEqual(captured_bodies[2]["textQuery"], "japanese food")
+        self.assertNotIn("priceLevels", captured_bodies[2])
         self.assertEqual(
             [c["name"] for c in candidates],
-            ["Targeted Sushi", "Unlabelled Sushi"],
+            ["Targeted Sushi", "Complement Sushi", "Unlabelled Sushi"],
         )
 
         # 2. Multi-zone sampling selects across near/mid/outer zones instead of packing first 20 near.
@@ -1493,6 +1515,201 @@ class OOPRefactorTests(unittest.TestCase):
         self.assertTrue(any(n.startswith("Near ") for n in sampled_names))
         self.assertTrue(any(n.startswith("Mid ") for n in sampled_names))
         self.assertTrue(any(n.startswith("Outer ") for n in sampled_names))
+
+    def test_rating_filter_strict_limits_min_rating_and_conditional_food_restaurants_merge(self):
+        from unittest.mock import patch
+        from BRNS import io_manager as brns_io
+        from BRNS import logic_manager as brns_logic
+
+        # 1. Standalone & prefixed decimal ratings normalize cleanly and never trigger hard relaxation on distance/budget.
+        self.assertEqual(brns_logic.minimum_rating(["minimum 4 .5 stars"]), 4.5)
+        self.assertEqual(brns_logic.minimum_rating(["4.5 stars"]), 4.5)
+        self.assertEqual(brns_logic.minimum_rating(["4.3 stars"]), 4.3)
+        self.assertEqual(brns_logic.minimum_rating(["4.5+ rated"]), 4.5)
+        self.assertEqual(brns_logic.minimum_rating(["4.5+ stars"]), 4.5)
+        self.assertEqual(brns_logic.minimum_rating(["minimum rating 4.0"]), 4.0)
+        self.assertIsNone(brns_logic.minimum_rating(["under 4.5 stars"]))
+        self.assertFalse(brns_logic.has_hard_preferences(["minimum 4 .5 stars"]))
+        self.assertFalse(brns_logic.has_hard_preferences(["4.5 stars"]))
+        self.assertFalse(brns_logic.has_hard_preferences(["at least 4.5 stars"]))
+        self.assertTrue(brns_logic.has_hard_preferences(["at least 4.5 stars", "halal only"]))
+
+        req_strict = {
+            "origin": {"latitude": 1.376, "longitude": 103.879},
+            "mode": "walk",
+            "max_distance_km": 1.8,
+            "max_travel_minutes": None,
+            "traffic_aware": False,
+            "cuisine": "none",
+            "budget_per_person": 20.0,
+            "other_preferences": ["minimum 4 .5 stars"],
+            "dietary_requirements": [],
+            "disliked_cuisines": [],
+            "free_text": "",
+        }
+        self.assertEqual(brns_io._search_radius(req_strict), 1800)
+        self.assertEqual(brns_io._clean_free_text_query(["minimum 4 .5 stars", "spicy food"]), "spicy food")
+
+        over_budget_place = {
+            "name": "Pricy Bistro",
+            "address": "1 Hougang Ave",
+            "source": "google places",
+            "open_now": True,
+            "cuisines": ["western"],
+            "dietary_requirements": [],
+            "avg_price": 30.0,
+            "rating": 4.8,
+            "rating_count": 200,
+            "walk_source": "route",
+            "walk_meters": 500,
+            "walk_minutes": 6.0,
+        }
+        status, _, reasons = brns_logic.decide_outcome(over_budget_place, req_strict)
+        self.assertEqual(status, "alternative")
+        self.assertTrue(any("exceeds your SGD 20 budget" in r and "relaxed" not in r for r in reasons), reasons)
+
+        # 2. Generic search with minimum 4.5 stars uses Text Search minRating + merges food+restaurants (< 12 open).
+        origin = (1.376, 103.879)
+        text_calls = []
+
+        def mk_place(idx, rating=4.7):
+            return {
+                "id": f"r-{idx}",
+                "displayName": {"text": f"Gem {idx}"},
+                "formattedAddress": f"{idx} Hougang St",
+                "location": {"latitude": 1.377, "longitude": 103.880},
+                "rating": rating,
+                "priceLevel": "PRICE_LEVEL_INEXPENSIVE",
+                "types": ["restaurant"],
+                "currentOpeningHours": {"openNow": True},
+            }
+
+        responses = [
+            {"places": [mk_place(i) for i in range(7)]},          # 7 < 12 open -> swaps food -> restaurants
+            {"places": [mk_place(i + 10) for i in range(5)]},     # merged = 12 >= 12 -> stops before backfill
+        ]
+
+        def fake_post_merge(url, headers=None, json=None, timeout=None):
+            if "computeRouteMatrix" in url:
+                return SimpleNamespace(raise_for_status=lambda: None, json=lambda: [])
+            text_calls.append((url, dict(json or {})))
+            return SimpleNamespace(raise_for_status=lambda: None, json=lambda: responses.pop(0))
+
+        with patch.object(brns_io.requests, "post", side_effect=fake_post_merge), \
+                patch.object(brns_io.config, "GOOGLE_MAPS_API_KEY", "test-key"), \
+                patch.object(brns_io.config, "USE_LIVE_GOOGLE", True):
+            cands = brns_io.build_candidates(origin, req_strict, [])
+
+        self.assertEqual(len(text_calls), 2)
+        self.assertTrue(all("places:searchText" in u for u, _ in text_calls))
+        self.assertEqual([b["textQuery"] for _, b in text_calls], ["food", "restaurants"])
+        self.assertEqual([b["minRating"] for _, b in text_calls], [4.5, 4.5])
+        self.assertEqual(len(cands), 12)
+
+        # 3. Aligned min_rating (e.g. 4.5) with >= 12 qualifying open runs only 1 Places call;
+        #    fractional min_rating (e.g. 4.3 -> floored 4.0) ignores sub-threshold 4.1-4.2 places in early-stop
+        #    and adds one minRating=4.5 tier call so high-rated 4.5-5.0 venues aren't crowded out.
+        req_aligned = dict(req_strict, other_preferences=["4.5 stars"])
+        aligned_calls = []
+
+        def fake_post_aligned(url, headers=None, json=None, timeout=None):
+            aligned_calls.append(dict(json or {}))
+            return SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda: {"places": [mk_place(i, 4.6) for i in range(12)]},
+            )
+
+        with patch.object(brns_io.requests, "post", side_effect=fake_post_aligned), \
+                patch.object(brns_io.config, "GOOGLE_MAPS_API_KEY", "test-key"):
+            aligned_res = brns_io.fetch_by_profile_text(origin, req_aligned)
+
+        self.assertEqual(len(aligned_calls), 1)
+        self.assertEqual(aligned_calls[0]["minRating"], 4.5)
+        self.assertEqual(len(aligned_res), 12)
+
+        req_frac = dict(req_strict, other_preferences=["at least 4.3 stars"])
+        frac_calls = []
+        frac_responses = [
+            {"places": [mk_place(i, 4.1) for i in range(15)]},        # 0 >= 4.3 qualifying -> must NOT stop early
+            {"places": [mk_place(100 + i, 4.4) for i in range(12)]},  # swap adds 12 qualifying >= 4.3
+            {"places": [mk_place(200 + i, 4.8) for i in range(5)]},   # upper tier minRating=4.5 adds 4.8 gems
+        ]
+
+        def fake_post_frac(url, headers=None, json=None, timeout=None):
+            frac_calls.append(dict(json or {}))
+            return SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda: frac_responses.pop(0),
+            )
+
+        with patch.object(brns_io.requests, "post", side_effect=fake_post_frac), \
+                patch.object(brns_io.config, "GOOGLE_MAPS_API_KEY", "test-key"):
+            frac_res = brns_io.fetch_by_profile_text(origin, req_frac)
+
+        self.assertEqual([(c["textQuery"], c["minRating"], "priceLevels" in c) for c in frac_calls], [
+            ("food", 4.0, True),
+            ("restaurants", 4.0, True),
+            ("food", 4.5, False),
+        ])
+        self.assertTrue(any(p["rating"] == 4.8 for p in frac_res))
+
+        # 4. _select_zone_places prioritizes rating >= min_rating before filling leftover slots < limit.
+        mixed_pool = []
+        for i in range(25):
+            mixed_pool.append({
+                "name": f"Low {i}",
+                "lat": origin[0] + 0.001 * ((i % 5) + 1),
+                "lng": origin[1],
+                "rating": 4.1,
+                "open_now": True,
+            })
+        for i in range(8):
+            mixed_pool.append({
+                "name": f"High {i}",
+                "lat": origin[0] + 0.002 * ((i % 4) + 1),
+                "lng": origin[1],
+                "rating": 4.7,
+                "open_now": True,
+            })
+        prioritized = brns_io._select_zone_places(mixed_pool, origin, 2000.0, limit=12, min_rating=4.5)
+        self.assertEqual(len(prioritized), 12)
+        high_selected = [p for p in prioritized if (p.get("rating") or 0) >= 4.5]
+        self.assertEqual(len(high_selected), 8)
+
+    def test_brns_active_model_tracks_live_fallback_and_resets_after_completion(self):
+        from unittest.mock import patch
+        from BRNS import ai_manager as brns_ai
+
+        seen_active = []
+        chain = [
+            {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
+            {"provider": "groq", "model": "qwen/qwen3.8-27b"},
+        ]
+
+        def fake_gemini(model, sys_prompt, text):
+            seen_active.append(brns_ai.current_active_model())
+            return False, "HTTP 429: rate limited"
+
+        def fake_groq(model, sys_prompt, text):
+            seen_active.append(brns_ai.current_active_model())
+            return True, '{"recommendations":[{"id":0,"reason_codes":[]}]}'
+
+        with patch.object(brns_ai.config, "MODEL_CHAIN", chain), \
+                patch.object(brns_ai.config, "GEMINI_API_KEY", "test-gemini"), \
+                patch.object(brns_ai.config, "GROQ_API_KEY", "test-groq"), \
+                patch.object(brns_ai.config, "OPENROUTER_API_KEY", ""), \
+                patch.object(brns_ai.time, "sleep", lambda _s: None), \
+                patch.object(brns_ai, "_call_gemini", side_effect=fake_gemini), \
+                patch.object(brns_ai, "_call_groq", side_effect=fake_groq):
+            self.assertEqual(brns_ai.current_active_model(), "gemini/gemini-3.5-flash-lite")
+            result = brns_ai.manager().recommend_prepared({"candidates": [{"id": 0}]}, 1)
+            self.assertEqual(result, [{"id": 0, "reason_codes": []}])
+            self.assertEqual(seen_active, [
+                "gemini/gemini-3.5-flash-lite",
+                "groq/qwen/qwen3.8-27b",
+            ])
+            self.assertEqual(brns_ai.last_used_model(), "groq/qwen/qwen3.8-27b")
+            self.assertEqual(brns_ai.current_active_model(), "gemini/gemini-3.5-flash-lite")
 
 
 if __name__ == "__main__":

@@ -1708,6 +1708,111 @@ class WebIntegrationTests(unittest.TestCase):
             ["j-1", "k-1", "j-2", "k-2"],
         )
 
+    def test_rating_wish_normalization_ai_bypass_and_chatbot_rating_sync(self):
+        # Pure rating wishes (even with decimal typo '4 .5') pass deterministically without AI rejection.
+        self.config["ai_bypass"] = False
+        self.ai.review_profile_wishes = Mock(
+            side_effect=AssertionError("review_profile_wishes should not run for pure rating wishes")
+        )
+        try:
+            search_res = self.client.post("/api/search", json=dict(
+                self.search_payload(),
+                other_preferences=["minimum 4 .5 stars"],
+            ))
+            self.assertEqual(search_res.status_code, 200, search_res.text)
+            self.assertEqual(self.ranking_calls[-1]["other_preferences"], ["minimum 4.5 stars"])
+            self.ai.review_profile_wishes.assert_not_called()
+
+            headers, user = self.account("rating.wish@example.com")
+            prof_res = self.client.post("/api/profile", json={
+                "user_id": user["user_id"],
+                "username": "ratingwish",
+                "email": user["email"],
+                "location": ["Bugis"],
+                "max_distance_km": 2.0,
+                "max_travel_time_minutes": 30.0,
+                "budget_per_person": 25.0,
+                "dietary_requirements": [],
+                "liked_cuisines": [],
+                "disliked_cuisines": [],
+                "other_preferences": ["minimum 4 .5 stars", "4.5/5"],
+            }, headers=headers)
+            self.assertEqual(prof_res.status_code, 200, prof_res.text)
+            self.assertEqual(
+                prof_res.json()["user"]["other_preferences"],
+                ["minimum 4.5 stars", "4.5/5"],
+            )
+            self.ai.review_profile_wishes.assert_not_called()
+
+            # Mixed rating + text wish strips rating clause and still validates text with AI.
+            self.ai.review_profile_wishes = Mock(return_value=["spicy food"])
+            mixed_res = self.client.post("/api/search", json=dict(
+                self.search_payload(),
+                other_preferences=["minimum 4 .5 stars", "spicy food"],
+            ))
+            self.assertEqual(mixed_res.status_code, 200, mixed_res.text)
+            self.ai.review_profile_wishes.assert_called_once()
+            self.assertEqual(self.ai.review_profile_wishes.call_args[0][0], ["spicy food"])
+
+            # Standalone rating phrases ('4.3 stars', '4.5+ rated') also bypass AI validation cleanly.
+            self.ai.review_profile_wishes = Mock(
+                side_effect=AssertionError("review_profile_wishes should not run for standalone rating wishes")
+            )
+            bare_res = self.client.post("/api/search", json=dict(
+                self.search_payload(),
+                other_preferences=["4.3 stars"],
+            ))
+            self.assertEqual(bare_res.status_code, 200, bare_res.text)
+            self.assertEqual(self.ranking_calls[-1]["other_preferences"], ["4.3 stars"])
+            self.ai.review_profile_wishes.assert_not_called()
+
+            # Out-of-bounds star rating (1..5) rejected before reaching AI or BRNS.
+            bad_res = self.client.post("/api/search", json=dict(
+                self.search_payload(),
+                other_preferences=["at least 6 stars"],
+            ))
+            self.assertEqual(bad_res.status_code, 400, bad_res.text)
+            self.assertIn("1 and 5 stars", bad_res.json()["detail"])
+        finally:
+            self.config["ai_bypass"] = True
+
+        # Chatbot preserves non-rating wishes on rating updates and 'any rating'.
+        base = {
+            "location": "Hougang 1",
+            "locations": ["Hougang 1"],
+            "mode": "walk",
+            "max_distance_km": 1.8,
+            "max_travel_minutes": None,
+            "budget_per_person": 20.0,
+            "dietary_requirements": [],
+            "liked_cuisines": [],
+            "disliked_cuisines": [],
+            "other_preferences": ["spicy food"],
+        }
+        set_r = self.client.post("/api/chat", json={
+            "message": "minimum 4 .5 stars",
+            "current_filters": base,
+        }).json()
+        self.assertEqual(set_r["filters"]["other_preferences"], ["spicy food", "at least 4.5 stars"])
+
+        replace_r = self.client.post("/api/chat", json={
+            "message": "at least 4.0 stars",
+            "current_filters": set_r["filters"],
+        }).json()
+        self.assertEqual(replace_r["filters"]["other_preferences"], ["spicy food", "at least 4.0 stars"])
+
+        clear_r = self.client.post("/api/chat", json={
+            "message": "any rating",
+            "current_filters": replace_r["filters"],
+        }).json()
+        self.assertEqual(clear_r["filters"]["other_preferences"], ["spicy food"])
+
+        rated_r = self.client.post("/api/chat", json={
+            "message": "4.3+ rated",
+            "current_filters": clear_r["filters"],
+        }).json()
+        self.assertEqual(rated_r["filters"]["other_preferences"], ["spicy food", "at least 4.3 stars"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

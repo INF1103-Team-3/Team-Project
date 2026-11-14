@@ -14,6 +14,7 @@ from sources.profile_schema import (
     PREFERENCE_FIELDS,
     PROFILE_NUMBER_LIMITS,
     normalize_username,
+    normalize_wish_text,
     validate_english_preferences as _validate_english_preferences,
     validate_preferences,
     validate_updates,
@@ -176,7 +177,7 @@ class LogicManager(BISLogicManagerInterface):
     def normalize_profile_items(items, is_location=False):
         normalized = []
         for item in items:
-            clean = str(item or "").strip()
+            clean = str(item or "").strip() if is_location else normalize_wish_text(item)
             if not clean:
                 continue
             if is_location and clean.isdigit():

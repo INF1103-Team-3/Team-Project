@@ -14,25 +14,38 @@ from BRNS.classes.logic.evaluation.opening_hours_service import OpeningHoursServ
 from common import debug_log as log
 
 
+_DECIMAL_SPACE_RX = re.compile(r"\b(\d+)\s*\.\s*(\d+)\b")
 _RATING_FLOOR = re.compile(
-    r"\b(?:minimum|min\.?|at least|no less than|above|over)\s*"
-    r"(?:rating\s*(?:of\s*)?|rated\s*)?"
-    r"(\d+(?:\.\d+)?)\s*(?:stars?|/\s*5|rating)\b"
-    r"|\b(\d+(?:\.\d+)?)\s*(?:stars?|/\s*5)\s*"
-    r"(?:or higher|or above|and up|minimum|\+)(?!\w)"
-    r"|\b(\d+(?:\.\d+)?)\s*\+\s*(?:stars?|/\s*5)\b",
+    r"(?:\b(?:minimum|min\.?|at least|no less than|above|over)\b|>=?)\s*"
+    r"(?:google\s*)?(?:rating|rated)\s*(?:of\s*|is\s*)?"
+    r"(\d+(?:\.\d+)?|\.\d+)(?:\s*(?:\+\s*)?(?:stars?|/\s*5|\+))?"
+    r"|(?:\b(?:minimum|min\.?|at least|no less than|above|over)\b|>=?)\s*"
+    r"(?:google\s*)?(?:rating\s*(?:of\s*)?|rated\s*)?"
+    r"(\d+(?:\.\d+)?|\.\d+)\s*(?:\+\s*)?(?:stars?|/\s*5|rating\b|rated\b)"
+    r"|\b(?:google\s*)?(?:rating|rated)\s*(?:of\s*|is\s*|at\s*)?"
+    r"(?:>=?|at least|minimum|min\.?|no less than|above|over)?\s*"
+    r"(\d+(?:\.\d+)?|\.\d+)(?:\s*(?:\+\s*)?(?:stars?|/\s*5)|\s*\+(?!\w)|(?=[,.;!?\s]|$))"
+    r"|\b(\d+(?:\.\d+)?|\.\d+)\s*(?:\+\s*)?(?:stars?|/\s*5)(?!\w)"
+    r"(?:\s*(?:or higher|or above|and up|or better|minimum|min\.?|\+)(?!\w))?"
+    r"|\b(\d+(?:\.\d+)?|\.\d+)\s*(?:\+\s*)?(?:rating|rated)\b"
+    r"(?:\s*(?:or higher|or above|and up|or better|minimum|min\.?|\+)(?!\w))?",
     re.IGNORECASE,
 )
 _ANY_RATING = re.compile(
-    r"\b(?:rating\s*(?:of\s*)?|rated\s*)"
+    r"\b(?:google\s*)?(?:rating\s*(?:of\s*|is\s*)?|rated\s*(?:at\s*)?)"
     r"([1-5](?:\.\d+)?)\s*(?:stars?|/\s*5)?\b"
-    r"|\b([1-5](?:\.\d+)?)\s*(?:stars?|/\s*5|rating)\b",
+    r"|\b([1-5](?:\.\d+)?)\s*(?:\+\s*)?(?:stars?|/\s*5|rating\b|rated\b)",
     re.IGNORECASE,
 )
+_NEGATIVE_RATING_PREFIX = re.compile(r"\b(?:under|below|less\s+than)\s*$", re.IGNORECASE)
 _HARD_LANGUAGE = re.compile(
     r"\b(?:only|must|required|hard requirement|minimum|at least|"
     r"no less than|exclusively)\b", re.IGNORECASE,
 )
+
+
+def _normalize_rating_spacing(text):
+    return _DECIMAL_SPACE_RX.sub(r"\1.\2", str(text or ""))
 
 _MANAGER = None
 _OUTCOME_POLICY = None
@@ -65,11 +78,14 @@ def manager():
 
 
 def minimum_rating(preferences):
-    """Read explicit Google star floors from today's free-text wishes."""
+    """Read Google star floors (explicit or standalone) from today's wishes."""
     ratings = []
     for preference in preferences:
-        for match in _RATING_FLOOR.finditer(preference):
-            rating = float(next(group for group in match.groups() if group))
+        norm = _normalize_rating_spacing(preference)
+        for match in _RATING_FLOOR.finditer(norm):
+            if _NEGATIVE_RATING_PREFIX.search(norm[:match.start()]):
+                continue
+            rating = float(next(group for group in match.groups() if group is not None))
             if not 1 <= rating <= 5:
                 raise ValueError("Minimum Google rating must be between 1 and 5 stars.")
             ratings.append(rating)
@@ -79,9 +95,9 @@ def minimum_rating(preferences):
 def preferred_rating(preferences):
     """Read any stated star preference, including a soft bare rating."""
     ratings = [
-        float(next(group for group in match.groups() if group))
+        float(next(group for group in match.groups() if group is not None))
         for preference in preferences
-        for match in _ANY_RATING.finditer(preference)
+        for match in _ANY_RATING.finditer(_normalize_rating_spacing(preference))
     ]
     if any(not 1 <= rating <= 5 for rating in ratings):
         raise ValueError("Preferred Google rating must be between 1 and 5 stars.")
@@ -105,7 +121,13 @@ def hard_required_cuisines(preferences):
 
 
 def has_hard_preferences(preferences):
-    return any(_HARD_LANGUAGE.search(item) for item in preferences)
+    """Return True only when non-rating wishes demand strict hard relaxation."""
+    for item in preferences:
+        cleaned = _RATING_FLOOR.sub(" ", _normalize_rating_spacing(item))
+        cleaned = _ANY_RATING.sub(" ", cleaned)
+        if _HARD_LANGUAGE.search(cleaned):
+            return True
+    return False
 
 
 def confidence_adjusted_rating(rating, review_count):

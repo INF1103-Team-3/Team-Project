@@ -65,13 +65,14 @@ class BISApplicationService:
                     raise ValueError(
                         f"Default location '{loc}' must be a valid Singapore location."
                     )
-        wishes = updated["preferences"].get("other_preferences") or []
-        validate_special_preferences(
-            wishes,
-            ai=self._ai,
-            config=self._config,
-            field_label="Default special wishes",
-        )
+        wishes = updated["preferences"].get("other_preferences")
+        if wishes:
+            updated["preferences"]["other_preferences"] = validate_special_preferences(
+                wishes,
+                ai=self._ai,
+                config=self._config,
+                field_label="Default special wishes",
+            )
         return self._data.save(updated)
 
     def _resolve_origins(self, raw_locations):
@@ -229,12 +230,14 @@ class BISApplicationService:
         raw_locations = self._logic.collect_search_locations(payload)
         origin, resolved_origins = self._resolve_origins(raw_locations)
         selected_cuisines = self._logic.collect_search_cuisines(payload)
-        validate_special_preferences(
+        normalized_wishes = validate_special_preferences(
             payload.get("other_preferences"),
             ai=self._ai,
             config=self._config,
             field_label="Special requests",
         )
+        if "other_preferences" in payload or normalized_wishes:
+            payload = dict(payload, other_preferences=normalized_wishes)
 
         if payload.get("confirm_only"):
             single_c = selected_cuisines[0] if len(selected_cuisines) == 1 else None

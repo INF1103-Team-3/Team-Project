@@ -3,24 +3,26 @@ import {
   escapeHtml,
   getAuthToken,
   isUserProfileIncomplete,
+  normalizeWishText,
   RECENT_KEY,
   refreshIcons,
   setAuthToken,
   state,
   validateEnglishWishesInput,
-} from './state.js?v=20261114-9';
+} from './state.js?v=20261114-12';
 export { validateEnglishWishesInput };
-import { apiJson } from './api.js?v=20261114-9';
-import { openModal, closeModal } from './modals.js?v=20261114-9';
-import { showToast } from './toast.js?v=20261114-9';
+import { apiJson } from './api.js?v=20261114-12';
+import { openModal, closeModal } from './modals.js?v=20261114-12';
+import { showToast } from './toast.js?v=20261114-12';
 import {
   applyFiltersToSearchForm,
   applyUserToSearchForm,
+  createRatingSliderController,
   getUserRecentKey,
   initRecentSearches,
   renderRecentSearches,
-} from './filters.js?v=20261114-9';
-import { formatHours, renderResults } from './results.js?v=20261114-9';
+} from './filters.js?v=20261114-12';
+import { formatHours, renderResults } from './results.js?v=20261114-12';
 
 const EMAIL_REGEX = /^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
 const PASSWORD_ALLOWED_REGEX = /^[A-Za-z0-9.,?!$]+$/;
@@ -781,7 +783,18 @@ export function initAuthAndModals() {
     document.getElementById('profLikedInput').value = (state.currentUser.liked_cuisines || []).join(', ');
     document.getElementById('profDislikedInput').value = (state.currentUser.disliked_cuisines || []).join(', ');
     document.getElementById('profOtherInput').value = (state.currentUser.other_preferences || []).join(', ');
+    profRatingControl?.syncFromWishes();
     openModal(profileModal, '#profUsernameInput');
+  });
+
+  const profRatingControl = createRatingSliderController({
+    wrapId: 'profRatingDisplayWrap',
+    inputId: 'profRatingInput',
+    unitId: 'profRatingUnitLabel',
+    clearBtnId: 'profRatingClearBtn',
+    sliderId: 'profRatingSlider',
+    scaleMinId: 'profRatingScaleMin',
+    wishInputId: 'profOtherInput',
   });
 
   document.getElementById('closeProfileModalBtn')?.addEventListener('click', () => closeModal(profileModal));
@@ -799,7 +812,7 @@ export function initAuthAndModals() {
     const dislikedRaw = document.getElementById('profDislikedInput')?.value.trim() || '';
     const dislikedList = dislikedRaw ? dislikedRaw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean) : [];
     const otherRaw = document.getElementById('profOtherInput')?.value.trim() || '';
-    const otherList = otherRaw ? otherRaw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    const otherList = otherRaw ? otherRaw.split(',').map(normalizeWishText).filter(Boolean) : [];
     const locVal = document.getElementById('profLocationInput')?.value.trim() || '';
     const distVal = document.getElementById('profDistInput')?.value.trim() || '';
     const timeVal = document.getElementById('profTimeInput')?.value.trim() || '';
