@@ -809,7 +809,7 @@ class OOPRefactorTests(unittest.TestCase):
                 json=lambda: payload,
             )
 
-        for mode in ("drive", "transit"):
+        for mode, expected_radius in (("drive", 19500.0), ("transit", 12000.0)):
             captured.clear()
             req = {
                 "mode": mode,
@@ -824,14 +824,14 @@ class OOPRefactorTests(unittest.TestCase):
 
             self.assertEqual(len(captured), 1)
             _, body, _ = captured[0]
-            self.assertEqual(body["rankPreference"], "DISTANCE")
+            self.assertEqual(body["rankPreference"], "RELEVANCE")
             self.assertNotIn("locationRestriction", body)
             self.assertEqual(
                 body["locationBias"],
                 {
                     "circle": {
                         "center": {"latitude": midpoint[0], "longitude": midpoint[1]},
-                        "radius": 19500.0,
+                        "radius": expected_radius,
                     }
                 },
             )
@@ -1281,6 +1281,218 @@ class OOPRefactorTests(unittest.TestCase):
             self.assertEqual(mock_get.call_count, 4)
             self.assertIsNone(service.get_or_fetch_photo("ChIJNoPhoto"))
             self.assertEqual(mock_get.call_count, 4)
+
+    def test_option2_joint_budget_fit_and_outcome_classification(self):
+        from BRNS import logic_manager
+        from BRNS.classes.logic.evaluation.budget_fit_policy import BudgetFitPolicy
+        from BRNS.classes.logic.evaluation.restaurant_enricher import RestaurantEnricher
+        from BRNS.classes.logic.evaluation.restaurant_outcome_policy import RestaurantOutcomePolicy
+
+        self.assertEqual(BudgetFitPolicy.price_levels_for_budget(10), ["PRICE_LEVEL_INEXPENSIVE"])
+        self.assertEqual(
+            BudgetFitPolicy.price_levels_for_budget(25),
+            ["PRICE_LEVEL_INEXPENSIVE", "PRICE_LEVEL_MODERATE"],
+        )
+        self.assertEqual(
+            BudgetFitPolicy.price_levels_for_budget(50),
+            ["PRICE_LEVEL_MODERATE", "PRICE_LEVEL_EXPENSIVE"],
+        )
+        self.assertEqual(
+            BudgetFitPolicy.price_levels_for_budget(90),
+            ["PRICE_LEVEL_EXPENSIVE", "PRICE_LEVEL_VERY_EXPENSIVE"],
+        )
+        self.assertEqual(
+            BudgetFitPolicy.price_levels_for_budget(1000),
+            ["PRICE_LEVEL_VERY_EXPENSIVE", "PRICE_LEVEL_EXPENSIVE"],
+        )
+
+        # $50 Casual Dining favors ~$42 sit-down over $8 hawker & penalizes $65 over-budget.
+        self.assertGreater(
+            BudgetFitPolicy.budget_fit_score({"avg_price": 42}, 50.0),
+            BudgetFitPolicy.budget_fit_score({"avg_price": 8}, 50.0),
+        )
+        self.assertGreater(
+            BudgetFitPolicy.budget_fit_score({"avg_price": 8}, 50.0),
+            BudgetFitPolicy.budget_fit_score({"avg_price": 65}, 50.0),
+        )
+        # $100+ (1000) favors fine dining over moderate & inexpensive venues.
+        self.assertGreater(
+            BudgetFitPolicy.budget_fit_score({"price_level": "very_expensive"}, 1000.0),
+            BudgetFitPolicy.budget_fit_score({"price_level": "expensive"}, 1000.0),
+        )
+        self.assertGreater(
+            BudgetFitPolicy.budget_fit_score({"price_level": "expensive"}, 1000.0),
+            BudgetFitPolicy.budget_fit_score({"price_level": "moderate"}, 1000.0),
+        )
+        self.assertGreater(
+            BudgetFitPolicy.budget_fit_score({"price_level": "moderate"}, 1000.0),
+            BudgetFitPolicy.budget_fit_score({"price_level": "inexpensive"}, 1000.0),
+        )
+
+        rules = SimpleNamespace(
+            has_hard_preferences=lambda _p: False,
+            hard_required_cuisines=lambda _p: [],
+            minimum_rating=lambda _p: None,
+        )
+        policy = RestaurantOutcomePolicy(rules)
+        req_50 = dict(search_request(), budget_per_person=50.0, other_preferences=[])
+
+        # Range straddling budget stays a match when midpoint <= budget.
+        straddle_ok = dict(
+            source="google places", open_now=True,
+            cuisines=[req_50["cuisine"]], dietary_requirements=[],
+            avg_price=None, price_start=30, price_end=60,
+            walk_source="route", walk_meters=100,
+        )
+        status_ok, _, reasons_ok = policy.evaluate(straddle_ok, req_50)
+        self.assertEqual(status_ok, "match")
+        self.assertTrue(any("45" in r and "50" in r for r in reasons_ok))
+
+        # Midpoint above budget becomes an alternative.
+        straddle_high = dict(straddle_ok, price_start=40, price_end=90)
+        self.assertEqual(policy.evaluate(straddle_high, req_50)[0], "alternative")
+
+        # Google price_level without priceRange still evaluates cleanly ($50 & $100+).
+        tier_mod = dict(straddle_ok, price_start=None, price_end=None, price_level="moderate")
+        self.assertEqual(policy.evaluate(tier_mod, req_50)[0], "match")
+        tier_vexp = dict(straddle_ok, price_start=None, price_end=None, price_level="very_expensive")
+        self.assertEqual(policy.evaluate(tier_vexp, req_50)[0], "alternative")
+        req_plus = dict(req_50, budget_per_person=1000.0)
+        status_plus, _, reasons_plus = policy.evaluate(
+            dict(tier_ok := dict(straddle_ok, price_start=None, price_end=None, price_level="expensive")),
+            req_plus,
+        )
+        self.assertEqual(status_plus, "match")
+        self.assertTrue(any("$100+ fine-dining" in r for r in reasons_plus))
+
+        # Enricher keeps avg_price=None while populating estimated_price + price_level.
+        enriched = RestaurantEnricher().enrich({
+            "name": "Bistro", "address": "10 Road", "lat": 1.3, "lng": 103.8,
+            "types": ["japanese_restaurant"], "price_level": "expensive", "rating": 4.7,
+        }, [])
+        self.assertIsNone(enriched["avg_price"])
+        self.assertEqual(enriched["price_level"], "expensive")
+        self.assertEqual(enriched["estimated_price"], 65.0)
+
+        # Grounded AI reason accepts estimated price/tier as within_budget.
+        normed = logic_manager.normalize_candidate(dict(tier_ok, halal_status="unverified"))
+        self.assertEqual(
+            logic_manager._grounded_ai_reasons(normed, req_plus, ["within_budget"], 0),
+            ["within your SGD $100+ fine-dining tier (Upscale, ~SGD 65)"],
+        )
+
+        # RecommendationContext exposes full budget-fit fields + deterministic fallback honors Pure Best-Fit.
+        hawker = dict(
+            name="Near Hawker", address="1 A", source="google places", open_now=True,
+            cuisines=[req_50["cuisine"]], dietary_requirements=[],
+            avg_price=8.0, rating=4.4, rating_count=300,
+            walk_source="route", walk_minutes=3.0, walk_meters=250,
+        )
+        casual = dict(
+            name="Best Casual", address="2 B", source="google places", open_now=True,
+            cuisines=[req_50["cuisine"]], dietary_requirements=[],
+            avg_price=45.0, rating=4.6, rating_count=600,
+            walk_source="route", walk_minutes=22.0, walk_meters=1700,
+        )
+        req_time_50 = dict(req_50, max_distance_km=None, max_travel_minutes=30.0)
+        ctx = logic_manager.manager().recommendation_context(req_time_50, [hawker, casual])
+        self.assertIn("budget_fit_score", ctx["candidates"][1])
+        self.assertGreater(ctx["candidates"][1]["budget_fit_score"], ctx["candidates"][0]["budget_fit_score"])
+        fallback_ranked = logic_manager.manager().rank_restaurants(
+            [hawker, casual], req_time_50, recommendations=None
+        )
+        self.assertEqual(
+            [m["restaurant"]["name"] for m in fallback_ranked["matches"]],
+            ["Best Casual", "Near Hawker"],
+        )
+
+    def test_option2_discovery_price_levels_backfill_and_multizone_sampling(self):
+        from unittest.mock import patch
+        from BRNS import io_manager as brns_io
+
+        origin = (1.300, 103.840)
+        captured_bodies = []
+
+        # 1. Targeted search returning < 6 open places triggers one untargeted backfill.
+        sparse_payload = {
+            "places": [{
+                "id": "p-targeted",
+                "displayName": {"text": "Targeted Sushi"},
+                "formattedAddress": "10 Orchard Rd",
+                "location": {"latitude": 1.302, "longitude": 103.841},
+                "priceLevel": "PRICE_LEVEL_MODERATE",
+                "types": ["japanese_restaurant"],
+                "currentOpeningHours": {"openNow": True},
+            }]
+        }
+        backfill_payload = {
+            "places": [{
+                "id": "p-unlabelled",
+                "displayName": {"text": "Unlabelled Sushi"},
+                "formattedAddress": "12 Orchard Rd",
+                "location": {"latitude": 1.303, "longitude": 103.842},
+                "types": ["japanese_restaurant"],
+                "currentOpeningHours": {"openNow": True},
+            }]
+        }
+        responses = [sparse_payload, backfill_payload]
+
+        def fake_post(url, headers=None, json=None, timeout=None):
+            captured_bodies.append(json)
+            if "computeRouteMatrix" in url:
+                return SimpleNamespace(raise_for_status=lambda: None, json=lambda: [])
+            data = responses.pop(0)
+            return SimpleNamespace(raise_for_status=lambda: None, json=lambda: data)
+
+        req = {
+            "mode": "walk",
+            "max_distance_km": 2.0,
+            "max_travel_minutes": None,
+            "cuisine": "japanese",
+            "dietary_requirements": [],
+            "free_text": "",
+            "budget_per_person": 50.0,
+        }
+        with patch.object(brns_io.requests, "post", side_effect=fake_post), \
+                patch.object(brns_io.config, "GOOGLE_MAPS_API_KEY", "test-key"), \
+                patch.object(brns_io.config, "USE_LIVE_GOOGLE", True):
+            candidates = brns_io.build_candidates(origin, req, [])
+
+        self.assertEqual(captured_bodies[0]["rankPreference"], "RELEVANCE")
+        self.assertEqual(
+            captured_bodies[0]["priceLevels"],
+            ["PRICE_LEVEL_MODERATE", "PRICE_LEVEL_EXPENSIVE"],
+        )
+        self.assertNotIn("priceLevels", captured_bodies[1])
+        self.assertEqual(
+            [c["name"] for c in candidates],
+            ["Targeted Sushi", "Unlabelled Sushi"],
+        )
+
+        # 2. Multi-zone sampling selects across near/mid/outer zones instead of packing first 20 near.
+        many_places = []
+        # 18 near (~0.5 km), 10 mid (~5 km), 10 outer (~9 km) within 10 km radius
+        for i in range(18):
+            many_places.append({
+                "google_place_id": f"n-{i}", "name": f"Near {i}",
+                "lat": origin[0] + 0.004, "lng": origin[1], "open_now": True,
+            })
+        for i in range(10):
+            many_places.append({
+                "google_place_id": f"m-{i}", "name": f"Mid {i}",
+                "lat": origin[0] + 0.045, "lng": origin[1], "open_now": True,
+            })
+        for i in range(10):
+            many_places.append({
+                "google_place_id": f"o-{i}", "name": f"Outer {i}",
+                "lat": origin[0] + 0.080, "lng": origin[1], "open_now": True,
+            })
+        sampled = brns_io._select_zone_places(many_places, origin, 10000.0, limit=20)
+        self.assertEqual(len(sampled), 20)
+        sampled_names = [p["name"] for p in sampled]
+        self.assertTrue(any(n.startswith("Near ") for n in sampled_names))
+        self.assertTrue(any(n.startswith("Mid ") for n in sampled_names))
+        self.assertTrue(any(n.startswith("Outer ") for n in sampled_names))
 
 
 if __name__ == "__main__":

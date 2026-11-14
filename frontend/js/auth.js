@@ -7,18 +7,20 @@ import {
   refreshIcons,
   setAuthToken,
   state,
-} from './state.js';
-import { apiJson } from './api.js';
-import { openModal, closeModal } from './modals.js';
-import { showToast } from './toast.js';
+  validateEnglishWishesInput,
+} from './state.js?v=20261114-9';
+export { validateEnglishWishesInput };
+import { apiJson } from './api.js?v=20261114-9';
+import { openModal, closeModal } from './modals.js?v=20261114-9';
+import { showToast } from './toast.js?v=20261114-9';
 import {
   applyFiltersToSearchForm,
   applyUserToSearchForm,
   getUserRecentKey,
   initRecentSearches,
   renderRecentSearches,
-} from './filters.js';
-import { formatHours, renderResults } from './results.js';
+} from './filters.js?v=20261114-9';
+import { formatHours, renderResults } from './results.js?v=20261114-9';
 
 const EMAIL_REGEX = /^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
 const PASSWORD_ALLOWED_REGEX = /^[A-Za-z0-9.,?!$]+$/;
@@ -43,40 +45,7 @@ export function validateNewPassword(password) {
   return '';
 }
 
-const WISH_ACRONYMS = new Set(['bbq', 'byob', 'msg', 'cbd', 'mrt', 'hrs', 'gym', 'nth', 'sgd', 'ac', 'tv', 'vip']);
-const WISH_KEYBOARD_MASH = [
-  'asdf', 'sdfg', 'dfgh', 'fghj', 'ghjk', 'hjkl',
-  'qwer', 'wert', 'erty', 'tyui', 'uiop',
-  'zxcv', 'xcvb', 'cvbn', 'vbnm',
-];
 const COORD_PAIR_REGEX = /^\s*[+-]?\d+(?:\.\d+)?\s*,\s*[+-]?\d+(?:\.\d+)?\s*$/;
-
-export function validateEnglishWishesInput(items) {
-  for (const raw of items) {
-    const text = String(raw || '').trim();
-    if (!text) continue;
-    if (text.length > 100 || !/^[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()+\-]*$/.test(text)) {
-      return 'Default special wishes must use proper English letters and words (e.g. quiet seating, spicy food).';
-    }
-    const words = text.match(/[A-Za-z]+/g) || [];
-    if (!words.length || !words.some((w) => w.length > 1)) {
-      return 'Default special wishes must contain meaningful English words (e.g. quiet seating, spicy food).';
-    }
-    for (const word of words) {
-      const low = word.toLowerCase();
-      if (/(.)\1\1/.test(low) || WISH_KEYBOARD_MASH.some((seq) => low.includes(seq))) {
-        return `Default special wishes must contain proper English words, not '${word}'.`;
-      }
-      if (low.length >= 3 && !WISH_ACRONYMS.has(low) && !/[aeiouy]/.test(low)) {
-        return `Default special wishes must contain proper English words, not '${word}'.`;
-      }
-      if (/[bcdfghjklmnpqrstvwxz]{6,}/.test(low)) {
-        return `Default special wishes must contain proper English words, not '${word}'.`;
-      }
-    }
-  }
-  return '';
-}
 
 let pendingAuthEmail = '';
 let resendCooldownTimer = null;
@@ -129,7 +98,20 @@ function showAuthAlert(msg, isError = true) {
     : 'mx-6 mt-4 p-3 rounded-xl text-xs font-medium border bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300';
 }
 
+function resetPasswordVisibilityToggles() {
+  document.querySelectorAll('[data-toggle-password]').forEach((btn) => {
+    const input = document.getElementById(btn.dataset.togglePassword);
+    if (input) input.type = 'password';
+    btn.setAttribute('aria-pressed', 'false');
+    btn.setAttribute('aria-label', 'Show password');
+    const icon = btn.querySelector('i');
+    if (icon) icon.setAttribute('data-lucide', 'eye');
+    refreshIcons(btn);
+  });
+}
+
 export function switchAuthTab(mode) {
+  resetPasswordVisibilityToggles();
   const authAlert = document.getElementById('authAlert');
   const authTabsContainer = document.getElementById('authTabsContainer');
   const loginForm = document.getElementById('loginForm');
@@ -388,7 +370,7 @@ async function loadAndRenderHistory() {
             <div class="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2">
               <span class="capitalize">🚶 Mode: <strong>${escapeHtml(item.mode || 'walk')}</strong></span>
               <span>• ⏱️ Max ${escapeHtml(item.max_travel_minutes || 30)}m</span>
-              <span>• 💰 SGD $${escapeHtml(item.budget_per_person || 30)}</span>
+              <span>• 💰 SGD $${item.budget_per_person != null && Number(item.budget_per_person) > 100 ? '100+' : escapeHtml(item.budget_per_person || 30)}</span>
               ${item.cuisine ? `<span>• 🍽️ ${escapeHtml(item.cuisine)}</span>` : ''}
               ${dietBadges}
             </div>
@@ -450,9 +432,30 @@ export function initAuthAndModals() {
   const historyModal = document.getElementById('historyModal');
 
   document.getElementById('authOpenBtn')?.addEventListener('click', () => openAuthModalWithNotice(''));
-  document.getElementById('closeAuthModalBtn')?.addEventListener('click', () => closeModal(authModal));
+  document.getElementById('closeAuthModalBtn')?.addEventListener('click', () => {
+    resetPasswordVisibilityToggles();
+    closeModal(authModal);
+  });
   document.getElementById('tabLoginBtn')?.addEventListener('click', () => switchAuthTab('login'));
   document.getElementById('tabRegisterBtn')?.addEventListener('click', () => switchAuthTab('register'));
+
+  document.querySelectorAll('[data-toggle-password]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.togglePassword;
+      const input = targetId ? document.getElementById(targetId) : null;
+      if (!input) return;
+      const revealing = input.type === 'password';
+      input.type = revealing ? 'text' : 'password';
+      btn.setAttribute('aria-pressed', revealing ? 'true' : 'false');
+      btn.setAttribute('aria-label', revealing ? 'Hide password' : 'Show password');
+      const icon = btn.querySelector('i');
+      if (icon) {
+        icon.setAttribute('data-lucide', revealing ? 'eye-off' : 'eye');
+        refreshIcons(btn);
+      }
+      input.focus();
+    });
+  });
 
   // Sign In Submit
   loginForm?.addEventListener('submit', async (e) => {
@@ -654,6 +657,107 @@ export function initAuthAndModals() {
   });
 
   // Profile Modal
+  const PROFILE_DIST_MAX = 50;
+  const PROFILE_TIME_MAX = 150;
+  const PROFILE_BUDGET_MIN = 1;
+  const PROFILE_BUDGET_MAX_EXACT = 100;
+  const PROFILE_BUDGET_PLUS_BACKEND = 1000;
+  const profDistInput = document.getElementById('profDistInput');
+  const profTimeInput = document.getElementById('profTimeInput');
+  const profBudgetInput = document.getElementById('profBudgetInput');
+
+  const bindProfileMaxClamp = (inputEl, maxVal) => {
+    if (!inputEl) return;
+    inputEl.addEventListener('input', (e) => {
+      const raw = String(e.target.value || '').trim();
+      if (!raw) return;
+      const num = parseFloat(raw);
+      if (Number.isFinite(num) && num > maxVal) {
+        e.target.value = String(maxVal);
+      }
+    });
+    inputEl.addEventListener('change', (e) => {
+      const raw = String(e.target.value || '').trim();
+      if (!raw) {
+        e.target.value = '';
+        return;
+      }
+      const num = parseFloat(raw);
+      if (!Number.isFinite(num)) return;
+      if (num > maxVal) {
+        e.target.value = String(maxVal);
+      } else if (num > 0) {
+        e.target.value = String(Math.round(num * 100) / 100);
+      }
+    });
+  };
+
+  bindProfileMaxClamp(profDistInput, PROFILE_DIST_MAX);
+  bindProfileMaxClamp(profTimeInput, PROFILE_TIME_MAX);
+
+  const formatProfileBudgetDisplay = (rawBudget) => {
+    if (rawBudget == null || rawBudget === '') return '';
+    const num = Number(rawBudget);
+    if (!Number.isFinite(num)) return '';
+    if (num > PROFILE_BUDGET_MAX_EXACT) return '100+';
+    return String(Math.round(num * 100) / 100);
+  };
+
+  const normalizeProfileBudgetInput = (raw) => {
+    const str = String(raw || '').trim();
+    if (!str) return '';
+    const hasPlus = /\+$/.test(str);
+    let seenDot = false;
+    const cleaned = str
+      .replace(/[^\d.]/g, '')
+      .replace(/\./g, () => {
+        if (seenDot) return '';
+        seenDot = true;
+        return '.';
+      });
+    if (!cleaned) return '';
+    if (cleaned === '.') return '.';
+    const num = parseFloat(cleaned);
+    if (Number.isFinite(num) && (num > PROFILE_BUDGET_MAX_EXACT || (hasPlus && num >= PROFILE_BUDGET_MAX_EXACT))) {
+      return '100+';
+    }
+    return cleaned;
+  };
+
+  const parseProfileBudgetValue = (raw) => {
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) return { value: null, isPlus: false };
+    const normalized = normalizeProfileBudgetInput(trimmed);
+    if (normalized === '100+') return { value: PROFILE_BUDGET_PLUS_BACKEND, isPlus: true };
+    const num = parseFloat(normalized);
+    if (!Number.isFinite(num)) return { value: NaN, isPlus: false };
+    if (num > PROFILE_BUDGET_MAX_EXACT) return { value: PROFILE_BUDGET_PLUS_BACKEND, isPlus: true };
+    return { value: Math.round(num * 100) / 100, isPlus: false };
+  };
+
+  profBudgetInput?.addEventListener('input', (e) => {
+    const normalized = normalizeProfileBudgetInput(e.target.value);
+    if (normalized !== e.target.value) {
+      e.target.value = normalized;
+    }
+  });
+
+  profBudgetInput?.addEventListener('change', (e) => {
+    const normalized = normalizeProfileBudgetInput(e.target.value);
+    if (normalized === '' || normalized === '.') {
+      e.target.value = '';
+      return;
+    }
+    if (normalized === '100+') {
+      e.target.value = '100+';
+      return;
+    }
+    const num = parseFloat(normalized);
+    e.target.value = Number.isFinite(num)
+      ? (num > PROFILE_BUDGET_MAX_EXACT ? '100+' : String(Math.round(num * 100) / 100))
+      : '';
+  });
+
   document.getElementById('profileBtn')?.addEventListener('click', async () => {
     if (!state.currentUser) return;
     profileAlert?.classList.add('hidden');
@@ -670,7 +774,7 @@ export function initAuthAndModals() {
     document.getElementById('profLocationInput').value = Array.isArray(state.currentUser.location) ? state.currentUser.location.join(', ') : (state.currentUser.location || '');
     document.getElementById('profDistInput').value = state.currentUser.max_distance_km ?? '';
     document.getElementById('profTimeInput').value = state.currentUser.max_travel_time_minutes ?? '';
-    document.getElementById('profBudgetInput').value = state.currentUser.budget_per_person ?? '';
+    if (profBudgetInput) profBudgetInput.value = formatProfileBudgetDisplay(state.currentUser.budget_per_person);
     const diet = state.currentUser.dietary_requirements || [];
     document.getElementById('profHalalCheck').checked = diet.includes('halal');
     document.getElementById('profVegCheck').checked = diet.includes('vegetarian');
@@ -699,7 +803,7 @@ export function initAuthAndModals() {
     const locVal = document.getElementById('profLocationInput')?.value.trim() || '';
     const distVal = document.getElementById('profDistInput')?.value.trim() || '';
     const timeVal = document.getElementById('profTimeInput')?.value.trim() || '';
-    const budgetVal = document.getElementById('profBudgetInput')?.value.trim() || '';
+    const budgetVal = profBudgetInput?.value.trim() || '';
 
     const showProfileError = (msg) => {
       if (profileAlert) {
@@ -708,22 +812,39 @@ export function initAuthAndModals() {
       }
     };
 
-    const parsedDist = distVal !== '' ? parseFloat(distVal) : null;
-    const parsedTime = timeVal !== '' ? parseFloat(timeVal) : null;
-    const parsedBudget = budgetVal !== '' ? parseFloat(budgetVal) : null;
-    if (parsedDist !== null && (!Number.isFinite(parsedDist) || parsedDist <= 0)) {
-      showProfileError('Max distance must be greater than 0.');
+    const usernameVal = document.getElementById('profUsernameInput')?.value.trim() || '';
+    if (!usernameVal) {
+      showProfileError('Username cannot be empty.');
       return;
     }
-    if (parsedTime !== null && (!Number.isFinite(parsedTime) || parsedTime <= 0)) {
-      showProfileError('Max time must be greater than 0.');
+
+    let parsedDist = distVal !== '' ? parseFloat(distVal) : null;
+    let parsedTime = timeVal !== '' ? parseFloat(timeVal) : null;
+    const { value: parsedBudget, isPlus: isBudgetPlus } = parseProfileBudgetValue(budgetVal);
+    if (isBudgetPlus && profBudgetInput) {
+      profBudgetInput.value = '100+';
+    }
+    if (parsedDist !== null && Number.isFinite(parsedDist) && parsedDist > PROFILE_DIST_MAX) {
+      parsedDist = PROFILE_DIST_MAX;
+      if (profDistInput) profDistInput.value = String(PROFILE_DIST_MAX);
+    }
+    if (parsedTime !== null && Number.isFinite(parsedTime) && parsedTime > PROFILE_TIME_MAX) {
+      parsedTime = PROFILE_TIME_MAX;
+      if (profTimeInput) profTimeInput.value = String(PROFILE_TIME_MAX);
+    }
+    if (parsedDist !== null && (!Number.isFinite(parsedDist) || parsedDist < 0.01 || parsedDist > PROFILE_DIST_MAX)) {
+      showProfileError('Max distance must be between 0.01 and 50 km.');
       return;
     }
-    if (parsedBudget !== null && (!Number.isFinite(parsedBudget) || parsedBudget <= 0)) {
-      showProfileError('Budget must be greater than 0.');
+    if (parsedTime !== null && (!Number.isFinite(parsedTime) || parsedTime < 1 || parsedTime > PROFILE_TIME_MAX)) {
+      showProfileError('Max time must be between 1 and 150 mins.');
       return;
     }
-    const wishesErr = validateEnglishWishesInput(otherList);
+    if (parsedBudget !== null && (!Number.isFinite(parsedBudget) || parsedBudget < PROFILE_BUDGET_MIN || parsedBudget > PROFILE_BUDGET_PLUS_BACKEND)) {
+      showProfileError('Budget must be between SGD $1 and $100+.');
+      return;
+    }
+    const wishesErr = validateEnglishWishesInput(otherList, 'Default special wishes');
     if (wishesErr) {
       showProfileError(wishesErr);
       return;
@@ -738,7 +859,7 @@ export function initAuthAndModals() {
 
     const body = {
       user_id: state.currentUser.user_id,
-      username: document.getElementById('profUsernameInput')?.value.trim() || '',
+      username: usernameVal,
       email: state.currentUser.email,
       location: locations,
       max_distance_km: parsedDist,

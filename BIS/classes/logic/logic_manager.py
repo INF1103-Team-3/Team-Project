@@ -12,7 +12,9 @@ from sources.profile_schema import (
     CUISINES,
     MINUTES_PER_KM,
     PREFERENCE_FIELDS,
+    PROFILE_NUMBER_LIMITS,
     normalize_username,
+    validate_english_preferences as _validate_english_preferences,
     validate_preferences,
     validate_updates,
 )
@@ -92,60 +94,15 @@ class LogicManager(BISLogicManagerInterface):
     @staticmethod
     def validate_english_preferences(items, field_label="Default special wishes"):
         """Require proper meaningful English text for profile special wishes."""
-        acronyms = {"bbq", "byob", "msg", "cbd", "mrt", "hrs", "gym", "nth", "sgd", "ac", "tv", "vip"}
-        keyboard_mash = (
-            "asdf", "sdfg", "dfgh", "fghj", "ghjk", "hjkl",
-            "qwer", "wert", "erty", "tyui", "uiop",
-            "zxcv", "xcvb", "cvbn", "vbnm",
-        )
-        for item in items:
-            text = str(item or "").strip()
-            if not text:
-                continue
-            if len(text) > 100 or not re.fullmatch(
-                r"[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()+\-]*", text
-            ):
-                raise ValueError(
-                    f"{field_label} must use proper English letters and words "
-                    "(e.g. quiet seating, spicy food)."
-                )
-            words = re.findall(r"[A-Za-z]+", text)
-            if not words or not any(len(word) > 1 for word in words):
-                raise ValueError(
-                    f"{field_label} must contain meaningful English words "
-                    "(e.g. quiet seating, spicy food)."
-                )
-            for word in words:
-                low = word.lower()
-                if re.search(r"(.)\1\1", low):
-                    raise ValueError(
-                        f"{field_label} must contain proper English words, "
-                        f"not '{word}'."
-                    )
-                if any(seq in low for seq in keyboard_mash):
-                    raise ValueError(
-                        f"{field_label} must contain proper English words, "
-                        f"not '{word}'."
-                    )
-                if len(low) >= 3 and low not in acronyms and not any(
-                    ch in "aeiouy" for ch in low
-                ):
-                    raise ValueError(
-                        f"{field_label} must contain proper English words, "
-                        f"not '{word}'."
-                    )
-                if re.search(r"[bcdfghjklmnpqrstvwxz]{6,}", low):
-                    raise ValueError(
-                        f"{field_label} must contain proper English words, "
-                        f"not '{word}'."
-                    )
-        return items
+        return _validate_english_preferences(items, field_label=field_label)
 
     def apply_updates(self, preferences, updates, location_action="add",
                       allow_empty_location=False):
         if location_action not in {"add", "replace", "remove"}:
             raise ValueError("Choose add, replace, or remove for locations.")
-        result = deepcopy(validate_preferences(preferences))
+        result = deepcopy(
+            validate_preferences(preferences, clamp_legacy_limits=True)
+        )
         updates = self.estimate_travel_limits(
             validate_updates(
                 updates, profile_mode=True,
@@ -172,12 +129,16 @@ class LogicManager(BISLogicManagerInterface):
         updates = dict(updates)
         distance = updates.get("max_distance_km")
         minutes = updates.get("max_travel_time_minutes")
+        min_time, max_time = PROFILE_NUMBER_LIMITS["max_travel_time_minutes"]
+        min_dist, max_dist = PROFILE_NUMBER_LIMITS["max_distance_km"]
         if distance is not None and minutes is None:
+            estimated_minutes = round(distance * MINUTES_PER_KM, 2)
             updates["max_travel_time_minutes"] = round(
-                distance * MINUTES_PER_KM, 2)
+                max(min_time, min(max_time, estimated_minutes)), 2)
         elif minutes is not None and distance is None:
-            updates["max_distance_km"] = max(
-                0.01, round(minutes / MINUTES_PER_KM, 2))
+            estimated_distance = round(minutes / MINUTES_PER_KM, 2)
+            updates["max_distance_km"] = round(
+                max(min_dist, min(max_dist, estimated_distance)), 2)
         return updates
 
     @staticmethod
@@ -311,6 +272,7 @@ class LogicManager(BISLogicManagerInterface):
             str(p).strip() for p in (payload.get("other_preferences") or [])
             if str(p or "").strip()
         ]
+        _validate_english_preferences(other_prefs, field_label="Special requests")
         if not cuisine_target:
             cuisine_val = "none"
         elif cuisine_target in CUISINES:
@@ -366,44 +328,57 @@ class LogicManager(BISLogicManagerInterface):
 
     def merge_multi_cuisine_results(
             self, per_cuisine_results, num_cuisines, max_total=20):
-        """Deduplicate and merge per-cuisine search batches under balanced quotas."""
+        """Deduplicate, interleave, and balance per-cuisine batches up to max_total."""
         combined_matches = []
         combined_alternatives = []
-        cuisines_breakdown = {}
+        cuisines_breakdown = {c_target: 0 for c_target, _ in per_cuisine_results}
         seen_keys = set()
         total_hidden = 0
 
+        pools = []
         for c_target, sub_res in per_cuisine_results:
             if sub_res is None:
-                cuisines_breakdown[c_target] = 0
                 continue
-            raw_m = [
-                dict(m, matched_cuisine=c_target)
-                for m in sub_res.get("matches", [])
-                if self.place_key(m.get("restaurant")) not in seen_keys
-            ]
-            raw_a = [
-                dict(a, matched_cuisine=c_target)
-                for a in sub_res.get("alternatives", [])
-                if self.place_key(a.get("restaurant")) not in seen_keys
-            ]
-            total_for_c = len(raw_m) + len(raw_a)
-            if total_for_c == 0:
-                cuisines_breakdown[c_target] = 0
-                continue
-            quota = min(
-                max(1, max_total // num_cuisines),
-                max(1, math.ceil(total_for_c / num_cuisines)),
-            )
-            taken_m = raw_m[:quota]
-            rem_slots = max(0, quota - len(taken_m))
-            taken_a = raw_a[:rem_slots]
-            for item in taken_m + taken_a:
-                seen_keys.add(self.place_key(item.get("restaurant")))
-            combined_matches.extend(taken_m)
-            combined_alternatives.extend(taken_a)
             total_hidden += sub_res.get("hidden", 0)
-            cuisines_breakdown[c_target] = len(taken_m) + len(taken_a)
+            pools.append({
+                "cuisine": c_target,
+                "matches": [
+                    dict(m, matched_cuisine=c_target)
+                    for m in sub_res.get("matches", [])
+                ],
+                "alternatives": [
+                    dict(a, matched_cuisine=c_target)
+                    for a in sub_res.get("alternatives", [])
+                ],
+                "m_idx": 0,
+                "a_idx": 0,
+            })
+
+        def _take_next(bucket_key, idx_key, target_list, remaining_budget):
+            while remaining_budget > 0:
+                progressed = False
+                for pool in pools:
+                    items = pool[bucket_key]
+                    while pool[idx_key] < len(items):
+                        candidate = items[pool[idx_key]]
+                        pool[idx_key] += 1
+                        key = self.place_key(candidate.get("restaurant"))
+                        if key in seen_keys:
+                            continue
+                        seen_keys.add(key)
+                        target_list.append(candidate)
+                        cuisines_breakdown[pool["cuisine"]] += 1
+                        remaining_budget -= 1
+                        progressed = True
+                        break
+                    if remaining_budget <= 0:
+                        break
+                if not progressed:
+                    break
+            return remaining_budget
+
+        remaining = _take_next("matches", "m_idx", combined_matches, max_total)
+        _take_next("alternatives", "a_idx", combined_alternatives, remaining)
 
         return (
             combined_matches,

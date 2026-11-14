@@ -1189,21 +1189,55 @@ class WebIntegrationTests(unittest.TestCase):
             payload.update(overrides)
             return payload
 
-        # Valid: empty location + large positive distance/time/budget + English wishes.
+        # Valid: empty location + max cross-island profile limits + exact $100 + English wishes.
         ok = self.client.post("/api/profile", json=make_profile(
             location=[],
-            max_distance_km=500,
-            max_travel_time_minutes=3000,
-            budget_per_person=5000,
+            max_distance_km=50,
+            max_travel_time_minutes=150,
+            budget_per_person=1000,
             other_preferences=["quiet corner", "window seat"],
         ), headers=headers)
         self.assertEqual(ok.status_code, 200, ok.text)
         saved = self.client.get("/api/auth/me", headers=headers).json()["user"]
         self.assertEqual(saved["location"], [])
-        self.assertEqual(saved["max_distance_km"], 500.0)
-        self.assertEqual(saved["max_travel_time_minutes"], 3000.0)
-        self.assertEqual(saved["budget_per_person"], 5000.0)
+        self.assertEqual(saved["max_distance_km"], 50.0)
+        self.assertEqual(saved["max_travel_time_minutes"], 150.0)
+        self.assertEqual(saved["budget_per_person"], 1000.0)
         self.assertEqual(saved["other_preferences"], ["quiet corner", "window seat"])
+
+        # Exact $100 and minimum bounds save cleanly; max distance auto-estimates clamped time.
+        ok_exact = self.client.post("/api/profile", json=make_profile(
+            location=["Orchard"],
+            max_distance_km=0.01,
+            max_travel_time_minutes=1,
+            budget_per_person=100,
+        ), headers=headers)
+        self.assertEqual(ok_exact.status_code, 200, ok_exact.text)
+        saved_exact = self.client.get("/api/auth/me", headers=headers).json()["user"]
+        self.assertEqual(saved_exact["max_distance_km"], 0.01)
+        self.assertEqual(saved_exact["max_travel_time_minutes"], 1.0)
+        self.assertEqual(saved_exact["budget_per_person"], 100.0)
+
+        ok_auto = self.client.post("/api/profile", json=make_profile(
+            location=["Orchard"],
+            max_distance_km=50,
+            max_travel_time_minutes=None,
+            budget_per_person=100,
+        ), headers=headers)
+        self.assertEqual(ok_auto.status_code, 200, ok_auto.text)
+        saved_auto = self.client.get("/api/auth/me", headers=headers).json()["user"]
+        self.assertEqual(saved_auto["max_distance_km"], 50.0)
+        self.assertEqual(saved_auto["max_travel_time_minutes"], 150.0)
+
+        # Out-of-range profile limits are rejected.
+        for bad_limits in (
+            {"max_distance_km": 50.1},
+            {"max_travel_time_minutes": 0.5},
+            {"max_travel_time_minutes": 151},
+            {"budget_per_person": 1001},
+        ):
+            r_bad_limit = self.client.post("/api/profile", json=make_profile(**bad_limits), headers=headers)
+            self.assertEqual(r_bad_limit.status_code, 400)
 
         # Valid: real SG coordinate string.
         ok_coord = self.client.post("/api/profile", json=make_profile(
@@ -1303,6 +1337,376 @@ class WebIntegrationTests(unittest.TestCase):
                 self.config.pop("_env_file", None)
                 self.config.pop("smtp_bypass", None)
                 self.config.pop("_smtp_bypass_initial", None)
+
+    def test_search_and_chatbot_validate_proper_english_special_requests(self):
+        from BIS.classes.logic.validators.search_request_validator import (
+            create_search_request_validator,
+        )
+
+        # 1. Search Filters (/api/search) & SearchRequestValidator reject non-English / gibberish / symbols / empty words
+        bad_inputs = (["你好"], ["dkdk"], ["asdfghj"], ["1234"], ["!!!"], ["abc$"], ["x" * 101])
+        validator = create_search_request_validator()
+        for bad_wishes in bad_inputs:
+            payload = dict(self.search_payload(), other_preferences=bad_wishes)
+            res = self.client.post("/api/search", json=payload)
+            self.assertEqual(res.status_code, 400, f"Expected 400 for {bad_wishes!r}: {res.text}")
+            self.assertIn("Special requests", res.json()["detail"])
+
+            base_req = {
+                "origin": {"query": "Bugis", "label": "Bugis", "latitude": 1.30, "longitude": 103.85},
+                "mode": "walk",
+                "max_distance_km": None,
+                "max_travel_minutes": 15.0,
+                "traffic_aware": False,
+                "cuisine": "none",
+                "budget_per_person": 20.0,
+                "other_preferences": bad_wishes,
+                "dietary_requirements": [],
+                "disliked_cuisines": [],
+            }
+            with self.assertRaises(ValueError):
+                validator.validate(base_req)
+
+        ok_search = self.client.post("/api/search", json=dict(
+            self.search_payload(),
+            other_preferences=["quiet seating", "at least 4.5 stars", "near mrt", "bbq"],
+        ))
+        self.assertEqual(ok_search.status_code, 200, ok_search.text)
+
+        # AI semantic validation runs on search special requests when ai_bypass is False.
+        self.config["ai_bypass"] = False
+        self.ai.review_profile_wishes = Mock(
+            side_effect=ValueError("Default special wishes must be meaningful English preferences.")
+        )
+        try:
+            ai_bad_search = self.client.post("/api/search", json=dict(
+                self.search_payload(),
+                other_preferences=["comida picante"],
+            ))
+            self.assertEqual(ai_bad_search.status_code, 400, ai_bad_search.text)
+            self.assertIn("Special requests", ai_bad_search.json()["detail"])
+            self.ai.review_profile_wishes.assert_called_once()
+        finally:
+            self.config["ai_bypass"] = True
+
+        # 2. Chatbot regular flow: contextual awaiting_field='other_preferences' + explicit commands + confirm
+        base_filters = {
+            "location": "Bugis",
+            "locations": ["Bugis"],
+            "mode": "walk",
+            "max_travel_minutes": 15.0,
+            "max_distance_km": None,
+            "budget_per_person": 20.0,
+            "dietary_requirements": [],
+            "liked_cuisines": [],
+            "disliked_cuisines": [],
+            "other_preferences": [],
+        }
+        edit_wishes = self.client.post("/api/chat", json={
+            "message": "change wishes",
+            "current_filters": base_filters,
+        }).json()
+        self.assertEqual(edit_wishes["action"], "clarify")
+        self.assertEqual(edit_wishes["awaiting_field"], "other_preferences")
+
+        for bad_text in ("你好", "dkdk", "asdfghj", "1234", "!!!", "abc$", "a " + "b" * 105):
+            bad_chat = self.client.post("/api/chat", json={
+                "message": bad_text,
+                "current_filters": base_filters,
+                "awaiting_field": "other_preferences",
+            }).json()
+            self.assertEqual(bad_chat["action"], "clarify", f"Expected clarify for {bad_text!r}")
+            self.assertEqual(bad_chat["awaiting_field"], "other_preferences")
+            self.assertEqual(bad_chat["filters"]["other_preferences"], [])
+            self.assertIn("Special requests", bad_chat["reply"])
+
+        for explicit_bad in ("add wish 你好", "special request: asdfghj", "wish: 1234"):
+            bad_free = self.client.post("/api/chat", json={
+                "message": explicit_bad,
+                "current_filters": base_filters,
+            }).json()
+            self.assertEqual(bad_free["action"], "clarify", explicit_bad)
+            self.assertEqual(bad_free["awaiting_field"], "other_preferences")
+            self.assertEqual(bad_free["filters"]["other_preferences"], [])
+
+        # Even if AI extracts invalid wishes, chatbot rejects cleanly before updating filters.
+        self.config["ai_bypass"] = False
+        self.ai.chat_turn = lambda *_args: {
+            "intent": "search",
+            "reply": "Added wish.",
+            "updates": {"other_preferences": ["你好"], "other_action": "add"},
+            "quick_replies": [],
+        }
+        try:
+            ai_chat_bad = self.client.post("/api/chat", json={
+                "message": "quiet seat",
+                "current_filters": base_filters,
+            }).json()
+            self.assertEqual(ai_chat_bad["action"], "clarify")
+            self.assertEqual(ai_chat_bad["awaiting_field"], "other_preferences")
+            self.assertEqual(ai_chat_bad["filters"]["other_preferences"], [])
+        finally:
+            self.config["ai_bypass"] = True
+
+        # Confirming when current_filters holds invalid wishes rejects before searching, then "Clear wishes" clears it.
+        confirm_bad = self.client.post("/api/chat", json={
+            "message": "Yes, search now",
+            "current_filters": dict(base_filters, other_preferences=["你好"]),
+            "awaiting_field": "confirm",
+        }).json()
+        self.assertEqual(confirm_bad["action"], "clarify")
+        self.assertEqual(confirm_bad["awaiting_field"], "other_preferences")
+
+        cleared = self.client.post("/api/chat", json={
+            "message": "Clear wishes",
+            "current_filters": confirm_bad["filters"],
+            "awaiting_field": confirm_bad["awaiting_field"],
+        }).json()
+        self.assertEqual(cleared["action"], "confirm")
+        self.assertEqual(cleared["filters"]["other_preferences"], [])
+
+        good_chat = self.client.post("/api/chat", json={
+            "message": "quiet corner, near mrt",
+            "current_filters": base_filters,
+            "awaiting_field": "other_preferences",
+        }).json()
+        self.assertEqual(good_chat["action"], "confirm")
+        self.assertEqual(good_chat["filters"]["other_preferences"], ["quiet corner", "near mrt"])
+
+        # 3. Chatbot Onboarding rejects invalid special requests at step 7 and keeps onboarding active.
+        headers, _ = self.account("onboard.wishes@example.com")
+        state = self.client.post("/api/chat", json={
+            "message": "__start_onboarding__",
+            "current_filters": {},
+            "onboarding": True,
+        }, headers=headers).json()
+        for msg in ("Punggol", "$25", "20 mins", "None", "None", "None"):
+            state = self.client.post("/api/chat", json={
+                "message": msg,
+                "current_filters": state["filters"],
+                "onboarding": True,
+                "awaiting_field": state["awaiting_field"],
+            }, headers=headers).json()
+        self.assertEqual(state["awaiting_field"], "other_preferences")
+
+        for bad_onboard in ("你好", "dkdk", "1234", "!!!"):
+            retry = self.client.post("/api/chat", json={
+                "message": bad_onboard,
+                "current_filters": state["filters"],
+                "onboarding": True,
+                "awaiting_field": "other_preferences",
+            }, headers=headers).json()
+            self.assertEqual(retry["action"], "onboarding")
+            self.assertEqual(retry["awaiting_field"], "other_preferences")
+            self.assertFalse(retry["saved_to_profile"])
+            self.assertIn("Special requests", retry["reply"])
+
+        finish = self.client.post("/api/chat", json={
+            "message": "quiet corner, spicy food",
+            "current_filters": state["filters"],
+            "onboarding": True,
+            "awaiting_field": "other_preferences",
+        }, headers=headers).json()
+        self.assertEqual(finish["action"], "confirm")
+        self.assertTrue(finish["saved_to_profile"])
+        self.assertEqual(finish["filters"]["other_preferences"], ["quiet corner", "spicy food"])
+
+    def test_legacy_persisted_profile_limits_and_unrelated_docs_do_not_block_login(self):
+        _, valid_user = self.account("test@gmail.com")
+        legacy_headers, legacy_user = self.account("legacy@example.com")
+        self.config["smtp_bypass"] = True
+
+        # Simulate pre-existing MongoDB user saved under old wider numeric limits.
+        self.conn.db.users.update_one(
+            {"_id": legacy_user["user_id"]},
+            {"$set": {
+                "preferences.max_distance_km": 200.0,
+                "preferences.max_travel_time_minutes": 300.0,
+                "preferences.budget_per_person": 2000.0,
+            }},
+        )
+
+        # Valid account sign-in works despite another user having legacy bounds.
+        login_valid = self.client.post("/api/auth/login", json={
+            "email": "test@gmail.com", "password": "test.password",
+        })
+        self.assertEqual(login_valid.status_code, 200, login_valid.text)
+        self.assertTrue(login_valid.json()["success"])
+
+        # Legacy account can also sign in and reads clamped bounds within profile limits.
+        login_legacy = self.client.post("/api/auth/login", json={
+            "email": "legacy@example.com", "password": "test.password",
+        })
+        self.assertEqual(login_legacy.status_code, 200, login_legacy.text)
+        me_legacy = self.client.get("/api/auth/me", headers=legacy_headers).json()["user"]
+        self.assertEqual(me_legacy["max_distance_km"], 50.0)
+        self.assertEqual(me_legacy["max_travel_time_minutes"], 150.0)
+        self.assertEqual(me_legacy["budget_per_person"], 1000.0)
+
+        # Strict validation remains enforced on new profile writes and updates.
+        bad_save = self.client.post("/api/profile", json={
+            "user_id": valid_user["user_id"],
+            "username": "Tester",
+            "location": ["Orchard"],
+            "max_distance_km": 200.0,
+            "max_travel_time_minutes": 30.0,
+            "budget_per_person": 25.0,
+            "dietary_requirements": [],
+            "liked_cuisines": [],
+            "disliked_cuisines": [],
+            "other_preferences": [],
+        }, headers={"Authorization": "Bearer " + login_valid.json()["token"]})
+        self.assertEqual(bad_save.status_code, 400)
+
+        legacy_prefs = {
+            "location": ["Orchard"],
+            "max_distance_km": 200.0,
+            "max_travel_time_minutes": 300.0,
+            "budget_per_person": 2000.0,
+            "dietary_requirements": [],
+            "liked_cuisines": [],
+            "disliked_cuisines": [],
+            "other_preferences": [],
+        }
+        updated_prefs = LogicManager().apply_updates(legacy_prefs, {"budget_per_person": 45})
+        self.assertEqual(updated_prefs["max_distance_km"], 50.0)
+        self.assertEqual(updated_prefs["max_travel_time_minutes"], 150.0)
+        self.assertEqual(updated_prefs["budget_per_person"], 45.0)
+        with self.assertRaises(ValueError):
+            LogicManager().apply_updates(legacy_prefs, {"max_distance_km": 200})
+
+        # Unrelated malformed document in Mongo users collection does not break targeted login.
+        self.conn.db.users.insert_one({"_id": "corrupt-doc", "email": "broken@example.com"})
+        isolated_login = self.client.post("/api/auth/login", json={
+            "email": "test@gmail.com", "password": "test.password",
+        })
+        self.assertEqual(isolated_login.status_code, 200, isolated_login.text)
+        wrong_pw = self.client.post("/api/auth/login", json={
+            "email": "test@gmail.com", "password": "wrong-password",
+        })
+        self.assertEqual(wrong_pw.status_code, 401)
+
+    def test_chatbot_profile_sync_plus_budget_and_all_fields(self):
+        headers, user = self.account("profilesync@example.com")
+        save_res = self.client.post("/api/profile", json={
+            "user_id": user["user_id"],
+            "username": user["username"],
+            "email": user["email"],
+            "location": ["Bugis Junction"],
+            "max_distance_km": 0.5,
+            "max_travel_time_minutes": 10.0,
+            "budget_per_person": 1000.0,
+            "dietary_requirements": ["halal"],
+            "liked_cuisines": ["japanese"],
+            "disliked_cuisines": ["indian"],
+            "other_preferences": ["quiet seating"],
+        }, headers=headers)
+        self.assertEqual(save_res.status_code, 200, save_res.text)
+
+        show_res = self.client.post("/api/chat", json={
+            "message": "show my profile",
+            "current_filters": {},
+        }, headers=headers)
+        self.assertEqual(show_res.status_code, 200, show_res.text)
+        profile_reply = show_res.json()["reply"]
+        self.assertIn("10 mins / 0.5 km", profile_reply)
+        self.assertIn("SGD $100+", profile_reply)
+        self.assertNotIn("SGD $1000", profile_reply)
+        self.assertIn("indian", profile_reply.lower())
+        self.assertIn("quiet seating", profile_reply.lower())
+
+        # Chatbot parses "$100+" and "casual dining" and formats $100+ without leaking $1000
+        plus_chat = self.client.post("/api/chat", json={
+            "message": "Korean BBQ near Orchard $100+ walk 15 mins",
+            "current_filters": {"locations": ["Bugis Junction"], "budget_per_person": 25.0, "max_travel_minutes": 10.0},
+        }, headers=headers)
+        self.assertEqual(plus_chat.status_code, 200, plus_chat.text)
+        plus_json = plus_chat.json()
+        self.assertEqual(plus_json["filters"]["budget_per_person"], 1000.0)
+        self.assertIn("SGD $100+", plus_json["reply"])
+        self.assertNotIn("SGD $1000", plus_json["reply"])
+        self.assertTrue(any("SGD $100+" in c for c in plus_json["changes"]))
+        self.assertTrue(any("15 mins" in c for c in plus_json["changes"]))
+
+        casual_chat = self.client.post("/api/chat", json={
+            "message": "casual dining near Bugis 15 mins walk",
+            "current_filters": {},
+        }, headers=headers)
+        self.assertEqual(casual_chat.status_code, 200, casual_chat.text)
+        self.assertEqual(casual_chat.json()["filters"]["budget_per_person"], 50.0)
+
+        # Cross-island profile limits (>90 mins / >15 km) auto-select transit on reset/default
+        long_save = self.client.post("/api/profile", json={
+            "user_id": user["user_id"],
+            "username": user["username"],
+            "email": user["email"],
+            "location": ["Orchard"],
+            "max_distance_km": 30.0,
+            "max_travel_time_minutes": 120.0,
+            "budget_per_person": 1000.0,
+            "dietary_requirements": [],
+            "liked_cuisines": [],
+            "disliked_cuisines": [],
+            "other_preferences": [],
+        }, headers=headers)
+        self.assertEqual(long_save.status_code, 200, long_save.text)
+        reset_res = self.client.post("/api/chat", json={
+            "message": "Use my saved profile",
+            "current_filters": {},
+        }, headers=headers)
+        self.assertEqual(reset_res.status_code, 200, reset_res.text)
+        self.assertEqual(reset_res.json()["filters"]["mode"], "transit")
+        self.assertEqual(reset_res.json()["filters"]["max_travel_minutes"], 120.0)
+
+        # Even if AI strips '+' from '$100+' -> 100, reconciliation preserves 1000.0 (SGD $100+)
+        self.application._chatbot._ai = SimpleNamespace(
+            chat_turn=lambda msg, cur, hist, prof, cfg: {
+                "intent": "search",
+                "reply": "Searching Orchard.",
+                "updates": {
+                    "locations": ["Orchard"],
+                    "locations_action": "replace",
+                    "budget_per_person": 100,
+                    "max_travel_minutes": 15,
+                },
+                "quick_replies": ["Yes, search now"],
+            }
+        )
+        ai_plus = self.client.post("/api/chat", json={
+            "message": "Korean near Orchard $100+ 15 mins",
+            "current_filters": {},
+        }, headers=headers)
+        self.assertEqual(ai_plus.status_code, 200, ai_plus.text)
+        self.assertEqual(ai_plus.json()["filters"]["budget_per_person"], 1000.0)
+        self.assertIn("SGD $100+", ai_plus.json()["reply"])
+
+    def test_multi_cuisine_merge_interleaves_and_fills_unused_quota(self):
+        from BIS.classes.logic.logic_manager import LogicManager
+
+        logic = LogicManager()
+        fetched = [
+            ("japanese", {
+                "matches": [{"restaurant": {"google_place_id": f"j-{i}", "name": f"Jap {i}"}} for i in range(1, 3)],
+                "alternatives": [],
+                "hidden": 0,
+            }),
+            ("korean", {
+                "matches": [{"restaurant": {"google_place_id": f"k-{i}", "name": f"Kor {i}"}} for i in range(1, 13)],
+                "alternatives": [],
+                "hidden": 1,
+            }),
+        ]
+        matches, alternatives, breakdown, hidden = logic.merge_multi_cuisine_results(
+            fetched, num_cuisines=2, max_total=10
+        )
+        self.assertEqual(len(matches), 10)
+        self.assertEqual(alternatives, [])
+        self.assertEqual(hidden, 1)
+        self.assertEqual(breakdown, {"japanese": 2, "korean": 8})
+        self.assertEqual(
+            [m["restaurant"]["google_place_id"] for m in matches[:4]],
+            ["j-1", "k-1", "j-2", "k-2"],
+        )
 
 
 if __name__ == "__main__":

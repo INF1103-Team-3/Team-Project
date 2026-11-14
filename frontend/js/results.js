@@ -5,7 +5,7 @@ import {
   getSingaporeDate,
   refreshIcons,
   state,
-} from './state.js';
+} from './state.js?v=20261114-8';
 import {
   drawOriginToRestaurantLine,
   flyToMarkerForItem,
@@ -14,10 +14,10 @@ import {
   openRouteDrawer,
   setMapFormatters,
   updateInteractiveMap,
-} from './map.js';
-import { renderCompareTray, setCompareHelpers, toggleCompareItem } from './compare.js';
+} from './map.js?v=20261114-8';
+import { renderCompareTray, setCompareHelpers, toggleCompareItem } from './compare.js?v=20261114-8';
 
-let favoriteToggleHandler = async () => {};
+let favoriteToggleHandler = async () => { };
 
 export function setFavoriteToggleHandler(fn) {
   if (typeof fn === 'function') favoriteToggleHandler = fn;
@@ -154,14 +154,55 @@ export function getReviewsValue(r) {
   return !Number.isNaN(num) && num >= 0 ? num : 0;
 }
 
+const TIER_PRICE_ESTIMATES = {
+  inexpensive: 10,
+  moderate: 28,
+  expensive: 65,
+  very_expensive: 140,
+};
+
+const TIER_PRICE_BADGES = {
+  inexpensive: '$ · Budget',
+  moderate: '$$ · Casual Dining',
+  expensive: '$$$ · Upscale',
+  very_expensive: '$$$$ · Fine Dining',
+};
+
+function normalizePriceBand(r) {
+  if (!r) return '';
+  return String(r.price_level || r.price_band || '')
+    .replace(/^PRICE_LEVEL_/i, '')
+    .trim()
+    .toLowerCase();
+}
+
 export function getPriceValue(r) {
+  if (!r) return null;
   if (typeof r.avg_price === 'number' && !Number.isNaN(r.avg_price)) return r.avg_price;
   const s = typeof r.price_start === 'number' ? r.price_start : null;
   const e = typeof r.price_end === 'number' ? r.price_end : null;
   if (s !== null && e !== null) return (s + e) / 2;
   if (s !== null) return s;
   if (e !== null) return e;
-  return null;
+  if (typeof r.estimated_price === 'number' && !Number.isNaN(r.estimated_price)) return r.estimated_price;
+  const band = normalizePriceBand(r);
+  return Object.prototype.hasOwnProperty.call(TIER_PRICE_ESTIMATES, band) ? TIER_PRICE_ESTIMATES[band] : null;
+}
+
+export function formatPriceBadge(r) {
+  if (!r) return '';
+  if (r.price_range) return `💰 ${r.price_range}`;
+  if (typeof r.avg_price === 'number' && !Number.isNaN(r.avg_price)) {
+    return `💰 ~SGD ${Math.round(r.avg_price)}`;
+  }
+  const band = normalizePriceBand(r);
+  if (Object.prototype.hasOwnProperty.call(TIER_PRICE_BADGES, band)) {
+    return `💰 ${TIER_PRICE_BADGES[band]}`;
+  }
+  if (typeof r.estimated_price === 'number' && !Number.isNaN(r.estimated_price)) {
+    return `💰 ~SGD ${Math.round(r.estimated_price)}`;
+  }
+  return '';
 }
 
 function compareItems(a, b, sortBy, matchesFirst) {
@@ -238,7 +279,7 @@ function passesQuickFilters(item) {
     if (!isOfficial) return false;
   }
   if (qf.vegetarian && !r.serves_vegetarian_food) return false;
-  if (qf.withinBudget && state.activeBudgetLimit != null) {
+  if (qf.withinBudget && state.activeBudgetLimit != null && !state.activeBudgetIsPlus) {
     const price = getPriceValue(r);
     if (price !== null && price > state.activeBudgetLimit) return false;
   }
@@ -255,31 +296,47 @@ function updateQuickFilterChipsUI() {
   });
 }
 
-export function renderResultsSkeleton(activeStep = 0, modelLabel = 'Gemini AI') {
+export function resetResultsDisplay() {
+  state.lastOrigin = null;
+  state.lastInputOrigins = [];
+  state.lastMatches = [];
+  state.lastAlternatives = [];
+  state.displayedItems = [];
+  state.activeBudgetLimit = null;
+  state.activeBudgetIsPlus = false;
+  state.compareKeys.clear();
+  Object.keys(state.quickFilters).forEach((key) => {
+    state.quickFilters[key] = false;
+  });
+  updateQuickFilterChipsUI();
+  renderCompareTray();
+
+  document.getElementById('statusBanner')?.classList.add('hidden');
+  document.getElementById('resultsHeader')?.classList.add('hidden');
+  document.getElementById('mapSection')?.classList.add('hidden');
+  const resultsList = document.getElementById('resultsList');
+  if (resultsList) resultsList.innerHTML = '';
+  document.getElementById('emptyState')?.classList.remove('hidden');
+}
+
+export function renderResultsSkeleton(modelLabel = 'Gemini AI') {
   const container = document.getElementById('resultsList');
   if (!container) return;
   const steps = [
     'Resolving starting location(s)',
-    'Querying Google Places & calculating travel times',
-    'Verifying official MUIS Halal records (BRC)',
-    `AI interpretation & ranking (${modelLabel})`,
+    'Querying Google Places & route ETAs',
+    'Verifying official MUIS Halal records',
+    `Scoring & ranking with ${modelLabel}`,
   ];
 
-  const stepsHtml = steps.map((label, idx) => {
-    const done = idx < activeStep;
-    const current = idx === activeStep;
-    const badge = done
-      ? '<i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-500 shrink-0"></i>'
-      : current
-        ? '<svg class="animate-spin w-3.5 h-3.5 text-brand-600 shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>'
-        : '<span class="w-3.5 h-3.5 rounded-full border-2 border-slate-300 dark:border-slate-600 shrink-0"></span>';
-    return `
-      <div class="flex items-center gap-2 text-xs ${current ? 'font-bold text-slate-900 dark:text-white' : done ? 'text-emerald-700 dark:text-emerald-300 font-medium' : 'text-slate-400'}">
-        ${badge}
-        <span>${escapeHtml(label)}</span>
-      </div>
-    `;
-  }).join('');
+  const stepsHtml = steps.map((label) => `
+    <div class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 font-medium">
+      <span class="w-2 h-2 rounded-full bg-brand-500/75 animate-pulse shrink-0"></span>
+      <span>${escapeHtml(label)}</span>
+    </div>
+  `).join('');
+
+  const spinnerIcon = '<svg class="animate-spin w-3.5 h-3.5 text-brand-600 dark:text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
 
   const skeletonCard = `
     <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 animate-pulse">
@@ -300,9 +357,12 @@ export function renderResultsSkeleton(activeStep = 0, modelLabel = 'Gemini AI') 
 
   container.innerHTML = `
     <div id="pipelineProgressCard" class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-brand-200 dark:border-brand-800/70 shadow-sm space-y-3">
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-extrabold uppercase tracking-wider text-brand-600 dark:text-brand-400">Live BiteFinder Search Pipeline</span>
-        <span class="text-[11px] font-semibold text-slate-400">Usually ~5–15s</span>
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-xs font-extrabold uppercase tracking-wider text-brand-600 dark:text-brand-400 flex items-center gap-2">
+          ${spinnerIcon}
+          <span>Searching BiteFinder Pipeline</span>
+        </span>
+        <span class="text-[11px] font-semibold text-slate-400">Request in progress</span>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">${stepsHtml}</div>
     </div>
@@ -344,15 +404,31 @@ export function renderResults(matches, alternatives) {
     if (mapSection) mapSection.classList.add('hidden');
     const isClientFiltered = combined.length > 0;
     container.innerHTML = `
-      <div class="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 text-center space-y-2">
+      <div class="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 text-center space-y-3">
         <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">
           ${isClientFiltered ? 'No restaurants match the active quick filter chips.' : 'No restaurants matched all constraints.'}
         </p>
         <p class="text-xs text-slate-400">
-          ${isClientFiltered ? 'Toggle off a quick filter chip above to see all recommendations again.' : 'Try expanding your travel time limit or budget.'}
+          ${isClientFiltered ? 'Toggle off a quick filter chip above or reset all quick filters to see your recommendations.' : 'Try expanding your travel time limit or budget.'}
         </p>
+        ${isClientFiltered ? `
+          <div class="pt-1">
+            <button type="button" id="clearQuickFiltersBtn"
+              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 shadow-sm transition">
+              <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+              <span>Clear Quick Filters</span>
+            </button>
+          </div>
+        ` : ''}
       </div>
     `;
+    document.getElementById('clearQuickFiltersBtn')?.addEventListener('click', () => {
+      Object.keys(state.quickFilters).forEach((key) => {
+        state.quickFilters[key] = false;
+      });
+      renderResults(state.lastMatches, state.lastAlternatives);
+    });
+    refreshIcons(container);
     return;
   }
 
@@ -399,6 +475,7 @@ export function renderResults(matches, alternatives) {
     }
 
     const routeStr = formatRouteBadge(r, state.activeSearchMode);
+    const priceBadgeStr = formatPriceBadge(r);
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${r.name || ''} ${r.address || 'Singapore'}`)}`;
 
     const reasonsHtml = reasons.map((rawReason) => {
@@ -428,11 +505,11 @@ export function renderResults(matches, alternatives) {
             <span class="w-6 h-6 rounded-full text-xs font-extrabold flex items-center justify-center text-white shrink-0 ${item.isMatch ? 'bg-emerald-600' : 'bg-amber-600'}">${rankNumber}</span>
             <h3 class="text-base font-bold text-slate-900 dark:text-white">${escapeHtml(r.name || 'Restaurant')}</h3>
             ${item.isMatch
-              ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">Match</span>'
-              : '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">Alternative</span>'}
+        ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">Match</span>'
+        : '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">Alternative</span>'}
             ${item.matched_cuisine
-              ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-950/80 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800 capitalize">🍽️ ${escapeHtml(formatCuisineLabel(item.matched_cuisine))}</span>`
-              : ''}
+        ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-950/80 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800 capitalize">🍽️ ${escapeHtml(formatCuisineLabel(item.matched_cuisine))}</span>`
+        : ''}
           </div>
           <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
             <i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-400"></i>
@@ -454,27 +531,27 @@ export function renderResults(matches, alternatives) {
         <span class="font-bold text-slate-800 dark:text-slate-100">Hours Today:</span>
         <span class="text-slate-600 dark:text-slate-300 font-medium">${escapeHtml(hoursText)}</span>
         ${r.open_now
-          ? '<span class="ml-auto text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800 shrink-0">Open Now</span>'
-          : '<span class="ml-auto text-[10px] font-bold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-950 px-2.5 py-0.5 rounded-full border border-rose-300 dark:border-rose-800 shrink-0">Closed</span>'}
+        ? '<span class="ml-auto text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800 shrink-0">Open Now</span>'
+        : '<span class="ml-auto text-[10px] font-bold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-950 px-2.5 py-0.5 rounded-full border border-rose-300 dark:border-rose-800 shrink-0">Closed</span>'}
       </div>
 
       <div class="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
         ${isOfficialHalal
-          ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+        ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
                <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"></i> Official MUIS Halal
              </span>`
-          : isGoogleHalal
-            ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+        : isGoogleHalal
+          ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
                  <i data-lucide="info" class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400"></i> Halal (Google Indicated)
                </span>`
-            : ''}
+          : ''}
         ${r.serves_vegetarian_food
-          ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1">
+        ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1">
                <i data-lucide="leaf" class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400"></i> Vegetarian
              </span>`
-          : ''}
+        : ''}
         ${routeStr ? `<span class="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">${escapeHtml(routeStr)}</span>` : ''}
-        ${r.price_range ? `<span class="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">💰 ${escapeHtml(r.price_range)}</span>` : ''}
+        ${priceBadgeStr ? `<span class="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">${escapeHtml(priceBadgeStr)}</span>` : ''}
       </div>
 
       ${multiPersonDistancesHtml}
@@ -500,15 +577,15 @@ export function renderResults(matches, alternatives) {
           </button>
           <button type="button" id="favBtn-${displayIdx}" data-action="fav"
             class="px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${isFav
-              ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-300 border-rose-200 dark:border-rose-800'
-              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-slate-700 hover:text-rose-600 border-slate-200 dark:border-slate-700'}">
+        ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-slate-700 hover:text-rose-600 border-slate-200 dark:border-slate-700'}">
             <i data-lucide="heart" class="w-3.5 h-3.5 ${isFav ? 'text-rose-500 fill-rose-500' : 'text-rose-500'}"></i>
             <span>${isFav ? 'Saved' : 'Save'}</span>
           </button>
           <button type="button" data-action="compare"
             class="px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${isCompared
-              ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-slate-700 hover:text-indigo-600 border-slate-200 dark:border-slate-700'}">
+        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-slate-700 hover:text-indigo-600 border-slate-200 dark:border-slate-700'}">
             <i data-lucide="columns-2" class="w-3.5 h-3.5"></i>
             <span>${isCompared ? 'Comparing' : 'Compare'}</span>
           </button>

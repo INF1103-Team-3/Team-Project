@@ -1,14 +1,14 @@
-import { refreshIcons, THEME_KEY, updateThemeUI } from './state.js';
-import { initModalAccessibility } from './modals.js';
-import { initMapControls, refreshMapTheme, setMapFormatters } from './map.js';
-import { initCompareControls } from './compare.js';
+import { refreshIcons, THEME_KEY, updateThemeUI } from './state.js?v=20261114-9';
+import { initModalAccessibility } from './modals.js?v=20261114-9';
+import { initMapControls, refreshMapTheme, setMapFormatters } from './map.js?v=20261114-9';
+import { initCompareControls } from './compare.js?v=20261114-9';
 import {
   formatHours,
   getTravelMinutes,
   initResultsControls,
   setFavoriteToggleHandler,
-} from './results.js';
-import { initFiltersControls, setFilterChatCallbacks } from './filters.js';
+} from './results.js?v=20261114-9';
+import { initFiltersControls, setFilterChatCallbacks } from './filters.js?v=20261114-9';
 import {
   initChatbotControls,
   postChatSearchOutcome,
@@ -19,14 +19,14 @@ import {
   setChatbotAuthCallbacks,
   startOnboardingInChat,
   updateGuestHintBanner,
-} from './chatbot.js';
+} from './chatbot.js?v=20261114-9';
 import {
   checkSession,
   initAuthAndModals,
   openAuthModalWithNotice,
   setAuthChatCallbacks,
   toggleFavoriteByIndex,
-} from './auth.js';
+} from './auth.js?v=20261114-9';
 
 function initThemeToggle() {
   updateThemeUI();

@@ -5,14 +5,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BiteFinder — Singapore Smart Restaurant Discovery</title>
-  <link rel="stylesheet" href="/css/tailwind.css">
-  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/tailwind.css?v=20261114-2">
+  <link rel="stylesheet" href="/css/styles.css?v=20261114-4">
   <!-- Google Fonts & Lucide Icons -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
     rel="stylesheet">
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://unpkg.com/lucide@1.72.0/dist/umd/lucide.min.js"></script>
   <!-- Leaflet Interactive Map CSS & JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -57,7 +57,7 @@
           <i data-lucide="heart" class="w-4 h-4 text-rose-500"></i>
           <span class="hidden sm:inline">Saved</span>
           <span id="favoritesCountBadge"
-            class="px-1.5 py-0.2 text-[10px] font-extrabold rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300">0</span>
+            class="px-1.5 py-0.5 text-[10px] font-extrabold rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300">0</span>
         </button>
 
         <button id="historyOpenBtn" type="button" title="View Search History & Re-run Past Searches"
@@ -191,7 +191,7 @@
 
           <!-- Conversation History -->
           <div id="chatMessages"
-            class="h-[380px] sm:h-[420px] xl:h-[460px] overflow-y-auto space-y-3 pr-1 scroll-smooth rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-3">
+            class="h-[320px] sm:h-[360px] xl:h-[420px] lg:max-h-[calc(100vh-22rem)] overflow-y-auto overscroll-contain space-y-3 pr-1 scroll-smooth rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-3">
           </div>
 
           <!-- Chat Composer -->
@@ -215,7 +215,7 @@
             <!-- Location Input -->
             <div>
               <div class="flex items-center justify-between mb-1.5">
-                <label
+                <label for="locationInput"
                   class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Starting
                   Location(s)</label>
                 <button type="button" id="addLocationRowBtn"
@@ -291,7 +291,7 @@
               </div>
 
               <div class="sm:col-span-7">
-                <div class="flex flex-wrap justify-between items-center gap-x-2 gap-y-1 mb-1.5">
+                <div class="bf-slider-header flex flex-wrap justify-between items-center gap-x-2 gap-y-1 mb-1.5 select-none">
                   <div
                     class="inline-flex shrink-0 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
                     <button type="button" id="limitTypeTimeBtn"
@@ -303,7 +303,7 @@
                       Distance
                     </button>
                   </div>
-                  <div id="timeDisplayWrap" class="bf-limit-wrap" title="Click to type a custom travel time">
+                  <div id="timeDisplayWrap" class="bf-limit-wrap shrink-0" title="Click to type a custom travel time">
                     <input type="text" inputmode="decimal" id="timeInput" placeholder="Not set"
                       aria-label="Maximum travel time in minutes" class="bf-limit-input">
                     <span id="timeUnitLabel" class="bf-limit-unit hidden">mins</span>
@@ -313,7 +313,7 @@
                       <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z"></path>
                     </svg>
                   </div>
-                  <div id="distanceDisplayWrap" class="bf-limit-wrap hidden" title="Click to type a custom distance">
+                  <div id="distanceDisplayWrap" class="bf-limit-wrap shrink-0 hidden" title="Click to type a custom distance">
                     <input type="text" inputmode="decimal" id="distanceInput" placeholder="Not set"
                       aria-label="Maximum travel distance in kilometres" class="bf-limit-input">
                     <span id="distanceUnitLabel" class="bf-limit-unit hidden">km</span>
@@ -324,19 +324,24 @@
                     </svg>
                   </div>
                 </div>
-                <input type="range" id="timeSlider" min="1" max="90" step="1" value="30"
-                  class="w-full accent-brand-600 mt-2">
-                <input type="range" id="distanceSlider" min="0.1" max="15.0" step="0.1" value="2.0"
-                  class="hidden w-full accent-brand-600 mt-2">
+                <input type="range" id="timeSlider" min="1" max="90" step="1" value="30" draggable="false"
+                  class="bf-range-slider w-full mt-2">
+                <input type="range" id="distanceSlider" min="0.1" max="15.0" step="0.1" value="2.0" draggable="false"
+                  class="bf-range-slider hidden w-full mt-2">
+                <div id="travelScaleLabels" class="flex justify-between text-[10px] text-slate-400 mt-1 select-none">
+                  <span id="travelScaleMin">1 min</span>
+                  <span id="travelScaleMid">30 mins</span>
+                  <span id="travelScaleMax">90 mins</span>
+                </div>
                 <p id="limitRangeHint"
-                  class="hidden text-[10px] font-semibold text-amber-600 dark:text-amber-400 mt-1 leading-tight"></p>
+                  class="hidden text-[10px] font-semibold text-amber-600 dark:text-amber-400 mt-1 leading-tight select-none"></p>
               </div>
             </div>
 
             <!-- Real-Time Traffic -->
             <div id="trafficAwareBox"
               class="hidden p-2.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60">
-              <label class="flex items-center justify-between gap-2 cursor-pointer">
+              <label for="trafficAwareCheck" class="flex items-center justify-between gap-2 cursor-pointer">
                 <div class="flex items-center gap-2 text-xs">
                   <i data-lucide="gauge" class="w-4 h-4 text-brand-600 dark:text-brand-400"></i>
                   <div>
@@ -351,27 +356,39 @@
 
             <!-- Budget per person -->
             <div>
-              <div class="flex justify-between items-center mb-1.5">
-                <label class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Budget Per
+              <div class="bf-slider-header flex justify-between items-center mb-1.5 select-none">
+                <label for="budgetInput" class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Budget Per
                   Person</label>
-                <span id="budgetDisplay" class="text-xs font-bold text-slate-400 dark:text-slate-500">Not set</span>
+                <div id="budgetDisplayWrap" class="bf-limit-wrap bf-budget-wrap shrink-0" title="Click to type a custom budget">
+                  <span id="budgetPrefixLabel" class="bf-limit-unit bf-budget-prefix hidden">SGD $</span>
+                  <input type="text" inputmode="decimal" id="budgetInput" placeholder="Not set"
+                    aria-label="Budget per person in SGD" class="bf-limit-input">
+                  <span id="budgetPlusLabel" class="bf-limit-unit bf-budget-plus hidden">+</span>
+                  <svg class="bf-limit-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z"></path>
+                  </svg>
+                </div>
               </div>
-              <input type="range" id="budgetSlider" min="5" max="100" step="5" value="30"
-                class="w-full accent-brand-600">
-              <div class="flex justify-between text-[10px] text-slate-400 mt-1">
+              <input type="range" id="budgetSlider" min="5" max="105" step="5" value="30" draggable="false"
+                class="bf-range-slider w-full">
+              <div class="flex justify-between text-[10px] text-slate-400 mt-1 select-none">
                 <span>$5 (Budget)</span>
-                <span>$30 (Casual)</span>
-                <span>$100+ (Fine Dine)</span>
+                <span>$50 (Casual Dining)</span>
+                <span id="budgetScaleMax">$100+ (Fine Dine)</span>
               </div>
+              <p id="budgetRangeHint"
+                class="hidden text-[10px] font-semibold text-amber-600 dark:text-amber-400 mt-1 leading-tight select-none"></p>
             </div>
 
             <!-- Dietary Requirements -->
             <div>
-              <label
+              <span
                 class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Dietary
-                Requirements</label>
+                Requirements</span>
               <div class="grid grid-cols-2 gap-2">
-                <label
+                <label for="halalCheck"
                   class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 transition">
                   <input type="checkbox" id="halalCheck" class="rounded text-emerald-600 focus:ring-emerald-500">
                   <div class="text-xs">
@@ -379,7 +396,7 @@
                     <div class="text-[10px] text-slate-400">Official verification</div>
                   </div>
                 </label>
-                <label
+                <label for="vegCheck"
                   class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-950/30 transition">
                   <input type="checkbox" id="vegCheck" class="rounded text-blue-600 focus:ring-blue-500">
                   <div class="text-xs">
@@ -393,7 +410,7 @@
             <!-- Preferred Cuisines -->
             <div>
               <div class="flex items-center justify-between mb-1.5">
-                <label
+                <label for="customCuisineInput"
                   class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Preferred
                   Cuisines (Select Multiple or Type)</label>
                 <div class="flex items-center gap-2">
@@ -455,7 +472,7 @@
             <!-- Disliked Cuisines -->
             <div>
               <div class="flex items-center justify-between mb-1.5">
-                <label
+                <label for="customDislikedCuisineInput"
                   class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Disliked
                   Cuisines (Exclude Multiple or Type)</label>
                 <button type="button" id="clearDislikedBtn"
@@ -512,11 +529,12 @@
 
             <!-- Special Wishes -->
             <div>
-              <label
+              <label for="specialInput"
                 class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Special
                 Requests (AI Interpreted)</label>
               <input type="text" id="specialInput" placeholder="e.g. at least 4.5 stars, spicy food, quiet dinner"
                 class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+              <p id="specialInputError" class="hidden mt-1 text-[11px] font-medium text-rose-600 dark:text-rose-400"></p>
             </div>
 
             <button type="submit" id="searchBtn"
@@ -556,7 +574,7 @@
               <span>Pick One For Us!</span>
             </button>
 
-            <label
+            <label for="matchesFirstCheck"
               class="flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer select-none"
               title="Keep Direct Matches above Alternatives when sorting">
               <input type="checkbox" id="matchesFirstCheck" checked class="rounded text-brand-600 focus:ring-brand-500">
@@ -564,10 +582,10 @@
             </label>
 
             <div class="flex items-center gap-1.5">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+              <label for="sortSelect" class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
                 <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-brand-600 dark:text-brand-400"></i>
                 Sort:
-              </span>
+              </label>
               <select id="sortSelect"
                 class="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition cursor-pointer">
                 <option value="ai">✨ AI Best Match (Default)</option>
@@ -635,15 +653,13 @@
           </div>
         </div>
         <div id="resultsMap"
-          class="w-full h-[380px] sm:h-[420px] xl:h-[460px] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 z-10">
+          class="w-full h-[320px] sm:h-[360px] xl:h-[400px] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 z-10">
         </div>
       </div>
 
-      <!-- Results Container -->
-      <div id="resultsList" class="space-y-4">
-        <!-- Interactive Quick Start Empty State -->
-        <div id="emptyState"
-          class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm transition-colors duration-200 space-y-6">
+      <!-- Interactive Quick Start Empty State -->
+      <div id="emptyState"
+        class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm transition-colors duration-200 space-y-6">
           <div class="text-center flex flex-col items-center">
             <div
               class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-brand-50 to-amber-50 dark:from-brand-500/15 dark:to-amber-500/15 text-brand-600 dark:text-brand-400 border border-brand-200/70 dark:border-brand-500/30 flex items-center justify-center mb-3 shadow-sm">
@@ -713,7 +729,9 @@
             </button>
           </div>
         </div>
-      </div>
+
+      <!-- Results Container -->
+      <div id="resultsList" class="space-y-4"></div>
 
     </div>
 
@@ -739,17 +757,17 @@
   <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
 
   <!-- Authentication Modal -->
-  <div id="authModal" role="dialog" aria-modal="true" aria-hidden="true"
-    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+  <div id="authModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="authModalTitle"
+    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 overscroll-contain">
     <div
-      class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+      class="bg-white dark:bg-slate-900 w-full max-w-md max-h-[85vh] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl">
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
         <div class="flex items-center gap-2.5">
           <div
             class="w-8 h-8 rounded-lg bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white">
             <i data-lucide="shield-check" class="w-4 h-4"></i>
           </div>
-          <h3 class="text-base font-bold text-slate-900 dark:text-white">BiteFinder Account</h3>
+          <h3 id="authModalTitle" class="text-base font-bold text-slate-900 dark:text-white">BiteFinder Account</h3>
         </div>
         <button type="button" id="closeAuthModalBtn" aria-label="Close sign in dialog"
           class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
@@ -772,17 +790,23 @@
 
       <form id="loginForm" class="p-6 space-y-4">
         <div>
-          <label
+          <label for="loginEmail"
             class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Email
             Address</label>
-          <input type="email" id="loginEmail" required maxlength="254" placeholder="you@example.com"
+          <input type="email" id="loginEmail" required maxlength="254" autocomplete="email" placeholder="you@example.com"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
         </div>
         <div>
-          <label
+          <label for="loginPassword"
             class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Password</label>
-          <input type="password" id="loginPassword" required minlength="8" placeholder="••••••••"
-            class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+          <div class="relative">
+            <input type="password" id="loginPassword" required minlength="8" autocomplete="current-password" placeholder="••••••••"
+              class="w-full px-3 pr-10 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+            <button type="button" data-toggle-password="loginPassword" aria-label="Show password" aria-pressed="false"
+              class="password-toggle-btn absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+          </div>
         </div>
         <button type="submit" id="loginSubmitBtn"
           class="w-full py-2.5 px-4 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-brand-600 to-amber-600 hover:from-brand-700 hover:to-amber-700 shadow-md transition">
@@ -797,25 +821,31 @@
 
       <form id="registerForm" class="p-6 space-y-4 hidden">
         <div>
-          <label
+          <label for="registerUsername"
             class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Display
             Username</label>
-          <input type="text" id="registerUsername" required maxlength="50" placeholder="e.g. John"
+          <input type="text" id="registerUsername" required maxlength="50" autocomplete="username" placeholder="e.g. John"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
         </div>
         <div>
-          <label
+          <label for="registerEmail"
             class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Email
             Address</label>
-          <input type="email" id="registerEmail" required maxlength="254" placeholder="you@example.com"
+          <input type="email" id="registerEmail" required maxlength="254" autocomplete="email" placeholder="you@example.com"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
         </div>
         <div>
-          <label
+          <label for="registerPassword"
             class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Password
             (8–30 Characters)</label>
-          <input type="password" id="registerPassword" required minlength="8" maxlength="30" placeholder="••••••••"
-            class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+          <div class="relative">
+            <input type="password" id="registerPassword" required minlength="8" maxlength="30" autocomplete="new-password" placeholder="••••••••"
+              class="w-full px-3 pr-10 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+            <button type="button" data-toggle-password="registerPassword" aria-label="Show password" aria-pressed="false"
+              class="password-toggle-btn absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+          </div>
           <p class="mt-1 text-[11px] text-slate-400">Use letters, numbers, and <code class="font-semibold">.,?!$</code>
             only.</p>
         </div>
@@ -840,11 +870,11 @@
 
         <form id="otpForm" class="space-y-4 pt-1">
           <div>
-            <label
+            <label for="otpCodeInput"
               class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 text-center">
               Enter Verification Code
             </label>
-            <input type="text" id="otpCodeInput" required maxlength="6" pattern="[0-9]{6}" inputmode="numeric"
+            <input type="text" id="otpCodeInput" required maxlength="6" pattern="[0-9]{6}" inputmode="numeric" autocomplete="one-time-code"
               placeholder="123456"
               class="w-full py-2.5 px-3 text-2xl tracking-[0.35em] font-extrabold text-center font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none transition" />
           </div>
@@ -870,13 +900,13 @@
   </div>
 
   <!-- Profile Modal -->
-  <div id="profileModal" role="dialog" aria-modal="true" aria-hidden="true"
-    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+  <div id="profileModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="profileModalTitle"
+    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 overscroll-contain">
     <div
-      class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+      class="bg-white dark:bg-slate-900 w-full max-w-lg max-h-[85vh] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl">
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <h3 id="profileModalTitle" class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <i data-lucide="user-cog" class="w-5 h-5 text-brand-600"></i>
             My Profile &amp; Saved Preferences
           </h3>
@@ -890,16 +920,16 @@
 
       <div id="profileAlert" class="hidden mx-6 mt-4 p-3 rounded-xl text-xs font-medium border"></div>
 
-      <form id="profileForm" class="p-6 space-y-4">
+      <form id="profileForm" novalidate class="p-6 space-y-4">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label
+            <label for="profUsernameInput"
               class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Username</label>
             <input type="text" id="profUsernameInput" required maxlength="50"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div>
-            <label
+            <label for="profLocationInput"
               class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
               Location <span class="font-normal normal-case text-slate-400">(Optional)</span></label>
             <input type="text" id="profLocationInput" placeholder="e.g. Compass One (or leave empty)"
@@ -908,38 +938,38 @@
         </div>
 
         <div class="grid grid-cols-3 gap-3">
-          <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max
-              Distance (km)</label>
-            <input type="number" id="profDistInput" min="0.01" step="any" placeholder="No limit (e.g. 1.5)"
+          <div class="flex flex-col justify-between">
+            <label for="profDistInput" class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max
+              Distance (km)<span class="block mt-0.5 font-medium normal-case text-slate-400">(0.01–50)</span></label>
+            <input type="number" id="profDistInput" min="0.01" max="50" step="any" placeholder="No limit (e.g. 1.5)"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
-          <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max
-              Time (Mins)</label>
-            <input type="number" id="profTimeInput" min="0.01" step="any" placeholder="No limit (e.g. 30)"
+          <div class="flex flex-col justify-between">
+            <label for="profTimeInput" class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max
+              Time (Mins)<span class="block mt-0.5 font-medium normal-case text-slate-400">(1–150)</span></label>
+            <input type="number" id="profTimeInput" min="1" max="150" step="any" placeholder="No limit (e.g. 30)"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
-          <div>
-            <label
+          <div class="flex flex-col justify-between">
+            <label for="profBudgetInput"
               class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Budget
-              (SGD)</label>
-            <input type="number" id="profBudgetInput" min="0.01" step="any" placeholder="No limit (e.g. 20)"
+              (SGD)<span class="block mt-0.5 font-medium normal-case text-slate-400">($1–$100+)</span></label>
+            <input type="text" id="profBudgetInput" inputmode="decimal" placeholder="No limit (e.g. 20)"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
         </div>
 
         <div>
-          <label
+          <span
             class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Default
-            Dietary Requirements</label>
+            Dietary Requirements</span>
           <div class="flex items-center gap-4">
-            <label
+            <label for="profHalalCheck"
               class="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
               <input type="checkbox" id="profHalalCheck" class="rounded text-emerald-600 focus:ring-emerald-500">
               <span>MUIS Halal</span>
             </label>
-            <label
+            <label for="profVegCheck"
               class="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
               <input type="checkbox" id="profVegCheck" class="rounded text-blue-600 focus:ring-blue-500">
               <span>Vegetarian</span>
@@ -949,14 +979,14 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label
+            <label for="profLikedInput"
               class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
               Preferred Cuisines</label>
             <input type="text" id="profLikedInput" placeholder="e.g. chinese, japanese"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div>
-            <label
+            <label for="profDislikedInput"
               class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
               Disliked Cuisines</label>
             <input type="text" id="profDislikedInput" placeholder="e.g. western, italian"
@@ -965,7 +995,7 @@
         </div>
 
         <div>
-          <label
+          <label for="profOtherInput"
             class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
             Special Wishes <span class="font-normal normal-case text-slate-400">(English,
               comma-separated)</span></label>
@@ -988,8 +1018,8 @@
   </div>
 
   <!-- Turn-by-Turn Route Modal -->
-  <div id="routeModal" role="dialog" aria-modal="true" aria-hidden="true"
-    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+  <div id="routeModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="routeModalTitle"
+    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 overscroll-contain">
     <div
       class="bg-white dark:bg-slate-900 w-full max-w-lg max-h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
@@ -1032,7 +1062,7 @@
         </div>
       </div>
 
-      <div id="routeStepsContainer" class="p-6 overflow-y-auto flex-1 space-y-2.5 text-xs"></div>
+      <div id="routeStepsContainer" class="p-6 overflow-y-auto overscroll-contain flex-1 space-y-2.5 text-xs"></div>
 
       <div
         class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between shrink-0">
@@ -1050,8 +1080,8 @@
   </div>
 
   <!-- Saved Favorites Modal -->
-  <div id="favoritesModal" role="dialog" aria-modal="true" aria-hidden="true"
-    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+  <div id="favoritesModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="favoritesModalTitle"
+    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 overscroll-contain">
     <div
       class="bg-white dark:bg-slate-900 w-full max-w-xl max-h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
@@ -1060,7 +1090,7 @@
             <i data-lucide="heart" class="w-4 h-4"></i>
           </div>
           <div>
-            <h3 class="text-base font-bold text-slate-900 dark:text-white">Saved Favorite Restaurants</h3>
+            <h3 id="favoritesModalTitle" class="text-base font-bold text-slate-900 dark:text-white">Saved Favorite Restaurants</h3>
             <p class="text-xs text-slate-500 dark:text-slate-400">Stored in MongoDB • Accessible anytime</p>
           </div>
         </div>
@@ -1069,7 +1099,7 @@
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
-      <div id="favoritesListContainer" class="p-6 overflow-y-auto flex-1 space-y-3 text-xs"></div>
+      <div id="favoritesListContainer" class="p-6 overflow-y-auto overscroll-contain flex-1 space-y-3 text-xs"></div>
       <div
         class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-end shrink-0">
         <button type="button" id="closeFavoritesFooterBtn"
@@ -1081,8 +1111,8 @@
   </div>
 
   <!-- Search History Modal -->
-  <div id="historyModal" role="dialog" aria-modal="true" aria-hidden="true"
-    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+  <div id="historyModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="historyModalTitle"
+    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 overscroll-contain">
     <div
       class="bg-white dark:bg-slate-900 w-full max-w-xl max-h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
@@ -1092,7 +1122,7 @@
             <i data-lucide="history" class="w-4 h-4"></i>
           </div>
           <div>
-            <h3 class="text-base font-bold text-slate-900 dark:text-white">Search History</h3>
+            <h3 id="historyModalTitle" class="text-base font-bold text-slate-900 dark:text-white">Search History</h3>
             <p class="text-xs text-slate-500 dark:text-slate-400">Past searches in MongoDB • One-click Re-Run</p>
           </div>
         </div>
@@ -1101,7 +1131,7 @@
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
-      <div id="historyListContainer" class="p-6 overflow-y-auto flex-1 space-y-3 text-xs"></div>
+      <div id="historyListContainer" class="p-6 overflow-y-auto overscroll-contain flex-1 space-y-3 text-xs"></div>
       <div
         class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between shrink-0">
         <button type="button" id="clearHistoryBtn"
@@ -1118,8 +1148,8 @@
   </div>
 
   <!-- Side-by-Side Comparison Modal -->
-  <div id="compareModal" role="dialog" aria-modal="true" aria-hidden="true"
-    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+  <div id="compareModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="compareModalTitle"
+    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 overscroll-contain">
     <div
       class="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
@@ -1128,7 +1158,7 @@
             <i data-lucide="columns-2" class="w-4 h-4"></i>
           </div>
           <div>
-            <h3 class="text-base font-bold text-slate-900 dark:text-white">Side-by-Side Restaurant Comparison</h3>
+            <h3 id="compareModalTitle" class="text-base font-bold text-slate-900 dark:text-white">Side-by-Side Restaurant Comparison</h3>
             <p class="text-xs text-slate-500 dark:text-slate-400">Compare ratings, travel time, price, MUIS Halal status
               &amp; match reasons</p>
           </div>
@@ -1138,7 +1168,7 @@
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
-      <div id="compareTableContainer" class="p-6 overflow-auto flex-1"></div>
+      <div id="compareTableContainer" class="p-6 overflow-auto overscroll-contain flex-1"></div>
       <div
         class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-end shrink-0">
         <button type="button" id="closeCompareFooterBtn"
@@ -1150,7 +1180,7 @@
   </div>
 
   <!-- Modular Application Entrypoint -->
-  <script type="module" src="/js/main.js"></script>
+  <script type="module" src="/js/main.js?v=20261114-9"></script>
 </body>
 
 </html>

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from BRNS import config
 from BRNS.classes.logic.logic_manager import LogicManager
+from BRNS.classes.logic.evaluation.budget_fit_policy import BudgetFitPolicy
 from BRNS.classes.logic.evaluation.restaurant_outcome_policy import RestaurantOutcomePolicy
 from BRNS.classes.logic.evaluation.opening_hours_service import OpeningHoursService
 from common import debug_log as log
@@ -58,6 +59,7 @@ def manager():
             has_hard_preferences,
             today_hours_from_weekly,
             RecommendationContext(sys.modules[__name__]),
+            confidence_rating=confidence_adjusted_rating,
         )
     return _MANAGER
 
@@ -182,12 +184,8 @@ def _grounded_ai_reasons(restaurant, request, codes, candidate_id=None):
     average = restaurant.get("avg_price")
     range_end = restaurant.get("price_end")
     range_start = restaurant.get("price_start")
-    average_within_budget = (
-        type(average) in (int, float) and 0 <= average <= budget)
-    range_within_budget = (
-        average is None and type(range_end) in (int, float)
-        and 0 <= range_end <= budget
-        and (range_start is None or 0 <= range_start <= range_end))
+    budget_kind, budget_reason = BudgetFitPolicy.evaluate_budget(restaurant, budget)
+    budget_within_limit = budget_kind == "reason"
     if request["max_travel_minutes"] is not None:
         travel_within_limit = (
             restaurant.get(f"{mode}_source") == "route"
@@ -208,8 +206,8 @@ def _grounded_ai_reasons(restaurant, request, codes, candidate_id=None):
             and request["cuisine"] in restaurant["cuisines"],
             "matches your selected cuisine"),
         "within_budget": (
-            average_within_budget or range_within_budget,
-            "average price is within your budget" if average_within_budget
+            budget_within_limit,
+            budget_reason if budget_within_limit
             else "listed price range is within your budget"),
         "within_route": (
             travel_within_limit, travel_reason),

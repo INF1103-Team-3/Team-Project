@@ -10,6 +10,7 @@ from sources.profile_schema import (
     CUISINES,
     OTHER_PREFERENCES,
     clean_text,
+    validate_english_preferences,
     validate_search_distance,
     validate_travel_minutes,
     validate_value,
@@ -81,8 +82,10 @@ class SearchRequestValidator(
             "budget_per_person", request["budget_per_person"])
         if budget is None:
             raise ValueError("Today's search needs a travel limit and budget.")
-        preferences = validate_value(
-            OTHER_PREFERENCES, request[OTHER_PREFERENCES])
+        preferences = validate_english_preferences(
+            validate_value(OTHER_PREFERENCES, request[OTHER_PREFERENCES]),
+            field_label="Special requests",
+        )
         return {
             "origin": {
                 "query": clean_text(origin["query"], 200),

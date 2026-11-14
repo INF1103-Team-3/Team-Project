@@ -24,7 +24,9 @@ class AIManager(BISAIManagerInterface):
         if config.get("ai_bypass"):
             raise RuntimeError("AI is disabled for local testing.")
         context = {
-            "current_profile": validate_preferences(record["preferences"]),
+            "current_profile": validate_preferences(
+                record["preferences"], clamp_legacy_limits=True
+            ),
             "current_field": record["field"],
             "user_message": clean_text(record["text"], 1000),
         }

@@ -4,8 +4,16 @@ from BRNS.classes.logic.contracts.brns_logic_manager_interface import (
     BRNSLogicManagerInterface,
 )
 from BRNS.classes.logic.sorting.recommendation_sorter import RecommendationSorter
+from BRNS.classes.logic.evaluation.budget_fit_policy import BudgetFitPolicy
 from BRNS.classes.logic.evaluation.restaurant_enricher import RestaurantEnricher
 from BIS.sources.profile_schema import CUISINES
+
+
+def _default_confidence_rating(rating, review_count):
+    if (type(rating) not in (int, float) or not 1 <= rating <= 5
+            or type(review_count) is not int or review_count < 0):
+        return None
+    return round((rating * review_count + 4 * 100) / (review_count + 100), 3)
 
 
 class LogicManager(BRNSLogicManagerInterface):
@@ -14,7 +22,8 @@ class LogicManager(BRNSLogicManagerInterface):
     def __init__(self, normalizer, outcome_decider, reason_grounder,
                  max_matches, max_alternatives, minimum_rating_reader,
                  hard_preference_reader, today_hours_reader, context_builder,
-                 recommendation_sorter=None, restaurant_enricher=None):
+                 recommendation_sorter=None, restaurant_enricher=None,
+                 confidence_rating=None):
         if not callable(minimum_rating_reader) or not callable(hard_preference_reader):
             raise TypeError("Rating and hard-preference readers must be callable.")
         self._enricher = restaurant_enricher or RestaurantEnricher()
@@ -28,6 +37,7 @@ class LogicManager(BRNSLogicManagerInterface):
         self._minimum_rating_reader = minimum_rating_reader
         self._hard_preference_reader = hard_preference_reader
         self._sorter = recommendation_sorter or RecommendationSorter()
+        self._confidence_rating = confidence_rating or _default_confidence_rating
 
     def enrich_place(self, place, saved_restaurants):
         return self._enricher.enrich(place, saved_restaurants)
@@ -136,7 +146,15 @@ class LogicManager(BRNSLogicManagerInterface):
                     excluded_reasons[reason] = (
                         excluded_reasons.get(reason, 0) + 1)
         if recommendations is None:
-            matches.sort(key=lambda item: item["score"], reverse=True)
+            matches.sort(
+                key=lambda item: (
+                    item["score"],
+                    BudgetFitPolicy.joint_rank_score(
+                        item["restaurant"], request, self._confidence_rating
+                    ),
+                ),
+                reverse=True,
+            )
         previous_keys = {
             (
                 str(item.get("name", "")).casefold().strip(),

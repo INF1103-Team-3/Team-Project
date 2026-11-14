@@ -1,5 +1,7 @@
 """Restaurant acceptance, alternatives, and scoring policy."""
 
+from BRNS.classes.logic.evaluation.budget_fit_policy import BudgetFitPolicy
+
 
 class RestaurantOutcomePolicy:
     """Evaluate all existing constraints using injected preference rules.
@@ -55,27 +57,13 @@ class RestaurantOutcomePolicy:
                 unverified.append("vegetarian options unverified")
 
         budget = request["budget_per_person"]
-        price = restaurant.get("avg_price")
-        minimum_price = restaurant.get("price_start")
-        maximum_price = restaurant.get("price_end")
-        if price is not None:
-            if price > budget:
-                (advisories if hard_preferences else problems).append(
-                    f"average price SGD {price:g} exceeds your SGD {budget:g} budget")
-            else:
-                reasons.append("average price is within your budget")
-        elif minimum_price is not None and minimum_price > budget:
-            (advisories if hard_preferences else problems).append(
-                f"prices start at SGD {minimum_price:g}, over your budget")
-        elif (maximum_price is not None and maximum_price <= budget
-              and (minimum_price is None or minimum_price <= maximum_price)):
-            reasons.append("listed price range is within your budget")
-        elif minimum_price is not None:
-            (advisories if hard_preferences else unverified).append(
-                "some prices may fit; full budget unverified")
+        budget_kind, budget_reason = BudgetFitPolicy.evaluate_budget(restaurant, budget)
+        if budget_kind == "reason":
+            reasons.append(budget_reason)
+        elif budget_kind == "problem":
+            (advisories if hard_preferences else problems).append(budget_reason)
         else:
-            (advisories if hard_preferences else unverified).append(
-                "price unavailable")
+            (advisories if hard_preferences else unverified).append(budget_reason)
 
         rating_floor = self._rules.minimum_rating(request["other_preferences"])
         if rating_floor is not None:

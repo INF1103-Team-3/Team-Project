@@ -23,6 +23,11 @@ NUMBER_LIMITS = {
     "max_travel_time_minutes": (0.1, 2000),
     "budget_per_person": (0.01, 1000),
 }
+PROFILE_NUMBER_LIMITS = {
+    "max_distance_km": (0.01, 50.0),
+    "max_travel_time_minutes": (1.0, 150.0),
+    "budget_per_person": (0.01, 1000.0),
+}
 SEARCH_MODE_LIMITS = {
     "walk": {"max_distance_km": (0.01, 15.0), "max_travel_minutes": (1.0, 90.0)},
     "drive": {"max_distance_km": (0.01, 50.0), "max_travel_minutes": (1.0, 120.0)},
@@ -31,6 +36,15 @@ SEARCH_MODE_LIMITS = {
 MINUTES_PER_KM = 20
 TRANSIT_MINUTES_RANGE = (1, 150)
 _COORDINATE_TEXT = re.compile(r"^\s*[+-]?\d+(?:\.\d+)?\s*,\s*[+-]?\d+(?:\.\d+)?\s*$")
+_WISH_ALLOWED_TEXT = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()+\-]*")
+_WISH_ACRONYMS = {
+    "bbq", "byob", "msg", "cbd", "mrt", "hrs", "gym", "nth", "sgd", "ac", "tv", "vip", "wfh",
+}
+_WISH_KEYBOARD_MASH = (
+    "asdf", "sdfg", "dfgh", "fghj", "ghjk", "hjkl",
+    "qwer", "wert", "erty", "tyui", "uiop",
+    "zxcv", "xcvb", "cvbn", "vbnm",
+)
 EMAIL_PATTERN = re.compile(
     r"^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@"
     r"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+"
@@ -96,7 +110,40 @@ def normalize_list(value, choices=None, required=False, allow_coordinates=False)
     return result
 
 
-def validate_value(field, value, profile_mode=False, allow_empty_location=False):
+def validate_english_preferences(items, field_label="Special requests"):
+    """Require proper meaningful English text for special wishes or requests."""
+    for item in items:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        if len(text) > 100 or not _WISH_ALLOWED_TEXT.fullmatch(text):
+            raise ValueError(
+                f"{field_label} must use proper English letters and words "
+                "(e.g. quiet seating, spicy food)."
+            )
+        words = re.findall(r"[A-Za-z]+", text)
+        if not words or not any(len(word) > 1 for word in words):
+            raise ValueError(
+                f"{field_label} must contain meaningful English words "
+                "(e.g. quiet seating, spicy food)."
+            )
+        for word in words:
+            low = word.lower()
+            if (
+                re.search(r"(.)\1\1", low)
+                or any(seq in low for seq in _WISH_KEYBOARD_MASH)
+                or (len(low) >= 3 and low not in _WISH_ACRONYMS and not any(ch in "aeiouy" for ch in low))
+                or re.search(r"[bcdfghjklmnpqrstvwxz]{6,}", low)
+            ):
+                raise ValueError(
+                    f"{field_label} must contain proper English words, "
+                    f"not '{word}'."
+                )
+    return items
+
+
+def validate_value(field, value, profile_mode=False, allow_empty_location=False,
+                   clamp_legacy_limits=False):
     """Validate the exact agreed field type, returning normalized values."""
     if field not in PREFERENCE_FIELDS:
         raise ValueError(f"Unsupported preference field: {field}.")
@@ -108,8 +155,16 @@ def validate_value(field, value, profile_mode=False, allow_empty_location=False)
         if not math.isfinite(value):
             raise ValueError(f"{field} must be a finite number.")
         if profile_mode:
-            if value <= 0:
-                raise ValueError(f"{field} must be greater than 0.")
+            minimum, maximum = PROFILE_NUMBER_LIMITS[field]
+            if clamp_legacy_limits:
+                legacy_min = NUMBER_LIMITS[field][0]
+                if value < legacy_min:
+                    raise ValueError(
+                        f"{field} must be between {minimum:g} and {maximum:g}.")
+                return round(max(minimum, min(maximum, float(value))), 2)
+            if not minimum <= value <= maximum:
+                raise ValueError(
+                    f"{field} must be between {minimum:g} and {maximum:g}.")
             return round(float(value), 2)
         minimum, maximum = NUMBER_LIMITS[field]
         if not minimum <= value <= maximum:
@@ -163,14 +218,17 @@ def validate_updates(updates, profile_mode=False, allow_empty_location=False):
     return normalized
 
 
-def validate_preferences(preferences):
+def validate_preferences(preferences, clamp_legacy_limits=False):
     """Validate a full persisted preference record without adding fields."""
     if not isinstance(preferences, dict) or set(preferences) != set(
         PREFERENCE_FIELDS
     ):
         raise ValueError("Saved profile does not match the current BIS schema.")
     result = {
-        key: validate_value(key, value, profile_mode=True, allow_empty_location=True)
+        key: validate_value(
+            key, value, profile_mode=True, allow_empty_location=True,
+            clamp_legacy_limits=clamp_legacy_limits,
+        )
         for key, value in preferences.items()
     }
     overlap = set(result["liked_cuisines"] or []) & set(
@@ -181,7 +239,7 @@ def validate_preferences(preferences):
     return result
 
 
-def validate_user(user):
+def validate_user(user, clamp_legacy_limits=False):
     """Require the exact account and preference schema."""
     if not isinstance(user, dict) or set(user) != USER_FIELDS:
         raise ValueError("Saved account does not match the current BIS schema.")
@@ -195,7 +253,9 @@ def validate_user(user):
         "email_verified": user["email_verified"],
         "username": (normalize_username(user["username"])
                      if user["username"] is not None else None),
-        "preferences": validate_preferences(user["preferences"]),
+        "preferences": validate_preferences(
+            user["preferences"], clamp_legacy_limits=clamp_legacy_limits
+        ),
     }
 
 

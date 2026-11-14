@@ -41,7 +41,7 @@ class JsonUserStore(BaseUserStore, BaseJsonStore, UserStoreInterface, RecordStor
                     "Invalid user record in data/users.json; saved data was "
                     "retained. Restore a valid copy before writing."
                 )
-            users[user_id] = validate_user(user)
+            users[user_id] = validate_user(user, clamp_legacy_limits=True)
             email = users[user_id]["email"]
             if email in emails:
                 raise ValueError(

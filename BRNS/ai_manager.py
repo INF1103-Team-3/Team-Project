@@ -450,7 +450,8 @@ REASON_CODES = {
 }
 
 RECOMMEND_SYSTEM_PROMPT = """Rank every supplied restaurant candidate for the
-validated search request. Return only JSON in this exact shape:
+validated search request using Pure Best-Fit Within Limit ranking. Return only
+JSON in this exact shape:
 {"recommendations":[{"id":0,"reason_codes":["cuisine_match"]}]}.
 Include every candidate ID exactly once, most suitable first. Use only these
 reason codes when supported by the supplied facts: cuisine_match,
@@ -467,16 +468,26 @@ and travel because those two limits are relaxed by Logic.
 minimum_rating is a hard minimum Google star rating extracted from the user's
 other preferences. Put candidates below it or without a rating after those
 that meet it. The next layer will enforce the minimum.
-For candidates that satisfy the hard requirements, weigh Google review count
-alongside the star rating. Use confidence_adjusted_rating to compare rating
-quality: it shrinks ratings with few reviews toward 4/5 using 100 prior
-reviews. For example, 4.3 stars from 1,920 reviews is stronger evidence than
-4.5 stars from 75 reviews. Prefer the former when their other facts are similar
-and no minimum excludes it. A missing review count provides weak evidence.
+For candidates that satisfy hard requirements and the travel limit (anywhere
+inside 0..max limit regardless of 5 mins vs 25 mins), jointly optimize budget
+fit (`budget_fit_score`, `estimated_price`, `price_end`, `price_level`) AND
+rating quality (`confidence_adjusted_rating`):
+- budget_fit_score (0.0-1.0) measures how well estimated_price fits the user's
+  exact budget intent: e.g. for SGD 50 (Casual Dining), favor ~SGD 30-50 sit-down
+  spots over SGD 8 hawker stalls; for SGD >100 ($100+ Fine Dine), strongly favor
+  expensive/very_expensive ($80+) venues over cheap cafes; for <= SGD 15, favor
+  inexpensive budget spots.
+- Weigh review count alongside star rating via confidence_adjusted_rating (e.g.,
+  4.3 stars from 1,920 reviews beats 4.5 stars from 75 reviews). A missing
+  review count provides weak evidence.
+- Use shorter travel time/distance ONLY as a gentle tie-breaker when budget fit
+  and confidence_adjusted_rating are nearly tied.
 When previous_restaurants is supplied, prefer suitable candidates not named
 there over similarly suitable candidates already returned. Include every ID.
-Use within_budget only when avg_price is a number no greater than the user's
-budget. price_start alone does not prove a meal fits the budget.
+Use within_budget when avg_price <= budget_per_person, price_end <= budget,
+or estimated_price (from price range midpoint or price_level tier) aligns with
+budget_per_person (including SGD >100 fine-dining tier). price_start alone
+without price_end or price_level does not prove a meal fits the budget.
 Use vegetarian_options only when vegetarian is requested and listed in the
 candidate dietary_requirements. Use halal_hint_unofficial only when halal is
 requested and the candidate has halal_hint_unofficial true.

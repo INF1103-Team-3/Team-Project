@@ -26,7 +26,7 @@ class JsonMongoMigration:
                 raise ValueError("Users input must be a BIS registry object.")
             emails = set()
             for user_id, raw in value.items():
-                user = validate_user(raw)
+                user = validate_user(raw, clamp_legacy_limits=True)
                 if user_id != user["userID"] or user["email"] in emails:
                     raise ValueError("Users input contains conflicting identities.")
                 emails.add(user["email"])

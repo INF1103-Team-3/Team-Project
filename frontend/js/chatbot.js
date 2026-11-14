@@ -4,13 +4,18 @@ import {
   getSingaporeDate,
   refreshIcons,
   state,
-} from './state.js';
-import { apiJson } from './api.js';
-import { authHeaders } from './state.js';
-import { collectCurrentFormPayload, applyFiltersToSearchForm, applyUserToSearchForm } from './filters.js';
-import { getRatingValue, getTravelMinutes, getPriceValue } from './results.js';
-import { flyToMarkerForItem } from './map.js';
-import { showToast } from './toast.js';
+} from './state.js?v=20261114-9';
+import { apiJson } from './api.js?v=20261114-9';
+import { authHeaders } from './state.js?v=20261114-9';
+import {
+  applyFiltersToSearchForm,
+  applyUserToSearchForm,
+  collectCurrentFormPayload,
+  isBudgetPlusDisplay,
+} from './filters.js?v=20261114-9';
+import { getPriceValue, getRatingValue, getTravelMinutes, resetResultsDisplay } from './results.js?v=20261114-9';
+import { flyToMarkerForItem } from './map.js?v=20261114-9';
+import { showToast } from './toast.js?v=20261114-9';
 
 let authCallbacks = {
   onProfileSaved: () => {},
@@ -88,17 +93,30 @@ export function renderChatFilterSummary() {
 
   const modeIcon = p.mode === 'drive' ? '🚗 Drive' : (p.mode === 'transit' ? '🚆 Transit' : '🚶 Walk');
   if (p.max_distance_km != null) {
-    pills.push({ text: `${modeIcon} · ${p.max_distance_km}km`, missing: false });
+    pills.push({ text: `${modeIcon} · ${p.max_distance_km} km`, missing: false });
   } else if (p.max_travel_minutes != null) {
-    pills.push({ text: `${modeIcon} · ${Math.round(p.max_travel_minutes)}m`, missing: false });
+    pills.push({ text: `${modeIcon} · ${Math.round(p.max_travel_minutes)} mins`, missing: false });
   } else {
     pills.push({ text: '🚶 Travel not set', missing: true });
   }
 
   if (p.budget_per_person != null) {
-    pills.push({ text: `💰 $${Math.round(p.budget_per_person)}`, missing: false });
+    const roundedBud = Math.round(p.budget_per_person * 100) / 100;
+    const budLabel = isBudgetPlusDisplay(roundedBud, true) ? '$100+' : `$${roundedBud}`;
+    pills.push({ text: `💰 ${budLabel}`, missing: false });
   } else {
     pills.push({ text: '💰 Budget not set', missing: true });
+  }
+
+  if (
+    !state.onboardingActive
+    && (
+      (state.awaitingChatField === 'location' && hasLoc)
+      || (state.awaitingChatField === 'budget_per_person' && p.budget_per_person != null)
+      || (state.awaitingChatField === 'travel' && (p.max_distance_km != null || p.max_travel_minutes != null))
+    )
+  ) {
+    state.awaitingChatField = null;
   }
 
   (p.dietary_requirements || []).forEach((d) => {
@@ -238,7 +256,9 @@ export function buildGreetingState() {
     const locs = Array.isArray(prefs.location) && prefs.location.length
       ? prefs.location.join(' + ')
       : 'Singapore';
-    const budget = prefs.budget_per_person ? `SGD $${prefs.budget_per_person}` : 'Budget not set';
+    const budget = prefs.budget_per_person != null
+      ? (Number(prefs.budget_per_person) > 100 ? 'SGD $100+' : `SGD $${prefs.budget_per_person}`)
+      : 'Budget not set';
     return {
       text: `${timeGreeting}, ${prefs.username}! Your saved defaults (${locs}, ${budget}) are loaded. Ready for ${mealPrompt.toLowerCase()}? Tell me what you're craving and I'll double-check before searching.`,
       quickReplies: [
@@ -268,6 +288,7 @@ export function resetChatThread(resetFilters = false) {
   updateOnboardingProgressUI(null);
 
   if (resetFilters) {
+    resetResultsDisplay();
     if (state.currentUser) {
       applyUserToSearchForm(state.currentUser);
     } else {
@@ -338,7 +359,20 @@ export async function startOnboardingInChat() {
       state.onboardingActive = false;
     }
     updateOnboardingProgressUI(data.onboarding_step, data.onboarding_total);
-    if (data.filters) applyFiltersToSearchForm(data.filters);
+    if (data.action === 'reset' && state.currentUser && data.filters) {
+      applyFiltersToSearchForm({
+        ...data.filters,
+        max_distance_km: state.currentUser.max_distance_km ?? data.filters.max_distance_km ?? null,
+        max_travel_minutes: state.currentUser.max_travel_time_minutes ?? data.filters.max_travel_minutes ?? null,
+      });
+    } else if (data.filters) {
+      const hasTravelChange = (data.changes || []).some((c) => /km|\d+\s*(?:mins?|m)\b|Walk|Drive|Transit/i.test(String(c)));
+      const hasBudgetChange = (data.changes || []).some((c) => /budget|SGD\s*\$|\$\s*\d/i.test(String(c)));
+      applyFiltersToSearchForm(data.filters, {
+        preserveBudgetPlus: state.isBudgetPlus && !hasBudgetChange,
+        preserveInactiveTravel: !hasTravelChange,
+      });
+    }
     appendChatBubble('assistant', data.reply, {
       quickReplies: data.quick_replies || [],
       isConfirm: data.action === 'confirm',
@@ -378,7 +412,7 @@ export function postChatSearchOutcome({ matches = [], alternatives = [], modelUs
     const price = getPriceValue(r);
     const parts = [];
     if (rating) parts.push(`${rating.toFixed(1)}★`);
-    if (mins !== null) parts.push(`${Math.round(mins)}m`);
+    if (mins !== null) parts.push(`${Math.round(mins)} mins`);
     if (price !== null) parts.push(`~$${Math.round(price)}`);
     if (r.halal_certification === 'official') parts.push('MUIS Halal');
     picks.push({
@@ -440,8 +474,19 @@ export async function submitChatMessage(rawText) {
       data.onboarding_total,
     );
 
-    if (data.filters) {
-      applyFiltersToSearchForm(data.filters);
+    if (data.action === 'reset' && state.currentUser && data.filters) {
+      applyFiltersToSearchForm({
+        ...data.filters,
+        max_distance_km: state.currentUser.max_distance_km ?? data.filters.max_distance_km ?? null,
+        max_travel_minutes: state.currentUser.max_travel_time_minutes ?? data.filters.max_travel_minutes ?? null,
+      });
+    } else if (data.filters) {
+      const hasTravelChange = (data.changes || []).some((c) => /km|\d+\s*(?:mins?|m)\b|Walk|Drive|Transit/i.test(String(c)));
+      const hasBudgetChange = (data.changes || []).some((c) => /budget|SGD\s*\$|\$\s*\d/i.test(String(c)));
+      applyFiltersToSearchForm(data.filters, {
+        preserveBudgetPlus: state.isBudgetPlus && !hasBudgetChange,
+        preserveInactiveTravel: !hasTravelChange,
+      });
     }
 
     const shouldRunSearch = data.action === 'search';
