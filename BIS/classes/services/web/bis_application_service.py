@@ -101,7 +101,7 @@ class BISApplicationService:
             )
         return self._data.save(updated)
 
-    def _resolve_origins(self, raw_locations):
+    def __resolve_origins(self, raw_locations):
         api_key = self._config.get("google_maps_api_key")
         if self._locations is None:
             raise RuntimeError("Location lookup is not configured.")
@@ -110,7 +110,7 @@ class BISApplicationService:
         ]
         return self._logic.compute_midpoint_origin(resolved), resolved
 
-    def _build_validated_request(self, payload, origin, cuisine_target):
+    def __build_validated_request(self, payload, origin, cuisine_target):
         request = self._logic.build_base_search_request(
             payload, origin, cuisine_target
         )
@@ -130,7 +130,7 @@ class BISApplicationService:
         msg = str(exc).lower()
         return "no restaurants found" in msg or "no confirmed open" in msg
 
-    def _run_search(
+    def __run_search(
         self,
         owner,
         payload,
@@ -143,7 +143,7 @@ class BISApplicationService:
         try:
             if len(selected_cuisines) <= 1:
                 single_c = selected_cuisines[0] if selected_cuisines else None
-                request = first_request or self._build_validated_request(
+                request = first_request or self.__build_validated_request(
                     payload, origin, single_c
                 )
                 results = self._brns.search(
@@ -167,7 +167,7 @@ class BISApplicationService:
                 last_empty_error = None
                 base_request = None
                 for c_target in selected_cuisines:
-                    sub_request = self._build_validated_request(
+                    sub_request = self.__build_validated_request(
                         payload, origin, c_target
                     )
                     if base_request is None:
@@ -275,7 +275,7 @@ class BISApplicationService:
                     else []
                 )
             )
-            return self._run_search(
+            return self.__run_search(
                 owner,
                 payload,
                 request["origin"],
@@ -285,7 +285,7 @@ class BISApplicationService:
             )
 
         raw_locations = self._logic.collect_search_locations(payload)
-        origin, resolved_origins = self._resolve_origins(raw_locations)
+        origin, resolved_origins = self.__resolve_origins(raw_locations)
         selected_cuisines = self._logic.collect_search_cuisines(payload)
         normalized_wishes = validate_special_preferences(
             payload.get("other_preferences"),
@@ -300,7 +300,7 @@ class BISApplicationService:
             single_c = (
                 selected_cuisines[0] if len(selected_cuisines) == 1 else None
             )
-            request = self._build_validated_request(payload, origin, single_c)
+            request = self.__build_validated_request(payload, origin, single_c)
             proposal_token = self._data.create_search_proposal(
                 owner,
                 {
@@ -316,7 +316,7 @@ class BISApplicationService:
                 "confirmation_token": proposal_token,
             }
 
-        return self._run_search(
+        return self.__run_search(
             owner, payload, origin, resolved_origins, selected_cuisines
         )
 

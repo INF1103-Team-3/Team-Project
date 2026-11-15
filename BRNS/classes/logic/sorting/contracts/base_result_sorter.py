@@ -10,11 +10,11 @@ class BaseResultSorter(ABC):
         mode = results.get("mode")
         sorted_results = dict(results)
         sorted_results["matches"] = sorted(
-            results.get("matches", []), key=lambda item: self.key(item, mode)
+            results.get("matches", []), key=lambda item: self._key(item, mode)
         )
         sorted_results["alternatives"] = sorted(
             results.get("alternatives", []),
-            key=lambda item: self.key(item, mode),
+            key=lambda item: self._key(item, mode),
         )
         return sorted_results
 
@@ -35,5 +35,5 @@ class BaseResultSorter(ABC):
         return rating, reviews, distance, name
 
     @abstractmethod
-    def key(self, item, mode):
+    def _key(self, item, mode):
         """Return the strategy-specific stable sort key."""
