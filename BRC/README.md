@@ -28,10 +28,10 @@ checks. Request trace headers connect BRC work to upstream search logs.
 | `classes/io/console/` | Terminal input, JSON validation, progress and output |
 | `classes/io/http/` | Independent HTTP server/handler and client adapter |
 | `classes/io/scraping/`, `io/geocoding/` | MUIS collection, postal crawling and OneMap/no-geocoder implementations |
-| `classes/ai/` | Prompt/schema handling, optional cuisine and outlet workflows, provider clients/fallback and errors |
+| `classes/ai/` | Prompt/schema handling, provider clients/fallback and AI errors |
 | `classes/logic/` | Outlet identity, active certificates, deduplication and verification decisions |
 | `classes/data/` | JSON persistence, caches and restaurant/MUIS models |
-| `classes/services/` | `BRCApplication`, workflow template and concrete build/check jobs, internal CLI |
+| `classes/services/` | `BRCApplication`, build/check jobs, cuisine/outlet workflow coordination and internal CLI |
 | Root manager modules, `main.py`, `models.py`, `scraper.py` | Existing interfaces, re-exports and bootstrap compatibility |
 
 `BaseBRCWorkflow` provides a shared job template; build and check workflows

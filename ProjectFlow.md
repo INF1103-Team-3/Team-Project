@@ -230,7 +230,7 @@ single log volume shared by all containers.
 | Invalid/expired/used search token | Reject and require a new proposal |
 | BRC unavailable | Summarize failure; retain only clearly labelled available evidence |
 | MongoDB unavailable | Explicit unavailable error, without automatic switch to JSON |
-| Missing/corrupt JSON | Store-specific handling; BIS protects invalid account files, BRNS can return empty collections |
+| Missing/corrupt JSON | BIS user loads return an empty collection plus `last_error` on failure; BRNS read-only queries can return empty collections, but saving refuses to overwrite corrupt files and uses atomic replacement |
 | SMTP unavailable with bypass disabled | Report delivery failure; no successful email proof is invented |
 
 See subsystem READMEs for implementation paths and the [test guide](tests/README.md)

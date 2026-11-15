@@ -195,6 +195,15 @@ the search origin rather than treating saved durations as live routes.
 
 ### JSON mode, synchronization, and migration
 
+User-store bulk loads use the same JSON/Mongo contract: malformed records or
+unavailable reads produce an empty list and a nonempty `last_error`, rather than
+silently indicating a healthy empty database. Direct lookups and writes still
+raise validation/backend errors. BRNS JSON saves distinguish missing files from
+corrupt files, retain corrupt originals and atomically replace completed writes.
+Live location resolution is an IO gateway injected into BIS application workflows,
+not a Data Manager operation. Profile authorization is owned by Logic.
+
+
 The interactive CLI sets Mongo mode by default unless `BITEFINDER_STORAGE` is
 already set. Selecting `json` explicitly uses `BIS/data/users.json`,
 `profile_state.json`, `credentials.json`, configured BRNS restaurant/history

@@ -90,6 +90,11 @@ Production BIS, BRNS, and BRC classes live one per module inside functional
 subpackages (`io/`, `ai/`, `logic/`, `data/`, `services/`) under
 `BIS/classes/`, `BRNS/classes/`, and `BRC/classes/`.
 
+The SOLID cleanup keeps these four roles and separates chat policy/presentation,
+Google discovery planning/transport, profile authorization and BRC job workflows.
+See [the migration and verification record](project_overview/SOLID_REFACTOR.md)
+for class ownership, deliberate persistence fixes and test evidence.
+
 ## Detailed documentation
 
 Each major project folder has its own README with its responsibilities,

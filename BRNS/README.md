@@ -31,13 +31,14 @@ start [BIS](../BIS/README.md) through `python main.py`.
 | Area | Responsibility |
 | --- | --- |
 | `io_manager.py`, `classes/io/adapters/` | BIS request validation, presentation and external gateway delegation |
-| `classes/io/gateways/google/` | Candidate retrieval and route gateway operations |
+| `classes/io/gateways/google/` | Google Places/geocoding transport, photo and route gateway operations |
 | `classes/io/gateways/verification/` | Focused BRC adapter and verification capability |
 | `ai_manager.py`, `classes/ai/` | Ranking prompts, parsing/schema checks, provider objects and fallback routing |
 | `logic_manager.py`, `classes/logic/evaluation/` | Candidate normalization, opening hours, factual grounding, outcome and enrichment policy |
+| `classes/logic/discovery/` | Search plans, conditional fallbacks, open/rating selection and spatial quotas |
 | `classes/logic/sorting/` | Rating/distance strategies and registry |
 | `data_manager.py`, `classes/data/` | Restaurant/history repositories, record mapping and request-local history scope |
-| `classes/services/workflows/` | Recommendation pipeline, halal coordination and navigation |
+| `classes/services/workflows/` | Candidate search orchestration, recommendation pipeline, halal coordination and navigation |
 | `classes/services/gateway/` | Headless subsystem contract and service |
 | `classes/services/cli/`, `main.py` | Internal CLI and compatibility/bootstrap paths |
 
@@ -136,7 +137,9 @@ Configuration is in `config.py` and the root environment: `BITEFINDER_STORAGE`,
 `BRC_SERVICE_URL` and endpoint overrides. See [root setup](../README.md).
 
 Required provider/schema failures stop recommendation. BRNS JSON stores can
-return empty collections for missing/corrupt files; Mongo failures raise explicit
+return empty collections for missing/corrupt read-only queries, but saves refuse to
+overwrite unreadable or wrongly shaped existing files. Writes use atomic
+replacement. Mongo failures raise explicit
 unavailable errors. Web BIS can translate recognized no-open-restaurant errors
 into empty results with a message. Those policies are distinct from successful
 AI ranking.
