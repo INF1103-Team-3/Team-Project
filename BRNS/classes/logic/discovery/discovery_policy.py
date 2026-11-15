@@ -32,22 +32,12 @@ class DiscoveryPolicy:
         self._log = logger
         self._error = error_reporter
 
-    def strip_rating_terms(self, text):
-        """Strip rating filters and leftover connector words from free text."""
-        normalized = self._rules._normalize_rating_spacing(text)
-        stripped = self._rules._RATING_FLOOR.sub("", normalized)
-        stripped = self._rules._ANY_RATING.sub("", stripped).strip()
-        stripped = re.sub(
-            "\\b(?:and|with)\\b", " ", stripped, flags=re.IGNORECASE
-        )
-        return re.sub("^[,\\s&/]+|[,\\s&/]+$", "", stripped).strip()
-
     def clean_free_text_query(self, preferences):
         """Exclude rating patterns from Places search text."""
         cleaned = [
             part
             for pref in preferences
-            for part in [self.strip_rating_terms(pref)]
+            for part in [self._rules.strip_rating_terms(pref)]
             if part
         ]
         return " ".join(cleaned)
@@ -79,7 +69,7 @@ class DiscoveryPolicy:
         """
         cuisine = (req.get("cuisine") or "").strip()
         dietary = req.get("dietary_requirements") or []
-        free_text = self.strip_rating_terms(
+        free_text = self._rules.strip_rating_terms(
             req.get("free_text") or ""
         ).lower()[:200]
         terms = list(dietary)

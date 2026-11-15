@@ -92,6 +92,15 @@ def manager():
     return _MANAGER
 
 
+def strip_rating_terms(text):
+    """Remove rating wording for discovery without exposing regex internals."""
+    normalized = _normalize_rating_spacing(text)
+    stripped = _RATING_FLOOR.sub("", normalized)
+    stripped = _ANY_RATING.sub("", stripped).strip()
+    stripped = re.sub(r"\b(?:and|with)\b", " ", stripped, flags=re.IGNORECASE)
+    return re.sub(r"^[,\s&/]+|[,\s&/]+$", "", stripped).strip()
+
+
 def minimum_rating(preferences):
     """Read Google star floors (explicit or standalone) from today's wishes."""
     ratings = []
@@ -398,26 +407,6 @@ _OPENING_HOURS = OpeningHoursService()
 SINGAPORE = _OPENING_HOURS.SINGAPORE
 DAYS = _OPENING_HOURS.DAYS
 WEEK_MINUTES = _OPENING_HOURS.WEEK_MINUTES
-
-
-def _minute(point):
-    return _OPENING_HOURS._minute(point)
-
-
-def _intervals(hours):
-    return _OPENING_HOURS._intervals(hours)
-
-
-def _local_now(now=None):
-    return _OPENING_HOURS._local_now(now)
-
-
-def _today_index(now):
-    return _OPENING_HOURS._today_index(now)
-
-
-def _fmt(minute):
-    return _OPENING_HOURS._fmt(minute)
 
 
 def open_now_from_weekly(hours, now=None):

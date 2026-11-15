@@ -190,7 +190,7 @@ class LogicManager(BISLogicManagerInterface):
 
     @staticmethod
     def clarification_message(error):
-        return str(error)[len(SEARCH_CLARIFICATION_PREFIX) :]
+        return str(error)[len(SEARCH_CLARIFICATION_PREFIX):]
 
     @staticmethod
     def in_singapore(latitude, longitude):
