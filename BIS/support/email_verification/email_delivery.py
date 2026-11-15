@@ -21,8 +21,3 @@ def send_maps_link_email(email, restaurant_name, link, config):
     return _email_delivery.send_maps_link_email(
         email, restaurant_name, link, config
     )
-
-
-def _send_message(message, config, kind):
-    """Deliver an SMTP message without logging its contents or credentials."""
-    return _email_delivery._send_message(message, config, kind)

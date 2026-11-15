@@ -437,7 +437,7 @@ class OOPRefactorTests(unittest.TestCase):
         ui = SimpleNamespace(section=Mock(), item=Mock())
         io = SimpleNamespace(
             read_input=lambda *_a: "quiet seating",
-            _cancelled=lambda _v: False,
+            is_cancelled=lambda _v: False,
             display_message=Mock(),
             ask_yes_no=Mock(),
         )
@@ -465,7 +465,7 @@ class OOPRefactorTests(unittest.TestCase):
 
         io = SimpleNamespace(
             read_input=lambda *_a: "4.5 stars",
-            _cancelled=lambda _v: False,
+            is_cancelled=lambda _v: False,
             display_message=Mock(),
             ask_yes_no=Mock(return_value=True),
         )
@@ -2149,7 +2149,7 @@ class OOPRefactorTests(unittest.TestCase):
                     "open_now": True,
                 }
             )
-        sampled = brns_io._select_zone_places(
+        sampled = brns_io.discovery_policy().select_zone_places(
             many_places, origin, 10000.0, limit=20
         )
         self.assertEqual(len(sampled), 20)
@@ -2204,9 +2204,11 @@ class OOPRefactorTests(unittest.TestCase):
             "disliked_cuisines": [],
             "free_text": "",
         }
-        self.assertEqual(brns_io._search_radius(req_strict), 1800)
         self.assertEqual(
-            brns_io._clean_free_text_query(
+            brns_io.discovery_policy().search_radius(req_strict), 1800
+        )
+        self.assertEqual(
+            brns_io.discovery_policy().clean_free_text_query(
                 ["minimum 4 .5 stars", "spicy food"]
             ),
             "spicy food",
@@ -2377,7 +2379,7 @@ class OOPRefactorTests(unittest.TestCase):
                     "open_now": True,
                 }
             )
-        prioritized = brns_io._select_zone_places(
+        prioritized = brns_io.discovery_policy().select_zone_places(
             mixed_pool, origin, 2000.0, limit=12, min_rating=4.5
         )
         self.assertEqual(len(prioritized), 12)

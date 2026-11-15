@@ -4,12 +4,24 @@
 class CandidateSearch:
     """Assemble candidates without owning storage or preference policies."""
 
-    def __init__(self, data, logic, gateway, logger, config=None):
+    def __init__(
+        self,
+        data,
+        logic,
+        gateway,
+        logger,
+        config=None,
+        places_gateway=None,
+        route_gateway=None,
+        policy=None,
+    ):
         self._config = config or gateway.config
         self._rules = gateway.logic_manager
-        self._policy = gateway.discovery_policy()
+        self._policy = policy or gateway.discovery_policy()
+        self._places = places_gateway or gateway.places_gateway()
+        self._routes = route_gateway or gateway.route_gateway()
         self._data = data
-        self._logic = logic
+        self._logic = logic or gateway.logic_manager.manager()
         self._helpers = gateway
         self._log = logger
 
@@ -27,9 +39,7 @@ class CandidateSearch:
             "DEBUG",
             "BRNS.io_manager.find_candidates",
         )
-        candidates = self._helpers.build_candidates(
-            origin, lookup, saved_restaurants
-        )
+        candidates = self.build(origin, lookup, saved_restaurants)
         self._log.debug_log(
             f"Candidate builder returned {len(candidates)} records.",
             "DEBUG",
@@ -52,7 +62,7 @@ class CandidateSearch:
         )
         places = []
         if self._policy.use_profile_search(req):
-            places = self._helpers.fetch_by_profile_text(origin, req)
+            places = self.fetch_profile(origin, req)
             if places and (
                 not any(
                     (
@@ -77,30 +87,30 @@ class CandidateSearch:
                 "INFO",
                 "BRNS.io_manager.build_candidates",
             )
-            places = self._helpers.fetch_nearby_restaurants(origin, req)
-            radius_m = float(min(self._helpers._search_radius(req), 50000))
+            places = self._places.fetch_nearby_restaurants(origin, req)
+            radius_m = float(min(self._policy.search_radius(req), 50000))
             if self._policy.open_backfill_needed(places, origin, radius_m):
-                places = self._helpers._merge_unique_places(
-                    places, self._helpers.fetch_open_places(origin, req)
+                places = self._policy.merge_unique_places(
+                    places, self.fetch_open(origin, req)
                 )
         if not places:
             return []
-        radius_m = float(min(self._helpers._search_radius(req), 50000))
-        sampled = self._helpers._select_zone_places(
+        radius_m = float(min(self._policy.search_radius(req), 50000))
+        sampled = self._policy.select_zone_places(
             places, origin, radius_m, limit=20, min_rating=min_rating
         )
         candidates = []
         for p in sampled:
-            c = self._helpers.enrich_place(p, saved_restaurants)
+            c = self._logic.enrich_place(p, saved_restaurants)
             c["google_search_rank"] = len(candidates) + 1
             candidates.append(c)
-        self._helpers.travel_times_matrix(
+        self._routes.travel_times_matrix(
             origin,
             candidates,
             req.get("mode", "walk"),
             req.get("traffic_aware", False),
         )
-        self._helpers._fill_travel_estimates(origin, candidates)
+        self._routes.fill_travel_estimates(origin, candidates)
         estimated = sum(
             (
                 c.get(f"{req.get('mode', 'walk')}_source") == "estimate"
@@ -126,7 +136,7 @@ class CandidateSearch:
             "INFO",
             "BRNS.io_manager.fetch_by_profile_text",
         )
-        plan = self._helpers.discovery_policy().profile_searches(request)
+        plan = self._policy.profile_searches(request)
         response = None
         while True:
             try:
@@ -139,7 +149,7 @@ class CandidateSearch:
                     "BRNS.io_manager.fetch_by_profile_text",
                 )
                 return places
-            response = self._helpers._run_text_search(origin, *args, **kwargs)
+            response = self._places.run_text_search(origin, *args, **kwargs)
 
     def fetch_open(self, origin, request):
         self._log.debug_log(
@@ -150,7 +160,7 @@ class CandidateSearch:
         args, kwargs = self._policy.open_search(
             request, self._helpers.OPEN_SEARCH_MAX_PAGES
         )
-        places = self._helpers._run_text_search(origin, *args, **kwargs)
+        places = self._places.run_text_search(origin, *args, **kwargs)
         self._log.debug_log(
             f"Open-now Text Places returned {len(places)} usable records.",
             "INFO",

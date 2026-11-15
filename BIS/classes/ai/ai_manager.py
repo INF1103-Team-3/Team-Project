@@ -33,7 +33,7 @@ class AIManager(BISAIManagerInterface, ChatAIInterface):
 
     @property
     def interpreter(self):
-        """Expose configured interpretation tasks without replacing the wiring."""
+        """Expose interpretation tasks without replacing configured wiring."""
         return self.__interpreter
 
     def process(self, record, config):

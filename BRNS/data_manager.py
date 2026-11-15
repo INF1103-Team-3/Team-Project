@@ -32,14 +32,6 @@ def manager():
     return _MANAGER
 
 
-def _load_json(path):
-    return _STORE._load_json(path)
-
-
-def _save_json(path, data, *, compact_hours=False):
-    return _STORE._save_json(path, data, compact_hours=compact_hours)
-
-
 def load_restaurants(path=None):
     return _MANAGER.load_restaurants(path)
 

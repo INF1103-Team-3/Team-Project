@@ -248,7 +248,9 @@ class CleanupContractTests(unittest.TestCase):
             )
             for index in range(10)
         ]
-        result = io_manager._sample_zone_slice(places, (1.3, 103.8), 10000, 20)
+        result = io_manager.discovery_policy().sample_zone_slice(
+            places, (1.3, 103.8), 10000, 20
+        )
         expected = (
             [f"Near{i}" for i in range(7)]
             + [f"Mid{i}" for i in range(7)]
