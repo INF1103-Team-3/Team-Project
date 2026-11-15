@@ -5,11 +5,13 @@ from BIS.sources.profile_schema import (
     MINUTES_PER_KM, empty_preferences, normalize_email, normalize_username,
     validate_preferences,
 )
-from BIS.support.config import is_smtp_bypass
-from common.debug_log import debug_log
 
 
 class BaseUserStore(ABC):
+    @abstractmethod
+    def load(self):
+        """Load users; return [] on failure and expose last_error."""
+
     @abstractmethod
     def registry(self):
         """Load validated users keyed by ID."""
@@ -57,20 +59,3 @@ class BaseUserStore(ABC):
         if user_id not in users:
             raise ValueError("Unknown userID. Please sign up first.")
         return users[user_id]
-
-    def save_preferences(self, user_id, preferences, config):
-        user = self.get_user(user_id)
-        if (not user["email_verified"]
-                and not is_smtp_bypass(config)):
-            raise ValueError(
-                "Verify your email before changing preferences.")
-        user["preferences"] = validate_preferences(preferences)
-        result = self.save(user)
-        debug_log(
-            f"max_distance_km={preferences['max_distance_km']}, "
-            f"max_travel_time_minutes="
-            f"{preferences['max_travel_time_minutes']}; "
-            f"conversion assumption={MINUTES_PER_KM} min/km.",
-            "INFO", "BIS.profile.travel",
-        )
-        return result

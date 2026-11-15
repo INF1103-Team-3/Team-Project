@@ -20,7 +20,7 @@ def _initialize_cli():
     from BIS import ai_manager, data_manager, io_manager, logic_manager
     from BIS.classes.services.cli.bis_search_workflow import BISSearchWorkflow
     from BIS.classes.services.cli.interaction_session import InteractionSession
-    from BIS.classes.data.search_preference_recorder import SearchPreferenceRecorder
+    from BIS.classes.services.cli.search_preference_recorder import SearchPreferenceRecorder
     from BIS.classes.services.cli.search_results_controller import SearchResultsController
     from BRNS.runtime import build_cli_brns_service
     from sources.profile_schema import OTHER_PREFERENCES
@@ -47,6 +47,7 @@ def _search_preference_recorder(data=None):
         data or data_manager.manager(),
         debug_log,
         OTHER_PREFERENCES,
+        logic_manager.manager(),
     )
 
 

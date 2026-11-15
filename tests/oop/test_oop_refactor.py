@@ -853,7 +853,7 @@ class OOPRefactorTests(unittest.TestCase):
             root = Path(tmp)
             users = JsonUserStore(root / "users.json", root / "state.json")
             creds = JsonCredentialStore(root / "credentials.json")
-            data = DataManager(users, SimpleNamespace(), credentials=creds)
+            data = DataManager(users, credentials=creds)
             user = data.register_user("pw_oop@example.com", "PW User")
             user = data.save(dict(user, email_verified=True))
             hasher = PasswordHasher()
@@ -953,7 +953,7 @@ class OOPRefactorTests(unittest.TestCase):
             return request
 
         data_mgr = SimpleNamespace(
-            resolve_location=lambda loc, _key: events.append("data_geo") or {
+            resolve_location=lambda loc, _key: events.append("io_geo") or {
                 "query": loc, "label": loc, "latitude": 1.35, "longitude": 103.94},
             serialize_search_request=lambda req: events.append("data_serialize") or json.dumps(req),
         )
@@ -969,6 +969,7 @@ class OOPRefactorTests(unittest.TestCase):
             TrackingLogic(),
             brns_gw,
             {"google_maps_api_key": ""},
+            location_gateway=SimpleNamespace(resolve=data_mgr.resolve_location),
         )
         io_mgr = WebIOManager(
             auth=SimpleNamespace(authenticate=lambda _tok: None),
@@ -985,7 +986,7 @@ class OOPRefactorTests(unittest.TestCase):
             "cuisine": "japanese",
         })
         self.assertTrue(res["success"])
-        self.assertEqual(events, ["data_geo", "logic_base", "ai", "logic_validate", "data_serialize", "brns"])
+        self.assertEqual(events, ["io_geo", "logic_base", "ai", "logic_validate", "data_serialize", "brns"])
         self.assertEqual(io_mgr.active_model(), {"active_model": "Gemini AI (gemini-2.5-flash)"})
 
     def test_direct_brns_and_brc_cli_require_internal_flag(self):

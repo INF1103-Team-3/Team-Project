@@ -53,21 +53,17 @@ def build_web_runtime():
         for repository in (users, sessions, favorites, proposals):
             repository.ensure_indexes()
 
-        data = DataManager(
-            users,
-            LocationGateway(
+        locations = LocationGateway(
                 bis_logic,
                 geocode_cache,
                 os.getenv(
                     "BITEFINDER_GEOCODE_URL",
                     "https://maps.googleapis.com/maps/api/geocode/json",
                 ),
-            ),
-            sessions,
-            favorites,
-            MongoCredentialStore(connection),
-            proposals,
         )
+        data = DataManager(
+            users, sessions=sessions, favorites=favorites,
+            credentials=MongoCredentialStore(connection), proposals=proposals)
         settings = load_config()
         verification = EmailVerificationService(
             data, VerificationChallengeManager(), SMTPEmailDelivery()
@@ -75,7 +71,8 @@ def build_web_runtime():
         auth = WebAuthService(data, verification, PasswordHasher(), settings)
         brns = build_web_brns_service(connection)
         application = BISApplicationService(
-            data, bis_ai.manager(), bis_logic.manager(), brns, settings
+            data, bis_ai.manager(), bis_logic.manager(), brns, settings,
+            location_gateway=locations,
         )
         return WebRuntime(
             WebIOManager(auth, application, FavoriteService(data), connection.ready),

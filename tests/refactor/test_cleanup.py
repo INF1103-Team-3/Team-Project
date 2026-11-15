@@ -18,6 +18,23 @@ from BRNS.classes.data.stores.json.json_recommendation_store import (
 
 
 class CleanupContractTests(unittest.TestCase):
+    def test_profile_authorization_is_shared_by_cli_and_web_logic(self):
+        from BIS.classes.logic.logic_manager import LogicManager
+        from BIS.sources.profile_schema import empty_preferences
+
+        logic = LogicManager()
+        user = {"userID": "fixture", "email": "test@example.com",
+                "email_verified": False, "username": "Tester",
+                "preferences": empty_preferences()}
+        with self.assertRaisesRegex(ValueError, "Verify your email"):
+            logic.prepare_preferences_save(
+                user, user["preferences"], {"smtp_bypass": False})
+        with self.assertRaisesRegex(PermissionError, "Verify your email"):
+            logic.prepare_profile_save(user, {}, smtp_bypass=False)
+        self.assertEqual(logic.prepare_preferences_save(
+            user, user["preferences"], {"smtp_bypass": True}),
+            user["preferences"])
+
     def test_discovery_plan_preserves_fallback_sequence_without_http(self):
         plan = io_manager.discovery_policy().profile_searches({
             "mode": "walk", "max_distance_km": 2,

@@ -6,7 +6,6 @@ from pathlib import Path
 from BIS import logic_manager
 from BIS.classes.data.data_manager import DataManager
 from BIS.classes.data.stores.json.json_user_store import JsonUserStore
-from BIS.classes.io.gateways.location_gateway import LocationGateway
 from common import geocode_cache
 
 
@@ -34,9 +33,7 @@ elif _BACKEND == "mongo":
     _CREDENTIALS = MongoCredentialStore(_CONNECTION)
 else:
     raise ValueError("BITEFINDER_STORAGE must be json or mongo.")
-_LOCATION_GATEWAY = LocationGateway(
-    logic_manager, geocode_cache, GEOCODE_URL)
-_MANAGER = DataManager(_STORE, _LOCATION_GATEWAY, credentials=_CREDENTIALS)
+_MANAGER = DataManager(_STORE, credentials=_CREDENTIALS)
 LAST_ERROR = None
 
 
@@ -101,6 +98,8 @@ def save_credentials(user_id, credential):
 
 
 def save_preferences(user_id, preferences, config):
+    preferences = logic_manager.manager().prepare_preferences_save(
+        _MANAGER.get_user(user_id), preferences, config)
     return _MANAGER.save_preferences(user_id, preferences, config)
 
 
@@ -110,15 +109,3 @@ def get_state(section, user_id):
 
 def set_state(section, user_id, value):
     return _MANAGER.set_state(section, user_id, value)
-
-
-def lookup_cached_location(query):
-    return _MANAGER.lookup_cached_location(query)
-
-
-def resolve_location(query, api_key):
-    return _MANAGER.resolve_location(query, api_key)
-
-
-def remember_location(queries, location):
-    return _MANAGER.remember_location(queries, location)
