@@ -52,6 +52,10 @@ def serialize_search_request(request):
     return _MANAGER.serialize_search_request(request)
 
 
+def _read_json(path):
+    return _STORE._read_json(path)
+
+
 def _registry():
     return _STORE.registry()
 
@@ -65,6 +69,10 @@ def load():
 
 def query(filter_fn):
     return _MANAGER.query(filter_fn)
+
+
+def _atomic_write(path, value):
+    return _STORE._atomic_write(path, value)
 
 
 def save(record):

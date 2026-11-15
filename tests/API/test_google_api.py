@@ -450,7 +450,7 @@ def test_invalid_google_key_error_handling():
 
     show_case(
         "API-GOOGLE-07: Invalid Google Key Error Handling",
-        "BRNS.io_manager.log_api_error()",
+        "BRNS.io_manager._log_api_error()",
         (
             "Verify application resilience against invalid or rejected Google "
             "API credentials."

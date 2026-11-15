@@ -34,11 +34,7 @@ class StorageContractTests(unittest.TestCase):
     def test_user_store_read_failures_have_the_same_contract(self):
         path = self.root / "users.json"
         path.write_text(json.dumps({"invalid": {"userID": "invalid"}}))
-        self.conn.execute(
-            lambda db: db.users.insert_one(
-                {"_id": "invalid", "userID": "invalid"}
-            )
-        )
+        self.conn.db.users.insert_one({"_id": "invalid", "userID": "invalid"})
         stores = (
             JsonUserStore(path, self.root / "state.json"),
             MongoUserStore(self.conn),
@@ -49,7 +45,7 @@ class StorageContractTests(unittest.TestCase):
                 self.assertTrue(store.last_error)
                 self.assertEqual(store.query(lambda _row: True), [])
         path.write_text("{}")
-        self.conn.execute(lambda db: db.users.delete_many({}))
+        self.conn.db.users.delete_many({})
         for store in stores:
             self.assertEqual(store.load(), [])
             self.assertIsNone(store.last_error)
@@ -146,15 +142,11 @@ class StorageContractTests(unittest.TestCase):
         records = migration.prepare(
             self.root / "users.json", self.root / "state.json"
         )
-        self.assertEqual(
-            self.conn.execute(lambda db: db.users.count_documents({})), 0
-        )
+        self.assertEqual(self.conn.db.users.count_documents({}), 0)
         MongoUserStore(self.conn).ensure_indexes()
         self.assertEqual(migration.apply(self.conn, records)["users"], 1)
         migration.apply(self.conn, records)
-        self.assertEqual(
-            self.conn.execute(lambda db: db.users.count_documents({})), 1
-        )
+        self.assertEqual(self.conn.db.users.count_documents({}), 1)
         self.assertEqual(
             MongoUserStore(self.conn).get_user(user["userID"]), user
         )
@@ -163,10 +155,8 @@ class StorageContractTests(unittest.TestCase):
                 "completed"
             ]
         )
-        self.conn.execute(
-            lambda db: db.users.update_one(
-                {"_id": user["userID"]}, {"$set": {"username": "Edited"}}
-            )
+        self.conn.db.users.update_one(
+            {"_id": user["userID"]}, {"$set": {"username": "Edited"}}
         )
         with self.assertRaisesRegex(ValueError, "conflicts"):
             migration.apply(self.conn, records)
@@ -184,9 +174,7 @@ class StorageContractTests(unittest.TestCase):
         path.write_text(json.dumps([{"name": "No place id"}]))
         with self.assertRaises(ValueError):
             migration.prepare(restaurants=path)
-        self.assertEqual(
-            self.conn.execute(lambda db: db.restaurants.count_documents({})), 0
-        )
+        self.assertEqual(self.conn.db.restaurants.count_documents({}), 0)
 
     def test_credential_stores_preserve_credentials_and_reload(self):
         hasher = PasswordHasher()

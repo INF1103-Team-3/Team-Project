@@ -7,7 +7,7 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 
 class MongoConnection:
     def __init__(self, uri=None, database=None, client=None):
-        self.__client = (
+        self._client = (
             client
             if client is not None
             else MongoClient(
@@ -18,13 +18,13 @@ class MongoConnection:
                 tz_aware=True,
             )
         )
-        self.__db = self.__client[
+        self.db = self._client[
             database or os.getenv("MONGO_DATABASE", "bitefinder")
         ]
 
     def execute(self, operation):
         try:
-            return operation(self.__db)
+            return operation(self.db)
         except DuplicateKeyError as error:
             raise ValueError(
                 "A record with this identity already exists."
@@ -36,9 +36,9 @@ class MongoConnection:
 
     def ready(self):
         return (
-            self.execute(lambda _db: self.__client.admin.command("ping"))["ok"]
+            self.execute(lambda _db: self._client.admin.command("ping"))["ok"]
             == 1
         )
 
     def close(self):
-        self.__client.close()
+        self._client.close()

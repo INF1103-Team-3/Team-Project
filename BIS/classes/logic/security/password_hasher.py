@@ -36,11 +36,11 @@ class PasswordHasher:
         salt = secrets.token_hex(16)
         return {
             "password_salt": salt,
-            "password_hash": self.__hash(password, salt),
+            "password_hash": self._hash(password, salt),
         }
 
     @staticmethod
-    def __hash(password, salt):
+    def _hash(password, salt):
         return hashlib.pbkdf2_hmac(
             "sha256", password.encode(), salt.encode("ascii"), 100000
         ).hex()
@@ -59,6 +59,6 @@ class PasswordHasher:
                 )
             )
         return secrets.compare_digest(
-            self.__hash(password, credential["password_salt"]),
+            self._hash(password, credential["password_salt"]),
             credential["password_hash"],
         )

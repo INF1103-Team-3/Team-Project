@@ -135,7 +135,7 @@ class IOManager(BISSessionIOInterface, BISSearchIOInterface):
             }
         text = clean_text(text, 1000)
         if field in {"max_distance_km", "max_travel_time_minutes"}:
-            return self._helpers.profile_travel_action(
+            return self._helpers._profile_travel_action(
                 text, field, config, location_action
             )
         if (

@@ -119,7 +119,7 @@ def build_web_brns_service(connection, brc_service_url=None):
     )
     photo_service = PlacePhotoService(
         photo_store,
-        GooglePlacePhotoGateway(config, debug_log, io_manager.log_api_error),
+        GooglePlacePhotoGateway(config, debug_log, io_manager._log_api_error),
         debug_log,
     )
     return BRNSService(
@@ -163,7 +163,7 @@ def build_cli_brns_service():
     )
     photo_service = PlacePhotoService(
         NullPlacePhotoStore(),
-        GooglePlacePhotoGateway(config, debug_log, io_manager.log_api_error),
+        GooglePlacePhotoGateway(config, debug_log, io_manager._log_api_error),
         debug_log,
     )
     return BRNSService(
