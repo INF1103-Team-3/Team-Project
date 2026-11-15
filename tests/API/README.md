@@ -1,6 +1,6 @@
 # BiteFinder Live API & Fallback Chain Tests
 
-This directory contains automated live validation tests for all external API keys used by BiteFinder (`OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, and `GOOGLE_MAPS_API_KEY`), as well as comprehensive verification of the multi-provider AI fallback chain and Google offline fallback resilience.
+This directory contains automated live validation tests for all external API keys used by BiteFinder (`OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `NVIDIA_API_KEY`, `SILICON_FLOW_API_KEY`, and `GOOGLE_MAPS_API_KEY`), as well as comprehensive verification of the multi-provider AI fallback chain and Google offline fallback resilience.
 
 These are opt-in integration checks, not the offline regression suite. They
 use the configured provider/Maps endpoints and credentials and can consume
@@ -14,7 +14,7 @@ include this live group. See [the test guide](../README.md).
 
 | Script | Purpose |
 | --- | --- |
-| `test_ai_keys_and_fallback.py` | Direct API key connectivity for OpenRouter, Gemini, and Groq, plus multi-tier fallback cascade and exhaustion testing for both BIS and BRNS. |
+| `test_ai_keys_and_fallback.py` | Direct API key connectivity for OpenRouter, Gemini, Groq, NVIDIA NIM, and SiliconFlow, plus multi-tier fallback cascade and exhaustion testing for both BIS and BRNS. |
 | `test_google_api.py` | Dedicated tests for Google Maps Platform: Geocoding, Places (New), Routes (New), Geocode Caching, invalid key rejection, and offline restaurant fallback. |
 | `run_api_tests.py` | Master runner executing both test suites with colored teacher-facing test case reporting and summary metrics. |
 
@@ -34,6 +34,12 @@ include this live group. See [the test guide](../README.md).
   - Queries Groq active text models via `fetch_chat_models()`.
   - Sends a minimal chat completion request to `api.groq.com/openai/v1/chat/completions`.
   - Verifies authentication and response generation.
+- **API-AI-11: NVIDIA NIM API Key Connectivity & Model Discovery**
+  - Queries NVIDIA NIM chat models via `fetch_nvidia_models()`.
+  - Sends a minimal chat completion request to NVIDIA NIM and verifies authentication and response generation.
+- **API-AI-12: SiliconFlow API Key Connectivity & Model Discovery**
+  - Queries SiliconFlow chat models via `fetch_siliconflow_models()`.
+  - Sends a minimal chat completion request to SiliconFlow and verifies authentication and response generation.
 - **API-AI-04: BIS Fallback Chain Normal Execution**
   - Calls `BIS.ai_manager._call_json_with_fallback()` with real config and verifies valid structured output.
 - **API-AI-05: BIS Fallback Activation On Primary Failure**
@@ -96,6 +102,8 @@ The following are placeholder variable names, not supplied credentials:
 OPENROUTER_API_KEY=...
 GEMINI_API_KEY=...
 GROQ_API_KEY=...
+NVIDIA_API_KEY=...
+SILICON_FLOW_API_KEY=...
 GOOGLE_MAPS_API_KEY=...
 ```
 

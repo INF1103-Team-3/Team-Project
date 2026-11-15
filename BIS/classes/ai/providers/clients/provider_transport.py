@@ -7,7 +7,15 @@ class ProviderTransport:
     """Own network transport while keeping prompt and domain logic separate."""
 
     def __init__(
-        self, http, logger, key_selector, error_formatter, gemini_url, groq_url
+        self,
+        http,
+        logger,
+        key_selector,
+        error_formatter,
+        gemini_url,
+        groq_url,
+        nvidia_url=None,
+        siliconflow_url=None,
     ):
         self._http, self._log = http, logger
         self._key_selector, self._error_formatter = (
@@ -15,6 +23,8 @@ class ProviderTransport:
             error_formatter,
         )
         self._gemini_url, self._groq_url = gemini_url, groq_url
+        self._nvidia_url = nvidia_url
+        self._siliconflow_url = siliconflow_url
 
     def call_openrouter(self, payload, config):
         "Call OpenRouter's chat-completions endpoint and return model text."
@@ -114,45 +124,79 @@ class ProviderTransport:
             return content.strip()
         raise RuntimeError("Gemini rejected the request.")
 
-    def call_groq(self, payload, model, config):
-        """Call Groq's chat-completions endpoint for a BIS JSON response."""
-        api_key = config.get("groq_api_key")
+    def _call_openai_compatible(
+        self, label, url_getter, key_field, payload, model
+    ):
+        """Call an OpenAI-compatible chat-completions endpoint for JSON."""
+        api_key = key_field
         if not api_key:
-            raise RuntimeError("No Groq API key is configured for BIS.")
+            raise RuntimeError(f"No {label} API key is configured for BIS.")
+        if url_getter is None:
+            raise RuntimeError(f"No {label} URL is configured for BIS.")
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
-        groq_payload = dict(payload, model=model)
+        request_payload = dict(payload, model=model)
         for use_json_mode in (True, False):
             if use_json_mode:
-                groq_payload["response_format"] = {"type": "json_object"}
+                request_payload["response_format"] = {"type": "json_object"}
             else:
-                groq_payload.pop("response_format", None)
+                request_payload.pop("response_format", None)
             try:
                 response = self._http.post(
-                    self._groq_url(),
+                    url_getter(),
                     headers=headers,
-                    json=groq_payload,
+                    json=request_payload,
                     timeout=(3, 12),
                 )
             except requests.RequestException as error:
                 raise RuntimeError(
-                    "Groq request failed. Please retry."
+                    f"{label} request failed. Please retry."
                 ) from error
             if response.status_code == 400 and use_json_mode:
                 continue
             if response.status_code != 200:
                 raise RuntimeError(
-                    f"Groq request failed: HTTP {response.status_code}."
+                    f"{label} request failed: HTTP {response.status_code}."
                 )
             try:
                 content = response.json()["choices"][0]["message"]["content"]
             except (ValueError, KeyError, IndexError, TypeError) as error:
                 raise RuntimeError(
-                    "Groq returned an unexpected response."
+                    f"{label} returned an unexpected response."
                 ) from error
             if not isinstance(content, str) or not content.strip():
-                raise RuntimeError("Groq returned an empty response.")
+                raise RuntimeError(f"{label} returned an empty response.")
             return content.strip()
-        raise RuntimeError("Groq rejected the request.")
+        raise RuntimeError(f"{label} rejected the request.")
+
+    def call_groq(self, payload, model, config):
+        """Call Groq's chat-completions endpoint for a BIS JSON response."""
+        return self._call_openai_compatible(
+            "Groq",
+            self._groq_url,
+            config.get("groq_api_key"),
+            payload,
+            model,
+        )
+
+    def call_nvidia(self, payload, model, config):
+        """Call NVIDIA NIM's chat-completions endpoint for BIS JSON."""
+        return self._call_openai_compatible(
+            "NVIDIA NIM",
+            self._nvidia_url,
+            config.get("nvidia_api_key"),
+            payload,
+            model,
+        )
+
+    def call_siliconflow(self, payload, model, config):
+        """Call SiliconFlow's chat-completions endpoint for BIS JSON."""
+        return self._call_openai_compatible(
+            "SiliconFlow",
+            self._siliconflow_url,
+            config.get("siliconflow_api_key"),
+            payload,
+            model,
+        )

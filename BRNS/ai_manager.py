@@ -24,8 +24,14 @@ from BRNS.classes.ai.providers.clients.gemini_ai_provider import (
     GeminiAIProvider,
 )
 from BRNS.classes.ai.providers.clients.groq_ai_provider import GroqAIProvider
+from BRNS.classes.ai.providers.clients.nvidia_ai_provider import (
+    NvidiaAIProvider,
+)
 from BRNS.classes.ai.providers.clients.openrouter_ai_provider import (
     OpenRouterAIProvider,
+)
+from BRNS.classes.ai.providers.clients.siliconflow_ai_provider import (
+    SiliconFlowAIProvider,
 )
 from BRNS.classes.ai.providers.clients.unsupported_ai_provider import (
     UnsupportedAIProvider,
@@ -331,6 +337,14 @@ def _call_groq(model_id, system_prompt, user_text):
     return _transport().call_groq(model_id, system_prompt, user_text)
 
 
+def _call_nvidia(model_id, system_prompt, user_text):
+    return _transport().call_nvidia(model_id, system_prompt, user_text)
+
+
+def _call_siliconflow(model_id, system_prompt, user_text):
+    return _transport().call_siliconflow(model_id, system_prompt, user_text)
+
+
 def _track_provider_call(provider, model, fn):
     global _CURRENT_ACTIVE_MODEL
     _CURRENT_ACTIVE_MODEL = f"{provider}/{model}"
@@ -375,6 +389,32 @@ def _provider_registry():
             ),
         ),
         enabled=lambda settings: bool(settings.GROQ_API_KEY),
+    )
+    registry.register(
+        "nvidia",
+        lambda model: NvidiaAIProvider(
+            model,
+            lambda system_prompt, text, selected=model: _track_provider_call(
+                "nvidia",
+                selected,
+                lambda: _call_nvidia(selected, system_prompt, text),
+            ),
+        ),
+        enabled=lambda settings: bool(getattr(settings, "NVIDIA_API_KEY", "")),
+    )
+    registry.register(
+        "siliconflow",
+        lambda model: SiliconFlowAIProvider(
+            model,
+            lambda system_prompt, text, selected=model: _track_provider_call(
+                "siliconflow",
+                selected,
+                lambda: _call_siliconflow(selected, system_prompt, text),
+            ),
+        ),
+        enabled=lambda settings: bool(
+            getattr(settings, "SILICON_FLOW_API_KEY", "")
+        ),
     )
     return registry
 
@@ -609,16 +649,18 @@ def current_active_model():
     """Return the active/most-recent configured AI provider label."""
     if _CURRENT_ACTIVE_MODEL:
         return _CURRENT_ACTIVE_MODEL
+    key_attrs = {
+        "gemini": "GEMINI_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
+        "groq": "GROQ_API_KEY",
+        "nvidia": "NVIDIA_API_KEY",
+        "siliconflow": "SILICON_FLOW_API_KEY",
+    }
     for entry in getattr(config, "MODEL_CHAIN", []):
         provider = entry.get("provider", "")
         model = entry.get("model", "")
-        if provider == "gemini" and getattr(config, "GEMINI_API_KEY", ""):
-            return f"{provider}/{model}"
-        if provider == "openrouter" and getattr(
-            config, "OPENROUTER_API_KEY", ""
-        ):
-            return f"{provider}/{model}"
-        if provider == "groq" and getattr(config, "GROQ_API_KEY", ""):
+        attr = key_attrs.get(provider)
+        if attr and getattr(config, attr, ""):
             return f"{provider}/{model}"
     return "Gemini AI"
 

@@ -205,6 +205,8 @@ jobs:
       OPENROUTER_API_KEYS: ${{ secrets.OPENROUTER_API_KEYS }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+      SILICON_FLOW_API_KEY: ${{ secrets.SILICON_FLOW_API_KEY }}
       GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
       GOOGLE_MAPS_JS_API_KEY: ${{ secrets.GOOGLE_MAPS_JS_API_KEY }}
       SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -241,6 +243,8 @@ jobs:
               k for k in (
                   "GEMINI_API_KEY",
                   "GROQ_API_KEY",
+                  "NVIDIA_API_KEY",
+                  "SILICON_FLOW_API_KEY",
                   "OPENROUTER_API_KEY",
                   "OPENROUTER_API_KEYS",
               )
@@ -252,7 +256,8 @@ jobs:
               print(
                   f"Missing required secrets in GitHub Environment "
                   f"'{env_name}'. Configure GOOGLE_MAPS_API_KEY and AI keys "
-                  "(GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY) under "
+                  "(GEMINI_API_KEY, GROQ_API_KEY, NVIDIA_API_KEY, "
+                  "SILICON_FLOW_API_KEY, OPENROUTER_API_KEY) under "
                   "Settings -> Environments -> staging / production.",
                   file=sys.stderr,
               )

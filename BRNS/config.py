@@ -17,11 +17,16 @@ def _bounded_seconds(name, default, maximum):
     return min(max(value, 1.0), float(maximum))
 
 
-# --- AI layer: OpenRouter + direct Gemini + Groq (separate quota pools) ---
+# --- AI layer: OpenRouter + direct Gemini + Groq + NVIDIA + SiliconFlow ---
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 # from aistudio.google.com — free, no card
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
+SILICON_FLOW_API_KEY = (
+    os.getenv("SILICON_FLOW_API_KEY", "").strip()
+    or os.getenv("SILICONFLOW_API_KEY", "").strip()
+)
 AI_REQUEST_TIMEOUT_SECONDS = _bounded_seconds(
     "BRNS_AI_REQUEST_TIMEOUT_SECONDS", 12, 60
 )
@@ -40,6 +45,14 @@ GEMINI_URL = os.getenv(
 GROQ_URL = os.getenv(
     "BITEFINDER_GROQ_URL", "https://api.groq.com/openai/v1/chat/completions"
 )
+NVIDIA_URL = os.getenv(
+    "BITEFINDER_NVIDIA_URL",
+    "https://integrate.api.nvidia.com/v1/chat/completions",
+)
+SILICONFLOW_URL = os.getenv(
+    "BITEFINDER_SILICONFLOW_URL",
+    "https://api.siliconflow.com/v1/chat/completions",
+)
 
 # Try the responsive direct provider first; retain OpenRouter as fallback.
 MODEL_CHAIN = [
@@ -48,17 +61,24 @@ MODEL_CHAIN = [
 ]
 
 
-def _extend_chain_with_groq():
-    """Fetch Groq chat models at startup and put them before slow fallbacks."""
-    if not GROQ_API_KEY:
-        return
+def _extend_chain_with_dynamic_models():
+    """Fetch Groq, NVIDIA NIM, and SiliconFlow chat models at startup."""
+    from common.ai_models import fetch_nvidia_models, fetch_siliconflow_models
     from common.groq_models import fetch_chat_models
 
-    for model_id in fetch_chat_models(GROQ_API_KEY):
-        MODEL_CHAIN.append({"provider": "groq", "model": model_id})
+    discoverers = (
+        ("groq", GROQ_API_KEY, fetch_chat_models),
+        ("nvidia", NVIDIA_API_KEY, fetch_nvidia_models),
+        ("siliconflow", SILICON_FLOW_API_KEY, fetch_siliconflow_models),
+    )
+    for provider_name, api_key, fetcher in discoverers:
+        if not api_key:
+            continue
+        for model_id in fetcher(api_key):
+            MODEL_CHAIN.append({"provider": provider_name, "model": model_id})
 
 
-_extend_chain_with_groq()
+_extend_chain_with_dynamic_models()
 MODEL_CHAIN.extend(
     [
         {

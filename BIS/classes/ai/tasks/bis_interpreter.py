@@ -7,6 +7,19 @@ from common.debug_log import debug_log
 from BIS.sources.profile_schema import PREFERENCE_FIELDS, validate_updates
 
 
+def _has_fast_provider(config):
+    """Return True if any low-latency direct AI provider key is configured."""
+    return any(
+        bool(config.get(key))
+        for key in (
+            "groq_api_key",
+            "gemini_api_key",
+            "nvidia_api_key",
+            "siliconflow_api_key",
+        )
+    )
+
+
 class BISInterpreter:
     """Build and validate AI tasks through an injected provider request."""
 
@@ -692,9 +705,7 @@ class BISInterpreter:
                 parsed["quick_replies"] = []
             return parsed
 
-        has_fast = bool(
-            config.get("groq_api_key") or config.get("gemini_api_key")
-        )
+        has_fast = _has_fast_provider(config)
         return self._request(payload, config, check, skip_primary=has_fast)
 
     def review_profile_wishes(self, wishes, config):
@@ -746,9 +757,7 @@ class BISInterpreter:
             reason = str(parsed.get("reason") or "").strip()
             return {"valid": parsed["valid"], "reason": reason}
 
-        has_fast = bool(
-            config.get("groq_api_key") or config.get("gemini_api_key")
-        )
+        has_fast = _has_fast_provider(config)
         result = self._request(payload, config, check, skip_primary=has_fast)
         if not result["valid"]:
             raise ValueError(

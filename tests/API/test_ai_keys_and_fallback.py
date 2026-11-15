@@ -44,6 +44,13 @@ sys.modules["ai_manager"] = bis_ai
 import BIS.support.config as bis_config  # noqa: E402
 import BRNS.ai_manager as brns_ai  # noqa: E402
 import BRNS.config as brns_config  # noqa: E402
+from common.ai_models import (  # noqa: E402
+    NVIDIA_MODELS_URL,
+    SILICONFLOW_MODELS_URL,
+    derive_models_url,
+    fetch_nvidia_models,
+    fetch_siliconflow_models,
+)
 from common.groq_models import fetch_chat_models  # noqa: E402
 
 
@@ -496,6 +503,14 @@ def test_bis_fallback_graceful_exhaustion():
             "BIS.ai_manager._call_groq",
             side_effect=RuntimeError("Simulated failure"),
         ),
+        patch(
+            "BIS.ai_manager._call_nvidia",
+            side_effect=RuntimeError("Simulated failure"),
+        ),
+        patch(
+            "BIS.ai_manager._call_siliconflow",
+            side_effect=RuntimeError("Simulated failure"),
+        ),
     ):
         try:
             bis_ai._call_json_with_fallback(payload, config)
@@ -620,6 +635,13 @@ def test_brns_fallback_exhaustion_returns_none():
             return_value=(False, "HTTP 500"),
         ),
         patch("BRNS.ai_manager._call_groq", return_value=(False, "HTTP 500")),
+        patch(
+            "BRNS.ai_manager._call_nvidia", return_value=(False, "HTTP 500")
+        ),
+        patch(
+            "BRNS.ai_manager._call_siliconflow",
+            return_value=(False, "HTTP 500"),
+        ),
     ):
         recommendation = brns_ai.recommend_candidates(
             SAMPLE_SEARCH_REQUEST, SAMPLE_CANDIDATES
@@ -642,6 +664,137 @@ def test_brns_fallback_exhaustion_returns_none():
     assert actual is True
 
 
+def _verify_discovered_provider_connectivity(
+    case_title,
+    provider_name,
+    env_keys,
+    chat_url,
+    fetcher,
+    fallback_model,
+):
+    """Verify key connectivity and dynamic model discovery for a provider."""
+    key = ""
+    for env_name in env_keys:
+        key = os.getenv(env_name, "").strip()
+        if key:
+            break
+    if not key:
+        actual = {
+            "status": "SKIPPED",
+            "reason": f"{env_keys[0]} not set in .env",
+        }
+        expected = deepcopy(actual)
+        show_case(
+            case_title,
+            chat_url,
+            f"Verify {provider_name} API key auth and model discovery.",
+            {"api_key_present": False},
+            expected,
+            actual,
+        )
+        return
+
+    models = fetcher(key)
+    model = models[0] if models else fallback_model
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "user", "content": "Return the single word OK."}
+        ],
+        "temperature": 0,
+        "max_tokens": 50,
+    }
+    try:
+        resp = requests.post(
+            chat_url, headers=headers, json=payload, timeout=20
+        )
+        is_ok = resp.status_code == 200
+        msg = (
+            resp.json().get("choices", [{}])[0].get("message", {})
+            if is_ok
+            else {}
+        )
+        content = msg.get("content", "") or msg.get("reasoning_content", "")
+        actual = {
+            "status_code": resp.status_code,
+            "has_content": bool(content.strip()),
+            "models_discovered": len(models) > 0,
+            "authenticated": is_ok,
+        }
+    except Exception as err:
+        actual = {
+            "error": str(err),
+            "authenticated": False,
+            "models_discovered": len(models) > 0,
+        }
+
+    expected = {
+        "status_code": 200,
+        "has_content": True,
+        "models_discovered": True,
+        "authenticated": True,
+    }
+    show_case(
+        case_title,
+        chat_url,
+        f"Verify {provider_name} key auth, discovery, and chat completion.",
+        {
+            "provider": provider_name.lower(),
+            "model": model,
+            "models_found": len(models),
+        },
+        expected,
+        actual,
+    )
+    assert actual == expected
+
+
+def test_nvidia_api_key_connectivity():
+    """Verify NVIDIA_API_KEY model discovery and chat completion."""
+    _verify_discovered_provider_connectivity(
+        "API-AI-11: NVIDIA NIM API Key Connectivity",
+        "NVIDIA",
+        ("NVIDIA_API_KEY",),
+        os.getenv(
+            "BITEFINDER_NVIDIA_URL",
+            "https://integrate.api.nvidia.com/v1/chat/completions",
+        ),
+        lambda k: fetch_nvidia_models(
+            k,
+            models_url=derive_models_url(
+                "BITEFINDER_NVIDIA_URL", NVIDIA_MODELS_URL
+            ),
+        ),
+        "nvidia/nemotron-3.5-bolt-e4b",
+    )
+
+
+def test_siliconflow_api_key_connectivity():
+    """Verify SILICON_FLOW_API_KEY model discovery and chat completion."""
+    _verify_discovered_provider_connectivity(
+        "API-AI-12: SiliconFlow API Key Connectivity",
+        "SiliconFlow",
+        ("SILICON_FLOW_API_KEY", "SILICONFLOW_API_KEY"),
+        os.getenv(
+            "BITEFINDER_SILICONFLOW_URL",
+            "https://api.siliconflow.com/v1/chat/completions",
+        ),
+        lambda k: fetch_siliconflow_models(
+            k,
+            models_url=derive_models_url(
+                "BITEFINDER_SILICONFLOW_URL",
+                SILICONFLOW_MODELS_URL,
+                query="sub_type=chat",
+            ),
+        ),
+        "Qwen/Qwen2.5-7B-Instruct",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Test Runner
 # ---------------------------------------------------------------------------
@@ -650,6 +803,8 @@ TESTS = (
     test_openrouter_api_key_connectivity,
     test_gemini_api_key_connectivity,
     test_groq_api_key_connectivity,
+    test_nvidia_api_key_connectivity,
+    test_siliconflow_api_key_connectivity,
     test_bis_fallback_chain_normal_execution,
     test_bis_fallback_activates_on_primary_failure,
     test_bis_fallback_cascades_multi_tier,

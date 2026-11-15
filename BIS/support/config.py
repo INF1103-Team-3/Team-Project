@@ -37,6 +37,11 @@ def load_config():
         ),
         "gemini_api_key": os.getenv("GEMINI_API_KEY", "").strip(),
         "groq_api_key": os.getenv("GROQ_API_KEY", "").strip(),
+        "nvidia_api_key": os.getenv("NVIDIA_API_KEY", "").strip(),
+        "siliconflow_api_key": (
+            os.getenv("SILICON_FLOW_API_KEY", "").strip()
+            or os.getenv("SILICONFLOW_API_KEY", "").strip()
+        ),
         "google_maps_api_key": os.getenv("GOOGLE_MAPS_API_KEY", "").strip(),
         "google_maps_js_api_key": os.getenv(
             "GOOGLE_MAPS_JS_API_KEY", ""

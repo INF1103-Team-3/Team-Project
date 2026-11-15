@@ -6,6 +6,10 @@ import time
 
 from common import debug_log
 
+_CHAT_COMPLETION_PROVIDERS = frozenset(
+    {"openrouter", "groq", "nvidia", "siliconflow"}
+)
+
 
 class AIProviderRouter:
     """Try configured providers until one returns valid structured data."""
@@ -53,7 +57,7 @@ class AIProviderRouter:
             try:
                 if provider == "gemini":
                     raw = self._gemini_call(prompt, settings, model)
-                elif provider in {"openrouter", "groq"}:
+                elif provider in _CHAT_COMPLETION_PROVIDERS:
                     raw = self._chat_completions_call(
                         prompt,
                         settings,

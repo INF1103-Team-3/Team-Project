@@ -36,7 +36,7 @@ Run a smaller group by replacing `all` with one of the following names:
 | `launcher` | CLI/Web launcher menu and container readiness checks without Docker or browser IO |
 | `web` | FastAPI API integration, storage/password/migration contracts, and optional live MongoDB (`MONGO_TEST_URI`) |
 | `deployment` | Image contents, writable container paths, imports, BRC networking, and core tests inside Docker |
-| `api` | Live API key connectivity (OpenRouter, Gemini, Groq, Google Maps), AI multi-tier fallback chains, and Google Maps services |
+| `api` | Live API key connectivity (OpenRouter, Gemini, Groq, NVIDIA NIM, SiliconFlow, Google Maps), AI multi-tier fallback chains, and Google Maps services |
 | `all` | Standard CLI/container groups: `bis`, `brns`, `brc`, `blackbox`, `integration`, `oop`, `launcher`, `deployment`; run `web` separately |
 
 Examples:
@@ -79,7 +79,7 @@ The standard `NO_COLOR` environment variable also disables color.
 | `launcher/` | Tests for `BISLauncher`, `LauncherIO`, and `WebInterfaceLauncher` |
 | `web/` | FastAPI route, auth, chatbot, credential-store, and live MongoDB tests plus `smoke_stack.py` |
 | `deployment/` | Smoke tests that verify the deployed Docker environment starts correctly and that the main services can import, communicate, and run basic checks |
-| `API/` | Live validation tests for AI keys (OpenRouter, Gemini, Groq), multi-tier fallback cascades, and Google Maps Platform services |
+| `API/` | Live validation tests for AI keys (OpenRouter, Gemini, Groq, NVIDIA NIM, SiliconFlow), multi-tier fallback cascades, and Google Maps Platform services |
 
 ## Isolation
 
@@ -127,7 +127,8 @@ isolated real-MongoDB smoke suite on pushes and pull requests.
 The optional `live-api-smoke` job runs on a nightly schedule (`staging`) or via
 manual `workflow_dispatch` (`staging` or `production`). Store all API
 (`OPENROUTER_API_KEY`, `OPENROUTER_API_KEYS`, `GEMINI_API_KEY`, `GROQ_API_KEY`,
-`GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_JS_API_KEY`), mail (`SMTP_*`), and Mongo
+`NVIDIA_API_KEY`, `SILICON_FLOW_API_KEY`, `GOOGLE_MAPS_API_KEY`,
+`GOOGLE_MAPS_JS_API_KEY`), mail (`SMTP_*`), and Mongo
 (`MONGO_URI`, `MONGO_DATABASE`, `MONGO_TEST_URI`) credentials in **GitHub
 Environment Secrets** (`staging` / `production`), never in repo files or
 `Dockerfile` build args. A workflow definition is not evidence that the current

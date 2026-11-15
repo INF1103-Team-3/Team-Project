@@ -13,7 +13,8 @@ connection wiring, nginx configuration, and optional JSON-to-Mongo import.
 | `recommendation_ui.py` | Shared terminal result card, numbered summary, exclusion, and route formatting. | BIS and internal BRNS |
 | `debug_log.py` | Per-process file logging and trace identifiers propagated across a search. | BIS, BRNS, BRC |
 | `geocode_cache.py` | One durable location query to coordinate cache backed by MongoDB (`geocode_cache`) or JSON. | BIS, BRNS, BRC |
-| `groq_models.py` | Discovers currently active Groq text chat models suitable for structured prompts. | BIS and BRNS AI managers |
+| `groq_models.py` | Compatibility wrapper delegating Groq model discovery to `ai_models.py`. | BIS, BRNS, and BRC AI managers |
+| `ai_models.py` | Discovers active chat models for Groq, NVIDIA NIM, and SiliconFlow. | BIS, BRNS, and BRC AI managers |
 | `storage_dependencies.py` | Lazy process-level `mongo_connection()` factory shared by Mongo-backed stores and geocode cache. | `BIS/data_manager.py`, `BRNS/data_manager.py`, `geocode_cache.py` |
 | `nginx.conf` | nginx server and `/api/` reverse-proxy configuration for the web container. | Docker `web` service |
 | `migrate_to_mongo.py` | Optional CLI tool to import external JSON exports into MongoDB. | Operators |
@@ -95,16 +96,22 @@ Callers should cache only a successful, validated geocode. They remain
 responsible for Singapore specific interpretation and for deciding when a
 provider request is needed.
 
-## Groq model discovery
+## Dynamic AI model discovery
 
-`fetch_chat_models(api_key, timeout=(3, 10))` requests Groq's model catalog and
-returns active models that:
+`ai_models.py` (with `groq_models.py` kept as a compatibility wrapper) discovers
+chat models at startup for configured providers:
 
-- accept text input;
-- produce text output; and
-- expose a context window of at least 4,096 tokens.
-
-Models are ordered by largest context window first for use in a fallback chain.
+- **Groq** (`fetch_groq_models` / `fetch_chat_models`): requests Groq's catalog
+  and keeps active models accepting text input, producing text output, and
+  exposing a context window of at least 4,096 tokens (largest context first).
+- **NVIDIA NIM** (`fetch_nvidia_models`): requests `/v1/models`, excludes
+  non-chat/embedding/rerank/guard/vision/code entries, prioritizes fast NIM
+  models (`bolt`, `lightning`, `flash`/`ultra`) and newer versions, and caps
+  additions so fallback stays within the 45s chain deadline.
+- **SiliconFlow** (`fetch_siliconflow_models`): requests `/v1/models?sub_type=chat`
+  (deriving `.com` vs `.cn` from `BITEFINDER_SILICONFLOW_URL`), excludes `Pro/`,
+  vision, coder, and `-Thinking`/`-R1` entries, prioritizes small/fast models,
+  and caps additions cleanly.
 Missing credentials, network errors, non-success HTTP responses, or no eligible
 models return an empty list and write a concise log event. The BIS or BRNS AI
 manager owns the final configured fallback list and provider request policy.
@@ -114,8 +121,8 @@ manager owns the final configured fallback list and provider request policy.
 Keep common infrastructure focused on reusable capabilities:
 
 - accept ordinary values and return ordinary values;
-- keep core helpers (`debug_log.py`, `terminal_ui.py`, `groq_models.py`,
-  `geocode_cache.py`) free of domain imports (`storage_dependencies.py` is the
+- keep core helpers (`debug_log.py`, `terminal_ui.py`, `ai_models.py`,
+  `groq_models.py`, `geocode_cache.py`) free of domain imports (`storage_dependencies.py` is the
   only helper that lazily imports
   `BIS.classes.data.stores.mongo.mongo_connection.MongoConnection` when
   `mongo_connection()` is called);

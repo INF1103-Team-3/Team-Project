@@ -31,8 +31,27 @@ from BRC.classes.ai.providers.fallback.fallback_ai_client import (
 AIClient = AIClientInterface
 
 
+def _append_discovered_provider(
+    providers, provider_name, api_key, fetcher, explicit_env, fallback_model
+):
+    """Append discovered models for one OpenAI-compatible provider."""
+    if not api_key:
+        return
+    models = fetcher(api_key)
+    explicit = os.getenv(explicit_env, "").strip()
+    if explicit and explicit not in models:
+        models.insert(0, explicit)
+    if not models:
+        models = [fallback_model]
+    for model_id in models:
+        providers.append({"provider": provider_name, "model": model_id})
+
+
 def create_manager(api_key, model):
     """Build BRC's independent configured provider-chain state."""
+    from common.ai_models import fetch_nvidia_models, fetch_siliconflow_models
+    from common.groq_models import fetch_chat_models
+
     try:
         interval = float(os.getenv("BRC_AI_REQUEST_INTERVAL_SECONDS", "1.5"))
     except ValueError:
@@ -47,22 +66,40 @@ def create_manager(api_key, model):
         chain_timeout = 45.0
     openrouter_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     groq_key = os.getenv("GROQ_API_KEY", "").strip()
+    nvidia_key = os.getenv("NVIDIA_API_KEY", "").strip()
+    siliconflow_key = (
+        os.getenv("SILICON_FLOW_API_KEY", "").strip()
+        or os.getenv("SILICONFLOW_API_KEY", "").strip()
+    )
     providers = []
     if api_key:
         providers.append({"provider": "gemini", "model": model})
-    # Put fast Groq models ahead of secondary Gemini/OpenRouter fallbacks so
-    # 503/504 Gemini failures complete in ~1s instead of stalling for ~80s.
-    if groq_key:
-        from common.groq_models import fetch_chat_models
-
-        groq_models = fetch_chat_models(groq_key)
-        explicit_groq = os.getenv("BRC_GROQ_MODEL", "").strip()
-        if explicit_groq and explicit_groq not in groq_models:
-            groq_models.insert(0, explicit_groq)
-        if not groq_models:
-            groq_models = ["openai/gpt-oss-20b"]
-        for groq_model in groq_models:
-            providers.append({"provider": "groq", "model": groq_model})
+    # Put fast OpenAI-compatible models ahead of slower fallbacks so 503/504
+    # Gemini failures resolve quickly instead of stalling against deadlines.
+    _append_discovered_provider(
+        providers,
+        "groq",
+        groq_key,
+        fetch_chat_models,
+        "BRC_GROQ_MODEL",
+        "openai/gpt-oss-20b",
+    )
+    _append_discovered_provider(
+        providers,
+        "nvidia",
+        nvidia_key,
+        fetch_nvidia_models,
+        "BRC_NVIDIA_MODEL",
+        "nvidia/nemotron-3.5-bolt-e4b",
+    )
+    _append_discovered_provider(
+        providers,
+        "siliconflow",
+        siliconflow_key,
+        fetch_siliconflow_models,
+        "BRC_SILICONFLOW_MODEL",
+        "Qwen/Qwen2.5-7B-Instruct",
+    )
     if api_key:
         fallback = os.getenv(
             "BRC_GEMINI_FALLBACK_MODEL", "gemini-3.6-flash"
@@ -82,14 +119,16 @@ def create_manager(api_key, model):
     providers = [entry for entry in providers if entry["model"]]
     if not providers:
         raise ValueError(
-            "Set GEMINI_API_KEY, OPENROUTER_API_KEY, or GROQ_API_KEY "
-            "before running BRC."
+            "Set GEMINI_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, "
+            "NVIDIA_API_KEY, or SILICON_FLOW_API_KEY before running BRC."
         )
     return {
         "api_key": api_key,
         "model": model,
         "openrouter_api_key": openrouter_key,
         "groq_api_key": groq_key,
+        "nvidia_api_key": nvidia_key,
+        "siliconflow_api_key": siliconflow_key,
         "providers": providers,
         "client": None,
         "request_interval": min(max(interval, 0.0), 60.0),
@@ -171,22 +210,40 @@ def _call_gemini(prompt, manager, model):
     raise RuntimeError("Gemini rate-limit retries were exhausted.")
 
 
+_CHAT_PROVIDER_ENDPOINTS = {
+    "openrouter": (
+        "BITEFINDER_OPENROUTER_URL",
+        "https://openrouter.ai/api/v1/chat/completions",
+        "openrouter_api_key",
+    ),
+    "groq": (
+        "BITEFINDER_GROQ_URL",
+        "https://api.groq.com/openai/v1/chat/completions",
+        "groq_api_key",
+    ),
+    "nvidia": (
+        "BITEFINDER_NVIDIA_URL",
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+        "nvidia_api_key",
+    ),
+    "siliconflow": (
+        "BITEFINDER_SILICONFLOW_URL",
+        "https://api.siliconflow.com/v1/chat/completions",
+        "siliconflow_api_key",
+    ),
+}
+
+
 def _call_chat_completions(prompt, manager, provider, model, timeout):
-    """Call OpenRouter or Groq through its OpenAI-compatible endpoint."""
+    """Call an OpenAI-compatible chat-completions endpoint."""
     import requests
 
-    if provider == "openrouter":
-        url = os.getenv(
-            "BITEFINDER_OPENROUTER_URL",
-            "https://openrouter.ai/api/v1/chat/completions",
-        )
-        key = manager.get("openrouter_api_key")
-    else:
-        url = os.getenv(
-            "BITEFINDER_GROQ_URL",
-            "https://api.groq.com/openai/v1/chat/completions",
-        )
-        key = manager.get("groq_api_key")
+    endpoint = _CHAT_PROVIDER_ENDPOINTS.get(provider)
+    if endpoint is None:
+        raise ValueError(f"Unsupported chat provider: {provider}")
+    url_env, default_url, key_name = endpoint
+    url = os.getenv(url_env, default_url)
+    key = manager.get(key_name)
     try:
         response = requests.post(
             url,

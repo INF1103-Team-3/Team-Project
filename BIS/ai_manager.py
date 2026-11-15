@@ -21,8 +21,14 @@ from BIS.classes.ai.providers.clients.gemini_ai_provider import (
     GeminiAIProvider,
 )
 from BIS.classes.ai.providers.clients.groq_ai_provider import GroqAIProvider
+from BIS.classes.ai.providers.clients.nvidia_ai_provider import (
+    NvidiaAIProvider,
+)
 from BIS.classes.ai.providers.clients.openrouter_ai_provider import (
     OpenRouterAIProvider,
+)
+from BIS.classes.ai.providers.clients.siliconflow_ai_provider import (
+    SiliconFlowAIProvider,
 )
 
 from sources.prompts import INTENTS, SYSTEM_PROMPT
@@ -38,6 +44,14 @@ GEMINI_URL = os.getenv(
 GROQ_URL = os.getenv(
     "BITEFINDER_GROQ_URL",
     "https://api.groq.com/openai/v1/chat/completions",
+)
+NVIDIA_URL = os.getenv(
+    "BITEFINDER_NVIDIA_URL",
+    "https://integrate.api.nvidia.com/v1/chat/completions",
+)
+SILICONFLOW_URL = os.getenv(
+    "BITEFINDER_SILICONFLOW_URL",
+    "https://api.siliconflow.com/v1/chat/completions",
 )
 
 # BIS owns this fallback order. Keep it independent of BRNS's model chain.
@@ -69,19 +83,36 @@ def manager():
     return _MANAGER
 
 
-def _extend_bis_chain_with_groq():
-    """Fetch Groq chat models at startup and register them ahead of slow
-    fallbacks.
+def _extend_bis_chain_with_dynamic_models():
+    """Fetch available Groq, NVIDIA NIM, and SiliconFlow chat models at
+    startup and register them ahead of slow fallbacks.
     """
     from dotenv import load_dotenv
+    from common.ai_models import fetch_nvidia_models, fetch_siliconflow_models
+    from common.groq_models import fetch_chat_models
 
     load_dotenv(BASE_DIR.parent / ".env")
-    api_key = os.getenv("GROQ_API_KEY", "").strip()
-    if api_key:
-        from common.groq_models import fetch_chat_models
-
-        for model_id in fetch_chat_models(api_key):
-            MODEL_CHAIN.append({"provider": "groq", "model": model_id})
+    discoverers = (
+        ("groq", os.getenv("GROQ_API_KEY", "").strip(), fetch_chat_models),
+        (
+            "nvidia",
+            os.getenv("NVIDIA_API_KEY", "").strip(),
+            fetch_nvidia_models,
+        ),
+        (
+            "siliconflow",
+            (
+                os.getenv("SILICON_FLOW_API_KEY", "").strip()
+                or os.getenv("SILICONFLOW_API_KEY", "").strip()
+            ),
+            fetch_siliconflow_models,
+        ),
+    )
+    for provider_name, api_key, fetcher in discoverers:
+        if not api_key:
+            continue
+        for model_id in fetcher(api_key):
+            MODEL_CHAIN.append({"provider": provider_name, "model": model_id})
     MODEL_CHAIN.extend(
         [
             {"provider": "gemini", "model": "gemini-3.6-flash"},
@@ -93,7 +124,7 @@ def _extend_bis_chain_with_groq():
     )
 
 
-_extend_bis_chain_with_groq()
+_extend_bis_chain_with_dynamic_models()
 
 
 def load_api_keys():
@@ -174,6 +205,14 @@ def _call_groq(payload, model, config):
     return _transport().call_groq(payload, model, config)
 
 
+def _call_nvidia(payload, model, config):
+    return _transport().call_nvidia(payload, model, config)
+
+
+def _call_siliconflow(payload, model, config):
+    return _transport().call_siliconflow(payload, model, config)
+
+
 def _parse_json_response(content):
     """Parse a JSON object from the model response."""
     cleaned = content.strip()
@@ -246,6 +285,26 @@ def _call_json_with_fallback(
         ),
         enabled=lambda settings: bool(settings.get("groq_api_key")),
     )
+    registry.register(
+        "nvidia",
+        lambda model: NvidiaAIProvider(
+            model,
+            lambda request, settings, selected=model: _call_nvidia(
+                request, selected, settings
+            ),
+        ),
+        enabled=lambda settings: bool(settings.get("nvidia_api_key")),
+    )
+    registry.register(
+        "siliconflow",
+        lambda model: SiliconFlowAIProvider(
+            model,
+            lambda request, settings, selected=model: _call_siliconflow(
+                request, selected, settings
+            ),
+        ),
+        enabled=lambda settings: bool(settings.get("siliconflow_api_key")),
+    )
     for entry in MODEL_CHAIN:
         provider, model = entry.get("provider"), entry.get("model")
         if not model or any(char in model for char in "<> "):
@@ -268,20 +327,20 @@ def _call_json_with_fallback(
 
 def has_fallback_provider(config):
     """Whether BIS can use at least one entry in its own model chain."""
+    checks = {
+        "gemini": bool(config.get("gemini_api_key")),
+        "openrouter": bool(
+            config.get("openrouter_api_keys")
+            or config.get("openrouter_api_key")
+        ),
+        "groq": bool(config.get("groq_api_key")),
+        "nvidia": bool(config.get("nvidia_api_key")),
+        "siliconflow": bool(config.get("siliconflow_api_key")),
+    }
     return any(
         entry.get("model")
         and not any(char in entry["model"] for char in "<> ")
-        and (
-            entry.get("provider") == "gemini"
-            and config.get("gemini_api_key")
-            or entry.get("provider") == "openrouter"
-            and (
-                config.get("openrouter_api_keys")
-                or config.get("openrouter_api_key")
-            )
-            or entry.get("provider") == "groq"
-            and config.get("groq_api_key")
-        )
+        and checks.get(entry.get("provider"), False)
         for entry in MODEL_CHAIN
     )
 
@@ -415,4 +474,6 @@ def _transport():
         _get_safe_error_message,
         lambda: GEMINI_URL,
         lambda: GROQ_URL,
+        nvidia_url=lambda: NVIDIA_URL,
+        siliconflow_url=lambda: SILICONFLOW_URL,
     )

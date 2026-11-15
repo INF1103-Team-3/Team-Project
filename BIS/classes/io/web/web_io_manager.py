@@ -63,15 +63,18 @@ class WebIOManager(BISWebIOInterface):
         clean = str(raw_model or "").strip()
         if not clean:
             return "Gemini AI"
+        labels = {
+            "gemini": "Gemini AI",
+            "groq": "Groq AI",
+            "nvidia": "NVIDIA NIM",
+            "siliconflow": "SiliconFlow AI",
+            "openrouter": "OpenRouter AI",
+        }
         if "/" in clean:
             provider, model_name = clean.split("/", 1)
-            p_lower = provider.lower()
-            if p_lower == "gemini":
-                return f"Gemini AI ({model_name})"
-            if p_lower == "groq":
-                return f"Groq AI ({model_name})"
-            if p_lower == "openrouter":
-                return f"OpenRouter AI ({model_name})"
+            display = labels.get(provider.lower())
+            if display:
+                return f"{display} ({model_name})"
         return clean
 
     def active_model(self):
