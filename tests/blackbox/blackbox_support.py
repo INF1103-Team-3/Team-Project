@@ -18,7 +18,7 @@ TESTS_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(TESTS_ROOT))
 
-from reporting import show_case, show_summary
+from reporting import show_case, show_summary  # noqa: E402
 
 
 PLACE_NAMES = (
@@ -78,8 +78,7 @@ def places_response(extra=False):
                 number,
                 1.353 + number * 0.0001,
             )
-            for number, name
-            in enumerate(
+            for number, name in enumerate(
                 (
                     "Third Cafe",
                     "Fourth Cafe",
@@ -96,47 +95,24 @@ def places_response(extra=False):
                 "displayName": {
                     "text": name,
                 },
-
-                "id":
-                    f"test-place-{number}",
-
-                "formattedAddress":
-                    f"{number} Test Road, Singapore",
-
+                "id": f"test-place-{number}",
+                "formattedAddress": f"{number} Test Road, Singapore",
                 "postalAddress": {
-                    "postalCode":
-                        f"1234{number:02d}",
+                    "postalCode": f"1234{number:02d}",
                 },
-
-                "nationalPhoneNumber":
-                    f"61234{number:03d}",
-
-                "rating":
-                    4.2,
-
-                "userRatingCount":
-                    125,
-
-                "servesVegetarianFood":
-                    number == 2,
-
+                "nationalPhoneNumber": f"61234{number:03d}",
+                "rating": 4.2,
+                "userRatingCount": 125,
+                "servesVegetarianFood": number == 2,
                 "accessibilityOptions": {
-                    "wheelchairAccessibleEntrance":
-                        number == 1,
+                    "wheelchairAccessibleEntrance": number == 1,
                 },
-
                 "location": {
-                    "latitude":
-                        latitude,
-
-                    "longitude":
-                        103.95,
+                    "latitude": latitude,
+                    "longitude": 103.95,
                 },
-
                 "currentOpeningHours": {
-                    "openNow":
-                        True,
-
+                    "openNow": True,
                     "periods": [
                         {
                             "open": {
@@ -146,7 +122,6 @@ def places_response(extra=False):
                         }
                     ],
                 },
-
                 "regularOpeningHours": {
                     "periods": [
                         {
@@ -157,24 +132,19 @@ def places_response(extra=False):
                         }
                     ],
                 },
-
                 "types": [
                     "restaurant",
                 ],
-
                 "priceRange": {
                     "startPrice": {
                         "units": "5",
                     },
-
                     "endPrice": {
                         "units": "8",
                     },
                 },
             }
-
-            for name, number, latitude
-            in rows
+            for name, number, latitude in rows
         ]
     }
 
@@ -185,30 +155,18 @@ def _read_request(connection):
     data = b""
 
     while b"\r\n\r\n" not in data:
-
-        chunk = connection.recv(
-            4096
-        )
+        chunk = connection.recv(4096)
 
         if not chunk:
             break
 
         data += chunk
 
-    head, _, body = data.partition(
-        b"\r\n\r\n"
-    )
+    head, _, body = data.partition(b"\r\n\r\n")
 
-    lines = (
-        head.decode(
-            "iso-8859-1"
-        )
-        .split("\r\n")
-    )
+    lines = head.decode("iso-8859-1").split("\r\n")
 
-    method, raw_path, _ = (
-        lines[0].split()
-    )
+    method, raw_path, _ = lines[0].split()
 
     path = raw_path.split(
         "?",
@@ -218,17 +176,13 @@ def _read_request(connection):
     headers = {}
 
     for line in lines[1:]:
-
         if ":" in line:
-
             name, value = line.split(
                 ":",
                 1,
             )
 
-            headers[
-                name.lower().strip()
-            ] = value.strip()
+            headers[name.lower().strip()] = value.strip()
 
     length = int(
         headers.get(
@@ -239,21 +193,12 @@ def _read_request(connection):
     )
 
     while len(body) < length:
-
-        body += connection.recv(
-            4096
-        )
+        body += connection.recv(4096)
 
     parsed = None
 
     if length:
-
-        parsed = json.loads(
-            body[:length]
-            .decode(
-                "utf-8"
-            )
-        )
+        parsed = json.loads(body[:length].decode("utf-8"))
 
     return (
         method,
@@ -269,11 +214,7 @@ def _send_json(
 ):
     """Send a JSON response to BiteFinder."""
 
-    encoded = json.dumps(
-        value
-    ).encode(
-        "utf-8"
-    )
+    encoded = json.dumps(value).encode("utf-8")
 
     response = (
         f"HTTP/1.1 {status}\r\n"
@@ -281,13 +222,9 @@ def _send_json(
         f"Content-Length: {len(encoded)}\r\n"
         "Connection: close\r\n"
         "\r\n"
-    ).encode(
-        "ascii"
-    )
+    ).encode("ascii")
 
-    connection.sendall(
-        response + encoded
-    )
+    connection.sendall(response + encoded)
 
 
 def _response_for(
@@ -299,7 +236,6 @@ def _response_for(
     """Return the fixed response for one external-service request."""
 
     with fixture["lock"]:
-
         fixture["calls"].append(
             (
                 path,
@@ -308,39 +244,25 @@ def _response_for(
         )
 
     if (
-        path in (
+        path
+        in (
             "/nearby",
             "/text",
         )
-        and fixture[
-            "places_failure"
-        ]
+        and fixture["places_failure"]
     ):
-        raise RuntimeError(
-            "simulated Places service failure"
-        )
+        raise RuntimeError("simulated Places service failure")
 
-    if (
-        path == "/chat/completions"
-        and fixture[
-            "openrouter_failure"
-        ]
-    ):
-        raise RuntimeError(
-            "simulated AI provider failure"
-        )
+    if path == "/chat/completions" and fixture["openrouter_failure"]:
+        raise RuntimeError("simulated AI provider failure")
     if method == "GET":
-
         return {
             "results": [
                 {
                     "geometry": {
                         "location": {
-                            "lat":
-                                1.352,
-
-                            "lng":
-                                103.944,
+                            "lat": 1.352,
+                            "lng": 103.944,
                         }
                     }
                 }
@@ -348,82 +270,40 @@ def _response_for(
         }
 
     if path == "/chat/completions":
+        system = body["messages"][0]["content"]
 
-        system = (
-            body["messages"][0]
-            ["content"]
-        )
+        user = body["messages"][1]["content"]
 
-        user = (
-            body["messages"][1]
-            ["content"]
-        )
+        if "Interpret today's restaurant wish" in system:
+            content = json.dumps(json.loads(user)["confirmed_choices"])
 
-        if (
-            "Interpret today's restaurant wish"
-            in system
-        ):
-
-            content = json.dumps(
-                json.loads(
-                    user
-                )["confirmed_choices"]
-            )
-
-        elif (
-            "Extract one profile travel limit"
-            in system
-        ):
-
+        elif "Extract one profile travel limit" in system:
             content = json.dumps(
                 {
-                    "value":
-                        10,
-
-                    "unit":
-                        "km",
+                    "value": 10,
+                    "unit": "km",
                 }
             )
 
-        elif (
-            "Rank every supplied restaurant candidate"
-            in system
-        ):
-
-            data = json.loads(
-                user
-            )
+        elif "Rank every supplied restaurant candidate" in system:
+            data = json.loads(user)
 
             content = json.dumps(
                 {
                     "recommendations": [
                         {
-                            "id":
-                                item["id"],
-
-                            "reason_codes":
-                                [],
+                            "id": item["id"],
+                            "reason_codes": [],
                         }
-
-                        for item
-                        in data["candidates"]
+                        for item in data["candidates"]
                     ]
                 }
             )
 
-            if fixture[
-                "invalid_brns_ai"
-            ]:
+            if fixture["invalid_brns_ai"]:
+                content = '{"recommendations": "invalid"}'
 
-                content = (
-                    '{"recommendations": "invalid"}'
-                )
-
-        elif (
-            "Review this English"
-            in system
-        ):
-
+        elif "Review this English" in system:
             corrected = user.replace(
                 "wesaten",
                 "western",
@@ -431,34 +311,15 @@ def _response_for(
 
             content = json.dumps(
                 {
-                    "status":
-                        (
-                            "corrected"
-                            if corrected != user
-                            else "ok"
-                        ),
-
-                    "text":
-                        corrected,
+                    "status": ("corrected" if corrected != user else "ok"),
+                    "text": corrected,
                 }
             )
 
-        elif (
-            "You assist BiteFinder profile collection"
-            in system
-        ):
+        elif "You assist BiteFinder profile collection" in system:
+            profile_input = json.loads(user)
 
-            profile_input = (
-                json.loads(
-                    user
-                )
-            )
-
-            field = (
-                profile_input[
-                    "current_field"
-                ]
-            )
+            field = profile_input["current_field"]
 
             vocabulary = (
                 (
@@ -466,9 +327,7 @@ def _response_for(
                     "sengkang",
                     "nex",
                 )
-
                 if field == "location"
-
                 else (
                     "western",
                     "italian",
@@ -477,41 +336,28 @@ def _response_for(
 
             values = [
                 item
-
-                for item
-                in vocabulary
-
-                if item
-                in profile_input[
-                    "user_message"
-                ]
+                for item in vocabulary
+                if item in profile_input["user_message"]
             ]
 
             content = json.dumps(
                 {
-                    "intent":
-                        "profile_update",
-
+                    "intent": "profile_update",
                     "profile_updates": {
-                        field:
-                            values,
+                        field: values,
                     },
-
-                    "location_action":
-                        "add",
+                    "location_action": "add",
                 }
             )
 
         else:
-
             content = "{}"
 
         return {
             "choices": [
                 {
                     "message": {
-                        "content":
-                            content,
+                        "content": content,
                     }
                 }
             ]
@@ -521,18 +367,10 @@ def _response_for(
         "/nearby",
         "/text",
     ):
-
-        return places_response(
-            fixture[
-                "six_matches"
-            ]
-        )
+        return places_response(fixture["six_matches"])
 
     if path == "/matrix":
-        if fixture[
-            "matrix_no_route"
-        ]:
-
+        if fixture["matrix_no_route"]:
             destinations = (
                 body.get(
                     "destinations",
@@ -547,41 +385,24 @@ def _response_for(
 
             return [
                 {
-                    "destinationIndex":
-                        index,
-
-                    "condition":
-                        "ROUTE_NOT_FOUND",
+                    "destinationIndex": index,
+                    "condition": "ROUTE_NOT_FOUND",
                 }
-
-                for index
-                in range(
-                    len(destinations)
-                )
+                for index in range(len(destinations))
             ]
         matrix = [
             {
-                "destinationIndex":
-                    index,
-
-                "condition":
-                    "ROUTE_EXISTS",
-
-                "duration":
-                    duration,
-
-                "distanceMeters":
-                    distance,
+                "destinationIndex": index,
+                "condition": "ROUTE_EXISTS",
+                "duration": duration,
+                "distanceMeters": distance,
             }
-
-            for index, duration, distance
-            in (
+            for index, duration, distance in (
                 (
                     0,
                     "600s",
                     900,
                 ),
-
                 (
                     1,
                     "3600s",
@@ -590,41 +411,22 @@ def _response_for(
             )
         ]
 
-        if fixture[
-            "six_matches"
-        ]:
-
+        if fixture["six_matches"]:
             matrix[1] = {
-                "destinationIndex":
-                    1,
-
-                "condition":
-                    "ROUTE_EXISTS",
-
-                "duration":
-                    "900s",
-
-                "distanceMeters":
-                    1500,
+                "destinationIndex": 1,
+                "condition": "ROUTE_EXISTS",
+                "duration": "900s",
+                "distanceMeters": 1500,
             }
 
             matrix.extend(
                 {
-                    "destinationIndex":
-                        index,
-
-                    "condition":
-                        "ROUTE_EXISTS",
-
-                    "duration":
-                        "600s",
-
-                    "distanceMeters":
-                        900,
+                    "destinationIndex": index,
+                    "condition": "ROUTE_EXISTS",
+                    "duration": "600s",
+                    "distanceMeters": 900,
                 }
-
-                for index
-                in range(
+                for index in range(
                     2,
                     6,
                 )
@@ -633,31 +435,20 @@ def _response_for(
         return matrix
 
     if path == "/route":
-
-        if fixture[
-            "route_unavailable"
-        ]:
-
-            return {
-                "routes": []
-            }
+        if fixture["route_unavailable"]:
+            return {"routes": []}
 
         return {
             "routes": [
                 {
-                    "duration":
-                        "600s",
-
-                    "distanceMeters":
-                        900,
-
+                    "duration": "600s",
+                    "distanceMeters": 900,
                     "legs": [
                         {
                             "steps": [
                                 {
                                     "navigationInstruction": {
-                                        "instructions":
-                                            "Head north"
+                                        "instructions": "Head north"
                                     }
                                 }
                             ]
@@ -668,8 +459,7 @@ def _response_for(
         }
 
     return {
-        "error":
-            "not found",
+        "error": "not found",
     }
 
 
@@ -680,14 +470,11 @@ def _handle_connection(
     """Handle one local service request."""
 
     try:
-
         (
             method,
             path,
             body,
-        ) = _read_request(
-            connection
-        )
+        ) = _read_request(connection)
 
         response = _response_for(
             fixture,
@@ -702,55 +489,37 @@ def _handle_connection(
         )
 
     except Exception as error:
-
         _send_json(
             connection,
             {
-                "error":
-                    str(error),
+                "error": str(error),
             },
-            status=(
-                "500 Internal Server Error"
-            ),
+            status=("500 Internal Server Error"),
         )
 
     finally:
-
         connection.close()
 
 
 def _serve(fixture):
     """Serve fixed responses until the fixture is closed."""
 
-    while not fixture[
-        "stop"
-    ].is_set():
-
+    while not fixture["stop"].is_set():
         try:
-
-            connection, _ = (
-                fixture[
-                    "socket"
-                ].accept()
-            )
+            connection, _ = fixture["socket"].accept()
 
         except socket.timeout:
-
             continue
 
         except OSError:
-
             break
 
         threading.Thread(
-            target=
-                _handle_connection,
-
+            target=_handle_connection,
             args=(
                 fixture,
                 connection,
             ),
-
             daemon=True,
         ).start()
 
@@ -778,61 +547,29 @@ def start_fixture_server():
 
     server.listen()
 
-    server.settimeout(
-        0.2
-    )
+    server.settimeout(0.2)
 
     fixture = {
-    "calls":
-        [],
-
-    "lock":
-        threading.Lock(),
-
-    "invalid_brns_ai":
-        False,
-
-    "places_failure":
-        False,
-
-    "matrix_no_route":
-        False,
-
-    "route_unavailable":
-        False,
-
-    "openrouter_failure":
-        False,
-
-    "six_matches":
-        False,
-
-        "socket":
-            server,
-
-        "port":
-            server.getsockname()[1],
-
-        "stop":
-            threading.Event(),
+        "calls": [],
+        "lock": threading.Lock(),
+        "invalid_brns_ai": False,
+        "places_failure": False,
+        "matrix_no_route": False,
+        "route_unavailable": False,
+        "openrouter_failure": False,
+        "six_matches": False,
+        "socket": server,
+        "port": server.getsockname()[1],
+        "stop": threading.Event(),
     }
 
-    fixture["thread"] = (
-        threading.Thread(
-            target=
-                _serve,
-
-            args=(
-                fixture,
-            ),
-
-            daemon=True,
-        )
+    fixture["thread"] = threading.Thread(
+        target=_serve,
+        args=(fixture,),
+        daemon=True,
     )
 
-    fixture[
-        "thread"
-    ].start()
+    fixture["thread"].start()
 
     return fixture
 
@@ -842,25 +579,15 @@ def close_fixture_server(
 ):
     """Stop the local fake service."""
 
-    fixture[
-        "stop"
-    ].set()
+    fixture["stop"].set()
 
     try:
-
-        fixture[
-            "socket"
-        ].close()
+        fixture["socket"].close()
 
     except OSError:
-
         pass
 
-    fixture[
-        "thread"
-    ].join(
-        timeout=2
-    )
+    fixture["thread"].join(timeout=2)
 
 
 def fixture_base(
@@ -868,10 +595,7 @@ def fixture_base(
 ):
     """Return the fake service base URL."""
 
-    return (
-        f"http://127.0.0.1:"
-        f"{fixture['port']}"
-    )
+    return f"http://127.0.0.1:{fixture['port']}"
 
 
 def fixture_paths(
@@ -880,13 +604,7 @@ def fixture_paths(
     """Return all external paths called by BiteFinder."""
 
     with fixture["lock"]:
-
-        return [
-            path
-
-            for path, _
-            in fixture["calls"]
-        ]
+        return [path for path, _ in fixture["calls"]]
 
 
 def fixture_bodies(
@@ -896,15 +614,7 @@ def fixture_bodies(
     """Return request bodies recorded for one endpoint."""
 
     with fixture["lock"]:
-
-        return [
-            body
-
-            for name, body
-            in fixture["calls"]
-
-            if name == path
-        ]
+        return [body for name, body in fixture["calls"] if name == path]
 
 
 def clear_fixture_calls(
@@ -913,25 +623,15 @@ def clear_fixture_calls(
     """Clear recorded HTTP requests."""
 
     with fixture["lock"]:
-
-        fixture[
-            "calls"
-        ].clear()
+        fixture["calls"].clear()
 
 
 def create_blackbox_context():
     """Create an isolated BiteFinder copy for one black-box test."""
 
-    temporary = (
-        tempfile.TemporaryDirectory(
-            prefix=
-                "bitefinder-blackbox-"
-        )
-    )
+    temporary = tempfile.TemporaryDirectory(prefix="bitefinder-blackbox-")
 
-    root = Path(
-        temporary.name
-    )
+    root = Path(temporary.name)
 
     for folder in (
         "BIS",
@@ -962,71 +662,42 @@ def create_blackbox_context():
             ignore=_ignore_copy_entries,
         )
 
-    (
-        root
-        / "BIS/data"
-    ).mkdir()
+    (root / "BIS/data").mkdir()
 
-    (
-        root
-        / "BRNS/data"
-    ).mkdir()
+    (root / "BRNS/data").mkdir()
 
-    (
-        root
-        / "BRC/data"
-    ).mkdir()
+    (root / "BRC/data").mkdir()
 
-    (
-        root
-        / "data"
-    ).mkdir()
+    (root / "data").mkdir()
 
-    (
-        root
-        / "BRNS/data/restaurants.json"
-    ).write_text(
+    (root / "BRNS/data/restaurants.json").write_text(
         "[]",
         encoding="utf-8",
     )
 
-    fixture = (
-        start_fixture_server()
-    )
+    fixture = start_fixture_server()
 
-    base = fixture_base(
-        fixture
-    )
+    base = fixture_base(fixture)
 
-    env = (
-        os.environ.copy()
-    )
+    env = os.environ.copy()
 
-    for name in tuple(
-        env
-    ):
-
-        if (
-            name.startswith(
-                (
-                    "OPENROUTER_",
-                    "GEMINI_",
-                    "GROQ_",
-                    "SMTP_",
-                    "BITEFINDER_",
-                    "MONGO_",
-                )
+    for name in tuple(env):
+        if name.startswith(
+            (
+                "OPENROUTER_",
+                "GEMINI_",
+                "GROQ_",
+                "SMTP_",
+                "BITEFINDER_",
+                "MONGO_",
             )
-
-            or name in (
-                "GOOGLE_MAPS_API_KEY",
-                "AI_BYPASS",
-                "USE_LIVE_GOOGLE",
-                "DEBUG",
-                "BRC_SERVICE_URL",
-            )
+        ) or name in (
+            "GOOGLE_MAPS_API_KEY",
+            "AI_BYPASS",
+            "USE_LIVE_GOOGLE",
+            "DEBUG",
+            "BRC_SERVICE_URL",
         ):
-
             env.pop(
                 name,
                 None,
@@ -1034,92 +705,32 @@ def create_blackbox_context():
 
     env.update(
         {
-            "NO_COLOR":
-                "1",
-
-            "BITEFINDER_STORAGE":
-                "json",
-
-            "AI_BYPASS":
-                "false",
-
-            "SMTP_BYPASS":
-                "true",
-
-            "USE_LIVE_GOOGLE":
-                "true",
-
-            "GEMINI_API_KEY":
-                "",
-
-            "OPENROUTER_API_KEY":
-                "fixture-key",
-
-            "OPENROUTER_MODEL":
-                "fixture-model",
-
-            "OPENROUTER_BASE_URL":
-                base,
-
-            "GOOGLE_MAPS_API_KEY":
-                "fixture-key",
-
-            "BITEFINDER_OPENROUTER_URL":
-                (
-                    base
-                    + "/chat/completions"
-                ),
-
-            "BITEFINDER_GEOCODE_URL":
-                (
-                    base
-                    + "/geocode"
-                ),
-
-            "BITEFINDER_TEXT_SEARCH_URL":
-                (
-                    base
-                    + "/text"
-                ),
-
-            "BITEFINDER_PLACES_URL":
-                (
-                    base
-                    + "/nearby"
-                ),
-
-            "BITEFINDER_MATRIX_URL":
-                (
-                    base
-                    + "/matrix"
-                ),
-
-            "BITEFINDER_ROUTES_URL":
-                (
-                    base
-                    + "/route"
-                ),
-
-            "NO_PROXY":
-                "127.0.0.1,localhost",
+            "NO_COLOR": "1",
+            "BITEFINDER_STORAGE": "json",
+            "AI_BYPASS": "false",
+            "SMTP_BYPASS": "true",
+            "USE_LIVE_GOOGLE": "true",
+            "GEMINI_API_KEY": "",
+            "OPENROUTER_API_KEY": "fixture-key",
+            "OPENROUTER_MODEL": "fixture-model",
+            "OPENROUTER_BASE_URL": base,
+            "GOOGLE_MAPS_API_KEY": "fixture-key",
+            "BITEFINDER_OPENROUTER_URL": (base + "/chat/completions"),
+            "BITEFINDER_GEOCODE_URL": (base + "/geocode"),
+            "BITEFINDER_TEXT_SEARCH_URL": (base + "/text"),
+            "BITEFINDER_PLACES_URL": (base + "/nearby"),
+            "BITEFINDER_MATRIX_URL": (base + "/matrix"),
+            "BITEFINDER_ROUTES_URL": (base + "/route"),
+            "NO_PROXY": "127.0.0.1,localhost",
         }
     )
 
     return {
-        "temporary":
-            temporary,
-
-        "root":
-            root,
-
-        "fixture":
-            fixture,
-
-        "env":
-            env,
-
-        "observed_output":
-            [],
+        "temporary": temporary,
+        "root": root,
+        "fixture": fixture,
+        "env": env,
+        "observed_output": [],
     }
 
 
@@ -1128,15 +739,9 @@ def close_blackbox_context(
 ):
     """Clean up the temporary BiteFinder environment."""
 
-    close_fixture_server(
-        context[
-            "fixture"
-        ]
-    )
+    close_fixture_server(context["fixture"])
 
-    context[
-        "temporary"
-    ].cleanup()
+    context["temporary"].cleanup()
 
 
 def run_cli(
@@ -1148,79 +753,43 @@ def run_cli(
 
     content = (
         answers
-
         if isinstance(
             answers,
             str,
         )
-
-        else (
-            "\n".join(
-                answers
-            )
-            + "\n"
-        )
+        else ("\n".join(answers) + "\n")
     )
 
     try:
-
-        completed = (
-            subprocess.run(
-                [
-                    sys.executable,
-
-                    str(
-                        context[
-                            "root"
-                        ]
-                        / application
-                        / "main.py"
-                    ),
-                    *(["--cli"] if application == "BIS" else ["--internal"] if application == "BRNS" else []),
-                ],
-
-                input=
-                    content,
-
-                text=
-                    True,
-
-                stdout=
-                    subprocess.PIPE,
-
-                stderr=
-                    subprocess.STDOUT,
-
-                cwd=
-                    context[
-                        "root"
-                    ],
-
-                env=
-                    context[
-                        "env"
-                    ],
-
-                timeout=
-                    10,
-
-                check=
-                    False,
-            )
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(context["root"] / application / "main.py"),
+                *(
+                    ["--cli"]
+                    if application == "BIS"
+                    else ["--internal"]
+                    if application == "BRNS"
+                    else []
+                ),
+            ],
+            input=content,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            cwd=context["root"],
+            env=context["env"],
+            timeout=10,
+            check=False,
         )
 
     except subprocess.TimeoutExpired as error:
-
         raise AssertionError(
-            f"{application} hung after 10 seconds: "
-            f"{error.stdout!r}"
+            f"{application} hung after 10 seconds: {error.stdout!r}"
         ) from error
 
     if completed.returncode != 0:
-
-        raise AssertionError(
-            completed.stdout
-        )
+        raise AssertionError(completed.stdout)
 
     return completed.stdout
 
@@ -1233,9 +802,7 @@ def assert_shows(
     """Check that the user-visible output contains expected text."""
 
     for snippet in snippets:
-
         if snippet not in output:
-
             raise AssertionError(
                 f"Expected output to contain "
                 f"{snippet!r}.\n\n"
@@ -1244,19 +811,10 @@ def assert_shows(
             )
 
         line = next(
-            line.strip()
-
-            for line
-            in output.splitlines()
-
-            if snippet in line
+            line.strip() for line in output.splitlines() if snippet in line
         )
 
-        position = (
-            line.index(
-                snippet
-            )
-        )
+        position = line.index(snippet)
 
         start = max(
             0,
@@ -1265,27 +823,13 @@ def assert_shows(
 
         end = min(
             len(line),
-            position
-            + len(snippet)
-            + 55,
+            position + len(snippet) + 55,
         )
 
         excerpt = (
-            (
-                "..."
-                if start
-                else ""
-            )
-
-            + line[
-                start:end
-            ]
-
-            + (
-                "..."
-                if end < len(line)
-                else ""
-            )
+            ("..." if start else "")
+            + line[start:end]
+            + ("..." if end < len(line) else "")
         )
 
         excerpt = re.sub(
@@ -1294,18 +838,8 @@ def assert_shows(
             excerpt,
         )
 
-        if (
-            excerpt
-            not in context[
-                "observed_output"
-            ]
-        ):
-
-            context[
-                "observed_output"
-            ].append(
-                excerpt
-            )
+        if excerpt not in context["observed_output"]:
+            context["observed_output"].append(excerpt)
 
 
 def seed_complete_user(
@@ -1314,92 +848,50 @@ def seed_complete_user(
 ):
     """Create one complete verified BIS user for black-box testing."""
 
-    user_id = (
-        "blackbox-user"
-    )
+    user_id = "blackbox-user"
 
     preferences = {
-        "location": [
-            "tampines"
-        ],
-
-        "max_distance_km":
-            2.0,
-
-        "max_travel_time_minutes":
-            40.0,
-
-        "budget_per_person":
-            10.0,
-
-        "dietary_requirements":
-            [],
-
-        "liked_cuisines":
-            [],
-
-        "disliked_cuisines":
-            [],
-
-        "other_preferences":
-            [],
+        "location": ["tampines"],
+        "max_distance_km": 2.0,
+        "max_travel_time_minutes": 40.0,
+        "budget_per_person": 10.0,
+        "dietary_requirements": [],
+        "liked_cuisines": [],
+        "disliked_cuisines": [],
+        "other_preferences": [],
     }
 
     user = {
-        "userID":
-            user_id,
-
-        "email":
-            "tester@example.com",
-
-        "email_verified":
-            True,
-
-        "username":
-            "Tester",
-
-        "preferences":
-            preferences,
+        "userID": user_id,
+        "email": "tester@example.com",
+        "email_verified": True,
+        "username": "Tester",
+        "preferences": preferences,
     }
 
-    (
-        context["root"]
-        / "BIS/data/users.json"
-    ).write_text(
+    (context["root"] / "BIS/data/users.json").write_text(
         json.dumps(
             {
-                user_id:
-                    user,
+                user_id: user,
             }
         ),
-
-        encoding=
-            "utf-8",
+        encoding="utf-8",
     )
 
-    (
-        context["root"]
-        / "BIS/data/profile_state.json"
-    ).write_text(
+    (context["root"] / "BIS/data/profile_state.json").write_text(
         json.dumps(
             {
                 "search": {
                     user_id: {
-                        "completed":
-                            True,
+                        "completed": True,
                     }
                 }
             }
         ),
-
-        encoding=
-            "utf-8",
+        encoding="utf-8",
     )
 
-    credentials_path = (
-        context["root"]
-        / "BIS/data/credentials.json"
-    )
+    credentials_path = context["root"] / "BIS/data/credentials.json"
 
     if password is not None:
         from BIS.classes.logic.security.password_hasher import PasswordHasher
@@ -1407,8 +899,7 @@ def seed_complete_user(
         credentials_path.write_text(
             json.dumps(
                 {
-                    user_id:
-                        PasswordHasher().create(password),
+                    user_id: PasswordHasher().create(password),
                 }
             ),
             encoding="utf-8",
@@ -1424,21 +915,12 @@ def history(
 ):
     """Read BRNS search history produced by a black-box test."""
 
-    path = (
-        context["root"]
-        / "BRNS/data/search_history.json"
-    )
+    path = context["root"] / "BRNS/data/search_history.json"
 
     if not path.exists():
-
         return []
 
-    return json.loads(
-        path.read_text(
-            encoding=
-                "utf-8"
-        )
-    )
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def run_blackbox_tests(
@@ -1450,13 +932,10 @@ def run_blackbox_tests(
     failures = []
 
     for test in test_functions:
-
         try:
-
             test()
 
         except Exception as error:
-
             failures.append(
                 (
                     test.__name__,
@@ -1464,11 +943,7 @@ def run_blackbox_tests(
                 )
             )
 
-            print(
-                f"\nFAILED: "
-                f"{test.__name__}: "
-                f"{error}"
-            )
+            print(f"\nFAILED: {test.__name__}: {error}")
 
     show_summary(
         group_name,
@@ -1477,5 +952,4 @@ def run_blackbox_tests(
     )
 
     if failures:
-
         raise SystemExit(1)

@@ -12,7 +12,9 @@ class BRNSAIManagerInterface(ABC):
 
     @abstractmethod
     def recommend_prepared(self, context, candidate_count):
-        """Request recommendations from prepared facts without evaluating policy."""
+        """Request recommendations from prepared facts without evaluating
+        policy.
+        """
 
     @abstractmethod
     def recommend_candidates(self, *args, **kwargs):

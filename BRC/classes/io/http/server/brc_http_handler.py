@@ -24,9 +24,12 @@ class BRCRequestHandler(BaseHTTPRequestHandler):
         if self.path == "/health":
             self._send_json(200, {"status": "ok"})
         elif self.path == "/status":
-            self._send_json(200, {
-                "database_exists": bool(self.database_path.exists()),
-            })
+            self._send_json(
+                200,
+                {
+                    "database_exists": bool(self.database_path.exists()),
+                },
+            )
         else:
             self._send_json(404, {"error": "Not found."})
 
@@ -44,7 +47,8 @@ class BRCRequestHandler(BaseHTTPRequestHandler):
             return
         with self._run_lock:
             token = debug_log.adopt_trace(
-                self.headers.get("X-BiteFinder-Trace-ID"))
+                self.headers.get("X-BiteFinder-Trace-ID")
+            )
             try:
                 result = self.application_run(value)
             except ValueError as error:
@@ -54,18 +58,25 @@ class BRCRequestHandler(BaseHTTPRequestHandler):
                 detail = debug_log.safe_error_detail(error)
                 debug_log.debug_log(
                     f"BRC service check failed: {type(error).__name__}: "
-                    f"{detail}", "ERROR", "BRC.service")
-                self._send_json(500, {
-                    "error": f"{type(error).__name__}: {error}",
-                })
+                    f"{detail}",
+                    "ERROR",
+                    "BRC.service",
+                )
+                self._send_json(
+                    500,
+                    {
+                        "error": f"{type(error).__name__}: {error}",
+                    },
+                )
                 return
             finally:
                 debug_log.end_trace(token)
         self._send_json(200, result)
 
     def _send_json(self, status, payload):
-        body = json.dumps(
-            payload, ensure_ascii=False, default=str).encode("utf-8")
+        body = json.dumps(payload, ensure_ascii=False, default=str).encode(
+            "utf-8"
+        )
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))

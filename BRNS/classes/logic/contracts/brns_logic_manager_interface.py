@@ -31,7 +31,9 @@ class BRNSLogicManagerInterface(ABC):
         """Interpret raw saved records for candidate enrichment."""
 
     @abstractmethod
-    def recommendation_context(self, request, candidates, previous_restaurants=()):
+    def recommendation_context(
+        self, request, candidates, previous_restaurants=()
+    ):
         """Prepare domain facts and constraints consumed by AI."""
 
     @abstractmethod

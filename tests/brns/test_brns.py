@@ -1,4 +1,5 @@
 """Function tests for BiteFinder BRNS recommendation and ranking logic."""
+
 import json
 import importlib
 import os
@@ -17,11 +18,11 @@ sys.path.insert(0, str(TESTS_ROOT))
 sys.path.insert(0, str(TEST_DIR))
 
 
-from BRNS import logic_manager as brns_logic
-from BRNS import ai_manager as brns_ai
-from reporting import show_case, show_summary
+from BRNS import logic_manager as brns_logic  # noqa: E402
+from BRNS import ai_manager as brns_ai  # noqa: E402
+from reporting import show_case, show_summary  # noqa: E402
 
-from sample_inputs import (
+from sample_inputs import (  # noqa: E402
     MONDAY_EVENING,
     MONDAY_NOON,
     MONDAY_OPENING_HOURS,
@@ -39,15 +40,11 @@ from sample_inputs import (
 def test_explicit_minimum_rating_is_read():
     """A stated minimum Google rating becomes a numeric requirement."""
 
-    test_input = [
-        "at least 4.5 stars"
-    ]
+    test_input = ["at least 4.5 stars"]
 
     expected = 4.5
 
-    actual = brns_logic.minimum_rating(
-        test_input
-    )
+    actual = brns_logic.minimum_rating(test_input)
 
     show_case(
         "BRNS-01: Minimum rating recognised",
@@ -65,19 +62,11 @@ def test_explicit_minimum_rating_is_read():
 def test_hard_cuisine_requirement_is_detected():
     """Hard cuisine wording is preserved as a mandatory requirement."""
 
-    test_input = [
-        "Japanese only"
-    ]
+    test_input = ["Japanese only"]
 
-    expected = [
-        "japanese"
-    ]
+    expected = ["japanese"]
 
-    actual = (
-        brns_logic.hard_required_cuisines(
-            test_input
-        )
-    )
+    actual = brns_logic.hard_required_cuisines(test_input)
 
     show_case(
         "BRNS-02: Hard cuisine requirement recognised",
@@ -95,17 +84,11 @@ def test_hard_cuisine_requirement_is_detected():
 def test_halal_hint_is_not_treated_as_official():
     """A halal hint cannot become official halal certification."""
 
-    test_input = (
-        halal_hint_restaurant()
-    )
+    test_input = halal_hint_restaurant()
 
     expected = "unofficial"
 
-    actual = (
-        brns_logic.normalize_candidate(
-            test_input
-        )["halal_status"]
-    )
+    actual = brns_logic.normalize_candidate(test_input)["halal_status"]
 
     show_case(
         "BRNS-03: Halal hint remains unofficial",
@@ -123,17 +106,11 @@ def test_halal_hint_is_not_treated_as_official():
 def test_verified_muis_evidence_becomes_official_halal():
     """Official halal status requires verified MUIS evidence."""
 
-    test_input = (
-        verified_halal_restaurant()
-    )
+    test_input = verified_halal_restaurant()
 
     expected = "official"
 
-    actual = (
-        brns_logic.normalize_candidate(
-            test_input
-        )["halal_status"]
-    )
+    actual = brns_logic.normalize_candidate(test_input)["halal_status"]
 
     show_case(
         "BRNS-04: Verified MUIS status accepted",
@@ -161,11 +138,9 @@ def test_restaurant_meeting_requirements_is_a_match():
 
     expected = "match"
 
-    status, _, _ = (
-        brns_logic.decide_outcome(
-            candidate,
-            request,
-        )
+    status, _, _ = brns_logic.decide_outcome(
+        candidate,
+        request,
     )
 
     actual = status
@@ -186,13 +161,9 @@ def test_restaurant_meeting_requirements_is_a_match():
 def test_over_budget_restaurant_becomes_alternative():
     """A restaurant above budget is not treated as an exact match."""
 
-    request = search_request(
-        budget_per_person=10
-    )
+    request = search_request(budget_per_person=10)
 
-    candidate = restaurant(
-        avg_price=25
-    )
+    candidate = restaurant(avg_price=25)
 
     test_input = {
         "request": request,
@@ -201,11 +172,9 @@ def test_over_budget_restaurant_becomes_alternative():
 
     expected = "alternative"
 
-    status, _, _ = (
-        brns_logic.decide_outcome(
-            candidate,
-            request,
-        )
+    status, _, _ = brns_logic.decide_outcome(
+        candidate,
+        request,
     )
 
     actual = status
@@ -226,17 +195,9 @@ def test_over_budget_restaurant_becomes_alternative():
 def test_disliked_cuisine_is_rejected():
     """A cuisine explicitly disliked by the user causes rejection."""
 
-    request = search_request(
-        disliked_cuisines=[
-            "japanese"
-        ]
-    )
+    request = search_request(disliked_cuisines=["japanese"])
 
-    candidate = restaurant(
-        cuisines=[
-            "japanese"
-        ]
-    )
+    candidate = restaurant(cuisines=["japanese"])
 
     test_input = {
         "request": request,
@@ -245,16 +206,12 @@ def test_disliked_cuisine_is_rejected():
 
     expected = {
         "status": "reject",
-        "reasons": [
-            "contains a disliked cuisine"
-        ],
+        "reasons": ["contains a disliked cuisine"],
     }
 
-    status, _, reasons = (
-        brns_logic.decide_outcome(
-            candidate,
-            request,
-        )
+    status, _, reasons = brns_logic.decide_outcome(
+        candidate,
+        request,
     )
 
     actual = {
@@ -278,15 +235,9 @@ def test_disliked_cuisine_is_rejected():
 def test_unverified_halal_restaurant_is_rejected():
     """A halal request rejects restaurants without verified certification."""
 
-    request = search_request(
-        dietary_requirements=[
-            "halal"
-        ]
-    )
+    request = search_request(dietary_requirements=["halal"])
 
-    candidate = restaurant(
-        halal_status="unverified"
-    )
+    candidate = restaurant(halal_status="unverified")
 
     test_input = {
         "request": request,
@@ -295,16 +246,12 @@ def test_unverified_halal_restaurant_is_rejected():
 
     expected = {
         "status": "reject",
-        "reasons": [
-            "MUIS halal certification not verified"
-        ],
+        "reasons": ["MUIS halal certification not verified"],
     }
 
-    status, _, reasons = (
-        brns_logic.decide_outcome(
-            candidate,
-            request,
-        )
+    status, _, reasons = brns_logic.decide_outcome(
+        candidate,
+        request,
     )
 
     actual = {
@@ -328,17 +275,9 @@ def test_unverified_halal_restaurant_is_rejected():
 def test_verified_halal_restaurant_can_match():
     """A verified halal restaurant can satisfy a halal request."""
 
-    request = search_request(
-        dietary_requirements=[
-            "halal"
-        ]
-    )
+    request = search_request(dietary_requirements=["halal"])
 
-    candidate = (
-        brns_logic.normalize_candidate(
-            verified_halal_restaurant()
-        )
-    )
+    candidate = brns_logic.normalize_candidate(verified_halal_restaurant())
 
     test_input = {
         "request": request,
@@ -347,11 +286,9 @@ def test_verified_halal_restaurant_can_match():
 
     expected = "match"
 
-    status, _, _ = (
-        brns_logic.decide_outcome(
-            candidate,
-            request,
-        )
+    status, _, _ = brns_logic.decide_outcome(
+        candidate,
+        request,
     )
 
     actual = status
@@ -372,15 +309,9 @@ def test_verified_halal_restaurant_can_match():
 def test_unverified_vegetarian_option_is_not_exact_match():
     """Missing vegetarian evidence prevents an exact match."""
 
-    request = search_request(
-        dietary_requirements=[
-            "vegetarian"
-        ]
-    )
+    request = search_request(dietary_requirements=["vegetarian"])
 
-    candidate = restaurant(
-        dietary_requirements=[]
-    )
+    candidate = restaurant(dietary_requirements=[])
 
     test_input = {
         "request": request,
@@ -389,11 +320,9 @@ def test_unverified_vegetarian_option_is_not_exact_match():
 
     expected = "alternative"
 
-    status, _, _ = (
-        brns_logic.decide_outcome(
-            candidate,
-            request,
-        )
+    status, _, _ = brns_logic.decide_outcome(
+        candidate,
+        request,
     )
 
     actual = status
@@ -414,13 +343,9 @@ def test_unverified_vegetarian_option_is_not_exact_match():
 def test_over_travel_time_restaurant_becomes_alternative():
     """A restaurant outside the walking limit is not an exact match."""
 
-    request = search_request(
-        max_travel_minutes=10
-    )
+    request = search_request(max_travel_minutes=10)
 
-    candidate = restaurant(
-        walk_minutes=25
-    )
+    candidate = restaurant(walk_minutes=25)
 
     test_input = {
         "request": request,
@@ -429,11 +354,9 @@ def test_over_travel_time_restaurant_becomes_alternative():
 
     expected = "alternative"
 
-    status, _, _ = (
-        brns_logic.decide_outcome(
-            candidate,
-            request,
-        )
+    status, _, _ = brns_logic.decide_outcome(
+        candidate,
+        request,
     )
 
     actual = status
@@ -454,22 +377,13 @@ def test_over_travel_time_restaurant_becomes_alternative():
 def test_valid_hardcoded_ai_order_is_accepted():
     """A complete unique AI ordering is accepted without a live API."""
 
-    restaurants = (
-        ranking_restaurants()
-    )
+    restaurants = ranking_restaurants()
 
-    ai_response = (
-        valid_ai_recommendations()
-    )
+    ai_response = valid_ai_recommendations()
 
     test_input = {
-        "restaurant_names": [
-            item["name"]
-            for item in restaurants
-        ],
-
-        "hardcoded_ai_response":
-            ai_response,
+        "restaurant_names": [item["name"] for item in restaurants],
+        "hardcoded_ai_response": ai_response,
     }
 
     expected = [
@@ -477,11 +391,9 @@ def test_valid_hardcoded_ai_order_is_accepted():
         0,
     ]
 
-    actual = (
-        brns_logic.recommendation_order(
-            restaurants,
-            ai_response,
-        )
+    actual = brns_logic.recommendation_order(
+        restaurants,
+        ai_response,
     )
 
     show_case(
@@ -500,27 +412,16 @@ def test_valid_hardcoded_ai_order_is_accepted():
 def test_duplicate_hardcoded_ai_ids_are_rejected():
     """Duplicate IDs in AI output are rejected."""
 
-    restaurants = (
-        ranking_restaurants()
-    )
+    restaurants = ranking_restaurants()
 
-    ai_response = (
-        duplicate_ai_recommendations()
-    )
+    ai_response = duplicate_ai_recommendations()
 
     test_input = {
-        "restaurant_names": [
-            item["name"]
-            for item in restaurants
-        ],
-
-        "hardcoded_ai_response":
-            ai_response,
+        "restaurant_names": [item["name"] for item in restaurants],
+        "hardcoded_ai_response": ai_response,
     }
 
-    expected = (
-        "BRNS AI returned duplicate restaurant IDs."
-    )
+    expected = "BRNS AI returned duplicate restaurant IDs."
 
     try:
         brns_logic.recommendation_order(
@@ -549,27 +450,16 @@ def test_duplicate_hardcoded_ai_ids_are_rejected():
 def test_hardcoded_ai_ranking_is_checked_against_business_rules():
     """AI ordering still passes through deterministic BRNS rules."""
 
-    restaurants = (
-        ranking_restaurants()
-    )
+    restaurants = ranking_restaurants()
 
     request = search_request()
 
-    ai_response = (
-        valid_ai_recommendations()
-    )
+    ai_response = valid_ai_recommendations()
 
     test_input = {
-        "request":
-            request,
-
-        "hardcoded_ai_response":
-            ai_response,
-
-        "restaurant_names": [
-            item["name"]
-            for item in restaurants
-        ],
+        "request": request,
+        "hardcoded_ai_response": ai_response,
+        "restaurant_names": [item["name"] for item in restaurants],
     }
 
     expected = [
@@ -577,18 +467,13 @@ def test_hardcoded_ai_ranking_is_checked_against_business_rules():
         "Sakura Near",
     ]
 
-    result = (
-        brns_logic.rank_restaurants(
-            restaurants,
-            request,
-            recommendations=ai_response,
-        )
+    result = brns_logic.rank_restaurants(
+        restaurants,
+        request,
+        recommendations=ai_response,
     )
 
-    actual = [
-        item["restaurant"]["name"]
-        for item in result["matches"]
-    ]
+    actual = [item["restaurant"]["name"] for item in result["matches"]]
 
     show_case(
         "BRNS-14: AI ranking passes through BRNS business rules",
@@ -608,20 +493,15 @@ def test_weekly_hours_detect_open_restaurant():
     """Weekly hours identify a restaurant as open at Monday noon."""
 
     test_input = {
-        "weekly_hours":
-            MONDAY_OPENING_HOURS,
-
-        "time":
-            MONDAY_NOON.isoformat(),
+        "weekly_hours": MONDAY_OPENING_HOURS,
+        "time": MONDAY_NOON.isoformat(),
     }
 
     expected = True
 
-    actual = (
-        brns_logic.open_now_from_weekly(
-            MONDAY_OPENING_HOURS,
-            MONDAY_NOON,
-        )
+    actual = brns_logic.open_now_from_weekly(
+        MONDAY_OPENING_HOURS,
+        MONDAY_NOON,
     )
 
     show_case(
@@ -641,20 +521,15 @@ def test_weekly_hours_detect_closed_restaurant():
     """Weekly hours identify a restaurant as closed after operating hours."""
 
     test_input = {
-        "weekly_hours":
-            MONDAY_OPENING_HOURS,
-
-        "time":
-            MONDAY_EVENING.isoformat(),
+        "weekly_hours": MONDAY_OPENING_HOURS,
+        "time": MONDAY_EVENING.isoformat(),
     }
 
     expected = False
 
-    actual = (
-        brns_logic.open_now_from_weekly(
-            MONDAY_OPENING_HOURS,
-            MONDAY_EVENING,
-        )
+    actual = brns_logic.open_now_from_weekly(
+        MONDAY_OPENING_HOURS,
+        MONDAY_EVENING,
     )
 
     show_case(
@@ -675,31 +550,25 @@ def test_rating_sort_places_highest_rated_first():
 
     results = {
         "mode": "walk",
-
         "matches": [
             {
-                "restaurant":
-                    restaurant(
-                        name="Lower",
-                        rating=4.1,
-                    )
+                "restaurant": restaurant(
+                    name="Lower",
+                    rating=4.1,
+                )
             },
-
             {
-                "restaurant":
-                    restaurant(
-                        name="Higher",
-                        rating=4.8,
-                    )
+                "restaurant": restaurant(
+                    name="Higher",
+                    rating=4.8,
+                )
             },
         ],
-
         "alternatives": [],
     }
 
     test_input = {
         "sort_by": "rating",
-
         "restaurants": [
             "Lower: 4.1",
             "Higher: 4.8",
@@ -708,17 +577,12 @@ def test_rating_sort_places_highest_rated_first():
 
     expected = "Higher"
 
-    sorted_results = (
-        brns_logic.sort_results(
-            results,
-            "rating",
-        )
+    sorted_results = brns_logic.sort_results(
+        results,
+        "rating",
     )
 
-    actual = (
-        sorted_results["matches"][0]
-        ["restaurant"]["name"]
-    )
+    actual = sorted_results["matches"][0]["restaurant"]["name"]
 
     show_case(
         "BRNS-17: Results sorted by rating",
@@ -738,31 +602,25 @@ def test_distance_sort_places_nearest_first():
 
     results = {
         "mode": "walk",
-
         "matches": [
             {
-                "restaurant":
-                    restaurant(
-                        name="Far",
-                        walk_meters=1500,
-                    )
+                "restaurant": restaurant(
+                    name="Far",
+                    walk_meters=1500,
+                )
             },
-
             {
-                "restaurant":
-                    restaurant(
-                        name="Near",
-                        walk_meters=300,
-                    )
+                "restaurant": restaurant(
+                    name="Near",
+                    walk_meters=300,
+                )
             },
         ],
-
         "alternatives": [],
     }
 
     test_input = {
         "sort_by": "distance",
-
         "restaurants": [
             "Far: 1500 m",
             "Near: 300 m",
@@ -771,17 +629,12 @@ def test_distance_sort_places_nearest_first():
 
     expected = "Near"
 
-    sorted_results = (
-        brns_logic.sort_results(
-            results,
-            "distance",
-        )
+    sorted_results = brns_logic.sort_results(
+        results,
+        "distance",
     )
 
-    actual = (
-        sorted_results["matches"][0]
-        ["restaurant"]["name"]
-    )
+    actual = sorted_results["matches"][0]["restaurant"]["name"]
 
     show_case(
         "BRNS-18: Results sorted by distance",
@@ -794,18 +647,14 @@ def test_distance_sort_places_nearest_first():
     )
 
     assert actual == expected
+
+
 def test_missing_restaurant_facts_are_not_invented():
     """Missing restaurant facts remain unavailable instead of being guessed."""
 
-    request = search_request(
-        other_preferences=[
-            "at least 4.5 stars"
-        ]
-    )
+    request = search_request(other_preferences=["at least 4.5 stars"])
 
-    candidate = (
-        restaurant_with_missing_facts()
-    )
+    candidate = restaurant_with_missing_facts()
 
     test_input = {
         "request": request,
@@ -822,11 +671,9 @@ def test_missing_restaurant_facts_are_not_invented():
         ],
     }
 
-    status, _, reasons = (
-        brns_logic.decide_outcome(
-            candidate,
-            request,
-        )
+    status, _, reasons = brns_logic.decide_outcome(
+        candidate,
+        request,
     )
 
     actual = {
@@ -846,6 +693,8 @@ def test_missing_restaurant_facts_are_not_invented():
     )
 
     assert actual == expected
+
+
 def test_ai_falls_back_to_next_provider():
     """If the first AI provider fails, BRNS tries the next provider."""
 
@@ -874,9 +723,7 @@ def test_ai_falls_back_to_next_provider():
         system_prompt,
         user_text,
     ):
-        calls.append(
-            f"gemini/{model}"
-        )
+        calls.append(f"gemini/{model}")
 
         return (
             False,
@@ -888,15 +735,11 @@ def test_ai_falls_back_to_next_provider():
         system_prompt,
         user_text,
     ):
-        calls.append(
-            f"openrouter/{model}"
-        )
+        calls.append(f"openrouter/{model}")
 
         return (
             True,
-            json.dumps(
-                valid_reply
-            ),
+            json.dumps(valid_reply),
         )
 
     try:
@@ -911,69 +754,34 @@ def test_ai_falls_back_to_next_provider():
             },
         ]
 
-        brns_ai._call_gemini = (
-            fake_gemini
-        )
+        brns_ai._call_gemini = fake_gemini
 
-        brns_ai._call_openrouter = (
-            fake_openrouter
-        )
+        brns_ai._call_openrouter = fake_openrouter
 
-        brns_ai.time.sleep = (
-            lambda seconds: None
-        )
+        brns_ai.time.sleep = lambda seconds: None
 
         test_input = {
-            "first_provider":
-                "gemini/primary-model",
-
-            "fallback_provider":
-                "openrouter/backup-model",
+            "first_provider": "gemini/primary-model",
+            "fallback_provider": "openrouter/backup-model",
         }
 
         expected = {
-            "ok":
-                True,
-
-            "model_used":
-                "openrouter/backup-model",
-
-            "cuisine":
-                "japanese",
-
+            "ok": True,
+            "model_used": "openrouter/backup-model",
+            "cuisine": "japanese",
             "call_order": [
                 "gemini/primary-model",
                 "openrouter/backup-model",
             ],
         }
 
-        ok, result, model_used = (
-            brns_ai.call_ai(
-                {
-                    "cuisine":
-                        "japanese"
-                }
-            )
-        )
+        ok, result, model_used = brns_ai.call_ai({"cuisine": "japanese"})
 
         actual = {
-            "ok":
-                ok,
-
-            "model_used":
-                model_used,
-
-            "cuisine":
-                (
-                    result.get(
-                        "cuisine"
-                    )
-                    if ok
-                    else None
-                ),
-
-            "call_order":
-                calls,
+            "ok": ok,
+            "model_used": model_used,
+            "cuisine": (result.get("cuisine") if ok else None),
+            "call_order": calls,
         }
 
         show_case(
@@ -989,21 +797,13 @@ def test_ai_falls_back_to_next_provider():
         assert actual == expected
 
     finally:
-        brns_ai.config.MODEL_CHAIN = (
-            original_chain
-        )
+        brns_ai.config.MODEL_CHAIN = original_chain
 
-        brns_ai._call_gemini = (
-            original_gemini
-        )
+        brns_ai._call_gemini = original_gemini
 
-        brns_ai._call_openrouter = (
-            original_openrouter
-        )
+        brns_ai._call_openrouter = original_openrouter
 
-        brns_ai.time.sleep = (
-            original_sleep
-        )
+        brns_ai.time.sleep = original_sleep
 
 
 def test_all_ai_providers_can_fail_safely():
@@ -1021,9 +821,7 @@ def test_all_ai_providers_can_fail_safely():
         system_prompt,
         user_text,
     ):
-        calls.append(
-            f"gemini/{model}"
-        )
+        calls.append(f"gemini/{model}")
 
         return (
             False,
@@ -1035,9 +833,7 @@ def test_all_ai_providers_can_fail_safely():
         system_prompt,
         user_text,
     ):
-        calls.append(
-            f"openrouter/{model}"
-        )
+        calls.append(f"openrouter/{model}")
 
         return (
             False,
@@ -1056,66 +852,37 @@ def test_all_ai_providers_can_fail_safely():
             },
         ]
 
-        brns_ai._call_gemini = (
-            fake_gemini
-        )
+        brns_ai._call_gemini = fake_gemini
 
-        brns_ai._call_openrouter = (
-            fake_openrouter
-        )
+        brns_ai._call_openrouter = fake_openrouter
 
-        brns_ai.time.sleep = (
-            lambda seconds: None
-        )
+        brns_ai.time.sleep = lambda seconds: None
 
         test_input = {
-            "gemini":
-                "network failure",
-
-            "openrouter":
-                "HTTP 503",
+            "gemini": "network failure",
+            "openrouter": "HTTP 503",
         }
 
         expected = {
-            "ok":
-                False,
-
-            "model_used":
-                None,
-
-            "error_returned":
-                True,
-
+            "ok": False,
+            "model_used": None,
+            "error_returned": True,
             "call_order": [
                 "gemini/primary-model",
                 "openrouter/backup-model",
             ],
         }
 
-        ok, result, model_used = (
-            brns_ai.call_ai(
-                {
-                    "cuisine":
-                        "japanese"
-                }
-            )
-        )
+        ok, result, model_used = brns_ai.call_ai({"cuisine": "japanese"})
 
         actual = {
-            "ok":
-                ok,
-
-            "model_used":
-                model_used,
-
-            "error_returned":
-                isinstance(
-                    result,
-                    str,
-                ),
-
-            "call_order":
-                calls,
+            "ok": ok,
+            "model_used": model_used,
+            "error_returned": isinstance(
+                result,
+                str,
+            ),
+            "call_order": calls,
         }
 
         show_case(
@@ -1132,21 +899,13 @@ def test_all_ai_providers_can_fail_safely():
         assert actual == expected
 
     finally:
-        brns_ai.config.MODEL_CHAIN = (
-            original_chain
-        )
+        brns_ai.config.MODEL_CHAIN = original_chain
 
-        brns_ai._call_gemini = (
-            original_gemini
-        )
+        brns_ai._call_gemini = original_gemini
 
-        brns_ai._call_openrouter = (
-            original_openrouter
-        )
+        brns_ai._call_openrouter = original_openrouter
 
-        brns_ai.time.sleep = (
-            original_sleep
-        )
+        brns_ai.time.sleep = original_sleep
 
 
 def test_ai_ranking_accepts_all_grounded_reason_codes():
@@ -1170,11 +929,13 @@ def test_ai_ranking_accepts_all_grounded_reason_codes():
         brns_ai.config.GEMINI_API_KEY = "test-key"
         brns_ai._call_gemini = lambda *_args: (
             True,
-            json.dumps({
-                "recommendations": [
-                    {"id": 0, "reason_codes": reason_codes},
-                ],
-            }),
+            json.dumps(
+                {
+                    "recommendations": [
+                        {"id": 0, "reason_codes": reason_codes},
+                    ],
+                }
+            ),
         )
 
         request = search_request()
@@ -1222,7 +983,8 @@ def test_brc_error_does_not_skip_later_candidates():
     original_brc_service_url = os.environ.pop("BRC_SERVICE_URL", None)
     brc_stub = types.ModuleType("BRC.main")
     brc_stub.data_manager = types.SimpleNamespace(
-        CLEAN_DATABASE_PATH=Path("missing-test-database.json"))
+        CLEAN_DATABASE_PATH=Path("missing-test-database.json")
+    )
     brc_stub.run = lambda _record: None
     sys.modules["BRC.main"] = brc_stub
     brns_main = importlib.import_module("BRNS.main")
@@ -1231,7 +993,9 @@ def test_brc_error_does_not_skip_later_candidates():
         candidate = restaurant()
         candidate["name"] = name
         candidate["halal_hint"] = True
-        candidate["address"] = f"{index + 1} Test Street, Singapore 10000{index}"
+        candidate["address"] = (
+            f"{index + 1} Test Street, Singapore 10000{index}"
+        )
         candidates.append(candidate)
     calls = []
 
@@ -1241,11 +1005,13 @@ def test_brc_error_does_not_skip_later_candidates():
             raise RuntimeError("temporary provider failure")
         checked = dict(record)
         if record["name"] == "MUIS Cafe":
-            checked.update({
-                "halal_certification": "official",
-                "muis_check": {"status": "verified"},
-                "cuisines": ["chinese"],
-            })
+            checked.update(
+                {
+                    "halal_certification": "official",
+                    "muis_check": {"status": "verified"},
+                    "cuisines": ["chinese"],
+                }
+            )
         else:
             checked["muis_check"] = {"status": "not_verified"}
         return checked
@@ -1259,7 +1025,8 @@ def test_brc_error_does_not_skip_later_candidates():
             for index in range(len(candidates))
         ]
         checked, summary = brns_main.verify_halal_candidates(
-            candidates, request, recommendations)
+            candidates, request, recommendations
+        )
         actual = {
             "calls": calls,
             "errors": summary["errors"],
@@ -1297,6 +1064,7 @@ def test_brc_error_does_not_skip_later_candidates():
         if original_brc_service_url is not None:
             os.environ["BRC_SERVICE_URL"] = original_brc_service_url
 
+
 TESTS = (
     test_explicit_minimum_rating_is_read,
     test_hard_cuisine_requirement_is_detected,
@@ -1330,12 +1098,10 @@ def run_tests():
     failures = []
 
     for test in TESTS:
-
         try:
             test()
 
         except Exception as error:
-
             failures.append(
                 (
                     test.__name__,
@@ -1343,11 +1109,7 @@ def run_tests():
                 )
             )
 
-            print(
-                f"\nFAILED: "
-                f"{test.__name__}: "
-                f"{error}"
-            )
+            print(f"\nFAILED: {test.__name__}: {error}")
 
     show_summary(
         "BRNS",

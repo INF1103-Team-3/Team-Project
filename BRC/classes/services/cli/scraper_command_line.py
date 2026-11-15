@@ -16,8 +16,8 @@ class ScraperCommandLine:
 
     def run(self, argv=None):
         parser = argparse.ArgumentParser(
-            description=(
-                "Download all MUIS-certified eating establishments."))
+            description=("Download all MUIS-certified eating establishments.")
+        )
         parser.add_argument("--output", type=Path, default=RAW_MUIS_PATH)
         parser.add_argument("--no-geocode", action="store_true")
         parser.add_argument("--delay", type=float, default=0.1)
@@ -25,13 +25,15 @@ class ScraperCommandLine:
         io, display = IOManager(), ConsoleProgress()
         io.display_status(
             "Downloading the complete MUIS eating-establishment directory...",
-            error=True)
+            error=True,
+        )
         try:
             snapshot = MuisScraper(
                 DataManager(raw_path=args.output),
                 delay=max(0, args.delay),
                 geocode=not args.no_geocode,
-                progress=display).scrape_all()
+                progress=display,
+            ).scrape_all()
         except (ValueError, OSError, requests.RequestException) as error:
             io.display_status(f"MUIS scrape failed: {error}", error=True)
             return 1
@@ -39,5 +41,6 @@ class ScraperCommandLine:
             display.finish()
         io.display_status(
             f"Saved {len(snapshot.listings)} MUIS-certified restaurants "
-            f"to {args.output}.")
+            f"to {args.output}."
+        )
         return 0

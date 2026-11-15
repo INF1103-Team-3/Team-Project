@@ -10,7 +10,8 @@ class BaseResultSorter(ABC):
         mode = results.get("mode")
         sorted_results = dict(results)
         sorted_results["matches"] = sorted(
-            results.get("matches", []), key=lambda item: self.key(item, mode))
+            results.get("matches", []), key=lambda item: self.key(item, mode)
+        )
         sorted_results["alternatives"] = sorted(
             results.get("alternatives", []),
             key=lambda item: self.key(item, mode),
@@ -26,7 +27,8 @@ class BaseResultSorter(ABC):
         reviews = reviews if type(reviews) is int and reviews >= 0 else 0
         distance = restaurant.get(f"{mode}_meters")
         distance = (
-            distance if type(distance) in (int, float) and distance >= 0
+            distance
+            if type(distance) in (int, float) and distance >= 0
             else None
         )
         name = str(restaurant.get("name") or "").casefold()

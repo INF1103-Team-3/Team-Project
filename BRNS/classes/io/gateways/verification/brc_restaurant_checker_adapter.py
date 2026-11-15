@@ -1,6 +1,6 @@
 """Adapter isolating BRNS from the existing BRC module shape."""
 
-from BRNS.classes.io.gateways.verification.restaurant_verification_interface import (
+from BRNS.classes.io.gateways.verification.restaurant_verification_interface import (  # noqa: E501
     RestaurantVerificationInterface,
 )
 

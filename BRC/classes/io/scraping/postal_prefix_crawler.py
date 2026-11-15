@@ -2,7 +2,9 @@
 
 import time
 
-from BRC.classes.data.storage.data_unavailable_error import DataUnavailableError
+from BRC.classes.data.storage.data_unavailable_error import (
+    DataUnavailableError,
+)
 from BRC.classes.data.models.common.model_constants import SOURCE_URL
 from BRC.classes.data.models.muis.muis_listing import MuisListing
 
@@ -25,14 +27,17 @@ class PostalPrefixCrawler:
         while pending:
             prefix = pending.pop(0)
             self._report(
-                len(done), len(done) + len(pending) + 1,
-                f"Searching postal prefix {prefix}")
+                len(done),
+                len(done) + len(pending) + 1,
+                f"Searching postal prefix {prefix}",
+            )
             rows, capped = self._directory.search(prefix)
             if capped:
                 if len(prefix) >= 6:
                     raise ValueError(
                         "MUIS results for postal prefix "
-                        f"{prefix!r} remain capped.")
+                        f"{prefix!r} remain capped."
+                    )
                 pending[0:0] = [prefix + digit for digit in "0123456789"]
             else:
                 done.append(prefix)
@@ -40,8 +45,10 @@ class PostalPrefixCrawler:
                     if row.postal_code.startswith(prefix):
                         found[row.crawl_identity] = row.to_dict(geocoded=False)
                         self._report(
-                            len(done), len(done) + len(pending),
-                            f"{row.name} ({number}/{len(rows)} in {prefix})")
+                            len(done),
+                            len(done) + len(pending),
+                            f"{row.name} ({number}/{len(rows)} in {prefix})",
+                        )
             since_save += 1
             if since_save >= 10 or not pending:
                 self._progress_file.write(state)
@@ -49,8 +56,7 @@ class PostalPrefixCrawler:
             if self._delay and pending:
                 time.sleep(self._delay)
         self._report(1, 1, f"Retrieved {len(found)} restaurant outlets")
-        return [
-            MuisListing.from_dict(row) for row in found.values()], done
+        return [MuisListing.from_dict(row) for row in found.values()], done
 
     def clear(self):
         self._progress_file.delete()
@@ -77,5 +83,6 @@ class PostalPrefixCrawler:
             and saved.get("source_url") == SOURCE_URL
             and isinstance(saved.get("pending_prefixes"), list)
             and isinstance(saved.get("completed_prefixes"), list)
-            and isinstance(saved.get("listings"), dict))
+            and isinstance(saved.get("listings"), dict)
+        )
         return saved if usable else fresh

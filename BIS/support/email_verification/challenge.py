@@ -24,12 +24,15 @@ def validate_challenge(challenge):
 def new_challenge(previous=None, now=None, *, attempt_reset_seconds):
     """Make a new code, carrying the failed-attempt count across resends."""
     return _challenge_manager.create(
-        previous, now, attempt_reset_seconds=attempt_reset_seconds)
+        previous, now, attempt_reset_seconds=attempt_reset_seconds
+    )
 
 
 def check_challenge(challenge, code, now=None, *, attempt_reset_seconds):
     """Return updated state and an error, consuming one attempt if invalid."""
     return _challenge_manager.check(
-        challenge, code, now,
+        challenge,
+        code,
+        now,
         attempt_reset_seconds=attempt_reset_seconds,
     )

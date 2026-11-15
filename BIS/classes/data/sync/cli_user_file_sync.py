@@ -1,8 +1,14 @@
-"""Two-way synchronization between MongoDB users and BIS CLI data/users.json."""
+"Two-way synchronization between MongoDB users and BIS CLI data/users.json."
+
 import json
 from pathlib import Path
 from threading import RLock
-from BIS.sources.profile_schema import CUISINES, empty_preferences, normalize_email, validate_user
+from BIS.sources.profile_schema import (
+    CUISINES,
+    empty_preferences,
+    normalize_email,
+    validate_user,
+)
 
 
 class CliUserFileSync:
@@ -30,10 +36,14 @@ class CliUserFileSync:
             **empty_preferences(),
             **pref,
             "liked_cuisines": (
-                [c for c in liked if c in CUISINES] if isinstance(liked, list) else None
+                [c for c in liked if c in CUISINES]
+                if isinstance(liked, list)
+                else None
             ),
             "disliked_cuisines": (
-                [c for c in disliked if c in CUISINES] if isinstance(disliked, list) else None
+                [c for c in disliked if c in CUISINES]
+                if isinstance(disliked, list)
+                else None
             ),
         }
 
@@ -57,22 +67,34 @@ class CliUserFileSync:
                         user = validate_user(candidate)
                     except ValueError:
                         continue
-                    if user["email"] in seen_emails or user["email"] in self._SKIP_EMAILS:
+                    if (
+                        user["email"] in seen_emails
+                        or user["email"] in self._SKIP_EMAILS
+                    ):
                         continue
                     seen_emails.add(user["email"])
                     existing_by_email = self._connection.execute(
-                        lambda db, e=user["email"]: db.users.find_one({"email": e})
+                        lambda db, e=user["email"]: db.users.find_one(
+                            {"email": e}
+                        )
                     )
-                    if existing_by_email and existing_by_email.get("_id") != user["userID"]:
+                    if (
+                        existing_by_email
+                        and existing_by_email.get("_id") != user["userID"]
+                    ):
                         continue
                     existing = self._connection.execute(
-                        lambda db, key=user["userID"]: db.users.find_one({"_id": key})
+                        lambda db, key=user["userID"]: db.users.find_one(
+                            {"_id": key}
+                        )
                     )
                     merged = dict(user, _id=user["userID"])
                     if existing and existing.get("email_verified"):
                         merged["email_verified"] = True
                     self._connection.execute(
-                        lambda db, doc=merged: db.users.replace_one({"_id": doc["_id"]}, doc, upsert=True)
+                        lambda db, doc=merged: db.users.replace_one(
+                            {"_id": doc["_id"]}, doc, upsert=True
+                        )
                     )
                 self._last_mtime_ns = self._users_path.stat().st_mtime_ns
             except Exception as exc:
@@ -91,17 +113,25 @@ class CliUserFileSync:
             try:
                 cli_users = {}
                 if self._users_path.exists():
-                    loaded = json.loads(self._users_path.read_text(encoding="utf-8"))
+                    loaded = json.loads(
+                        self._users_path.read_text(encoding="utf-8")
+                    )
                     if isinstance(loaded, dict):
                         cli_users = loaded
                 uid = str(user.get("userID") or user.get("_id"))
-                clean = validate_user({
-                    "userID": uid,
-                    "email": email,
-                    "email_verified": bool(user.get("email_verified", False)),
-                    "username": user.get("username"),
-                    "preferences": self._cli_preferences(user.get("preferences")),
-                })
+                clean = validate_user(
+                    {
+                        "userID": uid,
+                        "email": email,
+                        "email_verified": bool(
+                            user.get("email_verified", False)
+                        ),
+                        "username": user.get("username"),
+                        "preferences": self._cli_preferences(
+                            user.get("preferences")
+                        ),
+                    }
+                )
                 cli_users[uid] = clean
                 self._users_path.parent.mkdir(parents=True, exist_ok=True)
                 self._users_path.write_text(
@@ -111,4 +141,3 @@ class CliUserFileSync:
                 self._last_mtime_ns = self._users_path.stat().st_mtime_ns
             except Exception as exc:
                 self._warn(f"Mongo->CLI sync warning: {exc}")
-

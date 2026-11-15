@@ -4,16 +4,23 @@ import os
 from BRNS import config
 from BRNS.classes.data.helpers.search_history_scope import SearchHistoryScope
 from BRNS.classes.data.data_manager import DataManager
-from BRNS.classes.data.stores.json.json_recommendation_store import JsonRecommendationStore
+from BRNS.classes.data.stores.json.json_recommendation_store import (
+    JsonRecommendationStore,
+)
 
 
 history_scope = SearchHistoryScope()
 _BACKEND = os.getenv("BITEFINDER_STORAGE", "json").strip().lower()
 if _BACKEND == "json":
-    _STORE = JsonRecommendationStore(config.RESTAURANT_FILE, config.HISTORY_FILE)
+    _STORE = JsonRecommendationStore(
+        config.RESTAURANT_FILE, config.HISTORY_FILE
+    )
 elif _BACKEND == "mongo":
     from common.storage_dependencies import mongo_connection
-    from BRNS.classes.data.stores.mongo.mongo_recommendation_store import MongoRecommendationStore
+    from BRNS.classes.data.stores.mongo.mongo_recommendation_store import (
+        MongoRecommendationStore,
+    )
+
     _STORE = MongoRecommendationStore(mongo_connection(), history_scope)
     _STORE.ensure_indexes()
 else:

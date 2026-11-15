@@ -12,9 +12,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(TESTS_ROOT))
 
 
-from reporting import show_case
+from reporting import show_case  # noqa: E402
 
-from blackbox_support import (
+from blackbox_support import (  # noqa: E402
     PLACE_NAMES,
     TEST_PASSWORD,
     assert_shows,
@@ -35,9 +35,7 @@ def test_bis_to_brns_retries_input_and_shows_route():
     context = create_blackbox_context()
 
     try:
-        seed_complete_user(
-            context
-        )
+        seed_complete_user(context)
 
         test_input = [
             "2",
@@ -81,157 +79,64 @@ def test_bis_to_brns_retries_input_and_shows_route():
             "Head north",
         )
 
-        paths = fixture_paths(
-            context["fixture"]
-        )
+        paths = fixture_paths(context["fixture"])
 
         prompts = [
-            body[
-                "messages"
-            ][0][
-                "content"
-            ]
-
-            for body
-            in fixture_bodies(
+            body["messages"][0]["content"]
+            for body in fixture_bodies(
                 context["fixture"],
                 "/chat/completions",
             )
         ]
 
-        route_requests = (
-            fixture_bodies(
-                context["fixture"],
-                "/matrix",
-            )
-
-            + fixture_bodies(
-                context["fixture"],
-                "/route",
-            )
+        route_requests = fixture_bodies(
+            context["fixture"],
+            "/matrix",
+        ) + fixture_bodies(
+            context["fixture"],
+            "/route",
         )
 
-        cache_path = (
-            context["root"]
-            / "data/geocode_cache.json"
-        )
+        cache_path = context["root"] / "data/geocode_cache.json"
 
-        cache = json.loads(
-            cache_path.read_text(
-                encoding="utf-8"
-            )
-        )
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
 
-        saved_history = history(
-            context
-        )
+        saved_history = history(context)
 
         actual = {
-            "geocode_calls":
-                paths.count(
-                    "/geocode"
-                ),
-
-            "nearby_calls":
-                paths.count(
-                    "/nearby"
-                ),
-
-            "matrix_calls":
-                paths.count(
-                    "/matrix"
-                ),
-
-            "route_calls":
-                paths.count(
-                    "/route"
-                ),
-
-            "ai_calls_at_least_two":
-                (
-                    paths.count(
-                        "/chat/completions"
-                    )
-                    >= 2
-                ),
-
-            "search_interpretation_ai_used":
-                any(
-                    "Interpret today's restaurant wish"
-                    in prompt
-
-                    for prompt
-                    in prompts
-                ),
-
-            "ranking_ai_used":
-                any(
-                    "Rank every supplied restaurant candidate"
-                    in prompt
-
-                    for prompt
-                    in prompts
-                ),
-
-            "all_route_calls_traffic_aware":
-                all(
-                    body.get(
-                        "routingPreference"
-                    )
-                    == "TRAFFIC_AWARE"
-
-                    for body
-                    in route_requests
-                ),
-
-            "history_count":
-                len(
-                    saved_history
-                ),
-
-            "top_match_place_ids":
-                saved_history[0][
-                    "top_match_place_ids"
-                ],
-
-            "cached_postal_code":
-                cache[
-                    "530912"
-                ],
+            "geocode_calls": paths.count("/geocode"),
+            "nearby_calls": paths.count("/nearby"),
+            "matrix_calls": paths.count("/matrix"),
+            "route_calls": paths.count("/route"),
+            "ai_calls_at_least_two": (paths.count("/chat/completions") >= 2),
+            "search_interpretation_ai_used": any(
+                "Interpret today's restaurant wish" in prompt
+                for prompt in prompts
+            ),
+            "ranking_ai_used": any(
+                "Rank every supplied restaurant candidate" in prompt
+                for prompt in prompts
+            ),
+            "all_route_calls_traffic_aware": all(
+                body.get("routingPreference") == "TRAFFIC_AWARE"
+                for body in route_requests
+            ),
+            "history_count": len(saved_history),
+            "top_match_place_ids": saved_history[0]["top_match_place_ids"],
+            "cached_postal_code": cache["530912"],
         }
 
         expected = {
-            "geocode_calls":
-                1,
-
-            "nearby_calls":
-                1,
-
-            "matrix_calls":
-                1,
-
-            "route_calls":
-                1,
-
-            "ai_calls_at_least_two":
-                True,
-
-            "search_interpretation_ai_used":
-                True,
-
-            "ranking_ai_used":
-                True,
-
-            "all_route_calls_traffic_aware":
-                True,
-
-            "history_count":
-                1,
-
-            "top_match_place_ids": [
-                "test-place-1"
-            ],
-
+            "geocode_calls": 1,
+            "nearby_calls": 1,
+            "matrix_calls": 1,
+            "route_calls": 1,
+            "ai_calls_at_least_two": True,
+            "search_interpretation_ai_used": True,
+            "ranking_ai_used": True,
+            "all_route_calls_traffic_aware": True,
+            "history_count": 1,
+            "top_match_place_ids": ["test-place-1"],
             "cached_postal_code": [
                 1.352,
                 103.944,
@@ -253,9 +158,7 @@ def test_bis_to_brns_retries_input_and_shows_route():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_enter_starts_search_and_repeat_uses_same_choices_with_new_top_match():
@@ -264,15 +167,9 @@ def test_enter_starts_search_and_repeat_uses_same_choices_with_new_top_match():
     context = create_blackbox_context()
 
     try:
-        seed_complete_user(
-            context
-        )
+        seed_complete_user(context)
 
-        context[
-            "fixture"
-        ][
-            "six_matches"
-        ] = True
+        context["fixture"]["six_matches"] = True
 
         test_input = [
             "2",
@@ -315,110 +212,48 @@ def test_enter_starts_search_and_repeat_uses_same_choices_with_new_top_match():
 
         recommendation_calls = [
             body
-
-            for body
-            in ai_calls
-
+            for body in ai_calls
             if (
                 "Rank every supplied restaurant candidate"
-                in body[
-                    "messages"
-                ][0][
-                    "content"
-                ]
+                in body["messages"][0]["content"]
             )
         ]
 
         second_request = json.loads(
-            recommendation_calls[1][
-                "messages"
-            ][1][
-                "content"
-            ]
+            recommendation_calls[1]["messages"][1]["content"]
         )
 
-        saved_history = history(
-            context
-        )
+        saved_history = history(context)
 
         actual = {
-            "searching_count":
-                output.count(
-                    "Searching restaurants..."
-                ),
-
-            "nearby_calls":
-                fixture_paths(
-                    context["fixture"]
-                ).count(
-                    "/nearby"
-                ),
-
-            "matrix_calls":
-                fixture_paths(
-                    context["fixture"]
-                ).count(
-                    "/matrix"
-                ),
-
-            "history_count":
-                len(
-                    saved_history
-                ),
-
+            "searching_count": output.count("Searching restaurants..."),
+            "nearby_calls": fixture_paths(context["fixture"]).count("/nearby"),
+            "matrix_calls": fixture_paths(context["fixture"]).count("/matrix"),
+            "history_count": len(saved_history),
             "top_matches": [
-                entry[
-                    "top_match_place_ids"
-                ][0]
-
-                for entry
-                in saved_history
+                entry["top_match_place_ids"][0] for entry in saved_history
             ],
-
-            "ranking_ai_calls":
-                len(
-                    recommendation_calls
-                ),
-
-            "previous_restaurants_count":
-                len(
-                    second_request[
-                        "previous_restaurants"
-                    ]
-                ),
-
-            "first_previous_restaurant":
-                second_request[
-                    "previous_restaurants"
-                ][0],
+            "ranking_ai_calls": len(recommendation_calls),
+            "previous_restaurants_count": len(
+                second_request["previous_restaurants"]
+            ),
+            "first_previous_restaurant": second_request[
+                "previous_restaurants"
+            ][0],
         }
 
         expected = {
-            "searching_count":
-                2,
-
-            "nearby_calls":
-                2,
-
-            "matrix_calls":
-                2,
-
-            "history_count":
-                2,
-
+            "searching_count": 2,
+            "nearby_calls": 2,
+            "matrix_calls": 2,
+            "history_count": 2,
             "top_matches": [
                 "test-place-1",
                 "test-place-6",
             ],
-
-            "ranking_ai_calls":
-                2,
-
-            "previous_restaurants_count":
-                5,
-
-            "first_previous_restaurant":
-                "Near Cafe",
+            "ranking_ai_calls": 2,
+            "previous_restaurants_count": 5,
+            "first_previous_restaurant": "Near Cafe",
         }
 
         show_case(
@@ -435,9 +270,7 @@ def test_enter_starts_search_and_repeat_uses_same_choices_with_new_top_match():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_repeat_explains_when_no_new_restaurants_are_available():
@@ -446,9 +279,7 @@ def test_repeat_explains_when_no_new_restaurants_are_available():
     context = create_blackbox_context()
 
     try:
-        seed_complete_user(
-            context
-        )
+        seed_complete_user(context)
 
         test_input = [
             "2",
@@ -482,34 +313,17 @@ def test_repeat_explains_when_no_new_restaurants_are_available():
         )
 
         actual = {
-            "message_shown":
-                (
-                    "No new restaurants found for these choices"
-                    in output
-                ),
-
-            "searching_count":
-                output.count(
-                    "Searching restaurants..."
-                ),
-
-            "history_count":
-                len(
-                    history(
-                        context
-                    )
-                ),
+            "message_shown": (
+                "No new restaurants found for these choices" in output
+            ),
+            "searching_count": output.count("Searching restaurants..."),
+            "history_count": len(history(context)),
         }
 
         expected = {
-            "message_shown":
-                True,
-
-            "searching_count":
-                2,
-
-            "history_count":
-                2,
+            "message_shown": True,
+            "searching_count": 2,
+            "history_count": 2,
         }
 
         show_case(
@@ -525,9 +339,7 @@ def test_repeat_explains_when_no_new_restaurants_are_available():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 TESTS = (

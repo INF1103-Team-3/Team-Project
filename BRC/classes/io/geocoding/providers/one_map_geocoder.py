@@ -5,8 +5,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from BRC.classes.data.storage.data_unavailable_error import DataUnavailableError
-from BRC.classes.io.geocoding.contracts.geocoder_interface import GeocoderInterface
+from BRC.classes.data.storage.data_unavailable_error import (
+    DataUnavailableError,
+)
+from BRC.classes.io.geocoding.contracts.geocoder_interface import (
+    GeocoderInterface,
+)
 
 
 class OneMapGeocoder(GeocoderInterface):
@@ -27,28 +31,34 @@ class OneMapGeocoder(GeocoderInterface):
         for listing in listings:
             first_at_postal.setdefault(listing.postal_code, listing)
         missing = {
-            postal: listing for postal, listing in first_at_postal.items()
-            if postal not in cache}
+            postal: listing
+            for postal, listing in first_at_postal.items()
+            if postal not in cache
+        }
         if missing:
             self._look_up(missing, cache)
         return [
-            listing.with_coordinates(**cache.get(
-                listing.postal_code, self.NO_LOCATION))
-            for listing in listings]
+            listing.with_coordinates(
+                **cache.get(listing.postal_code, self.NO_LOCATION)
+            )
+            for listing in listings
+        ]
 
     def _look_up(self, missing, cache):
-        self._report(0, len(missing),
-                     f"Preparing {len(missing)} restaurant locations")
+        self._report(
+            0, len(missing), f"Preparing {len(missing)} restaurant locations"
+        )
         with ThreadPoolExecutor(max_workers=self.WORKERS) as pool:
             futures = {
                 pool.submit(self.lookup, postal, listing.address): postal
-                for postal, listing in missing.items()}
+                for postal, listing in missing.items()
+            }
             for count, future in enumerate(as_completed(futures), 1):
                 postal = futures[future]
                 cache[postal] = future.result()
                 self._report(
-                    count, len(missing),
-                    f"{missing[postal].name} ({postal})")
+                    count, len(missing), f"{missing[postal].name} ({postal})"
+                )
                 if count % 25 == 0:
                     self._cache_file.write(cache)
         self._cache_file.write(cache)
@@ -56,21 +66,27 @@ class OneMapGeocoder(GeocoderInterface):
     def lookup(self, postal, address):
         variants = []
         for text in (
-                address, re.sub(r"\s*#.*$", "", address),
-                re.sub(r"\bSingapore\b.*$", "", address,
-                       flags=re.IGNORECASE)):
+            address,
+            re.sub(r"\s*#.*$", "", address),
+            re.sub(r"\bSingapore\b.*$", "", address, flags=re.IGNORECASE),
+        ):
             text = re.sub(r"\s+", " ", text).strip(" ,")
-            if (text and text.casefold()
-                    not in {item.casefold() for item in variants}):
+            if text and text.casefold() not in {
+                item.casefold() for item in variants
+            }:
                 variants.append(text)
         for text in (postal, *variants):
             try:
                 response = self._http_get(
                     self.URL,
                     params={
-                        "searchVal": text, "returnGeom": "Y",
-                        "getAddrDetails": "Y", "pageNum": 1},
-                    timeout=20)
+                        "searchVal": text,
+                        "returnGeom": "Y",
+                        "getAddrDetails": "Y",
+                        "pageNum": 1,
+                    },
+                    timeout=20,
+                )
                 response.raise_for_status()
                 payload = response.json()
                 if payload.get("found", 0) > 0 and payload.get("results"):
@@ -80,8 +96,11 @@ class OneMapGeocoder(GeocoderInterface):
                         "longitude": float(best["LONGITUDE"]),
                     }
             except (
-                    requests.RequestException, ValueError,
-                    KeyError, TypeError):
+                requests.RequestException,
+                ValueError,
+                KeyError,
+                TypeError,
+            ):
                 continue
         return dict(self.NO_LOCATION)
 

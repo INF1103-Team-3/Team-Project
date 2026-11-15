@@ -1,4 +1,5 @@
-"""Account and workflow-state persistence capability shared by JSON and Mongo."""
+"Account and workflow-state persistence capability shared by JSON and Mongo."
+
 from abc import ABC, abstractmethod
 
 

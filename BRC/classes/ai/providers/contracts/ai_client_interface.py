@@ -11,8 +11,11 @@ class AIClientInterface(ABC):
         """Return provider response text or raise a documented AI error."""
 
     def request_validated(self, prompt, read_answer):
-        """Retry a malformed reply once; routers may specialize provider fallback."""
+        """Retry a malformed reply once; routers may specialize provider
+        fallback.
+        """
         from BRC.classes.ai.errors.ai_response_error import AIResponseError
+
         try:
             return read_answer(self.call_api(prompt))
         except AIResponseError:

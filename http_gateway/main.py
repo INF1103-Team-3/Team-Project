@@ -1,4 +1,5 @@
-"""FastAPI composition and lifecycle; domain behavior lives in OOP subsystems."""
+"FastAPI composition and lifecycle; domain behavior lives in OOP subsystems."
+
 from contextlib import asynccontextmanager
 import os
 from fastapi import FastAPI, Request
@@ -13,6 +14,7 @@ def create_app(runtime_factory=None):
         factory = runtime_factory
         if factory is None:
             from http_gateway.dependencies import build_runtime
+
             factory = build_runtime
         app.state.runtime = await run_in_threadpool(factory)
         try:

@@ -7,8 +7,14 @@ class Certificate:
     """Expose the stable fields and active status of one MUIS certificate."""
 
     FIELDS = (
-        "certificate_number", "listing_id", "scheme", "category",
-        "valid_until", "source_url", "raw_fetched_at")
+        "certificate_number",
+        "listing_id",
+        "scheme",
+        "category",
+        "valid_until",
+        "source_url",
+        "raw_fetched_at",
+    )
     DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y")
 
     def __init__(self, data):
@@ -36,7 +42,8 @@ class Certificate:
         for date_format in self.DATE_FORMATS:
             try:
                 expiry = datetime.strptime(
-                    str(self.valid_until)[:10], date_format).date()
+                    str(self.valid_until)[:10], date_format
+                ).date()
             except ValueError:
                 continue
             return expiry >= (today or date.today())

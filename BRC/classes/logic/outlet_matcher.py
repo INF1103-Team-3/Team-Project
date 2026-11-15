@@ -17,20 +17,23 @@ class OutletMatcher:
             return False
         if not outlet.certificate.is_active():
             return False
-        if (self._similarity(
-                self.brand(record.name), self.brand(outlet.name))
-                < self.BRAND_SIMILARITY):
+        if (
+            self._similarity(self.brand(record.name), self.brand(outlet.name))
+            < self.BRAND_SIMILARITY
+        ):
             return False
         if record.address.unit != outlet.address.unit:
             return False
         return (
             record.address.street_similarity(outlet.address)
-            >= self.ADDRESS_SIMILARITY)
+            >= self.ADDRESS_SIMILARITY
+        )
 
     @staticmethod
     def brand(name):
         return Address.normalise(
-            re.split(r"\s*(?:\(|@|\|)\s*", str(name), maxsplit=1)[0])
+            re.split(r"\s*(?:\(|@|\|)\s*", str(name), maxsplit=1)[0]
+        )
 
     @staticmethod
     def _similarity(first, second):

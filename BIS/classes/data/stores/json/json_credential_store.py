@@ -1,10 +1,12 @@
-"""JSON-backed password credential persistence matching MongoCredentialStore."""
+"JSON-backed password credential persistence matching MongoCredentialStore."
 
 from BIS.classes.data.stores.contracts.base_json_store import BaseJsonStore
 
 
 class JsonCredentialStore(BaseJsonStore):
-    """Persist salted PBKDF2 password credentials in a separate JSON object file."""
+    """Persist salted PBKDF2 password credentials in a separate JSON object
+    file.
+    """
 
     def load(self):
         return self._read_json(self._records_path)
@@ -16,7 +18,9 @@ class JsonCredentialStore(BaseJsonStore):
         if row is None:
             return None
         if not isinstance(row, dict):
-            raise RuntimeError("Saved credentials are invalid; restore the file.")
+            raise RuntimeError(
+                "Saved credentials are invalid; restore the file."
+            )
         return dict(row)
 
     def save(self, user_id, credential):

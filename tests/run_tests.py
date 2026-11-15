@@ -38,7 +38,6 @@ TEST_GROUPS = {
     "bis": (BIS_TEST,),
     "brns": (BRNS_TEST,),
     "brc": (BRC_TEST,),
-
     "core": (
         BIS_TEST,
         BRNS_TEST,
@@ -47,19 +46,13 @@ TEST_GROUPS = {
         CLEANUP_TEST,
         LAUNCHER_TEST,
     ),
-
     "oop": (OOP_TEST, CLEANUP_TEST),
     "launcher": (LAUNCHER_TEST,),
     "web": (WEB_TEST, STORAGE_TEST, LIVE_MONGO_TEST),
-
     "blackbox": BLACKBOX_TESTS,
-
     "integration": (INTEGRATION_TEST,),
-
     "deployment": (DEPLOYMENT_TEST,),
-
     "api": API_TESTS,
-
     "all": (
         BIS_TEST,
         BRNS_TEST,
@@ -74,8 +67,13 @@ TEST_GROUPS = {
 }
 
 GROUP_DESCRIPTIONS = {
-    "web": "Offline web/Mongo contracts; optional isolated live-Mongo checks when MONGO_TEST_URI is set.",
-    "launcher": "Menu and startup tests without launching Docker or a browser.",
+    ("web"): (
+        "Offline web/Mongo contracts; optional isolated live-Mongo checks "
+        "when MONGO_TEST_URI is set."
+    ),
+    ("launcher"): (
+        "Menu and startup tests without launching Docker or a browser."
+    ),
     "bis": (
         "Tests BIS input validation, preference handling, search preparation "
         "and hardcoded AI interpretation."
@@ -84,9 +82,7 @@ GROUP_DESCRIPTIONS = {
         "Tests BRNS restaurant filtering, recommendation rules, dietary "
         "checks, ranking and hardcoded AI recommendations."
     ),
-    "brc": (
-        "Tests MUIS halal verification and official outlet matching."
-    ),
+    "brc": ("Tests MUIS halal verification and official outlet matching."),
     "core": (
         "Runs the BIS and BRNS core function tests without calling a live "
         "AI API."
@@ -111,12 +107,17 @@ GROUP_DESCRIPTIONS = {
         "Validates live API key connectivity (OpenRouter, Gemini, Groq, "
         "Google Maps), AI fallback cascades, and Google Maps services."
     ),
-    "all": "Runs every BiteFinder core, black-box, integration and deployment test.",
+    ("all"): (
+        "Runs every BiteFinder core, black-box, integration and deployment "
+        "test."
+    ),
 }
 
 
 def safe_test_environment(use_brc_service=False, is_api_test=False):
-    """Return an importable test environment; retains credentials only for API tests."""
+    """Return an importable test environment; retains credentials only for
+    API tests.
+    """
     environment = os.environ.copy()
     paths = [str(ROOT), str(TESTS_DIR)]
     if environment.get("PYTHONPATH"):
@@ -177,17 +178,27 @@ def run_group(group_name):
     show_group_start(group_name, GROUP_DESCRIPTIONS[group_name])
 
     if group_name in {"deployment", "all"} and not running_inside_docker():
-        print(style(
-            "\nDeployment tests must run inside the BiteFinder Docker container.",
-            "warning",
-        ))
+        print(
+            style(
+                (
+                    "\nDeployment tests must run inside the BiteFinder Docker "
+                    "container."
+                ),
+                "warning",
+            )
+        )
         print("\nStart Docker with:")
         print(style("  docker compose up -d --build", "command"))
         print("\nThen run:")
-        print(style(
-            f"  docker compose exec bis-brns python tests/run_tests.py {group_name}",
-            "command",
-        ))
+        print(
+            style(
+                (
+                    "  docker compose exec bis-brns python tests/run_tests.py "
+                    f"{group_name}"
+                ),
+                "command",
+            )
+        )
         return 1
 
     failed_scripts = [
@@ -198,14 +209,18 @@ def run_group(group_name):
     print(style(f"{group_name.upper()} GROUP SUMMARY", "heading"))
     print(style("=" * 72, "rule"))
     print(f"Test scripts run: {len(scripts)}")
-    print(style(
-        f"Passed scripts: {len(scripts) - len(failed_scripts)}",
-        "pass",
-    ))
-    print(style(
-        f"Failed scripts: {len(failed_scripts)}",
-        "fail" if failed_scripts else "muted",
-    ))
+    print(
+        style(
+            f"Passed scripts: {len(scripts) - len(failed_scripts)}",
+            "pass",
+        )
+    )
+    print(
+        style(
+            f"Failed scripts: {len(failed_scripts)}",
+            "fail" if failed_scripts else "muted",
+        )
+    )
 
     if failed_scripts:
         print(style("\nFailed scripts:", "fail"))
@@ -219,11 +234,25 @@ def show_usage():
     """Display the available BiteFinder test commands."""
     print(style("BiteFinder automated test runner", "heading"))
     print("\nUsage:")
-    for group in ("bis", "brns", "core", "blackbox", "integration",
-                  "deployment", "web", "launcher", "all"):
+    for group in (
+        "bis",
+        "brns",
+        "core",
+        "blackbox",
+        "integration",
+        "deployment",
+        "web",
+        "launcher",
+        "all",
+    ):
         print(style(f"  python tests/run_tests.py {group}", "command"))
     print("\nWith no group, the runner uses core.")
-    print("Set BITEFINDER_TEST_COLOR=always or never to override color detection.")
+    print(
+        (
+            "Set BITEFINDER_TEST_COLOR=always or never to override color "
+            "detection."
+        )
+    )
 
 
 def main():

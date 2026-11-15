@@ -15,16 +15,19 @@ class CheckedRestaurant:
             if result.get("halal_certification") == "official":
                 result["halal_certification"] = "none"
                 result["dietary"] = [
-                    item for item in result.get("dietary", [])
-                    if item != "halal"]
+                    item
+                    for item in result.get("dietary", [])
+                    if item != "halal"
+                ]
             result["muis_check"] = {
                 "status": "not_verified",
                 "checked_at": self._checked_at,
             }
             return result
         certificate = self._outlet.certificate
-        result["dietary"] = list(dict.fromkeys([
-            *(result.get("dietary") or []), "halal"]))
+        result["dietary"] = list(
+            dict.fromkeys([*(result.get("dietary") or []), "halal"])
+        )
         result["halal_certification"] = "official"
         result["cuisines"] = self._outlet.cuisines
         if not result.get("cuisine") and self._outlet.cuisines:

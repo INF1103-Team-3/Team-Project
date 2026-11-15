@@ -21,7 +21,8 @@ class BaseJsonStore(ABC):
         if not path.exists():
             debug_log(
                 "Saved JSON file is missing; using an empty collection.",
-                "WARNING", "BRNS.data.load",
+                "WARNING",
+                "BRNS.data.load",
             )
             return None
         try:
@@ -35,7 +36,8 @@ class BaseJsonStore(ABC):
                 ) from error
             debug_log(
                 "Saved JSON file is unreadable; using an empty collection.",
-                "ERROR", "BRNS.data.load",
+                "ERROR",
+                "BRNS.data.load",
             )
             return None
 
@@ -49,19 +51,29 @@ class BaseJsonStore(ABC):
             if compact_hours:
                 formatted = re.sub(
                     r'\[\n[ \t]*"(\d{4})",\n[ \t]*"(\d{4})"\n[ \t]*\]',
-                    r'["\1", "\2"]', formatted,
+                    r'["\1", "\2"]',
+                    formatted,
                 )
                 formatted = re.sub(
                     r'\[\n(?:[ \t]*\["\d{4}", "\d{4}"\],?\n)+[ \t]*\]',
-                    lambda match: "[" + ", ".join(re.findall(
-                        r'\["\d{4}", "\d{4}"\]', match.group(0))) + "]",
+                    lambda match: (
+                        "["
+                        + ", ".join(
+                            re.findall(r'\["\d{4}", "\d{4}"\]', match.group(0))
+                        )
+                        + "]"
+                    ),
                     formatted,
                 )
             path.parent.mkdir(parents=True, exist_ok=True)
             with tempfile.NamedTemporaryFile(
-                    "w", encoding="utf-8", dir=path.parent,
-                    prefix=f".{path.name}.", suffix=".tmp",
-                    delete=False) as file:
+                "w",
+                encoding="utf-8",
+                dir=path.parent,
+                prefix=f".{path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as file:
                 temporary = Path(file.name)
                 file.write(formatted + "\n")
                 file.flush()
@@ -77,8 +89,13 @@ class BaseJsonStore(ABC):
     @staticmethod
     def _ordered_hours(data):
         weekdays = (
-            "monday", "tuesday", "wednesday", "thursday", "friday",
-            "saturday", "sunday",
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
         )
         ordered = []
         for row in data:

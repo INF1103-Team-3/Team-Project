@@ -1,4 +1,5 @@
-"""Request-local user identity for persisted search history; no schema changes."""
+"Request-local user identity for persisted search history; no schema changes."
+
 from contextlib import contextmanager
 from contextvars import ContextVar
 

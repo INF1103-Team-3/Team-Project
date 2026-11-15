@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 
-from BRC.classes.data.storage.data_unavailable_error import DataUnavailableError
+from BRC.classes.data.storage.data_unavailable_error import (
+    DataUnavailableError,
+)
 from BRC.classes.data.storage.json_file import JsonFile
 from BRC.models import (
     SOURCE_URL,
@@ -27,8 +29,13 @@ class DataManager:
     _CLEAN_DB_LOCK = Lock()
     _CLEAN_DB_CACHE = {}
 
-    def __init__(self, folder=DATA_DIR, raw_path=None, clean_path=None,
-                 cuisine_cache_path=None):
+    def __init__(
+        self,
+        folder=DATA_DIR,
+        raw_path=None,
+        clean_path=None,
+        cuisine_cache_path=None,
+    ):
         folder = Path(folder)
         self._raw = JsonFile(raw_path or folder / RAW_MUIS_PATH.name)
         self._clean = JsonFile(clean_path or folder / CLEAN_DATABASE_PATH.name)
@@ -40,7 +47,8 @@ class DataManager:
             cache_path = folder / "cuisine_tags_cache.json"
         self._cuisine_cache = JsonFile(cache_path)
         self._checked_cache = JsonFile(
-            folder / "checked_restaurants_cache.json")
+            folder / "checked_restaurants_cache.json"
+        )
         self._single_result = folder / "checked_restaurant.json"
         self._batch_result = folder / "checked_restaurants.json"
         self._scrape_progress = JsonFile(folder / "scrape_progress.json")
@@ -103,23 +111,29 @@ class DataManager:
     def save_clean_database(self, database):
         if len(database) == 0:
             raise DataUnavailableError(
-                "Refusing to save an incomplete cleaned database.")
-        self._clean.write({
-            "source_url": database.source_url,
-            "source_fetched_at": database.source_fetched_at,
-            "built_at": self._now(),
-            "restaurant_count": len(database),
-            "restaurants": database.to_list(),
-        })
+                "Refusing to save an incomplete cleaned database."
+            )
+        self._clean.write(
+            {
+                "source_url": database.source_url,
+                "source_fetched_at": database.source_fetched_at,
+                "built_at": self._now(),
+                "restaurant_count": len(database),
+                "restaurants": database.to_list(),
+            }
+        )
 
     def load(self):
         try:
             return list(self.load_clean_database())
         except (DataUnavailableError, OSError):
             from common.debug_log import debug_log
+
             debug_log(
                 "Cleaned BRC database is unavailable; returning no records.",
-                "ERROR", "BRC.data.load")
+                "ERROR",
+                "BRC.data.load",
+            )
             return []
 
     def query(self, keep):
@@ -137,17 +151,21 @@ class DataManager:
             and all(
                 isinstance(items, list)
                 and all(isinstance(tag, str) for tag in items)
-                for items in tags.values()))
+                for items in tags.values()
+            )
+        )
         return CuisineCache(tags) if valid else CuisineCache()
 
     def save_cuisine_cache(self, cache):
         tags = cache.to_dict()
-        self._cuisine_cache.write({
-            "version": 1,
-            "updated_at": self._now(),
-            "entry_count": len(tags),
-            "tags": tags,
-        })
+        self._cuisine_cache.write(
+            {
+                "version": 1,
+                "updated_at": self._now(),
+                "entry_count": len(tags),
+                "tags": tags,
+            }
+        )
 
     def bootstrap_cuisine_cache(self, snapshot, cache):
         try:
@@ -157,8 +175,7 @@ class DataManager:
         added = 0
         for listing in snapshot.listings:
             outlet = database.get(listing.certificate_number)
-            if (listing not in cache and outlet is not None
-                    and outlet.cuisines):
+            if listing not in cache and outlet is not None and outlet.cuisines:
                 cache.put(listing, outlet.cuisines)
                 added += 1
         return added
@@ -168,15 +185,19 @@ class DataManager:
             self._restaurant_key(row): row
             for row in self._load_checked_cache()
         }
-        for row in ([result] if single else result):
+        for row in [result] if single else result:
             merged[self._restaurant_key(row)] = row
-        self._checked_cache.write({
-            "updated_at": self._now(),
-            "restaurant_count": len(merged),
-            "restaurants": list(merged.values()),
-        }, compact_hours=True)
+        self._checked_cache.write(
+            {
+                "updated_at": self._now(),
+                "restaurant_count": len(merged),
+                "restaurants": list(merged.values()),
+            },
+            compact_hours=True,
+        )
         JsonFile(self.result_path(single, output)).write(
-            result, compact_hours=True)
+            result, compact_hours=True
+        )
         return result
 
     def _load_checked_cache(self):
@@ -192,16 +213,23 @@ class DataManager:
     @staticmethod
     def _database_from_json(value):
         restaurants = (
-            value.get("restaurants") if isinstance(value, dict) else None)
-        if (not isinstance(restaurants, list) or not restaurants
-                or value.get("restaurant_count") != len(restaurants)
-                or not isinstance(value.get("source_fetched_at"), str)):
+            value.get("restaurants") if isinstance(value, dict) else None
+        )
+        if (
+            not isinstance(restaurants, list)
+            or not restaurants
+            or value.get("restaurant_count") != len(restaurants)
+            or not isinstance(value.get("source_fetched_at"), str)
+        ):
             raise ValueError(
-                "The cleaned halal restaurant database is invalid.")
+                "The cleaned halal restaurant database is invalid."
+            )
         outlets = [HalalOutlet.from_dict(row) for row in restaurants]
         return HalalDatabase(
-            outlets, value.get("source_url", SOURCE_URL),
-            value["source_fetched_at"])
+            outlets,
+            value.get("source_url", SOURCE_URL),
+            value["source_fetched_at"],
+        )
 
     @staticmethod
     def _restaurant_key(row):
@@ -211,10 +239,12 @@ class DataManager:
         check = row.get("muis_check")
         if isinstance(check, dict) and check.get("certificate_number"):
             return "muis:" + str(check["certificate_number"])
-        address = " ".join(re.findall(
-            r"[a-z0-9]+", str(row.get("address") or "").casefold()))
-        name = " ".join(re.findall(
-            r"[a-z0-9]+", str(row.get("name") or "").casefold()))
+        address = " ".join(
+            re.findall(r"[a-z0-9]+", str(row.get("address") or "").casefold())
+        )
+        name = " ".join(
+            re.findall(r"[a-z0-9]+", str(row.get("name") or "").casefold())
+        )
         return f"outlet:{row.get('postal_code') or ''}:{address}:{name}"
 
     @staticmethod

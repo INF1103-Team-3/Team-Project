@@ -20,24 +20,37 @@ class SearchPreferenceRecorder:
             return
         preferences = dict(user["preferences"])
         preferences[self._other_preferences] = saved + [wish]
-        preferences = self._logic.prepare_preferences_save(user, preferences, config)
+        preferences = self._logic.prepare_preferences_save(
+            user, preferences, config
+        )
         session["user"] = self._data.save_preferences(
-            user["userID"], preferences, config)
+            user["userID"], preferences, config
+        )
         self._log.debug_log(
             "Saved one confirmed special request for later searches.",
-            "INFO", "BIS.data.save_preferences")
+            "INFO",
+            "BIS.data.save_preferences",
+        )
 
     def remember_cuisine(self, session, cuisine, config):
         user = session["user"]
         preferences = dict(user["preferences"])
-        preferences["liked_cuisines"] = list(dict.fromkeys(
-            (preferences["liked_cuisines"] or []) + [cuisine]))
+        preferences["liked_cuisines"] = list(
+            dict.fromkeys((preferences["liked_cuisines"] or []) + [cuisine])
+        )
         preferences["disliked_cuisines"] = [
-            item for item in preferences["disliked_cuisines"] or []
-            if item != cuisine]
-        preferences = self._logic.prepare_preferences_save(user, preferences, config)
+            item
+            for item in preferences["disliked_cuisines"] or []
+            if item != cuisine
+        ]
+        preferences = self._logic.prepare_preferences_save(
+            user, preferences, config
+        )
         session["user"] = self._data.save_preferences(
-            user["userID"], preferences, config)
+            user["userID"], preferences, config
+        )
         self._log.debug_log(
-            "Saved one approved liked cuisine.", "INFO",
-            "BIS.data.save_preferences")
+            "Saved one approved liked cuisine.",
+            "INFO",
+            "BIS.data.save_preferences",
+        )

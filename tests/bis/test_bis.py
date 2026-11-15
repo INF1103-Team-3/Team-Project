@@ -14,11 +14,11 @@ sys.path.insert(0, str(TESTS_ROOT))
 sys.path.insert(0, str(TEST_DIR))
 
 
-from BIS import logic_manager as bis_logic
-from sources.profile_schema import empty_preferences
-from reporting import show_case, show_summary
+from BIS import logic_manager as bis_logic  # noqa: E402
+from sources.profile_schema import empty_preferences  # noqa: E402
+from reporting import show_case, show_summary  # noqa: E402
 
-from sample_inputs import (
+from sample_inputs import (  # noqa: E402
     VALID_SINGAPORE_COORDINATES,
     OVERSEAS_COORDINATES,
     SINGAPORE_POSTAL_CODE,
@@ -41,9 +41,7 @@ def test_valid_singapore_coordinates_are_parsed():
     test_input = VALID_SINGAPORE_COORDINATES
     expected = (1.405, 103.902)
 
-    actual = bis_logic.parse_coordinates(
-        test_input
-    )
+    actual = bis_logic.parse_coordinates(test_input)
 
     show_case(
         "BIS-01: Valid Singapore coordinates",
@@ -59,15 +57,13 @@ def test_valid_singapore_coordinates_are_parsed():
 
 
 def test_overseas_coordinates_are_rejected():
-    """Coordinates outside Singapore are rejected before a search is prepared."""
+    "Coordinates outside Singapore are rejected before a search is prepared."
 
     test_input = OVERSEAS_COORDINATES
     expected = "Enter coordinates within Singapore."
 
     try:
-        bis_logic.parse_coordinates(
-            test_input
-        )
+        bis_logic.parse_coordinates(test_input)
 
         actual = "Accepted"
 
@@ -93,9 +89,7 @@ def test_postal_code_is_recognised_as_direct_location():
     test_input = SINGAPORE_POSTAL_CODE
     expected = True
 
-    actual = bis_logic.is_direct_location_input(
-        test_input
-    )
+    actual = bis_logic.is_direct_location_input(test_input)
 
     show_case(
         "BIS-03: Postal code recognised",
@@ -111,7 +105,7 @@ def test_postal_code_is_recognised_as_direct_location():
 
 
 def test_distance_estimates_walking_time():
-    """A distance-only profile update gets the matching walking-time estimate."""
+    "A distance-only profile update gets the matching walking-time estimate."
 
     test_input = {
         "max_distance_km": 2.0,
@@ -122,9 +116,7 @@ def test_distance_estimates_walking_time():
         "max_travel_time_minutes": 40.0,
     }
 
-    actual = bis_logic.estimate_travel_limits(
-        test_input
-    )
+    actual = bis_logic.estimate_travel_limits(test_input)
 
     show_case(
         "BIS-04: Distance converted to walking time",
@@ -177,9 +169,7 @@ def test_written_budget_is_rejected():
         "answer": INVALID_BUDGET_TEXT,
     }
 
-    expected = (
-        "Enter SGD as a number, e.g. 5 or 5.50."
-    )
+    expected = "Enter SGD as a number, e.g. 5 or 5.50."
 
     try:
         bis_logic.parse_local_answer(
@@ -277,10 +267,7 @@ def test_dislike_wording_cannot_be_saved_as_a_like():
         "answer": DISLIKE_AS_LIKE_TEXT,
     }
 
-    expected = (
-        "That describes dislikes. "
-        "Enter cuisines you like."
-    )
+    expected = "That describes dislikes. Enter cuisines you like."
 
     try:
         bis_logic.cuisine_tokens(
@@ -326,11 +313,8 @@ def test_profile_update_does_not_mutate_original_profile():
     )
 
     actual = {
-        "updated_budget":
-            updated["budget_per_person"],
-
-        "original_budget":
-            preferences["budget_per_person"],
+        "updated_budget": updated["budget_per_person"],
+        "original_budget": preferences["budget_per_person"],
     }
 
     show_case(
@@ -352,9 +336,7 @@ def test_valid_special_request_text_is_accepted():
     test_input = VALID_SPECIAL_REQUEST
     expected = VALID_SPECIAL_REQUEST
 
-    actual = bis_logic.validate_special_request_text(
-        test_input
-    )
+    actual = bis_logic.validate_special_request_text(test_input)
 
     show_case(
         "BIS-11: Valid special request accepted",
@@ -380,9 +362,7 @@ def test_invalid_special_request_text_is_rejected():
     )
 
     try:
-        bis_logic.validate_special_request_text(
-            test_input
-        )
+        bis_logic.validate_special_request_text(test_input)
 
         actual = "Accepted"
 
@@ -409,11 +389,8 @@ def test_hardcoded_ai_response_can_add_soft_preferences():
     ai_response = valid_ai_search_response()
 
     test_input = {
-        "confirmed_request":
-            confirmed,
-
-        "hardcoded_ai_response":
-            ai_response,
+        "confirmed_request": confirmed,
+        "hardcoded_ai_response": ai_response,
     }
 
     expected = [
@@ -426,9 +403,7 @@ def test_hardcoded_ai_response_can_add_soft_preferences():
         ai_response,
     )
 
-    actual = result[
-        "other_preferences"
-    ]
+    actual = result["other_preferences"]
 
     show_case(
         "BIS-13: Hardcoded AI interpretation accepted",
@@ -450,11 +425,8 @@ def test_hardcoded_ai_response_cannot_change_confirmed_budget():
     ai_response = conflicting_ai_search_response()
 
     test_input = {
-        "confirmed_budget":
-            confirmed["budget_per_person"],
-
-        "hardcoded_ai_budget":
-            ai_response["budget_per_person"],
+        "confirmed_budget": confirmed["budget_per_person"],
+        "hardcoded_ai_budget": ai_response["budget_per_person"],
     }
 
     expected = (
@@ -517,12 +489,10 @@ def run_tests():
     failures = []
 
     for test in TESTS:
-
         try:
             test()
 
         except Exception as error:
-
             failures.append(
                 (
                     test.__name__,
@@ -530,11 +500,7 @@ def run_tests():
                 )
             )
 
-            print(
-                f"\nFAILED: "
-                f"{test.__name__}: "
-                f"{error}"
-            )
+            print(f"\nFAILED: {test.__name__}: {error}")
 
     show_summary(
         "BIS",

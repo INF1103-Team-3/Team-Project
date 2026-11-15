@@ -12,4 +12,4 @@ class PlacePhotoStoreInterface(ABC):
 
     @abstractmethod
     def save_photo(self, place_id, record):
-        """Persist a photo record dict (or negative-cache marker) for place_id."""
+        "Persist a photo record dict (or negative-cache marker) for place_id."

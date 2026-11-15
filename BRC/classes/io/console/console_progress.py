@@ -12,7 +12,8 @@ class ConsoleProgress:
     def __init__(self, stream=None):
         self._stream = stream or sys.stderr
         self._interactive = bool(
-            getattr(self._stream, "isatty", lambda: False)())
+            getattr(self._stream, "isatty", lambda: False)()
+        )
         self._last_stage = None
         self._last_report = None
 
@@ -43,4 +44,5 @@ class ConsoleProgress:
             detail = detail[:55] + "..."
         return (
             f"[{bar}] {current / total:6.1%} {label}: "
-            f"{current}/{total} | {detail}")
+            f"{current}/{total} | {detail}"
+        )

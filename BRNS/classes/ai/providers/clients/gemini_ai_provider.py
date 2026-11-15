@@ -1,6 +1,8 @@
 """Gemini implementation of the BRNS AI provider contract."""
 
-from BRNS.classes.ai.providers.contracts.ai_provider_interface import AIProviderInterface
+from BRNS.classes.ai.providers.contracts.ai_provider_interface import (
+    AIProviderInterface,
+)
 from BRNS.classes.ai.providers.contracts.base_ai_provider import BaseAIProvider
 
 

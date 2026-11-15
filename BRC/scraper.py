@@ -1,6 +1,8 @@
 """Compatibility façade and launcher for BRC scraping classes."""
 
-from BRC.classes.io.geocoding.contracts.geocoder_interface import GeocoderInterface
+from BRC.classes.io.geocoding.contracts.geocoder_interface import (
+    GeocoderInterface,
+)
 from BRC.classes.io.scraping.muis_directory_client import MuisDirectoryClient
 from BRC.classes.io.scraping.muis_scraper import MuisScraper
 from BRC.classes.io.geocoding.providers.no_geocoder import NoGeocoder

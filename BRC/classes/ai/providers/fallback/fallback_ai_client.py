@@ -1,7 +1,11 @@
 """Production BRC AI client backed by the configured provider router."""
 
-from BRC.classes.ai.providers.contracts.ai_client_interface import AIClientInterface
-from BRC.classes.ai.providers.fallback.ai_provider_router import AIProviderRouter
+from BRC.classes.ai.providers.contracts.ai_client_interface import (
+    AIClientInterface,
+)
+from BRC.classes.ai.providers.fallback.ai_provider_router import (
+    AIProviderRouter,
+)
 
 
 class FallbackAIClient(AIClientInterface):
@@ -10,7 +14,8 @@ class FallbackAIClient(AIClientInterface):
     def __init__(self, settings, gemini_call, chat_completions_call):
         self._settings = settings
         self._router = AIProviderRouter(
-            gemini_call, chat_completions_call, cooldown_seconds=120)
+            gemini_call, chat_completions_call, cooldown_seconds=120
+        )
 
     def set_reporter(self, report):
         self._settings["report"] = report

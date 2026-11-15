@@ -21,14 +21,16 @@ class AIProviderRouter:
                 content = provider.request(payload, config)
             except RuntimeError as error:
                 errors.append(
-                    type(error).__name__ if provider.primary
+                    type(error).__name__
+                    if provider.primary
                     else provider.label
                 )
                 self._logger(
                     "Primary BIS model failed; trying model chain."
                     if provider.primary
                     else f"Fallback model {provider.label} failed.",
-                    "WARNING", "BIS.ai.fallback",
+                    "WARNING",
+                    "BIS.ai.fallback",
                 )
                 continue
             try:
@@ -39,16 +41,19 @@ class AIProviderRouter:
                 if provider.primary:
                     self._logger(
                         "Primary BIS model failed; trying model chain.",
-                        "WARNING", "BIS.ai.fallback",
+                        "WARNING",
+                        "BIS.ai.fallback",
                     )
                 continue
             if not provider.primary:
                 self._logger(
                     f"Fallback model {provider.label} responded.",
-                    "INFO", "BIS.ai.fallback",
+                    "INFO",
+                    "BIS.ai.fallback",
                 )
             return parsed
         raise RuntimeError(
             "BIS AI models are unavailable. Please retry."
-            if errors else "Configure a BIS AI model before continuing."
+            if errors
+            else "Configure a BIS AI model before continuing."
         )

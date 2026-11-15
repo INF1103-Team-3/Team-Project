@@ -35,12 +35,19 @@ class BaseJsonStore(ABC):
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             with tempfile.NamedTemporaryFile(
-                "w", encoding="utf-8", dir=path.parent,
-                prefix=".profile-", suffix=".tmp", delete=False,
+                "w",
+                encoding="utf-8",
+                dir=path.parent,
+                prefix=".profile-",
+                suffix=".tmp",
+                delete=False,
             ) as file:
                 temporary = Path(file.name)
                 json.dump(
-                    value, file, indent=4, ensure_ascii=False,
+                    value,
+                    file,
+                    indent=4,
+                    ensure_ascii=False,
                     allow_nan=False,
                 )
                 file.write("\n")

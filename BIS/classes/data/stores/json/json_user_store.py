@@ -5,8 +5,12 @@ from uuid import uuid4
 
 from BIS.classes.data.stores.contracts.base_json_store import BaseJsonStore
 from BIS.classes.data.stores.contracts.base_user_store import BaseUserStore
-from BIS.classes.data.stores.contracts.record_store_interface import RecordStoreInterface
-from BIS.classes.data.stores.contracts.user_store_interface import UserStoreInterface
+from BIS.classes.data.stores.contracts.record_store_interface import (
+    RecordStoreInterface,
+)
+from BIS.classes.data.stores.contracts.user_store_interface import (
+    UserStoreInterface,
+)
 from common.debug_log import debug_log
 from sources.profile_schema import (
     MINUTES_PER_KM,
@@ -18,7 +22,9 @@ from sources.profile_schema import (
 )
 
 
-class JsonUserStore(BaseUserStore, BaseJsonStore, UserStoreInterface, RecordStoreInterface):
+class JsonUserStore(
+    BaseUserStore, BaseJsonStore, UserStoreInterface, RecordStoreInterface
+):
     """Persist compatible BIS account and profile-state JSON records."""
 
     def __init__(self, users_path, state_path):
@@ -34,9 +40,13 @@ class JsonUserStore(BaseUserStore, BaseJsonStore, UserStoreInterface, RecordStor
         users = self._read_json(self._records_path)
         emails = set()
         for user_id, user in users.items():
-            if not isinstance(user_id, str) or not user_id or (
-                    not isinstance(user, dict)
-                    or user.get("userID") != user_id):
+            if (
+                not isinstance(user_id, str)
+                or not user_id
+                or (
+                    not isinstance(user, dict) or user.get("userID") != user_id
+                )
+            ):
                 raise ValueError(
                     "Invalid user record in data/users.json; saved data was "
                     "retained. Restore a valid copy before writing."
@@ -45,7 +55,8 @@ class JsonUserStore(BaseUserStore, BaseJsonStore, UserStoreInterface, RecordStor
             email = users[user_id]["email"]
             if email in emails:
                 raise ValueError(
-                    "Duplicate saved emails; restore the user file.")
+                    "Duplicate saved emails; restore the user file."
+                )
             emails.add(email)
         return users
 
@@ -56,12 +67,12 @@ class JsonUserStore(BaseUserStore, BaseJsonStore, UserStoreInterface, RecordStor
             self.__last_error = str(error)
             debug_log(
                 "Registry read failed; writes blocked.",
-                "ERROR", "BIS.data.load",
+                "ERROR",
+                "BIS.data.load",
             )
             return []
         self.__last_error = None
         return records
-
 
     def save(self, record):
         record = validate_user(record)
@@ -76,28 +87,26 @@ class JsonUserStore(BaseUserStore, BaseJsonStore, UserStoreInterface, RecordStor
         debug_log("User record saved.", "INFO", "BIS.data.save")
         return record
 
-
-
-
-
-
     def get_state(self, section, user_id):
         state = self._read_json(self.__state_path)
         values = state.get(section, {})
         if not isinstance(values, dict):
             raise RuntimeError(
-                "Invalid internal profile state. Restore the file.")
+                "Invalid internal profile state. Restore the file."
+            )
         value = values.get(user_id)
         if value is not None and not isinstance(value, dict):
             raise RuntimeError(
-                "Invalid internal profile state. Restore the file.")
+                "Invalid internal profile state. Restore the file."
+            )
         return value
 
     def set_state(self, section, user_id, value):
         state = self._read_json(self.__state_path)
         if not isinstance(state.get(section, {}), dict):
             raise RuntimeError(
-                "Invalid internal profile state. Restore the file.")
+                "Invalid internal profile state. Restore the file."
+            )
         values = state.setdefault(section, {})
         if value is None:
             values.pop(user_id, None)

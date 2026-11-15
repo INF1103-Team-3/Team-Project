@@ -34,7 +34,8 @@ except ModuleNotFoundError as error:
     if error.name != "PIL":
         raise
     raise SystemExit(
-        "Pillow is missing from this Python interpreter: " + sys.executable
+        "Pillow is missing from this Python interpreter: "
+        + sys.executable
         + "\nFrom the BiteFinder folder, install dependencies with the "
         "Python command used to start the script:\n"
         "  python -m pip install -r requirements-dev.txt\n"
@@ -112,8 +113,9 @@ def collect_definitions():
 
             def visit(body, prefix="", owner=None):
                 for statement in body:
-                    if isinstance(statement, (ast.FunctionDef,
-                                              ast.AsyncFunctionDef)):
+                    if isinstance(
+                        statement, (ast.FunctionDef, ast.AsyncFunctionDef)
+                    ):
                         qualname = prefix + statement.name
                         key = module + "." + qualname
                         functions[key] = Function(
@@ -121,8 +123,11 @@ def collect_definitions():
                         )
                         visit(statement.body, qualname + ".", owner)
                     elif isinstance(statement, ast.ClassDef):
-                        visit(statement.body, prefix + statement.name + ".",
-                              statement.name)
+                        visit(
+                            statement.body,
+                            prefix + statement.name + ".",
+                            statement.name,
+                        )
 
             visit(tree.body)
     return functions, imports, set(trees)
@@ -238,8 +243,11 @@ def bis_to_brns_nodes(edges):
 
 
 def font(size, bold=False):
-    names = (["DejaVuSans-Bold.ttf", "arialbd.ttf"] if bold
-             else ["DejaVuSans.ttf", "arial.ttf"])
+    names = (
+        ["DejaVuSans-Bold.ttf", "arialbd.ttf"]
+        if bold
+        else ["DejaVuSans.ttf", "arial.ttf"]
+    )
     windows_fonts = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
     for name in names:
         for candidate in (name, str(windows_fonts / name)):
@@ -259,8 +267,17 @@ def label_for(node):
     return package + ": " + rest
 
 
-def draw_graph(path, title, nodes, edges, groups, node_kind="functions",
-               sort_nodes=True, labels=None, route_cross_package=False):
+def draw_graph(
+    path,
+    title,
+    nodes,
+    edges,
+    groups,
+    node_kind="functions",
+    sort_nodes=True,
+    labels=None,
+    route_cross_package=False,
+):
     if not nodes:
         raise ValueError("Cannot draw an empty call graph")
     if all(str(name).startswith("Step ") for name in groups):
@@ -268,15 +285,23 @@ def draw_graph(path, title, nodes, edges, groups, node_kind="functions",
     else:
         columns = sorted(groups)
     ordered = {
-        column: (sorted(groups[column]) if sort_nodes
-                 else list(groups[column]))
+        column: (
+            sorted(groups[column]) if sort_nodes else list(groups[column])
+        )
         for column in columns
     }
     max_rows = max(len(items) for items in ordered.values())
-    width = (2 * MARGIN + 80 + len(columns) * NODE_WIDTH
-             + (len(columns) - 1) * COL_GAP)
-    cross_edges = sorted((source, target) for source, target in edges
-                         if source.split(".")[0] != target.split(".")[0])
+    width = (
+        2 * MARGIN
+        + 80
+        + len(columns) * NODE_WIDTH
+        + (len(columns) - 1) * COL_GAP
+    )
+    cross_edges = sorted(
+        (source, target)
+        for source, target in edges
+        if source.split(".")[0] != target.split(".")[0]
+    )
     extra = (40 + 24 * len(cross_edges)) if route_cross_package else 0
     height = TOP + max_rows * (NODE_HEIGHT + ROW_GAP) + MARGIN + extra
     image = Image.new("RGB", (width, height), "#ffffff")
@@ -304,8 +329,12 @@ def draw_graph(path, title, nodes, edges, groups, node_kind="functions",
         cross_package = source.split(".")[0] != target.split(".")[0]
         color = "#cc624d" if cross_package else "#b9c8d5"
         if cross_package and route_cross_package:
-            lane = (TOP + max_rows * (NODE_HEIGHT + ROW_GAP)
-                    + 20 + cross_edges.index((source, target)) * 24)
+            lane = (
+                TOP
+                + max_rows * (NODE_HEIGHT + ROW_GAP)
+                + 20
+                + cross_edges.index((source, target)) * 24
+            )
             if tx > sx:
                 start = (sx + NODE_WIDTH, sy + NODE_HEIGHT // 2)
                 end = (tx, ty + NODE_HEIGHT // 2)
@@ -318,11 +347,26 @@ def draw_graph(path, title, nodes, edges, groups, node_kind="functions",
                 source_gap = sx - 22
                 target_gap = tx + NODE_WIDTH + 22
                 direction = -1
-            draw.line((start, (source_gap, start[1]),
-                       (source_gap, lane), (target_gap, lane),
-                       (target_gap, end[1]), end), fill=color, width=2)
-            draw.polygon((end, (end[0] - direction * 8, end[1] - 4),
-                          (end[0] - direction * 8, end[1] + 4)), fill=color)
+            draw.line(
+                (
+                    start,
+                    (source_gap, start[1]),
+                    (source_gap, lane),
+                    (target_gap, lane),
+                    (target_gap, end[1]),
+                    end,
+                ),
+                fill=color,
+                width=2,
+            )
+            draw.polygon(
+                (
+                    end,
+                    (end[0] - direction * 8, end[1] - 4),
+                    (end[0] - direction * 8, end[1] + 4),
+                ),
+                fill=color,
+            )
             continue
         if tx > sx:
             start = (sx + NODE_WIDTH, sy + NODE_HEIGHT // 2)
@@ -334,20 +378,36 @@ def draw_graph(path, title, nodes, edges, groups, node_kind="functions",
             lane = sx + NODE_WIDTH + 18 + (sum(map(ord, source)) % 5) * 8
             start = (sx + NODE_WIDTH, sy + NODE_HEIGHT // 2)
             end = (tx + NODE_WIDTH, ty + NODE_HEIGHT // 2)
-            draw.line((start, (lane, start[1]), (lane, end[1]), end),
-                      fill=color, width=2 if cross_package else 1)
+            draw.line(
+                (start, (lane, start[1]), (lane, end[1]), end),
+                fill=color,
+                width=2 if cross_package else 1,
+            )
             continue
         draw.line((start, end), fill=color, width=2 if cross_package else 1)
         direction = 1 if tx > sx else -1
-        draw.polygon((end, (end[0] - direction * 8, end[1] - 4),
-                      (end[0] - direction * 8, end[1] + 4)), fill=color)
+        draw.polygon(
+            (
+                end,
+                (end[0] - direction * 8, end[1] - 4),
+                (end[0] - direction * 8, end[1] + 4),
+            ),
+            fill=color,
+        )
 
     for node, (x, y) in positions.items():
         package = node.split(".")[0]
         fill = COLORS.get(package, "#e9edf2")
-        draw.rounded_rectangle((x, y, x + NODE_WIDTH, y + NODE_HEIGHT),
-                               radius=8, fill=fill, outline="#7b8da0", width=1)
-        label = labels.get(node, label_for(node)) if labels else label_for(node)
+        draw.rounded_rectangle(
+            (x, y, x + NODE_WIDTH, y + NODE_HEIGHT),
+            radius=8,
+            fill=fill,
+            outline="#7b8da0",
+            width=1,
+        )
+        label = (
+            labels.get(node, label_for(node)) if labels else label_for(node)
+        )
         if len(label) > 39:
             label = label[:36] + "..."
         draw.text((x + 10, y + 15), label, font=text_font, fill="#1a2b3c")
@@ -375,14 +435,18 @@ def draw_arrow(draw, points, color, width=5):
     before = points[-2]
     if end[0] == before[0]:
         direction = 1 if end[1] > before[1] else -1
-        head = ((end[0], end[1]),
-                (end[0] - 10, end[1] - direction * 15),
-                (end[0] + 10, end[1] - direction * 15))
+        head = (
+            (end[0], end[1]),
+            (end[0] - 10, end[1] - direction * 15),
+            (end[0] + 10, end[1] - direction * 15),
+        )
     else:
         direction = 1 if end[0] > before[0] else -1
-        head = ((end[0], end[1]),
-                (end[0] - direction * 15, end[1] - 10),
-                (end[0] - direction * 15, end[1] + 10))
+        head = (
+            (end[0], end[1]),
+            (end[0] - direction * 15, end[1] - 10),
+            (end[0] - direction * 15, end[1] + 10),
+        )
     draw.polygon(head, fill=color)
 
 
@@ -394,169 +458,329 @@ def draw_manager_card(draw, box, title, module, choices, reached, outgoing):
     border = "#6688a4" if active else "#a7afb8"
     title_color = "#17334e" if active else "#687582"
     draw.rounded_rectangle(box, radius=18, fill=fill, outline=border, width=3)
-    draw.text((x0 + 23, y0 + 18), title, font=font(26, True),
-              fill=title_color)
+    draw.text((x0 + 23, y0 + 18), title, font=font(26, True), fill=title_color)
     count = sum(node.startswith(module + ".") for node in reached)
-    status = (f"{count} reachable functions" if active
-              else "Not called in this flow")
-    draw.text((x0 + 23, y0 + 56), status, font=font(16),
-              fill="#53677c" if active else "#7d8791")
+    status = (
+        f"{count} reachable functions" if active else "Not called in this flow"
+    )
+    draw.text(
+        (x0 + 23, y0 + 56),
+        status,
+        font=font(16),
+        fill="#53677c" if active else "#7d8791",
+    )
     shown = [name for name in choices if module + "." + name in reached]
     if not active:
         shown = choices[:3]
     for index, name in enumerate(shown[:5]):
         y = y0 + 98 + index * 39
-        draw.rounded_rectangle((x0 + 22, y, x1 - 22, y + 32), radius=7,
-                               fill="#ffffff" if active else "#e5e8eb")
-        draw.text((x0 + 35, y + 5), name + "()", font=font(17),
-                  fill="#23384e" if active else "#78838d")
+        draw.rounded_rectangle(
+            (x0 + 22, y, x1 - 22, y + 32),
+            radius=7,
+            fill="#ffffff" if active else "#e5e8eb",
+        )
+        draw.text(
+            (x0 + 35, y + 5),
+            name + "()",
+            font=font(17),
+            fill="#23384e" if active else "#78838d",
+        )
     if outgoing and active:
-        draw.text((x0 + 23, y1 - 36), outgoing, font=font(15),
-                  fill="#52677b")
+        draw.text((x0 + 23, y1 - 36), outgoing, font=font(15), fill="#52677b")
 
 
 def draw_main_card(draw, box, title, functions, subtitle, package):
     x0, y0, x1, y1 = box
-    draw.rounded_rectangle(box, radius=20, fill=COLORS[package],
-                           outline="#3d617e", width=4)
-    draw.text((x0 + 28, y0 + 20), title, font=font(28, True),
-              fill="#17334e")
-    draw.text((x0 + 28, y0 + 62), subtitle, font=font(17),
-              fill="#52677b")
+    draw.rounded_rectangle(
+        box, radius=20, fill=COLORS[package], outline="#3d617e", width=4
+    )
+    draw.text((x0 + 28, y0 + 20), title, font=font(28, True), fill="#17334e")
+    draw.text((x0 + 28, y0 + 62), subtitle, font=font(17), fill="#52677b")
     for index, name in enumerate(functions):
         column = index % 3
         row = index // 3
         x = x0 + 28 + column * 292
         y = y0 + 104 + row * 53
-        draw.rounded_rectangle((x, y, x + 266, y + 41), radius=8,
-                               fill="#ffffff", outline="#a5b8c9", width=1)
-        draw.text((x + 13, y + 9), name + "()", font=font(17),
-                  fill="#243a4d")
+        draw.rounded_rectangle(
+            (x, y, x + 266, y + 41),
+            radius=8,
+            fill="#ffffff",
+            outline="#a5b8c9",
+            width=1,
+        )
+        draw.text((x + 13, y + 9), name + "()", font=font(17), fill="#243a4d")
 
 
 def draw_flow_overview(path, reached, edges):
     """Draw a grouped, readable view of the BIS to BRNS handoff."""
     image = Image.new("RGB", (2350, 1860), "#ffffff")
     draw = ImageDraw.Draw(image)
-    draw.text((80, 32), "BiteFinder | BIS to BRNS function flow",
-              font=font(38, True), fill="#132e43")
-    draw.text((80, 85), "Reachable functions and ordered manager stages",
-              font=font(19), fill="#52677b")
-    draw.rounded_rectangle((90, 130, 2220, 930), radius=23,
-                           fill="#fafdff", outline="#c9d9e7", width=3)
-    draw.rounded_rectangle((90, 1050, 2220, 1830), radius=23,
-                           fill="#fbfefc", outline="#c9e3d4", width=3)
-    draw.text((120, 145), "BIS · chatbot and profile", font=font(25, True),
-              fill="#225a87")
-    draw.text((120, 1065), "BRNS · restaurant search", font=font(25, True),
-              fill="#24704c")
+    draw.text(
+        (80, 32),
+        "BiteFinder | BIS to BRNS function flow",
+        font=font(38, True),
+        fill="#132e43",
+    )
+    draw.text(
+        (80, 85),
+        "Reachable functions and ordered manager stages",
+        font=font(19),
+        fill="#52677b",
+    )
+    draw.rounded_rectangle(
+        (90, 130, 2220, 930),
+        radius=23,
+        fill="#fafdff",
+        outline="#c9d9e7",
+        width=3,
+    )
+    draw.rounded_rectangle(
+        (90, 1050, 2220, 1830),
+        radius=23,
+        fill="#fbfefc",
+        outline="#c9e3d4",
+        width=3,
+    )
+    draw.text(
+        (120, 145),
+        "BIS · chatbot and profile",
+        font=font(25, True),
+        fill="#225a87",
+    )
+    draw.text(
+        (120, 1065),
+        "BRNS · restaurant search",
+        font=font(25, True),
+        fill="#24704c",
+    )
 
     bis_main = (725, 195, 1625, 445)
     brns_main = (725, 1110, 1625, 1355)
-    bis_cards = [(125 + i * 530, 590, 605 + i * 530, 900)
-                 for i in range(4)]
-    brns_cards = [(125 + i * 530, 1500, 605 + i * 530, 1810)
-                  for i in range(4)]
+    bis_cards = [(125 + i * 530, 590, 605 + i * 530, 900) for i in range(4)]
+    brns_cards = [(125 + i * 530, 1500, 605 + i * 530, 1810) for i in range(4)]
     blue = "#3180b9"
     green = "#3d976c"
     red = "#c55548"
 
-    if any(a.startswith("BIS.main.") and b.startswith("BIS.io_manager.")
-           for a, b in edges):
-        draw_arrow(draw, [(790, 445), (790, 515),
-                          (365, 515), (365, 590)], blue)
-    bis_stages = ("io_manager", "ai_manager", "logic_manager",
-                  "data_manager")
-    if all(any(node.startswith("BIS." + module + ".")
-               for node in reached) for module in bis_stages):
+    if any(
+        a.startswith("BIS.main.") and b.startswith("BIS.io_manager.")
+        for a, b in edges
+    ):
+        draw_arrow(
+            draw, [(790, 445), (790, 515), (365, 515), (365, 590)], blue
+        )
+    bis_stages = ("io_manager", "ai_manager", "logic_manager", "data_manager")
+    if all(
+        any(node.startswith("BIS." + module + ".") for node in reached)
+        for module in bis_stages
+    ):
         for index in range(3):
             left, right = bis_cards[index], bis_cards[index + 1]
             draw_arrow(draw, [(left[2], 730), (right[0], 730)], blue)
 
-    if any(a.startswith("BRNS.main.") and b.startswith("BRNS.io_manager.")
-           for a, b in edges):
-        draw_arrow(draw, [(790, 1355), (790, 1410),
-                          (365, 1410), (365, 1500)], green)
-    stage_modules = ("io_manager", "ai_manager", "logic_manager",
-                     "data_manager")
-    if all(any(node.startswith("BRNS." + module + ".")
-               for node in reached) for module in stage_modules):
+    if any(
+        a.startswith("BRNS.main.") and b.startswith("BRNS.io_manager.")
+        for a, b in edges
+    ):
+        draw_arrow(
+            draw, [(790, 1355), (790, 1410), (365, 1410), (365, 1500)], green
+        )
+    stage_modules = (
+        "io_manager",
+        "ai_manager",
+        "logic_manager",
+        "data_manager",
+    )
+    if all(
+        any(node.startswith("BRNS." + module + ".") for node in reached)
+        for module in stage_modules
+    ):
         for index in range(3):
             left, right = brns_cards[index], brns_cards[index + 1]
             draw_arrow(draw, [(left[2], 1640), (right[0], 1640)], green)
 
     if ("BIS.main.run_search", "BRNS.main.search") in edges:
-        draw_arrow(draw, [(2195, 740), (2265, 740), (2265, 1220),
-                          (1625, 1220)], red, width=7)
-        draw.rounded_rectangle((1690, 953, 2240, 1025), radius=12,
-                               fill="#fff4f1", outline=red, width=2)
-        draw.text((1710, 966), "BIS Data JSON → BRNS IO",
-                  font=font(21, True), fill="#9b3d34")
-        draw.text((1710, 994), "via BRNS.main.search()",
-                  font=font(17), fill="#9b3d34")
+        draw_arrow(
+            draw,
+            [(2195, 740), (2265, 740), (2265, 1220), (1625, 1220)],
+            red,
+            width=7,
+        )
+        draw.rounded_rectangle(
+            (1690, 953, 2240, 1025),
+            radius=12,
+            fill="#fff4f1",
+            outline=red,
+            width=2,
+        )
+        draw.text(
+            (1710, 966),
+            "BIS Data JSON → BRNS IO",
+            font=font(21, True),
+            fill="#9b3d34",
+        )
+        draw.text(
+            (1710, 994),
+            "via BRNS.main.search()",
+            font=font(17),
+            fill="#9b3d34",
+        )
 
-    if any(a.startswith("BIS.main.") and b.startswith("BRNS.io_manager.")
-           for a, b in edges):
-        draw_arrow(draw, [(125, 1655), (67, 1655), (67, 340), (725, 340)],
-                   red, width=4)
-        draw.rounded_rectangle((105, 960, 545, 1030), radius=12,
-                               fill="#fff4f1", outline=red, width=2)
-        draw.text((125, 972), "BRNS results → BIS display",
-                  font=font(20, True), fill="#9b3d34")
-        draw.text((125, 1000), "and optional route", font=font(17),
-                  fill="#9b3d34")
+    if any(
+        a.startswith("BIS.main.") and b.startswith("BRNS.io_manager.")
+        for a, b in edges
+    ):
+        draw_arrow(
+            draw,
+            [(125, 1655), (67, 1655), (67, 340), (725, 340)],
+            red,
+            width=4,
+        )
+        draw.rounded_rectangle(
+            (105, 960, 545, 1030),
+            radius=12,
+            fill="#fff4f1",
+            outline=red,
+            width=2,
+        )
+        draw.text(
+            (125, 972),
+            "BRNS results → BIS display",
+            font=font(20, True),
+            fill="#9b3d34",
+        )
+        draw.text(
+            (125, 1000), "and optional route", font=font(17), fill="#9b3d34"
+        )
 
-    bis_main_names = [name for name in ("main", "run_accounts",
-                                        "run_session", "handle_action",
-                                        "run_search")
-                      if "BIS.main." + name in reached]
-    brns_main_names = [name for name in ("search", "route_to")
-                       if "BRNS.main." + name in reached]
-    draw_main_card(draw, bis_main, "BIS.main", bis_main_names,
-                   "Collect → AI intent → validate → confirm → JSON", "BIS")
-    draw_main_card(draw, brns_main, "BRNS.main", brns_main_names,
-                   "IO facts → AI reasons → Logic checks → Data stores", "BRNS")
+    bis_main_names = [
+        name
+        for name in (
+            "main",
+            "run_accounts",
+            "run_session",
+            "handle_action",
+            "run_search",
+        )
+        if "BIS.main." + name in reached
+    ]
+    brns_main_names = [
+        name
+        for name in ("search", "route_to")
+        if "BRNS.main." + name in reached
+    ]
+    draw_main_card(
+        draw,
+        bis_main,
+        "BIS.main",
+        bis_main_names,
+        "Collect → AI intent → validate → confirm → JSON",
+        "BIS",
+    )
+    draw_main_card(
+        draw,
+        brns_main,
+        "BRNS.main",
+        brns_main_names,
+        "IO facts → AI reasons → Logic checks → Data stores",
+        "BRNS",
+    )
 
     bis_details = (
-        ("1 · IO", "io_manager", ("collect_search", "ask_search_intent",
-                                  "confirm_search_request",
-                                  "display_search_summary"),
-         "Collects and confirms today's search"),
-        ("2 · AI", "ai_manager", ("interpret_search_request", "process",
-                                  "interpret_location", "_call_openrouter"),
-         "Interprets today's free-text wish"),
-        ("3 · Logic", "logic_manager", ("validate_search_request",
-                                        "apply_updates", "next_field",
-                                        "parse_local_answer"),
-         "Protects confirmed choices"),
-        ("4 · Data", "data_manager", ("serialize_search_request",
-                                      "save_preferences", "resolve_location",
-                                      "get_state"),
-         "Serializes search JSON"),
+        (
+            "1 · IO",
+            "io_manager",
+            (
+                "collect_search",
+                "ask_search_intent",
+                "confirm_search_request",
+                "display_search_summary",
+            ),
+            "Collects and confirms today's search",
+        ),
+        (
+            "2 · AI",
+            "ai_manager",
+            (
+                "interpret_search_request",
+                "process",
+                "interpret_location",
+                "_call_openrouter",
+            ),
+            "Interprets today's free-text wish",
+        ),
+        (
+            "3 · Logic",
+            "logic_manager",
+            (
+                "validate_search_request",
+                "apply_updates",
+                "next_field",
+                "parse_local_answer",
+            ),
+            "Protects confirmed choices",
+        ),
+        (
+            "4 · Data",
+            "data_manager",
+            (
+                "serialize_search_request",
+                "save_preferences",
+                "resolve_location",
+                "get_state",
+            ),
+            "Serializes search JSON",
+        ),
     )
     brns_details = (
-        ("1 · IO", "io_manager", ("accept_bis_json", "find_candidates",
-                                  "show_results", "show_route"),
-         "Places and routes via IO client"),
-        ("2 · AI", "ai_manager", ("recommend_candidates",
-                                  "_call_openrouter", "_call_gemini",
-                                  "parse_json_reply"),
-         "Orders IDs with reason codes"),
-        ("3 · Logic", "logic_manager", ("rank_restaurants",
-                                        "decide_outcome",
-                                        "normalize_candidate"),
-         "Verifies AI reasons and requirements"),
-        ("4 · Data", "data_manager", ("save_search_results",
-                                      "save_history", "load_history",
-                                      "_save_json"),
-         "Stores validated search summary"),
+        (
+            "1 · IO",
+            "io_manager",
+            (
+                "accept_bis_json",
+                "find_candidates",
+                "show_results",
+                "show_route",
+            ),
+            "Places and routes via IO client",
+        ),
+        (
+            "2 · AI",
+            "ai_manager",
+            (
+                "recommend_candidates",
+                "_call_openrouter",
+                "_call_gemini",
+                "parse_json_reply",
+            ),
+            "Orders IDs with reason codes",
+        ),
+        (
+            "3 · Logic",
+            "logic_manager",
+            ("rank_restaurants", "decide_outcome", "normalize_candidate"),
+            "Verifies AI reasons and requirements",
+        ),
+        (
+            "4 · Data",
+            "data_manager",
+            (
+                "save_search_results",
+                "save_history",
+                "load_history",
+                "_save_json",
+            ),
+            "Stores validated search summary",
+        ),
     )
     for box, (title, suffix, names, note) in zip(bis_cards, bis_details):
-        draw_manager_card(draw, box, "BIS " + title, "BIS." + suffix,
-                          names, reached, note)
+        draw_manager_card(
+            draw, box, "BIS " + title, "BIS." + suffix, names, reached, note
+        )
     for box, (title, suffix, names, note) in zip(brns_cards, brns_details):
-        draw_manager_card(draw, box, "BRNS " + title, "BRNS." + suffix,
-                          names, reached, note)
+        draw_manager_card(
+            draw, box, "BRNS " + title, "BRNS." + suffix, names, reached, note
+        )
 
     image.save(path, "PNG")
     print(f"Created {path.relative_to(ROOT)} (grouped BIS → BRNS flow)")
@@ -565,13 +789,17 @@ def draw_flow_overview(path, reached, edges):
 def draw_workflow_card(draw, box, title, details, fill):
     """Draw one stage in the project-level workflow."""
     x0, y0, x1, y1 = box
-    draw.rounded_rectangle(box, radius=17, fill=fill,
-                           outline="#75899a", width=2)
-    draw.text((x0 + 19, y0 + 14), title, font=font(25, True),
-              fill="#1a3043")
+    draw.rounded_rectangle(
+        box, radius=17, fill=fill, outline="#75899a", width=2
+    )
+    draw.text((x0 + 19, y0 + 14), title, font=font(25, True), fill="#1a3043")
     for index, detail in enumerate(details):
-        draw.text((x0 + 19, y0 + 53 + index * 30), detail,
-                  font=font(18), fill="#40566a")
+        draw.text(
+            (x0 + 19, y0 + 53 + index * 30),
+            detail,
+            font=font(18),
+            fill="#40566a",
+        )
 
 
 def draw_project_workflow(path):
@@ -582,26 +810,45 @@ def draw_project_workflow(path):
     subtitle = font(21)
     heading = font(29, True)
     note = font(20)
-    draw.text((85, 39), "BiteFinder | complete current workflow",
-              font=title, fill="#153047")
-    draw.text((86, 100),
-              "MUIS data and BRC are separate from the BIS → BRNS search; "
-              "the log is shared.",
-              font=subtitle, fill="#52677b")
+    draw.text(
+        (85, 39),
+        "BiteFinder | complete current workflow",
+        font=title,
+        fill="#153047",
+    )
+    draw.text(
+        (86, 100),
+        "MUIS data and BRC are separate from the BIS → BRNS search; "
+        "the log is shared.",
+        font=subtitle,
+        fill="#52677b",
+    )
 
     lanes = (
-        ((75, 170, 2725, 690), "MUIS DATA + SEPARATE BRC CHECKER",
-         "#fffaf2", "#91622d"),
-        ((75, 730, 2725, 1190), "BIS | ACCOUNT, PROFILE, TODAY'S SEARCH",
-         "#f5faff", "#2b6691"),
-        ((75, 1230, 2725, 1710), "BRNS | RESTAURANT SEARCH + ROUTE",
-         "#f5fcf8", "#367452"),
-        ((75, 1750, 2725, 2040), "SHARED SUPPORT",
-         "#faf8ff", "#675696"),
+        (
+            (75, 170, 2725, 690),
+            "MUIS DATA + SEPARATE BRC CHECKER",
+            "#fffaf2",
+            "#91622d",
+        ),
+        (
+            (75, 730, 2725, 1190),
+            "BIS | ACCOUNT, PROFILE, TODAY'S SEARCH",
+            "#f5faff",
+            "#2b6691",
+        ),
+        (
+            (75, 1230, 2725, 1710),
+            "BRNS | RESTAURANT SEARCH + ROUTE",
+            "#f5fcf8",
+            "#367452",
+        ),
+        ((75, 1750, 2725, 2040), "SHARED SUPPORT", "#faf8ff", "#675696"),
     )
     for box, label, background, accent in lanes:
-        draw.rounded_rectangle(box, radius=24, fill=background,
-                               outline=accent, width=3)
+        draw.rounded_rectangle(
+            box, radius=24, fill=background, outline=accent, width=3
+        )
         draw.text((111, box[1] + 16), label, font=heading, fill=accent)
 
     positions = [110, 650, 1190, 1730, 2270]
@@ -611,94 +858,168 @@ def draw_project_workflow(path):
     green = "#dbf5e6"
 
     # BRC main loads or invokes the standalone scraper, then builds clean data.
-    draw_workflow_card(draw, (110, 245, 520, 360),
-                       "MUIS scraper",
-                       ("Complete official search", "scraper.py"), orange)
-    draw_workflow_card(draw, (700, 245, 1150, 360),
-                       "MUIS raw data",
-                       ("Saved MUIS outlet listings", "Postal coverage + retrieval time"),
-                       orange)
+    draw_workflow_card(
+        draw,
+        (110, 245, 520, 360),
+        "MUIS scraper",
+        ("Complete official search", "scraper.py"),
+        orange,
+    )
+    draw_workflow_card(
+        draw,
+        (700, 245, 1150, 360),
+        "MUIS raw data",
+        ("Saved MUIS outlet listings", "Postal coverage + retrieval time"),
+        orange,
+    )
     draw_arrow(draw, [(520, 302), (700, 302)], "#a97936", 5)
 
     brc_cards = (
-        ("BRC main()", ("Build, one outlet, or array", "Coordinate four managers")),
+        (
+            "BRC main()",
+            ("Build, one outlet, or array", "Coordinate four managers"),
+        ),
         ("BRC IO", ("Choose workflow + validate", "Load raw or clean data")),
         ("BRC AI", ("Tag cuisine / match outlet", "Structured Gemini output")),
-        ("BRC Logic", ("Verify source and identity", "Decide official status")),
-        ("BRC Data", ("Save clean or checked JSON", "Preserve original fields")),
+        (
+            "BRC Logic",
+            ("Verify source and identity", "Decide official status"),
+        ),
+        (
+            "BRC Data",
+            ("Save clean or checked JSON", "Preserve original fields"),
+        ),
     )
     for x, (name, details) in zip(positions, brc_cards):
-        draw_workflow_card(draw, (x, 440, x + card_width, 580),
-                           name, details, orange)
+        draw_workflow_card(
+            draw, (x, 440, x + card_width, 580), name, details, orange
+        )
     for left, right in zip(positions, positions[1:]):
-        draw_arrow(draw, [(left + card_width, 510), (right, 510)],
-                   "#a97936", 5)
+        draw_arrow(
+            draw, [(left + card_width, 510), (right, 510)], "#a97936", 5
+        )
     draw_arrow(draw, [(925, 360), (925, 440)], "#a97936", 5)
-    draw.rounded_rectangle((750, 609, 2050, 668), radius=11,
-                           fill="#fff5f2", outline="#c65d50", width=2)
-    draw.text((782, 622),
-              "Current boundary: checked BRC JSON does not feed BIS or BRNS",
-              font=note, fill="#9d443a")
+    draw.rounded_rectangle(
+        (750, 609, 2050, 668),
+        radius=11,
+        fill="#fff5f2",
+        outline="#c65d50",
+        width=2,
+    )
+    draw.text(
+        (782, 622),
+        "Current boundary: checked BRC JSON does not feed BIS or BRNS",
+        font=note,
+        fill="#9d443a",
+    )
 
     bis_cards = (
         ("BIS main()", ("Signup + saved profile", "Start /search")),
-        ("BIS IO", ("Today's choices + free text", "Confirm interpreted search")),
+        (
+            "BIS IO",
+            ("Today's choices + free text", "Confirm interpreted search"),
+        ),
         ("BIS AI", ("OpenRouter interprets", "Profile + every live search")),
         ("BIS Logic", ("Validate exact fields", "Protect confirmed choices")),
         ("BIS Data", ("Save profile + state", "Serialize search JSON")),
     )
     for x, (name, details) in zip(positions, bis_cards):
-        draw_workflow_card(draw, (x, 835, x + card_width, 995),
-                           name, details, blue)
+        draw_workflow_card(
+            draw, (x, 835, x + card_width, 995), name, details, blue
+        )
     for left, right in zip(positions, positions[1:]):
-        draw_arrow(draw, [(left + card_width, 915), (right, 915)],
-                   "#397eb0", 5)
-    draw.text((145, 1084),
-              "Saved: BIS/data/users.json + profile_state.json",
-              font=note, fill="#45647e")
-    draw_workflow_card(draw, (2180, 1052, 2680, 1158),
-                       "BIS → BRNS JSON",
-                       ("Exactly 8 validated fields",), "#e5f2ff")
+        draw_arrow(
+            draw, [(left + card_width, 915), (right, 915)], "#397eb0", 5
+        )
+    draw.text(
+        (145, 1084),
+        "Saved: BIS/data/users.json + profile_state.json",
+        font=note,
+        fill="#45647e",
+    )
+    draw_workflow_card(
+        draw,
+        (2180, 1052, 2680, 1158),
+        "BIS → BRNS JSON",
+        ("Exactly 8 validated fields",),
+        "#e5f2ff",
+    )
     draw_arrow(draw, [(2475, 995), (2475, 1052)], "#397eb0", 5)
 
     brns_cards = (
         ("BRNS main.search()", ("Receives BIS JSON", "Runs one search")),
         ("BRNS IO", ("Validate + Google Places", "Catalog + route facts")),
         ("BRNS AI", ("Gemini / OpenRouter", "Rank IDs + reason codes")),
-        ("BRNS Logic", ("Check claims against facts", "Matches + alternatives")),
+        (
+            "BRNS Logic",
+            ("Check claims against facts", "Matches + alternatives"),
+        ),
         ("BRNS Data", ("Save compact summary", "Search history JSON")),
     )
     for x, (name, details) in zip(positions, brns_cards):
-        draw_workflow_card(draw, (x, 1350, x + card_width, 1510),
-                           name, details, green)
+        draw_workflow_card(
+            draw, (x, 1350, x + card_width, 1510), name, details, green
+        )
     for left, right in zip(positions, positions[1:]):
-        draw_arrow(draw, [(left + card_width, 1430), (right, 1430)],
-                   "#3e9568", 5)
-    draw_arrow(draw, [(2430, 1158), (2430, 1204),
-                      (315, 1204), (315, 1350)], "#c4584f", 6)
-    draw.text((1080, 1175), "Confirmed request handoff",
-              font=note, fill="#a0443e")
-    draw_workflow_card(draw, (2180, 1570, 2680, 1674),
-                       "Results → BIS user",
-                       ("BRNS IO display + optional route",), "#e6f7ed")
+        draw_arrow(
+            draw, [(left + card_width, 1430), (right, 1430)], "#3e9568", 5
+        )
+    draw_arrow(
+        draw,
+        [(2430, 1158), (2430, 1204), (315, 1204), (315, 1350)],
+        "#c4584f",
+        6,
+    )
+    draw.text(
+        (1080, 1175), "Confirmed request handoff", font=note, fill="#a0443e"
+    )
+    draw_workflow_card(
+        draw,
+        (2180, 1570, 2680, 1674),
+        "Results → BIS user",
+        ("BRNS IO display + optional route",),
+        "#e6f7ed",
+    )
     draw_arrow(draw, [(2475, 1510), (2475, 1570)], "#3e9568", 5)
-    draw.text((145, 1605),
-              "Halal is unofficial or unverified; official checker integration is pending.",
-              font=note, fill="#486959")
+    draw.text(
+        (145, 1605),
+        (
+            "Halal is unofficial or unverified; official checker integration "
+            "is pending."
+        ),
+        font=note,
+        fill="#486959",
+    )
 
-    draw_workflow_card(draw, (320, 1840, 1250, 1970),
-                       "Shared geocode cache",
-                       ("BIS + BRNS use data/geocode_cache.json",
-                        "Validated coordinates and cross-platform locking"),
-                       "#eee5ff")
-    draw_workflow_card(draw, (1550, 1840, 2480, 1970),
-                       "Global BiteFinder log",
-                       ("BIS + BRC + BRNS write logs/bitefinder.log",
-                        "One trace ID connects BIS and BRNS search stages"),
-                       "#eee5ff")
-    draw.text((105, 2002),
-              "Current executable paths; project plans may describe later integrations.",
-              font=font(17), fill="#697786")
+    draw_workflow_card(
+        draw,
+        (320, 1840, 1250, 1970),
+        "Shared geocode cache",
+        (
+            "BIS + BRNS use data/geocode_cache.json",
+            "Validated coordinates and cross-platform locking",
+        ),
+        "#eee5ff",
+    )
+    draw_workflow_card(
+        draw,
+        (1550, 1840, 2480, 1970),
+        "Global BiteFinder log",
+        (
+            "BIS + BRC + BRNS write logs/bitefinder.log",
+            "One trace ID connects BIS and BRNS search stages",
+        ),
+        "#eee5ff",
+    )
+    draw.text(
+        (105, 2002),
+        (
+            "Current executable paths; project plans may describe later "
+            "integrations."
+        ),
+        font=font(17),
+        fill="#697786",
+    )
 
     image.save(path, "PNG")
     print(f"Created {path.relative_to(ROOT)} (complete project workflow)")
@@ -708,18 +1029,29 @@ def create_static_graphs():
     functions, edges = build_graph()
     OUTPUT_DIR.mkdir(exist_ok=True)
     all_nodes = set(functions)
-    draw_graph(OUTPUT_DIR / "all_functions.png",
-               "BiteFinder function calls (source)", all_nodes, edges,
-               grouped_by_package(all_nodes))
+    draw_graph(
+        OUTPUT_DIR / "all_functions.png",
+        "BiteFinder function calls (source)",
+        all_nodes,
+        edges,
+        grouped_by_package(all_nodes),
+    )
     flow_nodes, depth = bis_to_brns_nodes(edges)
-    flow_edges = {(source, target) for source, target in edges
-                  if source in flow_nodes and target in flow_nodes}
+    flow_edges = {
+        (source, target)
+        for source, target in edges
+        if source in flow_nodes and target in flow_nodes
+    }
     reached, _ = reachable(ENTRY, edges)
     draw_flow_overview(OUTPUT_DIR / "bis_to_brns.png", reached, edges)
     draw_project_workflow(OUTPUT_DIR / "project_workflow.png")
-    draw_graph(OUTPUT_DIR / "bis_to_brns_functions.png",
-               "BIS main() → BRNS functions (source)", flow_nodes,
-               flow_edges, grouped_by_depth(flow_nodes, depth))
+    draw_graph(
+        OUTPUT_DIR / "bis_to_brns_functions.png",
+        "BIS main() → BRNS functions (source)",
+        flow_nodes,
+        flow_edges,
+        grouped_by_depth(flow_nodes, depth),
+    )
 
 
 def create_live_trace():
@@ -743,10 +1075,14 @@ def create_live_trace():
     capture = Capture()
     known, _ = build_graph()
     names = {node.split(".")[-1] for node in known}
-    config = Config(trace_filter=lambda name: (
-        name.startswith(("BRNS.", "BRC.", "common.", "sources.", "support."))
-        or name.split(".")[-1] in names
-    ))
+    config = Config(
+        trace_filter=lambda name: (
+            name.startswith(
+                ("BRNS.", "BRC.", "common.", "sources.", "support.")
+            )
+            or name.split(".")[-1] in names
+        )
+    )
     sys.path.insert(0, str(ROOT / "BIS"))
     sys.path.insert(1, str(ROOT))
     print("Running BIS/main.py. Complete a real session to capture its calls.")
@@ -767,22 +1103,31 @@ def create_live_trace():
                 return candidate
         return name
 
-    edges = {(normalize(source), normalize(target))
-             for source, target in capture.calls}
+    edges = {
+        (normalize(source), normalize(target))
+        for source, target in capture.calls
+    }
     nodes = {node for edge in edges for node in edge}
     if nodes:
         OUTPUT_DIR.mkdir(exist_ok=True)
-        draw_graph(OUTPUT_DIR / "bis_live_trace.png",
-                   "Observed BIS session calls", nodes, edges,
-                   grouped_by_package(nodes))
+        draw_graph(
+            OUTPUT_DIR / "bis_live_trace.png",
+            "Observed BIS session calls",
+            nodes,
+            edges,
+            grouped_by_package(nodes),
+        )
     else:
         print("No calls were captured in this session.")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--trace", action="store_true",
-                        help="also run BIS/main.py and graph its calls")
+    parser.add_argument(
+        "--trace",
+        action="store_true",
+        help="also run BIS/main.py and graph its calls",
+    )
     args = parser.parse_args()
     create_static_graphs()
     if args.trace:

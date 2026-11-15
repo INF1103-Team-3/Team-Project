@@ -12,12 +12,18 @@ from pathlib import Path
 import requests
 
 from BIS.classes.ai.fallback.ai_provider_router import AIProviderRouter
-from BIS.classes.ai.fallback.ai_provider_factory_registry import AIProviderFactoryRegistry
+from BIS.classes.ai.fallback.ai_provider_factory_registry import (
+    AIProviderFactoryRegistry,
+)
 from BIS.classes.ai.ai_manager import AIManager
 from BIS.classes.ai.tasks.bis_interpreter import BISInterpreter
-from BIS.classes.ai.providers.clients.gemini_ai_provider import GeminiAIProvider
+from BIS.classes.ai.providers.clients.gemini_ai_provider import (
+    GeminiAIProvider,
+)
 from BIS.classes.ai.providers.clients.groq_ai_provider import GroqAIProvider
-from BIS.classes.ai.providers.clients.openrouter_ai_provider import OpenRouterAIProvider
+from BIS.classes.ai.providers.clients.openrouter_ai_provider import (
+    OpenRouterAIProvider,
+)
 
 from sources.prompts import INTENTS, SYSTEM_PROMPT
 
@@ -48,30 +54,43 @@ def manager():
     global _MANAGER
     if _MANAGER is None:
         from BIS import logic_manager
+
         _MANAGER = AIManager(
             _call_json_with_fallback,
             build_prompt,
             validate_response,
             logic_manager.validate_search_request,
             interpreter=BISInterpreter(
-                lambda *args, **kwargs: _call_json_with_fallback(*args, **kwargs)),
+                lambda *args, **kwargs: _call_json_with_fallback(
+                    *args, **kwargs
+                )
+            ),
         )
     return _MANAGER
 
 
 def _extend_bis_chain_with_groq():
-    """Fetch Groq chat models at startup and register them ahead of slow fallbacks."""
+    """Fetch Groq chat models at startup and register them ahead of slow
+    fallbacks.
+    """
     from dotenv import load_dotenv
+
     load_dotenv(BASE_DIR.parent / ".env")
     api_key = os.getenv("GROQ_API_KEY", "").strip()
     if api_key:
         from common.groq_models import fetch_chat_models
+
         for model_id in fetch_chat_models(api_key):
             MODEL_CHAIN.append({"provider": "groq", "model": model_id})
-    MODEL_CHAIN.extend([
-        {"provider": "gemini", "model": "gemini-3.6-flash"},
-        {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
-    ])
+    MODEL_CHAIN.extend(
+        [
+            {"provider": "gemini", "model": "gemini-3.6-flash"},
+            {
+                "provider": "openrouter",
+                "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+            },
+        ]
+    )
 
 
 _extend_bis_chain_with_groq()
@@ -174,33 +193,38 @@ def _parse_json_response(content):
     if not isinstance(parsed, dict):
         raise RuntimeError("The AI response was not a JSON object.")
 
-    debug_log("Parsed structured JSON from AI response.",
-              "DEBUG", "BIS.ai.parse")
+    debug_log(
+        "Parsed structured JSON from AI response.", "DEBUG", "BIS.ai.parse"
+    )
     return parsed
 
 
-def _call_json_with_fallback(payload, config, validator=None, skip_primary=False):
+def _call_json_with_fallback(
+    payload, config, validator=None, skip_primary=False
+):
     """Try the BIS primary model, then BIS's own fallback chain for JSON."""
     providers = []
     primary_model = config.get("openrouter_model")
     has_openrouter_key = bool(
-        config.get("openrouter_api_keys")
-        or config.get("openrouter_api_key")
+        config.get("openrouter_api_keys") or config.get("openrouter_api_key")
     )
     if primary_model and not skip_primary:
-        providers.append(OpenRouterAIProvider(
-            primary_model,
-            lambda request, settings: _call_openrouter(request, settings),
-            primary=True,
-            include_model=False,
-        ))
+        providers.append(
+            OpenRouterAIProvider(
+                primary_model,
+                lambda request, settings: _call_openrouter(request, settings),
+                primary=True,
+                include_model=False,
+            )
+        )
     registry = AIProviderFactoryRegistry()
     registry.register(
         "gemini",
         lambda model: GeminiAIProvider(
             model,
             lambda request, settings, selected=model: _call_gemini(
-                request, selected, settings),
+                request, selected, settings
+            ),
         ),
         enabled=lambda settings: bool(settings.get("gemini_api_key")),
     )
@@ -217,7 +241,8 @@ def _call_json_with_fallback(payload, config, validator=None, skip_primary=False
         lambda model: GroqAIProvider(
             model,
             lambda request, settings, selected=model: _call_groq(
-                request, selected, settings),
+                request, selected, settings
+            ),
         ),
         enabled=lambda settings: bool(settings.get("groq_api_key")),
     )
@@ -225,14 +250,19 @@ def _call_json_with_fallback(payload, config, validator=None, skip_primary=False
         provider, model = entry.get("provider"), entry.get("model")
         if not model or any(char in model for char in "<> "):
             continue
-        if (provider == "openrouter"
-                and model == primary_model and has_openrouter_key):
+        if (
+            provider == "openrouter"
+            and model == primary_model
+            and has_openrouter_key
+        ):
             continue
         configured = registry.create(provider, model, config)
         if configured is not None:
             providers.append(configured)
     return AIProviderRouter(
-        providers, _parse_json_response, debug_log,
+        providers,
+        _parse_json_response,
+        debug_log,
     ).route(payload, config, validator)
 
 
@@ -241,14 +271,19 @@ def has_fallback_provider(config):
     return any(
         entry.get("model")
         and not any(char in entry["model"] for char in "<> ")
-        and (entry.get("provider") == "gemini"
-             and config.get("gemini_api_key")
-             or entry.get("provider") == "openrouter"
-             and (config.get("openrouter_api_keys")
-                  or config.get("openrouter_api_key"))
-             or entry.get("provider") == "groq"
-             and config.get("groq_api_key"))
-        for entry in MODEL_CHAIN)
+        and (
+            entry.get("provider") == "gemini"
+            and config.get("gemini_api_key")
+            or entry.get("provider") == "openrouter"
+            and (
+                config.get("openrouter_api_keys")
+                or config.get("openrouter_api_key")
+            )
+            or entry.get("provider") == "groq"
+            and config.get("groq_api_key")
+        )
+        for entry in MODEL_CHAIN
+    )
 
 
 def _get_safe_error_message(error):
@@ -271,7 +306,9 @@ def build_prompt(record):
 def validate_response(data):
     """Reject malformed or obsolete output before using any fields."""
     if not isinstance(data, dict) or set(data) - {
-        "intent", "profile_updates", "location_action",
+        "intent",
+        "profile_updates",
+        "location_action",
     }:
         raise ValueError("The AI returned an unsupported response schema.")
     intent = data.get("intent")
@@ -293,8 +330,10 @@ def validate_response(data):
 def call_api(prompt, config):
     """Send prepared messages through the configured model chain."""
     payload = {
-        "model": config["openrouter_model"], "messages": prompt,
-        "temperature": 0, "max_tokens": 700,
+        "model": config["openrouter_model"],
+        "messages": prompt,
+        "temperature": 0,
+        "max_tokens": 700,
     }
     return _call_json_with_fallback(payload, config)
 
@@ -334,7 +373,9 @@ def review_special_request(text, config):
 
 
 def review_prompt_text(text, config, context, maximum=1000):
-    return manager().interpreter.review_prompt_text(text, config, context, maximum)
+    return manager().interpreter.review_prompt_text(
+        text, config, context, maximum
+    )
 
 
 def equivalent_saved_request(text, saved, config):
@@ -347,12 +388,15 @@ def classify_search_constraints(text, config):
 
 def interpret_search_request(request, today_request, config):
     """Propose a structured search from today's natural-language request."""
-    return manager().interpret_search_request(
-        request, today_request, config)
+    return manager().interpret_search_request(request, today_request, config)
 
 
-def interpret_chat_turn(message, current_filters, history, saved_profile, config):
-    return manager().interpreter.interpret_chat_turn(message, current_filters, history, saved_profile, config)
+def interpret_chat_turn(
+    message, current_filters, history, saved_profile, config
+):
+    return manager().interpreter.interpret_chat_turn(
+        message, current_filters, history, saved_profile, config
+    )
 
 
 def review_profile_wishes(wishes, config):
@@ -360,7 +404,15 @@ def review_profile_wishes(wishes, config):
 
 
 def _transport():
-    from BIS.classes.ai.providers.clients.provider_transport import ProviderTransport
+    from BIS.classes.ai.providers.clients.provider_transport import (
+        ProviderTransport,
+    )
+
     return ProviderTransport(
-        requests, debug_log, next_api_key, _get_safe_error_message,
-        lambda: GEMINI_URL, lambda: GROQ_URL)
+        requests,
+        debug_log,
+        next_api_key,
+        _get_safe_error_message,
+        lambda: GEMINI_URL,
+        lambda: GROQ_URL,
+    )

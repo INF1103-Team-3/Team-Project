@@ -15,8 +15,10 @@ class LocationGateway:
         pair = self._cache.lookup(query)
         if pair and self._logic.in_singapore(*pair):
             return {
-                "query": query, "label": query,
-                "latitude": pair[0], "longitude": pair[1],
+                "query": query,
+                "label": query,
+                "latitude": pair[0],
+                "longitude": pair[1],
             }
         return None
 
@@ -47,10 +49,13 @@ class LocationGateway:
             response.raise_for_status()
             results = response.json().get("results", [])
         except (
-                requests.RequestException, ValueError,
-                AttributeError) as error:
+            requests.RequestException,
+            ValueError,
+            AttributeError,
+        ) as error:
             raise RuntimeError(
-                "Geocoding is unavailable. Try again.") from error
+                "Geocoding is unavailable. Try again."
+            ) from error
         for result in results:
             try:
                 point = result["geometry"]["location"]
@@ -67,9 +72,11 @@ class LocationGateway:
                     "longitude": longitude,
                 }
         raise ValueError(
-            "No Singapore location found. Try another address or postal code.")
+            "No Singapore location found. Try another address or postal code."
+        )
 
     def remember(self, queries, location):
         """Save aliases for a resolved location in the shared cache."""
         self._cache.remember(
-            queries, location["latitude"], location["longitude"])
+            queries, location["latitude"], location["longitude"]
+        )

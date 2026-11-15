@@ -1,4 +1,7 @@
-"""Web route request validation; BIS validates user IO before delegating to BRNS."""
+"""Web route request validation; BIS validates user IO before delegating to
+BRNS.
+"""
+
 from pydantic import BaseModel, ConfigDict, Field
 
 

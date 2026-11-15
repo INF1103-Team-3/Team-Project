@@ -8,9 +8,18 @@ import os
 import re
 import time
 
-from BRC.classes.ai.providers.contracts.ai_client_interface import AIClientInterface
-from BRC.classes.ai.ai_manager import AIManager, CUISINES, CUISINE_PROMPT, MATCH_PROMPT
-from BRC.classes.ai.providers.fallback.ai_provider_router import AIProviderRouter
+from BRC.classes.ai.providers.contracts.ai_client_interface import (
+    AIClientInterface,
+)
+from BRC.classes.ai.ai_manager import (
+    AIManager,
+    CUISINES,
+    CUISINE_PROMPT,
+    MATCH_PROMPT,
+)
+from BRC.classes.ai.providers.fallback.ai_provider_router import (
+    AIProviderRouter,
+)
 from BRC.classes.ai.errors.ai_response_error import AIResponseError
 from BRC.classes.ai.errors.ai_service_error import AIServiceError
 from BRC.classes.ai.providers.clients.gemini_client import GeminiClient
@@ -22,8 +31,7 @@ AIClient = AIClientInterface
 def create_manager(api_key, model):
     """Build BRC's independent configured provider-chain state."""
     try:
-        interval = float(os.getenv(
-            "BRC_AI_REQUEST_INTERVAL_SECONDS", "1.5"))
+        interval = float(os.getenv("BRC_AI_REQUEST_INTERVAL_SECONDS", "1.5"))
     except ValueError:
         interval = 1.5
     try:
@@ -31,8 +39,7 @@ def create_manager(api_key, model):
     except ValueError:
         timeout = 12.0
     try:
-        chain_timeout = float(os.getenv(
-            "BRC_AI_CHAIN_TIMEOUT_SECONDS", "45"))
+        chain_timeout = float(os.getenv("BRC_AI_CHAIN_TIMEOUT_SECONDS", "45"))
     except ValueError:
         chain_timeout = 45.0
     openrouter_key = os.getenv("OPENROUTER_API_KEY", "").strip()
@@ -44,6 +51,7 @@ def create_manager(api_key, model):
     # 503/504 Gemini failures complete in ~1s instead of stalling for ~80s.
     if groq_key:
         from common.groq_models import fetch_chat_models
+
         groq_models = fetch_chat_models(groq_key)
         explicit_groq = os.getenv("BRC_GROQ_MODEL", "").strip()
         if explicit_groq and explicit_groq not in groq_models:
@@ -54,21 +62,26 @@ def create_manager(api_key, model):
             providers.append({"provider": "groq", "model": groq_model})
     if api_key:
         fallback = os.getenv(
-            "BRC_GEMINI_FALLBACK_MODEL", "gemini-3.6-flash").strip()
+            "BRC_GEMINI_FALLBACK_MODEL", "gemini-3.6-flash"
+        ).strip()
         if fallback and fallback != model:
             providers.append({"provider": "gemini", "model": fallback})
     if openrouter_key:
-        providers.append({
-            "provider": "openrouter",
-            "model": os.getenv(
-                "BRC_OPENROUTER_MODEL",
-                "nvidia/nemotron-3-ultra-550b-a55b:free").strip(),
-        })
+        providers.append(
+            {
+                "provider": "openrouter",
+                "model": os.getenv(
+                    "BRC_OPENROUTER_MODEL",
+                    "nvidia/nemotron-3-ultra-550b-a55b:free",
+                ).strip(),
+            }
+        )
     providers = [entry for entry in providers if entry["model"]]
     if not providers:
         raise ValueError(
             "Set GEMINI_API_KEY, OPENROUTER_API_KEY, or GROQ_API_KEY "
-            "before running BRC.")
+            "before running BRC."
+        )
     return {
         "api_key": api_key,
         "model": model,
@@ -89,7 +102,8 @@ def _pace_request(manager):
     if last_request is None:
         return
     remaining = manager.get("request_interval", 0) - (
-        time.monotonic() - last_request)
+        time.monotonic() - last_request
+    )
     if remaining > 0:
         time.sleep(remaining)
 
@@ -97,7 +111,9 @@ def _pace_request(manager):
 def _retry_delay(error, attempt):
     match = re.search(
         r"(?:retry in|retryDelay[^0-9]*)\s*(\d+(?:\.\d+)?)\s*s",
-        str(error), re.IGNORECASE)
+        str(error),
+        re.IGNORECASE,
+    )
     supplied = float(match.group(1)) if match else 0.0
     return max(supplied, 4.2 * (attempt + 1))
 
@@ -111,7 +127,9 @@ def _call_gemini(prompt, manager, model):
         manager["client"] = genai.Client(
             api_key=manager.get("api_key"),
             http_options=types.HttpOptions(
-                timeout=int(manager["timeout_seconds"] * 1000)))
+                timeout=int(manager["timeout_seconds"] * 1000)
+            ),
+        )
     for attempt in range(5):
         _pace_request(manager)
         manager["last_request_at"] = time.monotonic()
@@ -120,17 +138,23 @@ def _call_gemini(prompt, manager, model):
                 model=model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    temperature=0, response_mime_type="application/json"))
+                    temperature=0, response_mime_type="application/json"
+                ),
+            )
         except Exception as error:
             alternatives_available = len(manager.get("providers", [])) > 1
-            if (getattr(error, "code", None) != 429
-                    or attempt == 4 or alternatives_available):
+            if (
+                getattr(error, "code", None) != 429
+                or attempt == 4
+                or alternatives_available
+            ):
                 raise
             delay = _retry_delay(error, attempt)
             if manager.get("report"):
                 manager["report"](
                     "AI: Gemini rate limit reached; retrying in "
-                    f"{delay:g} seconds...")
+                    f"{delay:g} seconds..."
+                )
             time.sleep(delay)
             continue
         if not response.text:
@@ -146,12 +170,14 @@ def _call_chat_completions(prompt, manager, provider, model, timeout):
     if provider == "openrouter":
         url = os.getenv(
             "BITEFINDER_OPENROUTER_URL",
-            "https://openrouter.ai/api/v1/chat/completions")
+            "https://openrouter.ai/api/v1/chat/completions",
+        )
         key = manager.get("openrouter_api_key")
     else:
         url = os.getenv(
             "BITEFINDER_GROQ_URL",
-            "https://api.groq.com/openai/v1/chat/completions")
+            "https://api.groq.com/openai/v1/chat/completions",
+        )
         key = manager.get("groq_api_key")
     try:
         response = requests.post(
@@ -176,7 +202,8 @@ def _call_chat_completions(prompt, manager, provider, model, timeout):
         content = response.json()["choices"][0]["message"]["content"]
     except (ValueError, KeyError, IndexError, TypeError) as error:
         raise RuntimeError(
-            f"{provider} returned an unexpected response") from error
+            f"{provider} returned an unexpected response"
+        ) from error
     if not isinstance(content, str) or not content.strip():
         raise RuntimeError(f"{provider} returned an empty response")
     return content

@@ -1,8 +1,8 @@
-"""Shared budget-tier estimation, fit scoring, and travel-joint ranking helpers."""
+"Shared budget-tier estimation, fit scoring, and travel-joint ranking helpers."
 
 
 class BudgetFitPolicy:
-    """Evaluate budget fit without modifying raw or missing restaurant fields."""
+    "Evaluate budget fit without modifying raw or missing restaurant fields."
 
     TIER_TYPICAL_SGD = {
         "inexpensive": 10.0,
@@ -87,7 +87,11 @@ class BudgetFitPolicy:
             return round(max(0.0, 0.25 - 0.35 * excess), 3)
 
         price_start = restaurant.get("price_start")
-        if avg_price is None and cls._is_valid_number(price_start) and price_start > budget:
+        if (
+            avg_price is None
+            and cls._is_valid_number(price_start)
+            and price_start > budget
+        ):
             excess = (price_start - budget) / max(float(budget), 1.0)
             return round(max(0.0, 0.25 - 0.35 * excess), 3)
 
@@ -103,10 +107,18 @@ class BudgetFitPolicy:
             if estimated >= 80 or tier == "very_expensive":
                 return 1.0
             if estimated >= 50 or tier == "expensive":
-                return round(0.76 + 0.16 * min(1.0, max(0.0, estimated - 50.0) / 30.0), 3)
+                return round(
+                    0.76 + 0.16 * min(1.0, max(0.0, estimated - 50.0) / 30.0),
+                    3,
+                )
             if estimated >= 25 or tier == "moderate":
-                return round(0.45 + 0.25 * min(1.0, max(0.0, estimated - 25.0) / 25.0), 3)
-            return round(max(0.12, 0.15 + 0.20 * min(1.0, estimated / 25.0)), 3)
+                return round(
+                    0.45 + 0.25 * min(1.0, max(0.0, estimated - 25.0) / 25.0),
+                    3,
+                )
+            return round(
+                max(0.12, 0.15 + 0.20 * min(1.0, estimated / 25.0)), 3
+            )
 
         if estimated > budget:
             excess = (estimated - budget) / max(float(budget), 1.0)
@@ -123,7 +135,7 @@ class BudgetFitPolicy:
 
     @classmethod
     def evaluate_budget(cls, restaurant, budget):
-        """Return (status_kind, reason_text) shared by policy and AI grounding."""
+        "Return (status_kind, reason_text) shared by policy and AI grounding."
         avg_price = restaurant.get("avg_price")
         minimum_price = restaurant.get("price_start")
         maximum_price = restaurant.get("price_end")
@@ -132,7 +144,13 @@ class BudgetFitPolicy:
             if avg_price > budget:
                 return (
                     "problem",
-                    f"average price SGD {avg_price:g} exceeds your SGD {budget:g} budget",
+                    (
+                        "average price SGD "
+                        f"{avg_price:g}"
+                        " exceeds your SGD "
+                        f"{budget:g}"
+                        " budget"
+                    ),
                 )
             return "reason", "average price is within your budget"
 
@@ -145,10 +163,22 @@ class BudgetFitPolicy:
         if (
             cls._is_valid_number(maximum_price)
             and maximum_price <= budget
-            and (minimum_price is None or (cls._is_valid_number(minimum_price) and minimum_price <= maximum_price))
+            and (
+                minimum_price is None
+                or (
+                    cls._is_valid_number(minimum_price)
+                    and minimum_price <= maximum_price
+                )
+            )
         ):
             if budget > 100 and ((minimum_price or maximum_price) >= 50):
-                return "reason", "listed price range fits within your SGD $100+ fine-dining tier"
+                return (
+                    "reason",
+                    (
+                        "listed price range fits within your SGD $100+ "
+                        "fine-dining tier"
+                    ),
+                )
             return "reason", "listed price range is within your budget"
 
         if (
@@ -161,15 +191,35 @@ class BudgetFitPolicy:
                 if budget > 100:
                     return (
                         "reason",
-                        f"estimated price (~SGD {midpoint:g}) fits within your SGD $100+ fine-dining tier",
+                        (
+                            "estimated price (~SGD "
+                            f"{midpoint:g}"
+                            ") fits within your SGD $100+ fine-dining tier"
+                        ),
                     )
                 return (
                     "reason",
-                    f"estimated price (~SGD {midpoint:g}) aligns with your SGD {budget:g} budget",
+                    (
+                        "estimated price (~SGD "
+                        f"{midpoint:g}"
+                        ") aligns with your SGD "
+                        f"{budget:g}"
+                        " budget"
+                    ),
                 )
             return (
                 "problem",
-                f"listed midpoint SGD {midpoint:g} (SGD {minimum_price:g}-{maximum_price:g}) exceeds your SGD {budget:g} budget",
+                (
+                    "listed midpoint SGD "
+                    f"{midpoint:g}"
+                    " (SGD "
+                    f"{minimum_price:g}"
+                    "-"
+                    f"{maximum_price:g}"
+                    ") exceeds your SGD "
+                    f"{budget:g}"
+                    " budget"
+                ),
             )
 
         if cls._is_valid_number(minimum_price):
@@ -178,7 +228,13 @@ class BudgetFitPolicy:
         if cls._is_valid_number(maximum_price) and maximum_price > budget:
             return (
                 "problem",
-                f"prices go up to SGD {maximum_price:g}, over your SGD {budget:g} budget",
+                (
+                    "prices go up to SGD "
+                    f"{maximum_price:g}"
+                    ", over your SGD "
+                    f"{budget:g}"
+                    " budget"
+                ),
             )
 
         tier = cls.normalize_price_tier(
@@ -191,36 +247,66 @@ class BudgetFitPolicy:
                 if tier in ("expensive", "very_expensive"):
                     return (
                         "reason",
-                        f"within your SGD $100+ fine-dining tier ({label}, ~SGD {typical:g})",
+                        (
+                            "within your SGD $100+ fine-dining tier ("
+                            f"{label}"
+                            ", ~SGD "
+                            f"{typical:g}"
+                            ")"
+                        ),
                     )
                 return (
                     "reason",
-                    f"Google price tier ({label}, ~SGD {typical:g}) fits within your SGD $100+ limit",
+                    (
+                        "Google price tier ("
+                        f"{label}"
+                        ", ~SGD "
+                        f"{typical:g}"
+                        ") fits within your SGD $100+ limit"
+                    ),
                 )
             if typical <= budget:
                 return (
                     "reason",
-                    f"estimated price (~SGD {typical:g}, {label}) aligns with your SGD {budget:g} budget",
+                    (
+                        "estimated price (~SGD "
+                        f"{typical:g}"
+                        ", "
+                        f"{label}"
+                        ") aligns with your SGD "
+                        f"{budget:g}"
+                        " budget"
+                    ),
                 )
             return (
                 "problem",
-                f"Google price tier ({label}, ~SGD {typical:g}) likely exceeds your SGD {budget:g} budget",
+                (
+                    "Google price tier ("
+                    f"{label}"
+                    ", ~SGD "
+                    f"{typical:g}"
+                    ") likely exceeds your SGD "
+                    f"{budget:g}"
+                    " budget"
+                ),
             )
 
         return "unverified", "price unavailable"
 
     @classmethod
     def joint_rank_score(cls, restaurant, request, rating_confidence_fn):
-        """Compute deterministic Pure Best-Fit score across budget, quality, and proximity."""
-        fit = cls.budget_fit_score(restaurant, request.get("budget_per_person"))
+        """Compute deterministic Pure Best-Fit score across budget,
+        quality, and proximity.
+        """
+        fit = cls.budget_fit_score(
+            restaurant, request.get("budget_per_person")
+        )
         conf_rating = rating_confidence_fn(
             restaurant.get("rating"),
             restaurant.get("rating_count"),
         )
         quality_norm = (
-            (conf_rating - 1.0) / 4.0
-            if conf_rating is not None
-            else 0.55
+            (conf_rating - 1.0) / 4.0 if conf_rating is not None else 0.55
         )
         mode = request.get("mode", "walk")
         proximity = 0.0

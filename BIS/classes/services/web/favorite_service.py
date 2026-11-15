@@ -1,4 +1,5 @@
 """User-owned bookmarks with stable restaurant identity."""
+
 from threading import Lock
 
 
@@ -15,7 +16,9 @@ class FavoriteService:
         name = str(restaurant.get("name") or "").strip().lower()
         address = str(restaurant.get("address") or "").strip().lower()
         if not name or not address:
-            raise ValueError("A favorite needs a place ID or restaurant name and address.")
+            raise ValueError(
+                "A favorite needs a place ID or restaurant name and address."
+            )
         return name + "|" + address
 
     def list(self, user):

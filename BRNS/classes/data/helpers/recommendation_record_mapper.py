@@ -1,4 +1,5 @@
 """Map recommendation results into the existing persisted record formats."""
+
 import re
 
 
@@ -6,11 +7,15 @@ class RecommendationRecordMapper:
     @staticmethod
     def restaurant_record(candidate):
         place_id = candidate.get("google_place_id")
-        if (not isinstance(place_id, str) or not place_id
-                or not candidate.get("name")):
+        if (
+            not isinstance(place_id, str)
+            or not place_id
+            or not candidate.get("name")
+        ):
             return None
         dietary = {
-            item for item in candidate.get("dietary_requirements") or []
+            item
+            for item in candidate.get("dietary_requirements") or []
             if item in ("halal", "vegetarian")
         }
         if candidate.get("halal_hint"):
@@ -19,7 +24,8 @@ class RecommendationRecordMapper:
         postal = candidate.get("postal_code")
         if not postal and isinstance(address, str):
             match = re.search(
-                r"\bSingapore\s+(\d{6})\b", address, re.IGNORECASE)
+                r"\bSingapore\s+(\d{6})\b", address, re.IGNORECASE
+            )
             postal = match.group(1) if match else None
         cuisines = candidate.get("cuisines") or []
         rating = candidate.get("rating")
@@ -38,20 +44,26 @@ class RecommendationRecordMapper:
             "address": address if address != "unavailable" else None,
             "number": candidate.get("number"),
             "g_rating": (
-                str(rating) if type(rating) in (int, float) else None),
+                str(rating) if type(rating) in (int, float) else None
+            ),
             "g_no_reviews": str(reviews) if type(reviews) is int else None,
             "cuisine": (
-                cuisines[0]
-                if cuisines and cuisines[0] != "unknown" else None),
+                cuisines[0] if cuisines and cuisines[0] != "unknown" else None
+            ),
             "dietary": sorted(dietary),
             "avg_price_low_sgd": candidate.get("price_start"),
             "avg_price_high_sgd": candidate.get("price_end"),
             "opening_hours": candidate.get("opening_hours"),
             "wheelchair_accessible": (
-                wheelchair if type(wheelchair) is bool else None),
+                wheelchair if type(wheelchair) is bool else None
+            ),
             "halal_certification": (
-                "official" if officially_verified
-                else "unofficial" if "halal" in dietary else "none"),
+                "official"
+                if officially_verified
+                else "unofficial"
+                if "halal" in dietary
+                else "none"
+            ),
         }
 
     @staticmethod

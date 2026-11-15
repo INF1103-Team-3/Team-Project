@@ -15,12 +15,12 @@ sys.path.insert(0, str(ROOT / "BIS"))
 sys.path.insert(0, str(TESTS_ROOT))
 
 
-from BIS import io_manager as bis_io
-from BIS import logic_manager as bis_logic
-from BRNS import io_manager as brns_io
-from BRNS import logic_manager as brns_logic
-from reporting import show_case, show_summary
-from sources.profile_schema import empty_preferences
+from BIS import io_manager as bis_io  # noqa: E402
+from BIS import logic_manager as bis_logic  # noqa: E402
+from BRNS import io_manager as brns_io  # noqa: E402
+from BRNS import logic_manager as brns_logic  # noqa: E402
+from reporting import show_case, show_summary  # noqa: E402
+from sources.profile_schema import empty_preferences  # noqa: E402
 
 
 def search_request(**changes):
@@ -33,29 +33,18 @@ def search_request(**changes):
             "latitude": 1.372,
             "longitude": 103.95,
         },
-
         "mode": "walk",
         "max_distance_km": 2.0,
         "max_travel_minutes": None,
         "traffic_aware": False,
-
         "cuisine": "malay",
         "budget_per_person": 10.0,
-
-        "other_preferences": [
-            "spicy food"
-        ],
-
-        "dietary_requirements": [
-            "halal"
-        ],
-
+        "other_preferences": ["spicy food"],
+        "dietary_requirements": ["halal"],
         "disliked_cuisines": [],
     }
 
-    request.update(
-        changes
-    )
+    request.update(changes)
 
     return request
 
@@ -68,30 +57,18 @@ def recommendation(*ids):
             "id": index,
             "reason_codes": [],
         }
-
-        for index
-        in ids
+        for index in ids
     ]
 
 
 def test_valid_bis_request_crosses_brns_boundary_unchanged():
     """A valid BIS request is accepted by BRNS without changing meaning."""
 
-    test_input = (
-        search_request()
-    )
+    test_input = search_request()
 
-    expected = (
-        bis_logic.validate_search_request(
-            test_input
-        )
-    )
+    expected = bis_logic.validate_search_request(test_input)
 
-    actual = (
-        brns_io.accept_bis_json(
-            expected
-        )
-    )
+    actual = brns_io.accept_bis_json(expected)
 
     show_case(
         "INT-01: Valid BIS request accepted by BRNS",
@@ -109,23 +86,13 @@ def test_valid_bis_request_crosses_brns_boundary_unchanged():
 def test_serialized_bis_json_is_accepted_by_brns():
     """The BIS request can cross the process boundary as JSON text."""
 
-    request = (
-        bis_logic.validate_search_request(
-            search_request()
-        )
-    )
+    request = bis_logic.validate_search_request(search_request())
 
-    test_input = json.dumps(
-        request
-    )
+    test_input = json.dumps(request)
 
     expected = request
 
-    actual = (
-        brns_io.accept_bis_json(
-            test_input
-        )
-    )
+    actual = brns_io.accept_bis_json(test_input)
 
     show_case(
         "INT-02: Serialized BIS JSON accepted",
@@ -143,11 +110,7 @@ def test_serialized_bis_json_is_accepted_by_brns():
 def test_invalid_search_mode_is_rejected_by_both_systems():
     """BIS and BRNS reject the same unsupported travel mode."""
 
-    test_input = (
-        search_request(
-            mode="fly"
-        )
-    )
+    test_input = search_request(mode="fly")
 
     expected = {
         "BIS": "rejected",
@@ -157,9 +120,7 @@ def test_invalid_search_mode_is_rejected_by_both_systems():
     actual = {}
 
     try:
-        bis_logic.validate_search_request(
-            test_input
-        )
+        bis_logic.validate_search_request(test_input)
 
         actual["BIS"] = "accepted"
 
@@ -167,9 +128,7 @@ def test_invalid_search_mode_is_rejected_by_both_systems():
         actual["BIS"] = "rejected"
 
     try:
-        brns_io.accept_bis_json(
-            test_input
-        )
+        brns_io.accept_bis_json(test_input)
 
         actual["BRNS"] = "accepted"
 
@@ -199,93 +158,55 @@ def test_transit_time_contract_is_shared_by_bis_and_brns():
         traffic_aware=False,
     )
 
-    invalid = deepcopy(
-        valid
-    )
+    invalid = deepcopy(valid)
 
-    invalid[
-        "max_distance_km"
-    ] = 5.0
+    invalid["max_distance_km"] = 5.0
 
     test_input = {
-        "valid_transit":
-            valid,
-
-        "invalid_transit_with_distance":
-            invalid,
+        "valid_transit": valid,
+        "invalid_transit_with_distance": invalid,
     }
 
     expected = {
-        "valid_BIS":
-            "accepted",
-
-        "valid_BRNS":
-            "accepted",
-
-        "invalid_BIS":
-            "rejected",
-
-        "invalid_BRNS":
-            "rejected",
+        "valid_BIS": "accepted",
+        "valid_BRNS": "accepted",
+        "invalid_BIS": "rejected",
+        "invalid_BRNS": "rejected",
     }
 
     actual = {}
 
     try:
-        bis_logic.validate_search_request(
-            valid
-        )
+        bis_logic.validate_search_request(valid)
 
-        actual[
-            "valid_BIS"
-        ] = "accepted"
+        actual["valid_BIS"] = "accepted"
 
     except ValueError:
-        actual[
-            "valid_BIS"
-        ] = "rejected"
+        actual["valid_BIS"] = "rejected"
 
     try:
-        brns_io.accept_bis_json(
-            valid
-        )
+        brns_io.accept_bis_json(valid)
 
-        actual[
-            "valid_BRNS"
-        ] = "accepted"
+        actual["valid_BRNS"] = "accepted"
 
     except ValueError:
-        actual[
-            "valid_BRNS"
-        ] = "rejected"
+        actual["valid_BRNS"] = "rejected"
 
     try:
-        bis_logic.validate_search_request(
-            invalid
-        )
+        bis_logic.validate_search_request(invalid)
 
-        actual[
-            "invalid_BIS"
-        ] = "accepted"
+        actual["invalid_BIS"] = "accepted"
 
     except ValueError:
-        actual[
-            "invalid_BIS"
-        ] = "rejected"
+        actual["invalid_BIS"] = "rejected"
 
     try:
-        brns_io.accept_bis_json(
-            invalid
-        )
+        brns_io.accept_bis_json(invalid)
 
-        actual[
-            "invalid_BRNS"
-        ] = "accepted"
+        actual["invalid_BRNS"] = "accepted"
 
     except ValueError:
-        actual[
-            "invalid_BRNS"
-        ] = "rejected"
+        actual["invalid_BRNS"] = "rejected"
 
     show_case(
         "INT-04: Transit time contract preserved",
@@ -310,34 +231,20 @@ def test_live_traffic_contract_is_shared_by_bis_and_brns():
         traffic_aware=True,
     )
 
-    invalid = deepcopy(
-        valid
-    )
+    invalid = deepcopy(valid)
 
-    invalid[
-        "mode"
-    ] = "walk"
+    invalid["mode"] = "walk"
 
     test_input = {
-        "valid_drive":
-            valid,
-
-        "invalid_walk":
-            invalid,
+        "valid_drive": valid,
+        "invalid_walk": invalid,
     }
 
     expected = {
-        "valid_BIS":
-            "accepted",
-
-        "valid_BRNS":
-            "accepted",
-
-        "invalid_BIS":
-            "rejected",
-
-        "invalid_BRNS":
-            "rejected",
+        "valid_BIS": "accepted",
+        "valid_BRNS": "accepted",
+        "invalid_BIS": "rejected",
+        "invalid_BRNS": "rejected",
     }
 
     actual = {}
@@ -348,19 +255,16 @@ def test_live_traffic_contract_is_shared_by_bis_and_brns():
             valid,
             bis_logic.validate_search_request,
         ),
-
         (
             "valid_BRNS",
             valid,
             brns_io.accept_bis_json,
         ),
-
         (
             "invalid_BIS",
             invalid,
             bis_logic.validate_search_request,
         ),
-
         (
             "invalid_BRNS",
             invalid,
@@ -369,20 +273,13 @@ def test_live_traffic_contract_is_shared_by_bis_and_brns():
     )
 
     for key, payload, validator in cases:
-
         try:
-            validator(
-                payload
-            )
+            validator(payload)
 
-            actual[
-                key
-            ] = "accepted"
+            actual[key] = "accepted"
 
         except ValueError:
-            actual[
-                key
-            ] = "rejected"
+            actual[key] = "rejected"
 
     show_case(
         "INT-05: Live-traffic contract preserved",
@@ -403,176 +300,96 @@ def test_bis_collected_drive_request_is_accepted_by_brns():
     profile = empty_preferences()
 
     profile.update(
-        location=[
-            "pasir ris"
-        ],
-
-        max_distance_km=
-            2.0,
-
-        max_travel_time_minutes=
-            40.0,
-
-        budget_per_person=
-            10.0,
-
-        dietary_requirements=[
-            "halal"
-        ],
-
-        liked_cuisines=[
-            "malay"
-        ],
-
+        location=["pasir ris"],
+        max_distance_km=2.0,
+        max_travel_time_minutes=40.0,
+        budget_per_person=10.0,
+        dietary_requirements=["halal"],
+        liked_cuisines=["malay"],
         disliked_cuisines=[],
-
         other_preferences=[],
     )
 
     user = {
-        "preferences":
-            profile,
+        "preferences": profile,
     }
 
     with (
         patch.object(
             bis_io,
             "ask_search_location",
-            return_value=
-                search_request()[
-                    "origin"
-                ],
+            return_value=search_request()["origin"],
         ),
-
         patch.object(
             bis_io,
             "ask_search_mode",
-            return_value=
-                "drive",
+            return_value="drive",
         ),
-
         patch.object(
             bis_io,
             "ask_search_limit",
-            return_value=
-                (
-                    None,
-                    25,
-                ),
+            return_value=(
+                None,
+                25,
+            ),
         ),
-
         patch.object(
             bis_io,
             "ask_drive_traffic",
-            return_value=
-                True,
+            return_value=True,
         ),
-
         patch.object(
             bis_io,
             "ask_search_cuisine",
-            return_value=
-                "malay",
+            return_value="malay",
         ),
-
         patch.object(
             bis_io,
             "ask_search_budget",
-            return_value=
-                10,
+            return_value=10,
         ),
-
         patch.object(
             bis_io,
             "ask_search_wishes",
             return_value={
-                "selected": [
-                    "spicy food"
-                ],
-
+                "selected": ["spicy food"],
                 "text": "",
             },
         ),
     ):
-
-        collected = (
-            bis_io.collect_search(
-                user,
-                {
-                    "ai_bypass":
-                        False
-                },
-            )
+        collected = bis_io.collect_search(
+            user,
+            {"ai_bypass": False},
         )
 
-    validated = (
-        bis_logic.validate_search_request(
-            collected[
-                "request"
-            ]
-        )
-    )
+    validated = bis_logic.validate_search_request(collected["request"])
 
-    accepted = (
-        brns_io.accept_bis_json(
-            validated
-        )
-    )
+    accepted = brns_io.accept_bis_json(validated)
 
-    test_input = (
-        collected[
-            "request"
-        ]
-    )
+    test_input = collected["request"]
 
     expected = {
-        "mode":
-            "drive",
-
-        "max_travel_minutes":
-            25,
-
-        "max_distance_km":
-            None,
-
-        "traffic_aware":
-            True,
-
-        "dietary_requirements": [
-            "halal"
-        ],
+        "mode": "drive",
+        "max_travel_minutes": 25,
+        "max_distance_km": None,
+        "traffic_aware": True,
+        "dietary_requirements": ["halal"],
     }
 
     actual = {
-        "mode":
-            accepted[
-                "mode"
-            ],
-
-        "max_travel_minutes":
-            accepted[
-                "max_travel_minutes"
-            ],
-
-        "max_distance_km":
-            accepted[
-                "max_distance_km"
-            ],
-
-        "traffic_aware":
-            accepted[
-                "traffic_aware"
-            ],
-
-        "dietary_requirements":
-            accepted[
-                "dietary_requirements"
-            ],
+        "mode": accepted["mode"],
+        "max_travel_minutes": accepted["max_travel_minutes"],
+        "max_distance_km": accepted["max_distance_km"],
+        "traffic_aware": accepted["traffic_aware"],
+        "dietary_requirements": accepted["dietary_requirements"],
     }
 
     show_case(
         "INT-06: BIS collected request reaches BRNS",
-        "BIS.collect_search() -> BIS.validate_search_request() -> BRNS.accept_bis_json()",
+        (
+            "BIS.collect_search() -> BIS.validate_search_request() -> "
+            "BRNS.accept_bis_json()"
+        ),
         "Checks an actual BIS-collected driving request through "
         "the full structured request boundary into BRNS.",
         test_input,
@@ -594,140 +411,64 @@ def test_hardcoded_ai_order_is_combined_with_brns_business_rules():
 
     candidates = [
         {
-            "name":
-                "Within Budget",
-
-            "address":
-                "1 Test Road",
-
-            "cuisines": [
-                "malay"
-            ],
-
-            "dietary_requirements":
-                [],
-
-            "avg_price":
-                8,
-
-            "walk_meters":
-                500,
-
-            "walk_source":
-                "route",
+            "name": "Within Budget",
+            "address": "1 Test Road",
+            "cuisines": ["malay"],
+            "dietary_requirements": [],
+            "avg_price": 8,
+            "walk_meters": 500,
+            "walk_source": "route",
         },
-
         {
-            "name":
-                "Over Budget",
-
-            "address":
-                "2 Test Road",
-
-            "cuisines": [
-                "malay"
-            ],
-
-            "dietary_requirements":
-                [],
-
-            "avg_price":
-                25,
-
-            "walk_meters":
-                700,
-
-            "walk_source":
-                "route",
+            "name": "Over Budget",
+            "address": "2 Test Road",
+            "cuisines": ["malay"],
+            "dietary_requirements": [],
+            "avg_price": 25,
+            "walk_meters": 700,
+            "walk_source": "route",
         },
     ]
 
-    ai_response = (
-        recommendation(
-            0,
-            1,
-        )
+    ai_response = recommendation(
+        0,
+        1,
     )
 
     test_input = {
-        "BIS_request":
-            request,
-
-        "hardcoded_AI_order":
-            ai_response,
-
-        "restaurants": [
-            item[
-                "name"
-            ]
-
-            for item
-            in candidates
-        ],
+        "BIS_request": request,
+        "hardcoded_AI_order": ai_response,
+        "restaurants": [item["name"] for item in candidates],
     }
 
-    validated = (
-        bis_logic.validate_search_request(
-            request
-        )
-    )
+    validated = bis_logic.validate_search_request(request)
 
-    accepted = (
-        brns_io.accept_bis_json(
-            validated
-        )
-    )
+    accepted = brns_io.accept_bis_json(validated)
 
-    results = (
-        brns_logic.rank_restaurants(
-            candidates,
-            accepted,
-            recommendations=
-                ai_response,
-        )
+    results = brns_logic.rank_restaurants(
+        candidates,
+        accepted,
+        recommendations=ai_response,
     )
 
     expected = {
-        "matches": [
-            "Within Budget"
-        ],
-
-        "alternatives": [
-            "Over Budget"
-        ],
+        "matches": ["Within Budget"],
+        "alternatives": ["Over Budget"],
     }
 
     actual = {
-        "matches": [
-            item[
-                "restaurant"
-            ][
-                "name"
-            ]
-
-            for item
-            in results[
-                "matches"
-            ]
-        ],
-
+        "matches": [item["restaurant"]["name"] for item in results["matches"]],
         "alternatives": [
-            item[
-                "restaurant"
-            ][
-                "name"
-            ]
-
-            for item
-            in results[
-                "alternatives"
-            ]
+            item["restaurant"]["name"] for item in results["alternatives"]
         ],
     }
 
     show_case(
         "INT-07: AI ordering and BRNS rules work together",
-        "BIS.validate_search_request() -> BRNS.accept_bis_json() -> BRNS.rank_restaurants()",
+        (
+            "BIS.validate_search_request() -> BRNS.accept_bis_json() -> "
+            "BRNS.rank_restaurants()"
+        ),
         "Passes a BIS request and hardcoded AI ordering into BRNS, "
         "then verifies deterministic budget rules still control "
         "the final recommendation outcome.",
@@ -745,147 +486,75 @@ def test_halal_requirement_survives_bis_to_brns_boundary():
     request = search_request(
         cuisine="none",
         other_preferences=[],
-        dietary_requirements=[
-            "halal"
-        ],
+        dietary_requirements=["halal"],
     )
 
     unverified = {
-        "name":
-            "Unverified Cafe",
-
-        "address":
-            "1 Test Road",
-
-        "cuisines": [
-            "malay"
-        ],
-
-        "dietary_requirements":
-            [],
-
-        "halal_status":
-            "unverified",
-
-        "avg_price":
-            8,
-
-        "walk_meters":
-            500,
-
-        "walk_source":
-            "route",
+        "name": "Unverified Cafe",
+        "address": "1 Test Road",
+        "cuisines": ["malay"],
+        "dietary_requirements": [],
+        "halal_status": "unverified",
+        "avg_price": 8,
+        "walk_meters": 500,
+        "walk_source": "route",
     }
 
     verified = {
-        "name":
-            "Verified Cafe",
-
-        "address":
-            "2 Test Road",
-
-        "cuisines": [
-            "malay"
-        ],
-
-        "dietary_requirements": [
-            "halal"
-        ],
-
-        "halal_status":
-            "official",
-
-        "halal_certification":
-            "official",
-
-        "muis_check": {
-            "status":
-                "verified"
-        },
-
-        "avg_price":
-            8,
-
-        "walk_meters":
-            600,
-
-        "walk_source":
-            "route",
+        "name": "Verified Cafe",
+        "address": "2 Test Road",
+        "cuisines": ["malay"],
+        "dietary_requirements": ["halal"],
+        "halal_status": "official",
+        "halal_certification": "official",
+        "muis_check": {"status": "verified"},
+        "avg_price": 8,
+        "walk_meters": 600,
+        "walk_source": "route",
     }
 
-    accepted = (
-        brns_io.accept_bis_json(
-            bis_logic.validate_search_request(
-                request
-            )
-        )
+    accepted = brns_io.accept_bis_json(
+        bis_logic.validate_search_request(request)
     )
 
-    unverified_status, _, _ = (
-        brns_logic.decide_outcome(
-            brns_logic.normalize_candidate(
-                unverified
-            ),
-            accepted,
-        )
+    unverified_status, _, _ = brns_logic.decide_outcome(
+        brns_logic.normalize_candidate(unverified),
+        accepted,
     )
 
-    verified_status, _, _ = (
-        brns_logic.decide_outcome(
-            brns_logic.normalize_candidate(
-                verified
-            ),
-            accepted,
-        )
+    verified_status, _, _ = brns_logic.decide_outcome(
+        brns_logic.normalize_candidate(verified),
+        accepted,
     )
 
     test_input = {
-        "BIS_dietary_requirements":
-            request[
-                "dietary_requirements"
-            ],
-
-        "unverified_restaurant":
-            unverified[
-                "name"
-            ],
-
-        "verified_restaurant":
-            verified[
-                "name"
-            ],
+        "BIS_dietary_requirements": request["dietary_requirements"],
+        "unverified_restaurant": unverified["name"],
+        "verified_restaurant": verified["name"],
     }
 
     expected = {
-        "BRNS_dietary_requirements": [
-            "halal"
-        ],
-
-        "unverified_status":
-            "reject",
-
-        "verified_status":
-            "match",
+        "BRNS_dietary_requirements": ["halal"],
+        "unverified_status": "reject",
+        "verified_status": "match",
     }
 
     actual = {
-        "BRNS_dietary_requirements":
-            accepted[
-                "dietary_requirements"
-            ],
-
-        "unverified_status":
-            unverified_status,
-
-        "verified_status":
-            verified_status,
+        "BRNS_dietary_requirements": accepted["dietary_requirements"],
+        "unverified_status": unverified_status,
+        "verified_status": verified_status,
     }
 
     show_case(
         "INT-08: Halal requirement survives BIS-to-BRNS handoff",
-        "BIS.validate_search_request() -> BRNS.accept_bis_json() -> BRNS.decide_outcome()",
-        "Confirms that the halal restriction is preserved across "
-        "the system boundary and still controls BRNS recommendation decisions.",
+        (
+            "BIS.validate_search_request() -> BRNS.accept_bis_json() -> "
+            "BRNS.decide_outcome()"
+        ),
+        (
+            "Confirms that the halal restriction is preserved across the "
+            "system boundary and still controls BRNS recommendation decisions."
+        ),
         test_input,
         expected,
         actual,
@@ -903,143 +572,66 @@ def test_repeat_search_prefers_unseen_match_without_changing_request():
         other_preferences=[],
     )
 
-    original_request = deepcopy(
-        request
-    )
+    original_request = deepcopy(request)
 
     candidates = [
         {
-            "name":
-                "First Cafe",
-
-            "address":
-                "1 Test Road",
-
-            "cuisines":
-                [],
-
-            "dietary_requirements":
-                [],
-
-            "avg_price":
-                8,
-
-            "walk_meters":
-                500,
-
-            "walk_source":
-                "route",
+            "name": "First Cafe",
+            "address": "1 Test Road",
+            "cuisines": [],
+            "dietary_requirements": [],
+            "avg_price": 8,
+            "walk_meters": 500,
+            "walk_source": "route",
         },
-
         {
-            "name":
-                "Second Cafe",
-
-            "address":
-                "2 Test Road",
-
-            "cuisines":
-                [],
-
-            "dietary_requirements":
-                [],
-
-            "avg_price":
-                8,
-
-            "walk_meters":
-                800,
-
-            "walk_source":
-                "route",
+            "name": "Second Cafe",
+            "address": "2 Test Road",
+            "cuisines": [],
+            "dietary_requirements": [],
+            "avg_price": 8,
+            "walk_meters": 800,
+            "walk_source": "route",
         },
     ]
 
-    accepted = (
-        brns_io.accept_bis_json(
-            bis_logic.validate_search_request(
-                request
-            )
-        )
+    accepted = brns_io.accept_bis_json(
+        bis_logic.validate_search_request(request)
     )
 
-    order = (
-        recommendation(
-            0,
-            1,
-        )
+    order = recommendation(
+        0,
+        1,
     )
 
-    first = (
-        brns_logic.rank_restaurants(
-            candidates,
-            accepted,
-            order,
-        )
+    first = brns_logic.rank_restaurants(
+        candidates,
+        accepted,
+        order,
     )
 
-    repeated = (
-        brns_logic.rank_restaurants(
-            candidates,
-            accepted,
-            order,
-            previous_restaurants=[
-                first[
-                    "matches"
-                ][0][
-                    "restaurant"
-                ]
-            ],
-        )
+    repeated = brns_logic.rank_restaurants(
+        candidates,
+        accepted,
+        order,
+        previous_restaurants=[first["matches"][0]["restaurant"]],
     )
 
     test_input = {
-        "request":
-            request,
-
-        "previous_top_match":
-            first[
-                "matches"
-            ][0][
-                "restaurant"
-            ][
-                "name"
-            ],
+        "request": request,
+        "previous_top_match": first["matches"][0]["restaurant"]["name"],
     }
 
     expected = {
-        "first_top_match":
-            "First Cafe",
-
-        "repeat_top_match":
-            "Second Cafe",
-
-        "request_unchanged":
-            True,
+        "first_top_match": "First Cafe",
+        "repeat_top_match": "Second Cafe",
+        "request_unchanged": True,
     }
 
     actual = {
-        "first_top_match":
-            first[
-                "matches"
-            ][0][
-                "restaurant"
-            ][
-                "name"
-            ],
-
-        "repeat_top_match":
-            repeated[
-                "matches"
-            ][0][
-                "restaurant"
-            ][
-                "name"
-            ],
-
-        "request_unchanged":
-            request
-            == original_request,
+        "first_top_match": first["matches"][0]["restaurant"]["name"],
+        "repeat_top_match": repeated["matches"][0]["restaurant"]["name"],
+        "request_unchanged": request == original_request,
     }
 
     show_case(
@@ -1065,89 +657,49 @@ def test_no_cuisine_choice_crosses_boundary_without_cuisine_penalty():
     )
 
     candidate = {
-        "name":
-            "Malay Cafe",
-
-        "cuisines": [
-            "malay"
-        ],
-
-        "dietary_requirements":
-            [],
-
-        "halal_status":
-            "unverified",
-
-        "avg_price":
-            8,
-
-        "walk_meters":
-            500,
-
-        "walk_source":
-            "route",
+        "name": "Malay Cafe",
+        "cuisines": ["malay"],
+        "dietary_requirements": [],
+        "halal_status": "unverified",
+        "avg_price": 8,
+        "walk_meters": 500,
+        "walk_source": "route",
     }
 
-    accepted = (
-        brns_io.accept_bis_json(
-            bis_logic.validate_search_request(
-                request
-            )
-        )
+    accepted = brns_io.accept_bis_json(
+        bis_logic.validate_search_request(request)
     )
 
-    outcome, _, reasons = (
-        brns_logic.decide_outcome(
-            candidate,
-            accepted,
-        )
+    outcome, _, reasons = brns_logic.decide_outcome(
+        candidate,
+        accepted,
     )
 
     test_input = {
-        "BIS_cuisine":
-            request[
-                "cuisine"
-            ],
-
-        "restaurant_cuisines":
-            candidate[
-                "cuisines"
-            ],
+        "BIS_cuisine": request["cuisine"],
+        "restaurant_cuisines": candidate["cuisines"],
     }
 
     expected = {
-        "BRNS_cuisine":
-            "none",
-
-        "outcome":
-            "match",
-
-        "cuisine_penalty_present":
-            False,
+        "BRNS_cuisine": "none",
+        "outcome": "match",
+        "cuisine_penalty_present": False,
     }
 
     actual = {
-        "BRNS_cuisine":
-            accepted[
-                "cuisine"
-            ],
-
-        "outcome":
-            outcome,
-
-        "cuisine_penalty_present":
-            any(
-                "cuisine"
-                in reason.lower()
-
-                for reason
-                in reasons
-            ),
+        "BRNS_cuisine": accepted["cuisine"],
+        "outcome": outcome,
+        "cuisine_penalty_present": any(
+            "cuisine" in reason.lower() for reason in reasons
+        ),
     }
 
     show_case(
         "INT-10: No-cuisine choice preserved",
-        "BIS.validate_search_request() -> BRNS.accept_bis_json() -> BRNS.decide_outcome()",
+        (
+            "BIS.validate_search_request() -> BRNS.accept_bis_json() -> "
+            "BRNS.decide_outcome()"
+        ),
         "Confirms that choosing no cuisine in BIS stays optional "
         "in BRNS and does not create an artificial cuisine mismatch.",
         test_input,
@@ -1159,21 +711,83 @@ def test_no_cuisine_choice_crosses_boundary_without_cuisine_penalty():
 
 
 def test_updated_mode_travel_caps_and_transit_distance_contract():
-    """Walk, drive, and transit limits allow 50km drive/transit and 150m transit."""
+    """Walk, drive, and transit limits allow 50km drive/transit and 150m
+    transit.
+    """
 
     cases = {
-        "walk_15km_ok": (search_request(mode="walk", max_distance_km=15.0, max_travel_minutes=None), "accepted"),
-        "walk_90m_ok": (search_request(mode="walk", max_distance_km=None, max_travel_minutes=90), "accepted"),
-        "walk_15_1km_bad": (search_request(mode="walk", max_distance_km=15.1, max_travel_minutes=None), "rejected"),
-        "walk_91m_bad": (search_request(mode="walk", max_distance_km=None, max_travel_minutes=91), "rejected"),
-        "drive_50km_ok": (search_request(mode="drive", max_distance_km=50.0, max_travel_minutes=None), "accepted"),
-        "drive_120m_ok": (search_request(mode="drive", max_distance_km=None, max_travel_minutes=120), "accepted"),
-        "drive_50_1km_bad": (search_request(mode="drive", max_distance_km=50.1, max_travel_minutes=None), "rejected"),
-        "drive_121m_bad": (search_request(mode="drive", max_distance_km=None, max_travel_minutes=121), "rejected"),
-        "transit_50km_ok": (search_request(mode="transit", max_distance_km=50.0, max_travel_minutes=None), "accepted"),
-        "transit_150m_ok": (search_request(mode="transit", max_distance_km=None, max_travel_minutes=150), "accepted"),
-        "transit_50_1km_bad": (search_request(mode="transit", max_distance_km=50.1, max_travel_minutes=None), "rejected"),
-        "transit_151m_bad": (search_request(mode="transit", max_distance_km=None, max_travel_minutes=151), "rejected"),
+        "walk_15km_ok": (
+            search_request(
+                mode="walk", max_distance_km=15.0, max_travel_minutes=None
+            ),
+            "accepted",
+        ),
+        "walk_90m_ok": (
+            search_request(
+                mode="walk", max_distance_km=None, max_travel_minutes=90
+            ),
+            "accepted",
+        ),
+        "walk_15_1km_bad": (
+            search_request(
+                mode="walk", max_distance_km=15.1, max_travel_minutes=None
+            ),
+            "rejected",
+        ),
+        "walk_91m_bad": (
+            search_request(
+                mode="walk", max_distance_km=None, max_travel_minutes=91
+            ),
+            "rejected",
+        ),
+        "drive_50km_ok": (
+            search_request(
+                mode="drive", max_distance_km=50.0, max_travel_minutes=None
+            ),
+            "accepted",
+        ),
+        "drive_120m_ok": (
+            search_request(
+                mode="drive", max_distance_km=None, max_travel_minutes=120
+            ),
+            "accepted",
+        ),
+        "drive_50_1km_bad": (
+            search_request(
+                mode="drive", max_distance_km=50.1, max_travel_minutes=None
+            ),
+            "rejected",
+        ),
+        "drive_121m_bad": (
+            search_request(
+                mode="drive", max_distance_km=None, max_travel_minutes=121
+            ),
+            "rejected",
+        ),
+        "transit_50km_ok": (
+            search_request(
+                mode="transit", max_distance_km=50.0, max_travel_minutes=None
+            ),
+            "accepted",
+        ),
+        "transit_150m_ok": (
+            search_request(
+                mode="transit", max_distance_km=None, max_travel_minutes=150
+            ),
+            "accepted",
+        ),
+        "transit_50_1km_bad": (
+            search_request(
+                mode="transit", max_distance_km=50.1, max_travel_minutes=None
+            ),
+            "rejected",
+        ),
+        "transit_151m_bad": (
+            search_request(
+                mode="transit", max_distance_km=None, max_travel_minutes=151
+            ),
+            "rejected",
+        ),
     }
 
     expected = {}
@@ -1198,7 +812,14 @@ def test_updated_mode_travel_caps_and_transit_distance_contract():
         "BIS.validate_search_request() + BRNS.accept_bis_json()",
         "Verifies per-mode ceilings (walk 15km/90m, drive 50km/120m, "
         "transit 50km/150m) and transit distance across both boundaries.",
-        {k: {"mode": v[0]["mode"], "km": v[0]["max_distance_km"], "min": v[0]["max_travel_minutes"]} for k, v in cases.items()},
+        {
+            k: {
+                "mode": v[0]["mode"],
+                "km": v[0]["max_distance_km"],
+                "min": v[0]["max_travel_minutes"],
+            }
+            for k, v in cases.items()
+        },
         expected,
         actual,
     )
@@ -1227,12 +848,10 @@ def run_tests():
     failures = []
 
     for test in TESTS:
-
         try:
             test()
 
         except Exception as error:
-
             failures.append(
                 (
                     test.__name__,
@@ -1241,10 +860,7 @@ def run_tests():
             )
 
             print(
-                f"\nFAILED: "
-                f"{test.__name__}: "
-                f"{type(error).__name__}: "
-                f"{error}"
+                f"\nFAILED: {test.__name__}: {type(error).__name__}: {error}"
             )
 
     show_summary(

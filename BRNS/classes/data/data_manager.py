@@ -1,6 +1,8 @@
 """BRNS Data Manager: restaurant and recommendation-history persistence."""
 
-from BRNS.classes.data.contracts.brns_data_manager_interface import BRNSDataManagerInterface
+from BRNS.classes.data.contracts.brns_data_manager_interface import (
+    BRNSDataManagerInterface,
+)
 
 
 class DataManager(BRNSDataManagerInterface):

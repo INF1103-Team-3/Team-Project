@@ -9,7 +9,8 @@ class Address:
 
     UNIT_PATTERN = re.compile(
         r"(?:#\s*|\b)((?:B\d{1,2}|\d{2})[-/]\d{2,3}(?:/\d{2,3})?[A-Z]?)\b",
-        re.I)
+        re.I,
+    )
 
     def __init__(self, text, postal_code=""):
         self._text = text
@@ -48,10 +49,8 @@ class Address:
     @property
     def street_key(self):
         street = self.UNIT_PATTERN.sub(" ", self._text)
-        street = re.sub(
-            r"\b(?:singapore|\d{6})\b", " ", street, flags=re.I)
+        street = re.sub(r"\b(?:singapore|\d{6})\b", " ", street, flags=re.I)
         return self.normalise(street)
 
     def street_similarity(self, other):
-        return SequenceMatcher(
-            None, self.street_key, other.street_key).ratio()
+        return SequenceMatcher(None, self.street_key, other.street_key).ratio()

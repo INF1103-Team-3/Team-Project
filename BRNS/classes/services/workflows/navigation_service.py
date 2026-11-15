@@ -9,8 +9,7 @@ class NavigationService:
         self._log = logger
 
     def route_to(self, restaurant, request):
-        self._log.debug_log(
-            "Route requested.", "INFO", "BRNS.main.route_to")
+        self._log.debug_log("Route requested.", "INFO", "BRNS.main.route_to")
         origin = (
             request["origin"]["latitude"],
             request["origin"]["longitude"],
@@ -18,13 +17,16 @@ class NavigationService:
         latitude, longitude = restaurant.get("lat"), restaurant.get("lng")
         if latitude is None or longitude is None:
             raise ValueError(
-                "No verified coordinates are available for that restaurant.")
+                "No verified coordinates are available for that restaurant."
+            )
         destination = (latitude, longitude)
         mode = request["mode"]
         result = {
             "name": restaurant["name"],
             "route": self._io.get_route(
-                origin, destination, mode,
+                origin,
+                destination,
+                mode,
                 request.get("traffic_aware", False),
             ),
             "link": self._io.build_maps_link(origin, destination, mode),
@@ -35,6 +37,7 @@ class NavigationService:
             "Route response prepared with directions."
             if result["route"]
             else "Route response prepared with map link.",
-            "INFO", "BRNS.main.route_to",
+            "INFO",
+            "BRNS.main.route_to",
         )
         return result

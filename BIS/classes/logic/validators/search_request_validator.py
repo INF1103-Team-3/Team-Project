@@ -18,7 +18,8 @@ from sources.profile_schema import (
 
 
 class SearchRequestValidator(
-        BaseSearchRequestValidator, SearchRequestValidatorInterface):
+    BaseSearchRequestValidator, SearchRequestValidatorInterface
+):
     """Validate user choices and constrain an AI-proposed interpretation."""
 
     def validate(self, request, ai_response=None):
@@ -35,51 +36,68 @@ class SearchRequestValidator(
         return proposed
 
     def _validate_fields(self, request):
-        if (not isinstance(request, dict)
-                or set(request) != self._search_fields):
+        if (
+            not isinstance(request, dict)
+            or set(request) != self._search_fields
+        ):
             raise ValueError("Today's search has an invalid set of fields.")
         origin = request["origin"]
         if not isinstance(origin, dict) or set(origin) != {
-                "query", "label", "latitude", "longitude"}:
+            "query",
+            "label",
+            "latitude",
+            "longitude",
+        }:
             raise ValueError("Today's search needs a confirmed location.")
         latitude, longitude = origin["latitude"], origin["longitude"]
-        if (type(latitude) not in (int, float)
-                or type(longitude) not in (int, float)
-                or not self._in_singapore(latitude, longitude)):
+        if (
+            type(latitude) not in (int, float)
+            or type(longitude) not in (int, float)
+            or not self._in_singapore(latitude, longitude)
+        ):
             raise ValueError("Today's search location must be in Singapore.")
         if request["mode"] not in ("walk", "drive", "transit"):
             raise ValueError(
-                "Choose walk, drive, or transit for today's search.")
+                "Choose walk, drive, or transit for today's search."
+            )
         if request["cuisine"] not in (*self.supported_cuisines, "none"):
             raise ValueError(
-                "Choose a supported cuisine or none for today's search.")
+                "Choose a supported cuisine or none for today's search."
+            )
         for field in (
-                OTHER_PREFERENCES, "dietary_requirements",
-                "disliked_cuisines"):
+            OTHER_PREFERENCES,
+            "dietary_requirements",
+            "disliked_cuisines",
+        ):
             if not isinstance(request[field], list):
                 raise ValueError(f"{field} must be a list.")
         distance = request["max_distance_km"]
         minutes = request["max_travel_minutes"]
         if (distance is None) == (minutes is None):
             raise ValueError(
-                "Choose exactly one travel limit: distance or time.")
+                "Choose exactly one travel limit: distance or time."
+            )
         mode = request["mode"]
         distance = (
             validate_search_distance(distance, mode)
-            if distance is not None else None
+            if distance is not None
+            else None
         )
         minutes = (
             validate_travel_minutes(minutes, mode)
-            if minutes is not None else None
+            if minutes is not None
+            else None
         )
         traffic_aware = request["traffic_aware"]
         if type(traffic_aware) is not bool or (
-                traffic_aware and (
-                    request["mode"] != "drive" or minutes is None)):
+            traffic_aware and (request["mode"] != "drive" or minutes is None)
+        ):
             raise ValueError(
-                "Live traffic is available only for driving time searches.")
+                "Live traffic is available only for driving time searches."
+            )
         budget = validate_value(
-            "budget_per_person", request["budget_per_person"])
+            "budget_per_person", request["budget_per_person"]
+        )
         if budget is None:
             raise ValueError("Today's search needs a travel limit and budget.")
         preferences = validate_english_preferences(
@@ -101,9 +119,11 @@ class SearchRequestValidator(
             "budget_per_person": budget,
             OTHER_PREFERENCES: preferences,
             "dietary_requirements": validate_value(
-                "dietary_requirements", request["dietary_requirements"]),
+                "dietary_requirements", request["dietary_requirements"]
+            ),
             "disliked_cuisines": validate_value(
-                "disliked_cuisines", request["disliked_cuisines"]),
+                "disliked_cuisines", request["disliked_cuisines"]
+            ),
         }
 
     @staticmethod
@@ -119,9 +139,16 @@ class SearchRequestValidator(
 
 
 SEARCH_FIELDS = {
-    "origin", "mode", "max_distance_km", "max_travel_minutes",
-    "traffic_aware", "cuisine", "budget_per_person", OTHER_PREFERENCES,
-    "dietary_requirements", "disliked_cuisines",
+    "origin",
+    "mode",
+    "max_distance_km",
+    "max_travel_minutes",
+    "traffic_aware",
+    "cuisine",
+    "budget_per_person",
+    OTHER_PREFERENCES,
+    "dietary_requirements",
+    "disliked_cuisines",
 }
 
 

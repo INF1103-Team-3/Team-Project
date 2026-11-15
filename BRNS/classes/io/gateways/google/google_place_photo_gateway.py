@@ -20,7 +20,9 @@ class GooglePlacePhotoGateway:
 
     @staticmethod
     def validate_place_id(place_id):
-        """Return a sanitized place_id or raise ValueError on invalid characters."""
+        """Return a sanitized place_id or raise ValueError on invalid
+        characters.
+        """
         clean = str(place_id or "").strip()
         if not PLACE_ID_RE.fullmatch(clean):
             raise ValueError("Invalid place identifier.")
@@ -28,7 +30,11 @@ class GooglePlacePhotoGateway:
 
     def _base_url(self):
         return (
-            getattr(self._config, "PLACES_DETAILS_BASE_URL", DEFAULT_PLACES_BASE_URL)
+            getattr(
+                self._config,
+                "PLACES_DETAILS_BASE_URL",
+                DEFAULT_PLACES_BASE_URL,
+            )
             or DEFAULT_PLACES_BASE_URL
         ).rstrip("/")
 
@@ -90,7 +96,9 @@ class GooglePlacePhotoGateway:
                 img_bytes = bytes(media_resp.content or b"")
                 content_type = direct_ct
             else:
-                photo_uri = str((media_resp.json() or {}).get("photoUri") or "").strip()
+                photo_uri = str(
+                    (media_resp.json() or {}).get("photoUri") or ""
+                ).strip()
                 if not photo_uri.startswith(("https://", "http://")):
                     return None
                 img_resp = requests.get(photo_uri, timeout=15)
@@ -112,11 +120,13 @@ class GooglePlacePhotoGateway:
         return img_bytes, content_type
 
     def fetch_photo(self, place_id, max_width_px=480):
-        """Fetch photo bytes + metadata from Google Places, or status marker."""
+        "Fetch photo bytes + metadata from Google Places, or status marker."
         clean_id = self.validate_place_id(place_id)
         if not getattr(self._config, "USE_LIVE_GOOGLE", True):
             return None
-        api_key = str(getattr(self._config, "GOOGLE_MAPS_API_KEY", "") or "").strip()
+        api_key = str(
+            getattr(self._config, "GOOGLE_MAPS_API_KEY", "") or ""
+        ).strip()
         if not api_key:
             return None
 

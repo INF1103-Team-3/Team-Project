@@ -25,7 +25,8 @@ class BaseSearchRequestValidator(ABC):
                 "a confirmed choice. Please clarify what you want today."
             )
         if not set(confirmed[OTHER_PREFERENCES]).issubset(
-                proposed[OTHER_PREFERENCES]):
+            proposed[OTHER_PREFERENCES]
+        ):
             raise ValueError(
                 "SEARCH_CLARIFICATION: The AI removed a selected preference. "
                 "Please clarify your request."

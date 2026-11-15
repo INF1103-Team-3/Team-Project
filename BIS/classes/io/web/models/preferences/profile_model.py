@@ -1,4 +1,5 @@
 """HTTP input schema; domain validation remains in the managers."""
+
 from pydantic import BaseModel, Field, ConfigDict
 
 

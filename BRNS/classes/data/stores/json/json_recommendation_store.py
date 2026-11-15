@@ -5,8 +5,12 @@ import json
 from pathlib import Path
 
 from BRNS.classes.data.stores.contracts.base_json_store import BaseJsonStore
-from BRNS.classes.data.helpers.recommendation_record_mapper import RecommendationRecordMapper
-from BRNS.classes.data.stores.contracts.record_store_interface import RecordStoreInterface
+from BRNS.classes.data.helpers.recommendation_record_mapper import (
+    RecommendationRecordMapper,
+)
+from BRNS.classes.data.stores.contracts.record_store_interface import (
+    RecordStoreInterface,
+)
 
 
 class JsonRecommendationStore(BaseJsonStore, RecordStoreInterface):
@@ -22,7 +26,9 @@ class JsonRecommendationStore(BaseJsonStore, RecordStoreInterface):
 
     def _load_for_update(self, path):
         data = self._load_json(path, for_update=True)
-        if (data is not None or Path(path).exists()) and not isinstance(data, list):
+        if (data is not None or Path(path).exists()) and not isinstance(
+            data, list
+        ):
             raise RuntimeError(
                 "Saved BRNS data must be a JSON list; the existing file "
                 "was retained. Restore it before saving."
@@ -32,14 +38,23 @@ class JsonRecommendationStore(BaseJsonStore, RecordStoreInterface):
     def load_candidate_records(self, path=None):
         """Read raw candidate records with the legacy silent empty fallback."""
         try:
-            data = json.loads(Path(self._restaurant_path if path is None else path).read_text(encoding="utf-8"))
+            data = json.loads(
+                Path(
+                    self._restaurant_path if path is None else path
+                ).read_text(encoding="utf-8")
+            )
         except (OSError, ValueError):
             return []
-        return [row for row in data if isinstance(row, dict) and row.get("name")] if isinstance(data, list) else []
+        return (
+            [row for row in data if isinstance(row, dict) and row.get("name")]
+            if isinstance(data, list)
+            else []
+        )
 
     @staticmethod
     def restaurant_record(candidate):
         return RecommendationRecordMapper.restaurant_record(candidate)
+
     def save_restaurants(self, candidates, path=None):
         path = path or self._restaurant_path
         restaurants = self._load_for_update(path)
@@ -73,7 +88,8 @@ class JsonRecommendationStore(BaseJsonStore, RecordStoreInterface):
                 changed = True
             saved += 1
         if changed and not self._save_json(
-                path, restaurants, compact_hours=True):
+            path, restaurants, compact_hours=True
+        ):
             return None
         return saved
 
@@ -88,7 +104,10 @@ class JsonRecommendationStore(BaseJsonStore, RecordStoreInterface):
         return self._save_json(path, history)
 
     def save_search_results(self, request, results, source):
-        return self.save_history(RecommendationRecordMapper.search_summary(request, results, source))
+        return self.save_history(
+            RecommendationRecordMapper.search_summary(request, results, source)
+        )
+
     def save(self, record):
         if not isinstance(record, dict):
             raise ValueError("Saved BRNS records must be dictionaries.")

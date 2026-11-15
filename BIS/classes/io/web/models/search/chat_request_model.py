@@ -1,4 +1,5 @@
 """Validated payload model for BIS conversational search chat turns."""
+
 from typing import Any
 from pydantic import BaseModel, Field
 

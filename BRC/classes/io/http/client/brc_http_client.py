@@ -12,18 +12,19 @@ from common import debug_log
 class BRCHTTPClient:
     """Verify restaurants through BRC's stable HTTP contract."""
 
-    def __init__(self, base_url=None, timeout=None, opener=None,
-                 sleep=time.sleep):
-        self._base_url = (
-            base_url or os.environ["BRC_SERVICE_URL"]).rstrip("/")
+    def __init__(
+        self, base_url=None, timeout=None, opener=None, sleep=time.sleep
+    ):
+        self._base_url = (base_url or os.environ["BRC_SERVICE_URL"]).rstrip(
+            "/"
+        )
         self._timeout = timeout if timeout is not None else self._env_timeout()
         self._open = opener or urllib.request.urlopen
         self._sleep = sleep
 
     def database_missing(self):
         try:
-            return not bool(
-                self._request("/status").get("database_exists"))
+            return not bool(self._request("/status").get("database_exists"))
         except RuntimeError:
             return True
 
@@ -35,15 +36,16 @@ class BRCHTTPClient:
             return []
         result = self._request("/check", list(restaurants))
         if not isinstance(result, list) or len(result) != len(restaurants):
-            raise RuntimeError("BRC batch check returned an unexpected payload.")
+            raise RuntimeError(
+                "BRC batch check returned an unexpected payload."
+            )
         return result
 
     def _request(self, path, payload=None):
         data = None
         headers = {}
         if payload is not None:
-            data = json.dumps(
-                payload, ensure_ascii=False).encode("utf-8")
+            data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             headers["Content-Type"] = "application/json"
         trace_id = debug_log.current_trace_id()
         if trace_id:
@@ -54,7 +56,8 @@ class BRCHTTPClient:
                 self._base_url + path,
                 data=data,
                 headers=headers,
-                method="GET" if data is None else "POST")
+                method="GET" if data is None else "POST",
+            )
             try:
                 with self._open(request, timeout=self._timeout) as response:
                     return json.loads(response.read().decode("utf-8"))
@@ -65,17 +68,19 @@ class BRCHTTPClient:
                 except (ValueError, AttributeError):
                     pass
                 raise RuntimeError(
-                    f"BRC service error {error.code}: {text}") from error
+                    f"BRC service error {error.code}: {text}"
+                ) from error
             except urllib.error.URLError as error:
                 unreachable = error
                 if attempt < 3:
                     self._sleep(2 * (attempt + 1))
             except (OSError, ValueError) as error:
                 raise RuntimeError(
-                    f"BRC service call failed: {error}") from error
+                    f"BRC service call failed: {error}"
+                ) from error
         raise RuntimeError(
-            f"BRC service is unreachable at {self._base_url}: "
-            f"{unreachable}")
+            f"BRC service is unreachable at {self._base_url}: {unreachable}"
+        )
 
     @staticmethod
     def _env_timeout():

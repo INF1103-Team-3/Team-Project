@@ -1,10 +1,12 @@
-"""Focused gateway contract exposing BRNS search, routing, history, and model status."""
+"""Focused gateway contract exposing BRNS search, routing, history, and
+model status.
+"""
 
 from abc import ABC, abstractmethod
 
 
 class BRNSGatewayInterface(ABC):
-    """Single downstream boundary called by BIS to execute BRNS capabilities."""
+    "Single downstream boundary called by BIS to execute BRNS capabilities."
 
     @abstractmethod
     def search(
@@ -19,7 +21,9 @@ class BRNSGatewayInterface(ABC):
 
     @abstractmethod
     def route_to(self, restaurant, request):
-        """Return navigation directions and map link for one selected restaurant."""
+        """Return navigation directions and map link for one selected
+        restaurant.
+        """
 
     @abstractmethod
     def place_photo(self, place_id):
@@ -38,7 +42,9 @@ class BRNSGatewayInterface(ABC):
         """Return persisted search history rows for one BIS user."""
 
     @abstractmethod
-    def save_history_summary(self, user_id, request, results, source="live-google"):
+    def save_history_summary(
+        self, user_id, request, results, source="live-google"
+    ):
         """Persist one summary search-history record for a BIS user."""
 
     @abstractmethod

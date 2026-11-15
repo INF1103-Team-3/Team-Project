@@ -1,8 +1,14 @@
 """BIS IO Manager: terminal interaction and input workflow ownership."""
 
-from BIS.classes.io.contracts.bis_search_io_interface import BISSearchIOInterface
-from BIS.classes.io.cli.helpers.search_wish_collector import SearchWishCollector
-from BIS.classes.io.contracts.bis_session_io_interface import BISSessionIOInterface
+from BIS.classes.io.contracts.bis_search_io_interface import (
+    BISSearchIOInterface,
+)
+from BIS.classes.io.cli.helpers.search_wish_collector import (
+    SearchWishCollector,
+)
+from BIS.classes.io.contracts.bis_session_io_interface import (
+    BISSessionIOInterface,
+)
 from BIS.sources.prompts import QUESTIONS
 from BIS.sources.profile_schema import (
     CUISINE_FIELDS,
@@ -20,11 +26,15 @@ class IOManager(BISSessionIOInterface, BISSearchIOInterface):
         self._review_prompt = prompt_reviewer
         self._logic = logic_manager
         self._wish_collector = SearchWishCollector(
-            helpers, helpers.ai_manager, helpers.logic_manager, helpers.ui)
+            helpers, helpers.ai_manager, helpers.logic_manager, helpers.ui
+        )
 
     def choose_interface(self):
         from BIS.classes.io.cli.helpers.launcher_io import LauncherIO
-        return LauncherIO(self._helpers.read_input, self.display_message).choose_interface()
+
+        return LauncherIO(
+            self._helpers.read_input, self.display_message
+        ).choose_interface()
 
     def ask_search_wishes(self, profile, config):
         return self._wish_collector.collect(profile, config)
@@ -38,26 +48,33 @@ class IOManager(BISSessionIOInterface, BISSearchIOInterface):
         if mode is None:
             return None
         distance, minutes = self._helpers.ask_search_limit(
-            profile, mode, config)
+            profile, mode, config
+        )
         if distance is None and minutes is None:
             return None
         traffic_aware = (
             self._helpers.ask_drive_traffic(config)
-            if mode == "drive" and minutes is not None else False)
+            if mode == "drive" and minutes is not None
+            else False
+        )
         if traffic_aware is None:
             return None
         cuisine = self._helpers.ask_search_cuisine(profile, config)
         if cuisine is None:
             return None
         save_cuisine = False
-        if (cuisine != "none"
-                and cuisine not in (profile["liked_cuisines"] or [])):
+        if cuisine != "none" and cuisine not in (
+            profile["liked_cuisines"] or []
+        ):
             disliked = cuisine in (profile["disliked_cuisines"] or [])
             question = (
                 f"Add {cuisine.title()} to your saved liked cuisines"
                 + (
                     " and remove it from disliked cuisines?"
-                    if disliked else "?"))
+                    if disliked
+                    else "?"
+                )
+            )
             save_cuisine = self._helpers.ask_yes_no(question, config)
             if save_cuisine is None:
                 return None
@@ -69,8 +86,7 @@ class IOManager(BISSessionIOInterface, BISSearchIOInterface):
             return None
         other = wishes["selected"]
         if config.get("ai_bypass") and wishes["text"]:
-            other = validate_value(
-                OTHER_PREFERENCES, other + [wishes["text"]])
+            other = validate_value(OTHER_PREFERENCES, other + [wishes["text"]])
         request = {
             "origin": location,
             "mode": mode,
@@ -81,10 +97,13 @@ class IOManager(BISSessionIOInterface, BISSearchIOInterface):
             "budget_per_person": budget,
             OTHER_PREFERENCES: other,
             "dietary_requirements": list(
-                profile["dietary_requirements"] or []),
+                profile["dietary_requirements"] or []
+            ),
             "disliked_cuisines": [
-                item for item in (profile["disliked_cuisines"] or [])
-                if item != cuisine],
+                item
+                for item in (profile["disliked_cuisines"] or [])
+                if item != cuisine
+            ],
         }
         return {
             "request": request,
@@ -92,8 +111,7 @@ class IOManager(BISSessionIOInterface, BISSearchIOInterface):
             "save_cuisine": cuisine if save_cuisine else None,
         }
 
-    def collect_action(self, user, config, field=None,
-                       location_action="add"):
+    def collect_action(self, user, config, field=None, location_action="add"):
         preferences = user["preferences"]
         field = field or self._logic.next_field(preferences)
         if field is not None:
@@ -105,7 +123,8 @@ class IOManager(BISSessionIOInterface, BISSearchIOInterface):
         if command is not None:
             return command
         natural_command = self._helpers.natural_command_action(
-            text, config, allow_ai=field is None)
+            text, config, allow_ai=field is None
+        )
         if natural_command is not None:
             return natural_command
         if field == OTHER_PREFERENCES and not text.strip():
@@ -117,32 +136,45 @@ class IOManager(BISSessionIOInterface, BISSearchIOInterface):
         text = clean_text(text, 1000)
         if field in {"max_distance_km", "max_travel_time_minutes"}:
             return self._helpers._profile_travel_action(
-                text, field, config, location_action)
-        if (field is not None
-                and field not in {
-                    "max_distance_km", "max_travel_time_minutes",
-                    "budget_per_person"}
-                and text.lower() not in {"none", "both"}
-                and not config.get("ai_bypass")):
+                text, field, config, location_action
+            )
+        if (
+            field is not None
+            and field
+            not in {
+                "max_distance_km",
+                "max_travel_time_minutes",
+                "budget_per_person",
+            }
+            and text.lower() not in {"none", "both"}
+            and not config.get("ai_bypass")
+        ):
             reviewed = self._review_prompt(
-                text, config, QUESTIONS[field], 1000)
+                text, config, QUESTIONS[field], 1000
+            )
             if reviewed is None:
                 raise ValueError("Please rephrase your answer in English.")
             if reviewed != text:
                 accepted = self._helpers.ask_yes_no(
-                    f"Use '{reviewed}' instead?", config)
+                    f"Use '{reviewed}' instead?", config
+                )
                 if accepted is not True:
                     raise ValueError(
-                        "No changes saved. Please re-enter your answer.")
+                        "No changes saved. Please re-enter your answer."
+                    )
                 text = reviewed
         if field in CUISINE_FIELDS:
-            if (not config.get("ai_bypass")
-                    and text.lower() not in {
-                        "none", "no preference", "no preferences"}):
+            if not config.get("ai_bypass") and text.lower() not in {
+                "none",
+                "no preference",
+                "no preferences",
+            }:
                 return self._helpers.interpretation_action(
-                    preferences, field, text)
+                    preferences, field, text
+                )
             updates = self._helpers.resolve_cuisines(
-                text, field, preferences, config)
+                text, field, preferences, config
+            )
             return {
                 "action": "profile_update",
                 "updates": updates,
@@ -150,7 +182,8 @@ class IOManager(BISSessionIOInterface, BISSearchIOInterface):
             }
         if field == OTHER_PREFERENCES:
             updates = self._helpers.logic_manager.parse_local_answer(
-                text, field)
+                text, field
+            )
             return {
                 "action": "profile_update",
                 "updates": updates,
@@ -158,7 +191,8 @@ class IOManager(BISSessionIOInterface, BISSearchIOInterface):
             }
         if not config.get("ai_bypass"):
             return self._helpers.interpretation_action(
-                preferences, field, text)
+                preferences, field, text
+            )
         if field is None:
             raise ValueError("Use /edit to change a completed profile.")
         updates = self._helpers.logic_manager.parse_local_answer(text, field)
@@ -224,7 +258,8 @@ class IOManager(BISSessionIOInterface, BISSearchIOInterface):
 
     def display_results(self, results, announce_no_matches=True):
         return self._helpers.display_results(
-            results, announce_no_matches=announce_no_matches)
+            results, announce_no_matches=announce_no_matches
+        )
 
     def display_result_list(self, results):
         return self._helpers.display_result_list(results)
@@ -234,4 +269,5 @@ class IOManager(BISSessionIOInterface, BISSearchIOInterface):
 
     def display_route(self, name, route, link, mode, traffic_aware=False):
         return self._helpers.display_route(
-            name, route, link, mode, traffic_aware=traffic_aware)
+            name, route, link, mode, traffic_aware=traffic_aware
+        )

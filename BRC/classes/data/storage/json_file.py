@@ -7,7 +7,9 @@ import tempfile
 import time
 from pathlib import Path
 
-from BRC.classes.data.storage.data_unavailable_error import DataUnavailableError
+from BRC.classes.data.storage.data_unavailable_error import (
+    DataUnavailableError,
+)
 
 
 class JsonFile:
@@ -28,16 +30,21 @@ class JsonFile:
             return json.loads(self._path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, json.JSONDecodeError) as error:
             raise DataUnavailableError(
-                f"Cannot read valid JSON from {self._path}.") from error
+                f"Cannot read valid JSON from {self._path}."
+            ) from error
 
     def write(self, value, compact_hours=False):
         self._path.parent.mkdir(parents=True, exist_ok=True)
         temporary = None
         try:
             with tempfile.NamedTemporaryFile(
-                    "w", encoding="utf-8", dir=self._path.parent,
-                    prefix=f".{self._path.name}.", suffix=".tmp",
-                    delete=False) as stream:
+                "w",
+                encoding="utf-8",
+                dir=self._path.parent,
+                prefix=f".{self._path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as stream:
                 temporary = Path(stream.name)
                 stream.write(self.format_json(value, compact_hours))
                 stream.flush()
@@ -67,10 +74,18 @@ class JsonFile:
         if compact_hours:
             text = re.sub(
                 r'\[\n[ \t]*"(\d{4})",\n[ \t]*"(\d{4})"\n[ \t]*\]',
-                r'["\1", "\2"]', text)
+                r'["\1", "\2"]',
+                text,
+            )
             text = re.sub(
                 r'\[\n(?:[ \t]*\["\d{4}", "\d{4}"\],?\n)+[ \t]*\]',
-                lambda match: "[" + ", ".join(re.findall(
-                    r'\["\d{4}", "\d{4}"\]', match.group(0))) + "]",
-                text)
+                lambda match: (
+                    "["
+                    + ", ".join(
+                        re.findall(r'\["\d{4}", "\d{4}"\]', match.group(0))
+                    )
+                    + "]"
+                ),
+                text,
+            )
         return text + "\n"

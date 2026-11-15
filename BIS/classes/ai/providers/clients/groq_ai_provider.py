@@ -1,6 +1,8 @@
 """Groq implementation of the BIS AI provider contract."""
 
-from BIS.classes.ai.providers.contracts.ai_provider_interface import AIProviderInterface
+from BIS.classes.ai.providers.contracts.ai_provider_interface import (
+    AIProviderInterface,
+)
 from BIS.classes.ai.providers.contracts.base_ai_provider import BaseAIProvider
 
 

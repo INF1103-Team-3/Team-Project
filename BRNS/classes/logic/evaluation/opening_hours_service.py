@@ -8,8 +8,13 @@ class OpeningHoursService:
 
     SINGAPORE = timezone(timedelta(hours=8))
     DAYS = (
-        "sunday", "monday", "tuesday", "wednesday", "thursday",
-        "friday", "saturday",
+        "sunday",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
     )
     WEEK_MINUTES = 7 * 24 * 60
 
@@ -20,9 +25,14 @@ class OpeningHoursService:
         day = point.get("day")
         hour = point.get("hour", 0)
         minute = point.get("minute", 0)
-        if (type(day) is not int or not 0 <= day < 7
-                or type(hour) is not int or not 0 <= hour < 24
-                or type(minute) is not int or not 0 <= minute < 60):
+        if (
+            type(day) is not int
+            or not 0 <= day < 7
+            or type(hour) is not int
+            or not 0 <= hour < 24
+            or type(minute) is not int
+            or not 0 <= minute < 60
+        ):
             return None
         return day * 1440 + hour * 60 + minute
 
@@ -49,7 +59,8 @@ class OpeningHoursService:
     def _local_now(self, now=None):
         return (
             now.astimezone(self.SINGAPORE)
-            if now is not None else datetime.now(self.SINGAPORE)
+            if now is not None
+            else datetime.now(self.SINGAPORE)
         )
 
     @staticmethod
@@ -68,13 +79,21 @@ class OpeningHoursService:
         if not isinstance(periods, list):
             return False
         if len(periods) == 2 and all(
-                isinstance(part, str) for part in periods):
+            isinstance(part, str) for part in periods
+        ):
             periods = [periods]
         minute = now.hour * 60 + now.minute
         for period in periods:
-            if (not isinstance(period, list) or len(period) != 2
-                    or any(not isinstance(part, str) or len(part) != 4
-                           or not part.isdigit() for part in period)):
+            if (
+                not isinstance(period, list)
+                or len(period) != 2
+                or any(
+                    not isinstance(part, str)
+                    or len(part) != 4
+                    or not part.isdigit()
+                    for part in period
+                )
+            ):
                 continue
             start = int(period[0][:2]) * 60 + int(period[0][2:])
             end = int(period[1][:2]) * 60 + int(period[1][2:])
@@ -85,24 +104,29 @@ class OpeningHoursService:
     def today_hours_from_weekly(self, hours, now=None):
         if not isinstance(hours, dict):
             return "Hours unavailable"
-        periods = hours.get(
-            self.DAYS[self._today_index(self._local_now(now))])
+        periods = hours.get(self.DAYS[self._today_index(self._local_now(now))])
         if periods is None:
             return "Hours unavailable"
         if not periods:
             return "Closed today"
         if len(periods) == 2 and all(
-                isinstance(part, str) for part in periods):
+            isinstance(part, str) for part in periods
+        ):
             periods = [periods]
         if periods == [["0000", "2359"]]:
             return "Open 24 hours"
-        return ", ".join(
-            f"{pair[0][:2]}:{pair[0][2:]}–{pair[1][:2]}:{pair[1][2:]}"
-            for pair in periods
-            if isinstance(pair, list) and len(pair) == 2
-            and all(isinstance(part, str) and len(part) == 4
-                    for part in pair)
-        ) or "Hours unavailable"
+        return (
+            ", ".join(
+                f"{pair[0][:2]}:{pair[0][2:]}–{pair[1][:2]}:{pair[1][2:]}"
+                for pair in periods
+                if isinstance(pair, list)
+                and len(pair) == 2
+                and all(
+                    isinstance(part, str) and len(part) == 4 for part in pair
+                )
+            )
+            or "Hours unavailable"
+        )
 
     def weekly_opening_hours(self, hours):
         if not isinstance(hours, dict) or "periods" not in hours:
@@ -119,15 +143,20 @@ class OpeningHoursService:
                     if left < right:
                         local_start = left - day_start
                         local_end = right - day_start
-                        segments.add((
-                            f"{local_start // 60:02d}"
-                            f"{local_start % 60:02d}",
-                            "2359" if local_end == 1440 else
-                            f"{local_end // 60:02d}{local_end % 60:02d}",
-                        ))
+                        segments.add(
+                            (
+                                f"{local_start // 60:02d}"
+                                f"{local_start % 60:02d}",
+                                "2359"
+                                if local_end == 1440
+                                else (
+                                    f"{local_end // 60:02d}"
+                                    f"{local_end % 60:02d}"
+                                ),
+                            )
+                        )
             intervals = [list(pair) for pair in sorted(segments)]
-            week[day_name] = (
-                intervals[0] if len(intervals) == 1 else intervals)
+            week[day_name] = intervals[0] if len(intervals) == 1 else intervals
         return week
 
     def today_hours(self, hours, now=None):
@@ -148,9 +177,9 @@ class OpeningHoursService:
                 return "Closed today"
             return "Hours unavailable"
         return ", ".join(
-            f"{self._fmt(start)}–"
-            f"{self._fmt(end) if end < 1440 else '24:00'}"
-            for start, end in segments)
+            f"{self._fmt(start)}–{self._fmt(end) if end < 1440 else '24:00'}"
+            for start, end in segments
+        )
 
     def open_now(self, hours, now=None):
         if not isinstance(hours, dict):
@@ -163,7 +192,6 @@ class OpeningHoursService:
         now = self._local_now(now)
         minute = self._today_index(now) * 1440 + now.hour * 60 + now.minute
         return any(
-            start <= minute < end
-            or start <= minute + self.WEEK_MINUTES < end
+            start <= minute < end or start <= minute + self.WEEK_MINUTES < end
             for start, end in intervals
         )

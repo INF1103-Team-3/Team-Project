@@ -9,7 +9,8 @@ class RestaurantRecord:
     def __init__(self, data):
         self._data = dict(data)
         self._address = Address(
-            str(data.get("address")), str(data.get("postal_code") or ""))
+            str(data.get("address")), str(data.get("postal_code") or "")
+        )
 
     @property
     def name(self):

@@ -14,7 +14,8 @@ class HalalDatabase:
         self._source_url = source_url
         self._source_fetched_at = source_fetched_at
         self._by_certificate = {
-            outlet.certificate.number: outlet for outlet in self._outlets}
+            outlet.certificate.number: outlet for outlet in self._outlets
+        }
 
     def __len__(self):
         return len(self._outlets)
@@ -41,15 +42,19 @@ class HalalDatabase:
     def candidates_for(self, record):
         postal = record.address.postal
         candidates = [
-            outlet for outlet in self._outlets
-            if postal and outlet.postal_code == postal]
+            outlet
+            for outlet in self._outlets
+            if postal and outlet.postal_code == postal
+        ]
         if not candidates:
             name = Address.normalise(record.name)
             candidates = [
-                outlet for outlet in self._outlets
+                outlet
+                for outlet in self._outlets
                 if Address.normalise(outlet.name) == name
-                or outlet.address.key == record.address.key]
-        return candidates[:self.MAX_CANDIDATES]
+                or outlet.address.key == record.address.key
+            ]
+        return candidates[: self.MAX_CANDIDATES]
 
     def to_list(self):
         return [outlet.to_dict() for outlet in self._outlets]
