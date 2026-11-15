@@ -10,6 +10,17 @@ from BIS.classes.services.web.bis_chatbot_service import (
 )
 from BIS.support.config import is_smtp_bypass
 
+_NO_OPEN_RESTAURANTS_MESSAGE = (
+    "No open restaurants found near this location right now. "
+    "Note: In Singapore, many mall outlets close after 10:00 PM. "
+    "Try searching a 24-hour hotspot (e.g. 'Rivervale Plaza' or "
+    "'Jewel Changi') or increasing travel limits."
+)
+_EXHAUSTED_REFRESH_MESSAGE = (
+    "No more new restaurants found matching your current filters. "
+    "Reset seen results or adjust your filters to discover more."
+)
+
 
 class BISApplicationService:
     """Coordinate BIS domain workflows across AI, Logic, Data, and the BRNS
@@ -130,6 +141,119 @@ class BISApplicationService:
         msg = str(exc).lower()
         return "no restaurants found" in msg or "no confirmed open" in msg
 
+    @staticmethod
+    def _normalize_previous_restaurants(raw_previous):
+        """Convert Pydantic models or dicts into seen-restaurant dicts."""
+        normalized = []
+        for item in raw_previous or ():
+            if hasattr(item, "model_dump"):
+                item = item.model_dump()
+            if not isinstance(item, dict):
+                continue
+            pid = item.get("google_place_id")
+            pid_str = str(pid).strip() if pid is not None else ""
+            name = str(item.get("name") or "").strip()
+            address = str(item.get("address") or "").strip()
+            if not pid_str and not name and not address:
+                continue
+            normalized.append(
+                {
+                    "google_place_id": pid_str or None,
+                    "name": name,
+                    "address": address,
+                }
+            )
+        return normalized
+
+    @staticmethod
+    def _build_previous_matcher(previous_restaurants):
+        """Build a seen predicate keyed by place ID or (name, address)."""
+        seen_pids = set()
+        seen_name_addrs = set()
+        for item in previous_restaurants or ():
+            if not isinstance(item, dict):
+                continue
+            pid = str(item.get("google_place_id") or "").strip()
+            if pid:
+                seen_pids.add(pid)
+            name = str(item.get("name") or "").casefold().strip()
+            addr = str(item.get("address") or "").casefold().strip()
+            if name:
+                seen_name_addrs.add((name, addr))
+
+        def is_seen(entry):
+            restaurant = (
+                entry.get("restaurant")
+                if isinstance(entry, dict) and "restaurant" in entry
+                else entry
+            )
+            if not isinstance(restaurant, dict):
+                return False
+            pid = str(restaurant.get("google_place_id") or "").strip()
+            if pid and pid in seen_pids:
+                return True
+            name = str(restaurant.get("name") or "").casefold().strip()
+            addr = str(restaurant.get("address") or "").casefold().strip()
+            return bool(name and (name, addr) in seen_name_addrs)
+
+        return is_seen
+
+    def _search_brns(
+        self, request, user_id, previous_restaurants, strict_exclude
+    ):
+        """Call the BRNS gateway, forwarding seen venues only on refresh."""
+        serialized = self._data.serialize_search_request(request)
+        if strict_exclude:
+            return self._brns.search(
+                serialized,
+                previous_restaurants=previous_restaurants,
+                user_id=user_id,
+                max_matches=20,
+                max_alternatives=20,
+                strict_exclude=True,
+            )
+        return self._brns.search(
+            serialized,
+            user_id=user_id,
+            max_matches=20,
+            max_alternatives=20,
+        )
+
+    def _build_search_response(
+        self,
+        origin,
+        resolved_origins,
+        selected_cuisines,
+        cuisines_breakdown,
+        matches,
+        alternatives,
+        hidden,
+        *,
+        strict_exclude=False,
+        exhausted_previous=False,
+        message=None,
+    ):
+        """Format `/api/search` response preserving normal-search keys."""
+        response = {
+            "success": True,
+            "confirmation_required": False,
+            "origin": origin,
+            "input_origins": resolved_origins,
+            "origins": resolved_origins,
+            "selected_cuisines": selected_cuisines,
+            "cuisines_breakdown": cuisines_breakdown,
+            "matches": matches,
+            "alternatives": alternatives,
+            "exclusions_count": hidden,
+            "model_used": self._model() or "AI provider unavailable",
+        }
+        if strict_exclude:
+            response["exhausted_previous"] = bool(exhausted_previous)
+            response["new_count"] = len(matches) + len(alternatives)
+        if message:
+            response["message"] = message
+        return response
+
     def _run_search(
         self,
         owner,
@@ -138,34 +262,70 @@ class BISApplicationService:
         resolved_origins,
         selected_cuisines,
         first_request=None,
+        previous_restaurants=(),
+        strict_exclude=False,
     ):
         cuisines_breakdown = {}
+        normalized_previous = (
+            self._normalize_previous_restaurants(previous_restaurants)
+            if strict_exclude and previous_restaurants
+            else []
+        )
+        is_seen = (
+            self._build_previous_matcher(normalized_previous)
+            if normalized_previous
+            else None
+        )
         try:
+            exhausted_previous = False
             if len(selected_cuisines) <= 1:
                 single_c = selected_cuisines[0] if selected_cuisines else None
                 request = first_request or self._build_validated_request(
                     payload, origin, single_c
                 )
-                results = self._brns.search(
-                    self._data.serialize_search_request(request),
-                    user_id=owner,
-                    max_matches=20,
-                    max_alternatives=20,
+                results = self._search_brns(
+                    request, owner, normalized_previous, strict_exclude
                 )
-                matches = results.get("matches", [])
-                alternatives = results.get("alternatives", [])
+                matches = list(results.get("matches", []) or [])
+                alternatives = list(results.get("alternatives", []) or [])
+                if is_seen is not None:
+                    matches = [m for m in matches if not is_seen(m)]
+                    alternatives = [a for a in alternatives if not is_seen(a)]
                 if single_c:
-                    for item in matches + alternatives:
-                        if isinstance(item, dict):
-                            item["matched_cuisine"] = single_c
+                    matches = [
+                        (
+                            dict(item, matched_cuisine=single_c)
+                            if isinstance(item, dict)
+                            else item
+                        )
+                        for item in matches
+                    ]
+                    alternatives = [
+                        (
+                            dict(item, matched_cuisine=single_c)
+                            if isinstance(item, dict)
+                            else item
+                        )
+                        for item in alternatives
+                    ]
                     cuisines_breakdown[single_c] = len(matches) + len(
                         alternatives
                     )
                 hidden = results.get("hidden", 0)
+                if strict_exclude:
+                    exhausted_previous = bool(
+                        not matches
+                        and not alternatives
+                        and (
+                            normalized_previous
+                            or results.get("exhausted_previous")
+                        )
+                    )
             else:
                 fetched = []
                 last_empty_error = None
                 base_request = None
+                any_sub_exhausted = False
                 for c_target in selected_cuisines:
                     sub_request = self._build_validated_request(
                         payload, origin, c_target
@@ -173,11 +333,11 @@ class BISApplicationService:
                     if base_request is None:
                         base_request = sub_request
                     try:
-                        sub_res = self._brns.search(
-                            self._data.serialize_search_request(sub_request),
-                            user_id=None,
-                            max_matches=20,
-                            max_alternatives=20,
+                        sub_res = self._search_brns(
+                            sub_request,
+                            None,
+                            normalized_previous,
+                            strict_exclude,
                         )
                     except RuntimeError as sub_exc:
                         if self._is_no_open_error(sub_exc):
@@ -185,6 +345,25 @@ class BISApplicationService:
                             fetched.append((c_target, None))
                             continue
                         raise
+                    if strict_exclude and isinstance(sub_res, dict):
+                        if sub_res.get("exhausted_previous"):
+                            any_sub_exhausted = True
+                        if is_seen is not None:
+                            sub_res = dict(
+                                sub_res,
+                                matches=[
+                                    m
+                                    for m in (sub_res.get("matches") or [])
+                                    if not is_seen(m)
+                                ],
+                                alternatives=[
+                                    a
+                                    for a in (
+                                        sub_res.get("alternatives") or []
+                                    )
+                                    if not is_seen(a)
+                                ],
+                            )
                     fetched.append((c_target, sub_res))
 
                 (
@@ -195,63 +374,82 @@ class BISApplicationService:
                 ) = self._logic.merge_multi_cuisine_results(
                     fetched, len(selected_cuisines), max_total=20
                 )
+                if strict_exclude:
+                    exhausted_previous = bool(
+                        not matches
+                        and not alternatives
+                        and (normalized_previous or any_sub_exhausted)
+                    )
                 if (
                     not matches
                     and not alternatives
                     and last_empty_error is not None
                 ):
-                    raise last_empty_error
+                    if not exhausted_previous:
+                        raise last_empty_error
 
-                summary_req = dict(base_request or {})
-                summary_req["cuisine"] = ", ".join(selected_cuisines)
-                self._brns.save_history_summary(
-                    owner,
-                    summary_req,
-                    {"matches": matches, "alternatives": alternatives},
-                    "live-google",
-                )
+                if not (strict_exclude and not matches and not alternatives):
+                    summary_req = dict(base_request or {})
+                    summary_req["cuisine"] = ", ".join(selected_cuisines)
+                    self._brns.save_history_summary(
+                        owner,
+                        summary_req,
+                        {"matches": matches, "alternatives": alternatives},
+                        "live-google",
+                    )
 
-            return {
-                "success": True,
-                "confirmation_required": False,
-                "origin": origin,
-                "input_origins": resolved_origins,
-                "origins": resolved_origins,
-                "selected_cuisines": selected_cuisines,
-                "cuisines_breakdown": cuisines_breakdown,
-                "matches": matches,
-                "alternatives": alternatives,
-                "exclusions_count": hidden,
-                "model_used": self._model() or "AI provider unavailable",
-            }
+            message = (
+                _EXHAUSTED_REFRESH_MESSAGE if exhausted_previous else None
+            )
+            return self._build_search_response(
+                origin,
+                resolved_origins,
+                selected_cuisines,
+                cuisines_breakdown,
+                matches,
+                alternatives,
+                hidden,
+                strict_exclude=strict_exclude,
+                exhausted_previous=exhausted_previous,
+                message=message,
+            )
         except RuntimeError as exc:
             if self._is_no_open_error(exc):
-                return {
-                    "success": True,
-                    "confirmation_required": False,
-                    "origin": origin,
-                    "input_origins": resolved_origins,
-                    "origins": resolved_origins,
-                    "selected_cuisines": selected_cuisines,
-                    "cuisines_breakdown": cuisines_breakdown,
-                    "matches": [],
-                    "alternatives": [],
-                    "exclusions_count": 0,
-                    "model_used": self._model() or "AI provider unavailable",
-                    "message": (
-                        "No open restaurants found near this location "
-                        "right now. Note: In Singapore, many mall outlets "
-                        "close after 10:00 PM. Try searching a 24-hour "
-                        "hotspot (e.g. 'Rivervale Plaza' or 'Jewel "
-                        "Changi') or increasing travel limits."
-                    ),
-                }
+                if strict_exclude and normalized_previous:
+                    return self._build_search_response(
+                        origin,
+                        resolved_origins,
+                        selected_cuisines,
+                        cuisines_breakdown,
+                        [],
+                        [],
+                        0,
+                        strict_exclude=True,
+                        exhausted_previous=True,
+                        message=_EXHAUSTED_REFRESH_MESSAGE,
+                    )
+                return self._build_search_response(
+                    origin,
+                    resolved_origins,
+                    selected_cuisines,
+                    cuisines_breakdown,
+                    [],
+                    [],
+                    0,
+                    strict_exclude=strict_exclude,
+                    exhausted_previous=False,
+                    message=_NO_OPEN_RESTAURANTS_MESSAGE,
+                )
             raise
 
     def search(self, user, payload):
         owner = user["userID"] if user else None
+        strict_exclude = bool(payload.get("strict_exclude"))
+        previous_restaurants = self._normalize_previous_restaurants(
+            payload.get("previous_restaurants")
+        )
         token = payload.get("confirmation_token")
-        if token:
+        if token and not strict_exclude:
             proposal = self._data.consume_search_proposal(owner, token)
             request = (
                 proposal["request"]
@@ -296,7 +494,7 @@ class BISApplicationService:
         if "other_preferences" in payload or normalized_wishes:
             payload = dict(payload, other_preferences=normalized_wishes)
 
-        if payload.get("confirm_only"):
+        if payload.get("confirm_only") and not strict_exclude:
             single_c = (
                 selected_cuisines[0] if len(selected_cuisines) == 1 else None
             )
@@ -317,7 +515,13 @@ class BISApplicationService:
             }
 
         return self._run_search(
-            owner, payload, origin, resolved_origins, selected_cuisines
+            owner,
+            payload,
+            origin,
+            resolved_origins,
+            selected_cuisines,
+            previous_restaurants=previous_restaurants,
+            strict_exclude=strict_exclude,
         )
 
     def route(self, payload):
