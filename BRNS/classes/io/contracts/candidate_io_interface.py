@@ -11,5 +11,7 @@ class CandidateIOInterface(ABC):
         """Validate and normalize a BIS search payload."""
 
     @abstractmethod
-    def find_candidates(self, request):
+    def find_candidates(
+        self, request, previous_restaurants=(), strict_exclude=False
+    ):
         """Return candidate restaurants for a validated request."""

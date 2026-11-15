@@ -16,6 +16,7 @@ class BRNSGatewayInterface(ABC):
         user_id=None,
         max_matches=None,
         max_alternatives=None,
+        strict_exclude=False,
     ):
         """Run recommendation search for one validated BIS request."""
 

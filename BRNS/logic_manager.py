@@ -384,11 +384,23 @@ def recommendation_order(restaurants, recommendations):
 
 
 def rank_restaurants(
-    restaurants, request, recommendations=None, previous_restaurants=()
+    restaurants,
+    request,
+    recommendations=None,
+    previous_restaurants=(),
+    max_matches=None,
+    max_alternatives=None,
+    strict_exclude=False,
 ):
     "Verify AI IDs and reasons, then enforce requirements on every candidate."
     return manager().rank_restaurants(
-        restaurants, request, recommendations, previous_restaurants
+        restaurants,
+        request,
+        recommendations,
+        previous_restaurants,
+        max_matches=max_matches,
+        max_alternatives=max_alternatives,
+        strict_exclude=strict_exclude,
     )
 
 
