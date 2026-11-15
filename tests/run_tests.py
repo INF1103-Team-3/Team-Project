@@ -21,6 +21,7 @@ BLACKBOX_TESTS = (
 )
 INTEGRATION_TEST = TESTS_DIR / "integration" / "test_bis_brns_integration.py"
 OOP_TEST = TESTS_DIR / "oop" / "test_oop_refactor.py"
+CLEANUP_TEST = TESTS_DIR / "refactor" / "test_cleanup.py"
 LAUNCHER_TEST = TESTS_DIR / "launcher" / "test_launcher.py"
 WEB_TEST = TESTS_DIR / "web" / "test_web_api.py"
 STORAGE_TEST = TESTS_DIR / "web" / "test_storage_contracts.py"
@@ -43,10 +44,11 @@ TEST_GROUPS = {
         BRNS_TEST,
         BRC_TEST,
         OOP_TEST,
+        CLEANUP_TEST,
         LAUNCHER_TEST,
     ),
 
-    "oop": (OOP_TEST,),
+    "oop": (OOP_TEST, CLEANUP_TEST),
     "launcher": (LAUNCHER_TEST,),
     "web": (WEB_TEST, STORAGE_TEST, LIVE_MONGO_TEST),
 
@@ -65,6 +67,7 @@ TEST_GROUPS = {
         *BLACKBOX_TESTS,
         INTEGRATION_TEST,
         OOP_TEST,
+        CLEANUP_TEST,
         LAUNCHER_TEST,
         DEPLOYMENT_TEST,
     ),
