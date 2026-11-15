@@ -1812,6 +1812,120 @@ def test_workflow_and_service_exhausted_candidates_handling():
     assert actual == expected
 
 
+def test_open_search_backfills_when_sparse_under_price_filter():
+    """Sparse open_search (<6) backfills complementary food/price=None."""
+    from unittest.mock import patch
+    from BRNS import io_manager as brns_io
+
+    origin = (1.3759, 103.8793)
+
+    def raw_place(idx, price="PRICE_LEVEL_INEXPENSIVE"):
+        return {
+            "id": f"open-{idx}",
+            "displayName": {"text": f"Late Night Venue {idx}"},
+            "formattedAddress": f"{idx} Hougang Ave 8",
+            "location": {
+                "latitude": 1.376 + idx * 0.0001,
+                "longitude": 103.880,
+            },
+            "rating": 4.2,
+            "userRatingCount": 80,
+            "priceLevel": price,
+            "types": ["restaurant"],
+            "currentOpeningHours": {"openNow": True},
+        }
+
+    # Case 1: Initial INEXPENSIVE "restaurants" returns only 3 (< 6),
+    # so open_searches backfills with "food" and priceLevels omitted.
+    sparse_calls = []
+
+    def fake_post_sparse(url, headers=None, json=None, timeout=None):
+        body = dict(json or {})
+        sparse_calls.append(
+            (body.get("textQuery"), body.get("priceLevels"))
+        )
+        if body.get("priceLevels"):
+            payload = {"places": [raw_place(i) for i in range(3)]}
+        else:
+            payload = {
+                "places": [
+                    raw_place(3 + i, "PRICE_LEVEL_INEXPENSIVE")
+                    for i in range(5)
+                ]
+            }
+        return types.SimpleNamespace(
+            raise_for_status=lambda: None, json=lambda: payload
+        )
+
+    req = {
+        "mode": "walk",
+        "max_distance_km": 1.2,
+        "max_travel_minutes": 15.0,
+        "cuisine": "none",
+        "dietary_requirements": [],
+        "other_preferences": [],
+        "free_text": "",
+        "budget_per_person": 15.0,
+        "traffic_aware": False,
+    }
+
+    with (
+        patch.object(brns_io.requests, "post", side_effect=fake_post_sparse),
+        patch.object(brns_io.config, "GOOGLE_MAPS_API_KEY", "test-key"),
+    ):
+        sparse_places = brns_io.fetch_open_places(origin, req)
+
+    # Case 2: Initial INEXPENSIVE query already finds >= 6 -> stops at 1 call.
+    abundant_calls = []
+
+    def fake_post_abundant(url, headers=None, json=None, timeout=None):
+        body = dict(json or {})
+        abundant_calls.append(
+            (body.get("textQuery"), body.get("priceLevels"))
+        )
+        return types.SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: {"places": [raw_place(i) for i in range(6)]},
+        )
+
+    with (
+        patch.object(
+            brns_io.requests, "post", side_effect=fake_post_abundant
+        ),
+        patch.object(brns_io.config, "GOOGLE_MAPS_API_KEY", "test-key"),
+    ):
+        abundant_places = brns_io.fetch_open_places(origin, req)
+
+    actual = {
+        "sparse_calls": sparse_calls,
+        "sparse_count": len(sparse_places),
+        "abundant_calls": abundant_calls,
+        "abundant_count": len(abundant_places),
+    }
+    expected = {
+        "sparse_calls": [
+            ("restaurants", ["PRICE_LEVEL_INEXPENSIVE"]),
+            ("food", None),
+        ],
+        "sparse_count": 8,
+        "abundant_calls": [("restaurants", ["PRICE_LEVEL_INEXPENSIVE"])],
+        "abundant_count": 6,
+    }
+
+    show_case(
+        "BRNS-28: Sparse open_search triggers complementary unlabelled "
+        "backfill",
+        "fetch_open_places()",
+        "Verifies open_search runs complementary 'food' backfill with "
+        "price_levels=None when <6 open venues match, and skips extra calls "
+        "when >=6 venues already qualify.",
+        {"budget_per_person": 15.0, "max_travel_minutes": 15.0},
+        expected,
+        actual,
+    )
+    assert actual == expected
+
+
 TESTS = (
     test_explicit_minimum_rating_is_read,
     test_hard_cuisine_requirement_is_detected,
@@ -1840,6 +1954,7 @@ TESTS = (
     test_strict_post_ranking_excludes_matches_and_alternatives_before_slicing,
     test_strict_exclude_false_preserves_existing_ranking_behavior,
     test_workflow_and_service_exhausted_candidates_handling,
+    test_open_search_backfills_when_sparse_under_price_filter,
 )
 
 

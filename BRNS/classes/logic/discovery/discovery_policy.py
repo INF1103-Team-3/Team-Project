@@ -373,3 +373,50 @@ class DiscoveryPolicy:
                 "rank_preference": "RELEVANCE",
             },
         )
+
+    def open_searches(self, request, max_pages=1):
+        """Open-now Text Search with sparse complementary/price backfill."""
+        args, kwargs = self.open_search(request, max_pages=max_pages)
+        query, radius, _tag = args
+        price_levels = kwargs.get("price_levels")
+        places, ok = yield (args, dict(kwargs, return_status=True))
+        if not ok or self.qualifying_open_count(places) >= 6:
+            return places
+        alt_query = self.complementary_venue_query(query)
+        if price_levels:
+            first_query = alt_query or query
+            tag = (
+                "places_open_text_complement_backfill"
+                if alt_query
+                else "places_open_text_backfill"
+            )
+            extra = yield (
+                (first_query, radius, tag),
+                {
+                    "max_pages": 1,
+                    "price_levels": None,
+                    "rank_preference": "RELEVANCE",
+                },
+            )
+            places = self.merge_unique_places(places, extra)
+            if alt_query and self.qualifying_open_count(places) < 6:
+                more = yield (
+                    (query, radius, "places_open_text_backfill"),
+                    {
+                        "max_pages": 1,
+                        "price_levels": None,
+                        "rank_preference": "RELEVANCE",
+                    },
+                )
+                places = self.merge_unique_places(places, more)
+        elif alt_query:
+            extra = yield (
+                (alt_query, radius, "places_open_text_complement"),
+                {
+                    "max_pages": 1,
+                    "price_levels": None,
+                    "rank_preference": "RELEVANCE",
+                },
+            )
+            places = self.merge_unique_places(places, extra)
+        return places

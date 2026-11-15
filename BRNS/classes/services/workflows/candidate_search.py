@@ -289,6 +289,17 @@ class CandidateSearch:
                 and tracker["excluded_count"] == 0
             )
 
+    def __run_search_plan(self, origin, plan, matcher):
+        response = None
+        while True:
+            try:
+                args, kwargs = plan.send(response)
+            except StopIteration as finished:
+                return self.__filter_excluded_places(finished.value, matcher)
+            response = self.__run_text_search_tracked(
+                origin, *args, matcher=matcher, **kwargs
+            )
+
     def fetch_profile(
         self, origin, request, previous_restaurants=(), strict_exclude=False
     ):
@@ -299,21 +310,13 @@ class CandidateSearch:
             "BRNS.io_manager.fetch_by_profile_text",
         )
         plan = self._policy.profile_searches(request)
-        response = None
-        while True:
-            try:
-                args, kwargs = plan.send(response)
-            except StopIteration as finished:
-                places = self.__filter_excluded_places(finished.value, matcher)
-                self._log.debug_log(
-                    f"Text Places returned {len(places)} usable records.",
-                    "INFO",
-                    "BRNS.io_manager.fetch_by_profile_text",
-                )
-                return places
-            response = self.__run_text_search_tracked(
-                origin, *args, matcher=matcher, **kwargs
-            )
+        places = self.__run_search_plan(origin, plan, matcher)
+        self._log.debug_log(
+            f"Text Places returned {len(places)} usable records.",
+            "INFO",
+            "BRNS.io_manager.fetch_by_profile_text",
+        )
+        return places
 
     def fetch_open(
         self, origin, request, previous_restaurants=(), strict_exclude=False
@@ -324,12 +327,18 @@ class CandidateSearch:
             "INFO",
             "BRNS.io_manager.fetch_open_places",
         )
-        args, kwargs = self._policy.open_search(
-            request, self._helpers.OPEN_SEARCH_MAX_PAGES
-        )
-        places = self.__run_text_search_tracked(
-            origin, *args, matcher=matcher, **kwargs
-        )
+        if hasattr(self._policy, "open_searches"):
+            plan = self._policy.open_searches(
+                request, self._helpers.OPEN_SEARCH_MAX_PAGES
+            )
+            places = self.__run_search_plan(origin, plan, matcher)
+        else:
+            args, kwargs = self._policy.open_search(
+                request, self._helpers.OPEN_SEARCH_MAX_PAGES
+            )
+            places = self.__run_text_search_tracked(
+                origin, *args, matcher=matcher, **kwargs
+            )
         self._log.debug_log(
             f"Open-now Text Places returned {len(places)} usable records.",
             "INFO",
