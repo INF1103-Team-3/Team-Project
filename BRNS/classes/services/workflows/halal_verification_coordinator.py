@@ -45,9 +45,9 @@ class HalalVerificationCoordinator:
             else hasattr(self._verifier, "verify_batch")
         )
         if supports_batch and order:
-            self._verify_batch(candidates, checked_candidates, order, summary)
+            self.__verify_batch(candidates, checked_candidates, order, summary)
         else:
-            self._verify_individually(
+            self.__verify_individually(
                 candidates, checked_candidates, order, summary
             )
         summary["google_fallback"] = sum(
@@ -62,7 +62,7 @@ class HalalVerificationCoordinator:
         self._io.show_halal_verification_summary(summary)
         return checked_candidates, summary
 
-    def _verify_individually(
+    def __verify_individually(
         self, candidates, checked_candidates, order, summary
     ):
         for index in order:
@@ -72,11 +72,11 @@ class HalalVerificationCoordinator:
                     self.brc_restaurant(candidates[index])
                 )
             except Exception as error:
-                self._record_verify_error(index, error, summary)
+                self.__record_verify_error(index, error, summary)
                 continue
-            self._apply_checked(candidate, index, checked, summary)
+            self.__apply_checked(candidate, index, checked, summary)
 
-    def _verify_batch(self, candidates, checked_candidates, order, summary):
+    def __verify_batch(self, candidates, checked_candidates, order, summary):
         payload = [self.brc_restaurant(candidates[index]) for index in order]
         try:
             checked_rows = self._verifier.verify_batch(payload)
@@ -92,16 +92,16 @@ class HalalVerificationCoordinator:
                 "WARNING",
                 "BRNS.main.verify_halal_candidates",
             )
-            self._verify_individually(
+            self.__verify_individually(
                 candidates, checked_candidates, order, summary
             )
             return
         for index, checked in zip(order, checked_rows):
-            self._apply_checked(
+            self.__apply_checked(
                 checked_candidates[index], index, checked, summary
             )
 
-    def _record_verify_error(self, index, error, summary):
+    def __record_verify_error(self, index, error, summary):
         detail = self._log.safe_error_detail(error)
         self._log.debug_log(
             f"BRC check failed for candidate {index}: "
@@ -113,7 +113,7 @@ class HalalVerificationCoordinator:
         if summary["error_type"] is None:
             summary["error_type"] = type(error).__name__
 
-    def _apply_checked(self, candidate, index, checked, summary):
+    def __apply_checked(self, candidate, index, checked, summary):
         summary["checked"] += 1
         verified = self._logic.apply_halal_evidence(candidate, checked)
         summary["verified" if verified else "not_verified"] += 1
