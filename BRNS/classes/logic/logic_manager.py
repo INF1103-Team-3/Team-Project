@@ -7,6 +7,9 @@ from BRNS.classes.logic.sorting.recommendation_sorter import (
     RecommendationSorter,
 )
 from BRNS.classes.logic.evaluation.budget_fit_policy import BudgetFitPolicy
+from BRNS.classes.logic.evaluation.previous_restaurant_matcher import (
+    PreviousRestaurantMatcher,
+)
 from BRNS.classes.logic.evaluation.restaurant_enricher import (
     RestaurantEnricher,
 )
@@ -163,6 +166,7 @@ class LogicManager(BRNSLogicManagerInterface):
         previous_restaurants=(),
         max_matches=None,
         max_alternatives=None,
+        strict_exclude=False,
     ):
         if recommendations is None:
             order = list(range(len(restaurants)))
@@ -213,24 +217,19 @@ class LogicManager(BRNSLogicManagerInterface):
                 ),
                 reverse=True,
             )
-        previous_keys = {
-            (
-                str(item.get("name", "")).casefold().strip(),
-                str(item.get("address", "")).casefold().strip(),
-            )
-            for item in previous_restaurants
-            if isinstance(item, dict)
-        }
+        matcher = PreviousRestaurantMatcher(previous_restaurants)
 
         def was_returned(item):
-            restaurant = item["restaurant"]
-            return (
-                str(restaurant.get("name", "")).casefold().strip(),
-                str(restaurant.get("address", "")).casefold().strip(),
-            ) in previous_keys
+            return matcher.matches(item["restaurant"])
 
-        matches.sort(key=was_returned)
-        alternatives.sort(key=was_returned)
+        if strict_exclude:
+            matches = [item for item in matches if not was_returned(item)]
+            alternatives = [
+                item for item in alternatives if not was_returned(item)
+            ]
+        else:
+            matches.sort(key=was_returned)
+            alternatives.sort(key=was_returned)
         resolved_max_matches = (
             max_matches
             if max_matches is not None
@@ -251,7 +250,7 @@ class LogicManager(BRNSLogicManagerInterface):
         )
         visible_matches = matches[:resolved_max_matches]
         visible_alternatives = alternatives[:resolved_max_alternatives]
-        return {
+        result = {
             "matches": visible_matches,
             "alternatives": visible_alternatives,
             "new_count": sum(
@@ -269,3 +268,10 @@ class LogicManager(BRNSLogicManagerInterface):
             "traffic_aware": request["traffic_aware"],
             "requested_dietary": request["dietary_requirements"],
         }
+        if strict_exclude:
+            result["exhausted_previous"] = bool(
+                not visible_matches
+                and not visible_alternatives
+                and previous_restaurants
+            )
+        return result

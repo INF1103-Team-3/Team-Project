@@ -2855,6 +2855,541 @@ class WebIntegrationTests(unittest.TestCase):
             ["spicy food", "at least 4.3 stars"],
         )
 
+    def test_refresh_request_validation_and_normal_search_untouched(self):
+        from BIS.classes.io.web.models.search.search_request_model import (
+            SearchRequestModel,
+        )
+
+        base_payload = self.search_payload()
+        validated_default = SearchRequestModel.model_validate(base_payload)
+        self.assertEqual(validated_default.previous_restaurants, [])
+        self.assertFalse(validated_default.strict_exclude)
+
+        # Reject unknown top-level and nested fields in previous_restaurants.
+        self.assertEqual(
+            self.client.post(
+                "/api/search", json=dict(base_payload, unknown_flag=True)
+            ).status_code,
+            422,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/search",
+                json=dict(
+                    base_payload,
+                    strict_exclude=True,
+                    previous_restaurants=[
+                        {"name": "Cafe", "extra_field": "bad"}
+                    ],
+                ),
+            ).status_code,
+            422,
+        )
+
+        # Enforce max_length bounds on list (200) and string fields.
+        too_many = [
+            {"google_place_id": f"p-{i}", "name": f"R{i}"}
+            for i in range(201)
+        ]
+        self.assertEqual(
+            self.client.post(
+                "/api/search",
+                json=dict(
+                    base_payload,
+                    strict_exclude=True,
+                    previous_restaurants=too_many,
+                ),
+            ).status_code,
+            422,
+        )
+        for bad_item in (
+            {"google_place_id": "x" * 257, "name": "R"},
+            {"name": "x" * 301},
+            {"name": "R", "address": "x" * 501},
+        ):
+            self.assertEqual(
+                self.client.post(
+                    "/api/search",
+                    json=dict(
+                        base_payload,
+                        strict_exclude=True,
+                        previous_restaurants=[bad_item],
+                    ),
+                ).status_code,
+                422,
+            )
+
+        # Normal search keeps legacy _brns.search call & response shape.
+        headers, _ = self.account("normal.refresh.check@example.com")
+        normal_res = self.client.post(
+            "/api/search", json=base_payload, headers=headers
+        )
+        self.assertEqual(normal_res.status_code, 200, normal_res.text)
+        normal_body = normal_res.json()
+        self.assertTrue(normal_body["success"])
+        self.assertNotIn("exhausted_previous", normal_body)
+        self.assertNotIn("new_count", normal_body)
+
+        # Chatbot /api/chat never adds strict_exclude/previous_restaurants.
+        chat_res = self.client.post(
+            "/api/chat",
+            json={
+                "message": "Japanese near Tampines under $20, 20 mins walk",
+                "current_filters": {},
+            },
+            headers=headers,
+        )
+        self.assertEqual(chat_res.status_code, 200, chat_res.text)
+        self.assertNotIn("strict_exclude", chat_res.json()["filters"])
+        self.assertNotIn("previous_restaurants", chat_res.json()["filters"])
+
+    def test_strict_refresh_single_cuisine_and_confirmation_skip(
+        self,
+    ):
+        import json
+
+        headers, user = self.account("refresh.single@example.com")
+        seen_calls = []
+
+        def refresh_brns_search(
+            payload,
+            previous_restaurants=(),
+            user_id=None,
+            max_matches=None,
+            max_alternatives=None,
+            strict_exclude=False,
+        ):
+            request = json.loads(payload)
+            seen_calls.append(
+                {
+                    "request": request,
+                    "previous_restaurants": list(previous_restaurants),
+                    "user_id": user_id,
+                    "max_matches": max_matches,
+                    "max_alternatives": max_alternatives,
+                    "strict_exclude": strict_exclude,
+                }
+            )
+            results = {
+                "matches": [
+                    {
+                        "restaurant": {
+                            "google_place_id": "pid-seen",
+                            "name": "Old By ID",
+                            "address": "1 Old St",
+                        }
+                    },
+                    {
+                        "restaurant": {
+                            "google_place_id": "",
+                            "name": "Old By Name",
+                            "address": "2 Old Ave",
+                        }
+                    },
+                    {
+                        "restaurant": {
+                            "google_place_id": "pid-branch",
+                            "name": "Branch Only Name",
+                            "address": "99 New Rd",
+                        }
+                    },
+                    {
+                        "restaurant": {
+                            "google_place_id": "pid-new-1",
+                            "name": "Fresh Sushi",
+                            "address": "10 Fresh Rd",
+                        }
+                    },
+                ],
+                "alternatives": [
+                    {
+                        "restaurant": {
+                            "google_place_id": "pid-alt-1",
+                            "name": "Fresh Ramen",
+                            "address": "12 Fresh Rd",
+                        }
+                    },
+                ],
+                "hidden": 1,
+                "exhausted_previous": False,
+                "new_count": 3,
+            }
+            with self.scope.for_user(user_id):
+                self.history.save_search_results(
+                    request, results, "live-google"
+                )
+            return results
+
+        orig_brns = self.application._brns
+        self.application._brns = self._make_brns_gateway(refresh_brns_search)
+        try:
+            # Consume a confirmation token first to simulate stale cloned data.
+            tok = self.client.post(
+                "/api/search",
+                json=dict(self.search_payload(), confirm_only=True),
+                headers=headers,
+            ).json()["confirmation_token"]
+            self.assertEqual(
+                self.client.post(
+                    "/api/search",
+                    json=dict(self.search_payload(), confirmation_token=tok),
+                    headers=headers,
+                ).status_code,
+                200,
+            )
+            seen_calls.clear()
+
+            previous = [
+                {
+                    "google_place_id": "pid-seen",
+                    "name": "Old By ID Renamed",
+                    "address": "Elsewhere",
+                },
+                {
+                    "google_place_id": None,
+                    "name": "old by name",
+                    "address": "2 old ave",
+                },
+                {
+                    "google_place_id": None,
+                    "name": "Branch Only Name",
+                    "address": "",
+                },
+            ]
+            res = self.client.post(
+                "/api/search",
+                json=dict(
+                    self.search_payload(),
+                    confirm_only=True,
+                    confirmation_token=tok,
+                    previous_restaurants=previous,
+                    strict_exclude=True,
+                ),
+                headers=headers,
+            )
+            self.assertEqual(res.status_code, 200, res.text)
+            body = res.json()
+            self.assertFalse(body["confirmation_required"])
+            self.assertFalse(body["exhausted_previous"])
+            self.assertEqual(body["new_count"], 3)
+            self.assertEqual(body["cuisines_breakdown"], {"japanese": 3})
+            self.assertEqual(
+                [m["restaurant"]["google_place_id"] for m in body["matches"]],
+                ["pid-branch", "pid-new-1"],
+            )
+            self.assertEqual(
+                [
+                    a["restaurant"]["google_place_id"]
+                    for a in body["alternatives"]
+                ],
+                ["pid-alt-1"],
+            )
+            self.assertEqual(len(seen_calls), 1)
+            self.assertTrue(seen_calls[0]["strict_exclude"])
+            self.assertEqual(seen_calls[0]["user_id"], user["user_id"])
+            self.assertEqual(seen_calls[0]["max_matches"], 20)
+            self.assertEqual(seen_calls[0]["max_alternatives"], 20)
+            self.assertEqual(
+                seen_calls[0]["previous_restaurants"],
+                [
+                    {
+                        "google_place_id": "pid-seen",
+                        "name": "Old By ID Renamed",
+                        "address": "Elsewhere",
+                    },
+                    {
+                        "google_place_id": None,
+                        "name": "old by name",
+                        "address": "2 old ave",
+                    },
+                    {
+                        "google_place_id": None,
+                        "name": "Branch Only Name",
+                        "address": "",
+                    },
+                ],
+            )
+            # History now has initial confirmed search + refresh search.
+            hist_res = self.client.get("/api/history", headers=headers)
+            self.assertEqual(len(hist_res.json()["history"]), 2)
+        finally:
+            self.application._brns = orig_brns
+
+    def test_strict_refresh_multi_cuisine_forwarding_dedup_and_exhaustion(
+        self,
+    ):
+        import json
+
+        headers, _ = self.account("refresh.multi@example.com")
+        sub_calls = []
+        mode_box = {"mode": "partial"}
+
+        def multi_brns_search(
+            payload,
+            previous_restaurants=(),
+            user_id=None,
+            max_matches=None,
+            max_alternatives=None,
+            strict_exclude=False,
+        ):
+            request = json.loads(payload)
+            sub_calls.append(
+                {
+                    "cuisine": request["cuisine"],
+                    "previous_restaurants": list(previous_restaurants),
+                    "user_id": user_id,
+                    "max_matches": max_matches,
+                    "max_alternatives": max_alternatives,
+                    "strict_exclude": strict_exclude,
+                }
+            )
+            if mode_box["mode"] == "partial":
+                if request["cuisine"] == "japanese":
+                    return {
+                        "matches": [],
+                        "alternatives": [],
+                        "hidden": 0,
+                        "exhausted_previous": True,
+                        "new_count": 0,
+                    }
+                return {
+                    "matches": [
+                        {
+                            "restaurant": {
+                                "google_place_id": "seen-k1",
+                                "name": "Seen Kor",
+                                "address": "1 K Rd",
+                            }
+                        },
+                        {
+                            "restaurant": {
+                                "google_place_id": "new-k2",
+                                "name": "New Kor",
+                                "address": "2 K Rd",
+                            }
+                        },
+                    ],
+                    "alternatives": [],
+                    "hidden": 1,
+                    "exhausted_previous": False,
+                    "new_count": 1,
+                }
+            if mode_box["mode"] == "all_empty":
+                return {
+                    "matches": [],
+                    "alternatives": [],
+                    "hidden": 0,
+                    "exhausted_previous": True,
+                    "new_count": 0,
+                }
+            if mode_box["mode"] == "all_runtime_no_open":
+                raise RuntimeError("No restaurants found for this cuisine.")
+            raise RuntimeError(
+                "BRNS needs a configured AI provider to complete this search."
+            )
+
+        orig_brns = self.application._brns
+        self.application._brns = self._make_brns_gateway(multi_brns_search)
+        try:
+            multi_payload = dict(
+                self.search_payload(),
+                cuisine="japanese, korean",
+                liked_cuisines=["japanese", "korean"],
+                previous_restaurants=[
+                    {
+                        "google_place_id": "seen-k1",
+                        "name": "Seen Kor",
+                        "address": "1 K Rd",
+                    },
+                ],
+                strict_exclude=True,
+            )
+
+            # 1. Partial exhaustion: japanese empty, korean has 1 unseen.
+            partial = self.client.post(
+                "/api/search", json=multi_payload, headers=headers
+            )
+            self.assertEqual(partial.status_code, 200, partial.text)
+            p_body = partial.json()
+            self.assertFalse(p_body["exhausted_previous"])
+            self.assertEqual(p_body["new_count"], 1)
+            self.assertEqual(
+                p_body["cuisines_breakdown"], {"japanese": 0, "korean": 1}
+            )
+            self.assertEqual(
+                [
+                    m["restaurant"]["google_place_id"]
+                    for m in p_body["matches"]
+                ],
+                ["new-k2"],
+            )
+            self.assertEqual(len(sub_calls), 2)
+            for call in sub_calls:
+                self.assertTrue(call["strict_exclude"])
+                self.assertIsNone(call["user_id"])
+                self.assertEqual(call["max_matches"], 20)
+                self.assertEqual(call["max_alternatives"], 20)
+                self.assertEqual(len(call["previous_restaurants"]), 1)
+            hist_partial = self.client.get("/api/history", headers=headers)
+            self.assertEqual(len(hist_partial.json()["history"]), 1)
+
+            # 2. All sub-cuisines exhausted cleanly via exhausted_previous.
+            mode_box["mode"] = "all_empty"
+            exhausted_res = self.client.post(
+                "/api/search", json=multi_payload, headers=headers
+            )
+            self.assertEqual(
+                exhausted_res.status_code, 200, exhausted_res.text
+            )
+            e_body = exhausted_res.json()
+            self.assertTrue(e_body["success"])
+            self.assertTrue(e_body["exhausted_previous"])
+            self.assertEqual(e_body["new_count"], 0)
+            self.assertEqual(e_body["matches"], [])
+            self.assertEqual(e_body["alternatives"], [])
+            self.assertEqual(
+                e_body["message"],
+                "No more new restaurants found matching your current filters. "
+                "Reset seen results or adjust your filters to discover more.",
+            )
+
+            # 3. Sub-cuisines raising No-open RuntimeError returns exhausted.
+            mode_box["mode"] = "all_runtime_no_open"
+            exhausted_err_res = self.client.post(
+                "/api/search", json=multi_payload, headers=headers
+            )
+            self.assertEqual(
+                exhausted_err_res.status_code, 200, exhausted_err_res.text
+            )
+            ee_body = exhausted_err_res.json()
+            self.assertTrue(ee_body["exhausted_previous"])
+            self.assertEqual(ee_body["new_count"], 0)
+            self.assertEqual(
+                ee_body["message"],
+                "No more new restaurants found matching your current filters. "
+                "Reset seen results or adjust your filters to discover more.",
+            )
+
+            # 4. Real outage RuntimeError still surfaces as 503.
+            mode_box["mode"] = "outage"
+            outage_res = self.client.post(
+                "/api/search", json=multi_payload, headers=headers
+            )
+            self.assertEqual(outage_res.status_code, 503)
+        finally:
+            self.application._brns = orig_brns
+
+    def test_strict_refresh_single_cuisine_exhausted_and_alternatives_only(
+        self,
+    ):
+        headers, _ = self.account("refresh.exhausted@example.com")
+        mode_box = {"mode": "exhausted"}
+
+        def single_brns_search(
+            payload,
+            previous_restaurants=(),
+            user_id=None,
+            max_matches=None,
+            max_alternatives=None,
+            strict_exclude=False,
+        ):
+            if mode_box["mode"] == "exhausted":
+                return {
+                    "matches": [],
+                    "alternatives": [],
+                    "hidden": 0,
+                    "exhausted_previous": True,
+                    "new_count": 0,
+                }
+            if mode_box["mode"] == "runtime_no_open":
+                raise RuntimeError("No confirmed open restaurants found.")
+            return {
+                "matches": [],
+                "alternatives": [
+                    {
+                        "restaurant": {
+                            "google_place_id": "alt-only",
+                            "name": "Alt Spot",
+                            "address": "5 Alt Rd",
+                        }
+                    },
+                ],
+                "hidden": 0,
+                "exhausted_previous": False,
+                "new_count": 1,
+            }
+
+        orig_brns = self.application._brns
+        self.application._brns = self._make_brns_gateway(single_brns_search)
+        try:
+            refresh_payload = dict(
+                self.search_payload(),
+                previous_restaurants=[
+                    {
+                        "google_place_id": "p1",
+                        "name": "Seen 1",
+                        "address": "1 Rd",
+                    }
+                ],
+                strict_exclude=True,
+            )
+
+            res = self.client.post(
+                "/api/search", json=refresh_payload, headers=headers
+            )
+            self.assertEqual(res.status_code, 200, res.text)
+            body = res.json()
+            self.assertTrue(body["success"])
+            self.assertTrue(body["exhausted_previous"])
+            self.assertEqual(body["new_count"], 0)
+            self.assertEqual(body["matches"], [])
+            self.assertEqual(body["alternatives"], [])
+            self.assertEqual(
+                body["message"],
+                "No more new restaurants found matching your current filters. "
+                "Reset seen results or adjust your filters to discover more.",
+            )
+
+            # Single-cuisine no-open RuntimeError also returns exhausted.
+            mode_box["mode"] = "runtime_no_open"
+            res_err = self.client.post(
+                "/api/search", json=refresh_payload, headers=headers
+            )
+            self.assertEqual(res_err.status_code, 200, res_err.text)
+            self.assertTrue(res_err.json()["exhausted_previous"])
+            self.assertEqual(res_err.json()["new_count"], 0)
+            self.assertEqual(
+                res_err.json()["message"],
+                "No more new restaurants found matching your current filters. "
+                "Reset seen results or adjust your filters to discover more.",
+            )
+
+            # Normal search keeps original no-open msg without exhausted keys.
+            normal_err = self.client.post(
+                "/api/search", json=self.search_payload(), headers=headers
+            )
+            self.assertEqual(normal_err.status_code, 200, normal_err.text)
+            self.assertNotIn("exhausted_previous", normal_err.json())
+            self.assertNotIn("new_count", normal_err.json())
+            self.assertIn(
+                "No open restaurants found near this location right now.",
+                normal_err.json()["message"],
+            )
+
+            # Alternatives-only refresh is NOT exhausted.
+            mode_box["mode"] = "alt_only"
+            alt_res = self.client.post(
+                "/api/search", json=refresh_payload, headers=headers
+            )
+            self.assertEqual(alt_res.status_code, 200, alt_res.text)
+            alt_body = alt_res.json()
+            self.assertFalse(alt_body["exhausted_previous"])
+            self.assertEqual(alt_body["new_count"], 1)
+            self.assertNotIn("message", alt_body)
+            self.assertEqual(len(alt_body["alternatives"]), 1)
+        finally:
+            self.application._brns = orig_brns
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

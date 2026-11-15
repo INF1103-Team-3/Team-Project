@@ -55,7 +55,13 @@ class RecommendationSystem:
     def verify_halal_candidates(self, candidates, request, recommendations):
         return self._halal.verify(candidates, request, recommendations)
 
-    def search(self, bis_json, previous_restaurants=()):
+    def search(
+        self, bis_json, previous_restaurants=(), strict_exclude=False
+    ):
+        if strict_exclude:
+            return self._workflow.search(
+                bis_json, previous_restaurants, strict_exclude=True
+            )
         return self._workflow.search(bis_json, previous_restaurants)
 
     def route_to(self, restaurant, request):
