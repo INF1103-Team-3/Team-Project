@@ -90,7 +90,7 @@ class BISChatbotService:
             self._presenter.format_profile_summary
         )
 
-    def __handle_onboarding(self, user, message, awaiting_field, current):
+    def _handle_onboarding(self, user, message, awaiting_field, current):
         prefs = deepcopy((user or {}).get("preferences") or {})
         text = str(message or "").strip()
         lower = text.casefold()
@@ -323,7 +323,7 @@ class BISChatbotService:
         awaiting_field = payload.get("awaiting_field")
 
         if payload.get("onboarding") and user:
-            return self.__handle_onboarding(
+            return self._handle_onboarding(
                 user, message, awaiting_field, current
             )
 

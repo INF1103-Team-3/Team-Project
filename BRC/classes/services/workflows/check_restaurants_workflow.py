@@ -22,22 +22,22 @@ class CheckRestaurantsWorkflow(BaseBRCWorkflow):
         ]
         self._exact = [None] * len(records)
 
-    def _announce(self, data, logic, report):
+    def announce(self, data, logic, report):
         self._report = report
         report(f"IO Manager: accepted {len(self._records)} restaurant(s).")
         self._exact = logic.exact_matches(self._records, self._candidates)
 
-    def _ask_ai(self, ai):
+    def ask_ai(self, ai):
         return OutletMatchingWorkflow(self._report).run(
             self._records, self._candidates, self._exact, ai
         )
 
-    def _apply_rules(self, logic, chosen_certificates):
+    def apply_rules(self, logic, chosen_certificates):
         return logic.check_restaurants(
             self._records, self._database, chosen_certificates
         )
 
-    def _save(self, data, results, report, output):
+    def save(self, data, results, report, output):
         shaped = results[0] if self._single else results
         data.save_checked_result(shaped, self._single, output)
         report(

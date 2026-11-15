@@ -19,7 +19,7 @@ class BuildDatabaseWorkflow(BaseBRCWorkflow):
         self._cache = None
         self._save_cache = None
 
-    def _announce(self, data, logic, report):
+    def announce(self, data, logic, report):
         report(
             f"IO Manager: loaded {len(self._snapshot.listings)} "
             "complete MUIS restaurant listings."
@@ -36,7 +36,7 @@ class BuildDatabaseWorkflow(BaseBRCWorkflow):
         self._logic = logic
         self._report = report
 
-    def _ask_ai(self, ai):
+    def ask_ai(self, ai):
         if not self._use_ai:
             tags, _pending = self._logic.prepare_cuisine_tags(
                 self._snapshot.listings, self._cache
@@ -52,10 +52,10 @@ class BuildDatabaseWorkflow(BaseBRCWorkflow):
             self._save_cache,
         )
 
-    def _apply_rules(self, logic, cuisines):
+    def apply_rules(self, logic, cuisines):
         return logic.build_database(self._snapshot, cuisines)
 
-    def _save(self, data, database, report, output):
+    def save(self, data, database, report, output):
         data.save_clean_database(database)
         report(
             f"Data Manager: saved {len(database)} restaurants to "

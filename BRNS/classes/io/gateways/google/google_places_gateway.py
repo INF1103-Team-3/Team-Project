@@ -1,7 +1,6 @@
 """Google Places/geocoding transport and provider response mapping."""
 
 import math
-from contextvars import ContextVar
 import requests
 
 
@@ -14,13 +13,6 @@ class GooglePlacesGateway:
         self._config, self._rules, self._policy = config, rules, policy
         self._log, self._error = logger, error_reporter
         self._distance, self._cache = distance, cache
-        self.__nearby_failed = ContextVar(
-            "nearby_places_failed", default=False
-        )
-
-    def last_call_failed(self):
-        """Whether the latest nearby request failed in this context."""
-        return self.__nearby_failed.get()
 
     def money_to_float(self, money):
         """Google Money object -> float (e.g. {'units': '20', 'nanos': 0}
@@ -184,7 +176,6 @@ class GooglePlacesGateway:
 
     def fetch_nearby_restaurants(self, origin, req, debug=False):
         """ONE Places request per search (up to 20 places). [] on failure."""
-        self.__nearby_failed.set(False)
         self._log.debug_log(
             "Nearby Places request started.",
             "INFO",
@@ -237,7 +228,6 @@ class GooglePlacesGateway:
             )
             return places
         except (requests.RequestException, KeyError, ValueError) as err:
-            self.__nearby_failed.set(True)
             self._error("places_search", err)
             return []
 

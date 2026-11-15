@@ -128,7 +128,7 @@ def ask_yes_no(question, config=None, default=None):
             )
             if suggested:
                 answer = read_input(f"Did you mean {suggested}? (yes/no): ")
-                if is_cancelled(answer):
+                if _cancelled(answer):
                     return None
                 if answer.lower() in {"yes", "y"}:
                     return suggested == "yes"
@@ -413,7 +413,7 @@ def select_user(config):
             display_message(error)
 
 
-def is_cancelled(value):
+def _cancelled(value):
     return value is None or value.lower() in {"/cancel", "/quit", "/exit"}
 
 
@@ -423,7 +423,7 @@ def ask_search_location(config):
             "Where are you now? Postal code, address, landmark, or "
             "lat,lng (/cancel): "
         )
-        if is_cancelled(raw):
+        if _cancelled(raw):
             return None
         if raw.lower() in {
             "here",
@@ -471,7 +471,7 @@ def ask_search_mode(config=None):
             "Travel by walking, driving, or transit? "
             "(walk/drive/transit, /cancel): "
         )
-        if is_cancelled(value):
+        if _cancelled(value):
             return None
         mode = value.lower()
         if mode in {"walk", "walking"}:
@@ -508,7 +508,7 @@ def ask_search_distance(profile, mode, config=None, default_source="profile"):
             else ""
         )
         value = read_input(f"Maximum {mode} distance in km{hint} (/cancel): ")
-        if is_cancelled(value):
+        if _cancelled(value):
             return None
         if not value and default is not None:
             return default
@@ -566,7 +566,7 @@ def ask_search_travel_minutes(
         value = read_input(
             f"Maximum {mode} journey time in minutes{hint} (/cancel): "
         )
-        if is_cancelled(value):
+        if _cancelled(value):
             return None
         if not value and default is not None:
             return default
@@ -626,7 +626,7 @@ def ask_search_limit(profile, mode, config=None, current=None):
         ui.item(2, "Journey time in minutes")
         default = "2" if current and current[1] is not None else "1"
         answer = read_input(f"Choose 1 or 2 [Enter = {default}]: ")
-        if is_cancelled(answer):
+        if _cancelled(answer):
             return None, None
         choice = answer or default
         if choice == "1":
@@ -663,7 +663,7 @@ def ask_drive_traffic(config=None):
         ui.item(1, "No live traffic (default)")
         ui.item(2, "Use live traffic")
         answer = read_input("Choose 1 or 2 [Enter = 1] (/cancel): ")
-        if is_cancelled(answer):
+        if _cancelled(answer):
             return None
         if answer in ("", "1"):
             return False
@@ -683,7 +683,7 @@ def ask_search_cuisine(profile, config=None, current_cuisine=None):
         value = read_input(
             f"Choose one saved number, cuisine, or none{hint} (/cancel): "
         )
-        if is_cancelled(value):
+        if _cancelled(value):
             return None
         if not value and current_cuisine:
             return current_cuisine
@@ -722,7 +722,7 @@ def ask_search_budget(profile, config=None, default_source="profile"):
             f"from {default_source}] "
             "(/cancel): "
         )
-        if is_cancelled(value):
+        if _cancelled(value):
             return None
         if not value:
             return default
@@ -765,7 +765,7 @@ def ask_search_clarification(config):
             "What are you looking for today? Describe any extra wishes "
             "(/cancel): "
         )
-        if is_cancelled(value):
+        if _cancelled(value):
             return None
         try:
             text = logic_manager.validate_special_request_text(value)
@@ -912,7 +912,7 @@ def refine_search_request(request, profile, config):
         choice = read_input(
             "Choose a number or option, or press Enter for results: "
         )
-        if is_cancelled(choice) or not choice:
+        if _cancelled(choice) or not choice:
             return None
         choice = choice.lower().strip()
         aliases = {
@@ -1429,7 +1429,7 @@ def choose_profile_edit():
         answer = read_input(
             "Choose what to change, or press Enter to cancel: "
         )
-        if answer is None or not answer.strip() or is_cancelled(answer):
+        if answer is None or not answer.strip() or _cancelled(answer):
             return None
         answer = answer.lower().strip()
         if answer.isdigit() and 1 <= int(answer) <= len(choices):
@@ -1464,7 +1464,7 @@ def ask_profile_travel_unit(amount):
         ui.item(1, "Kilometres")
         ui.item(2, "Minutes")
         choice = read_input("Choose 1 for km or 2 for minutes (/cancel): ")
-        if is_cancelled(choice):
+        if _cancelled(choice):
             raise ValueError("No travel preference was saved.")
         if choice == "1":
             return f"{amount} km"
@@ -1485,7 +1485,7 @@ def _declared_travel_unit(text):
     return "km" if distance else "minutes" if minutes else None
 
 
-def profile_travel_action(text, field, config, location_action):
+def _profile_travel_action(text, field, config, location_action):
     declared_unit = _declared_travel_unit(text)
     if re.fullmatch(r"\d+(?:\.\d{1,2})?", text):
         resolved = ask_profile_travel_unit(text)

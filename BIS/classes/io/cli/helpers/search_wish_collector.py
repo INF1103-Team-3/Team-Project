@@ -31,7 +31,7 @@ class SearchWishCollector:
                     "or new text] (/cancel): "
                 )
             )
-            if self._io.is_cancelled(value):
+            if self._io._cancelled(value):
                 return None
             if not value or value.lower() == "none":
                 return {"selected": [], "text": ""}

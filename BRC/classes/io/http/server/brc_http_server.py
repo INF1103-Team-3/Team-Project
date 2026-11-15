@@ -48,7 +48,7 @@ class BRCHTTPServer:
             return
 
         def warm():
-            with self._handler.serialized_checks():
+            with self._handler._run_lock:
                 if self._handler.database_path.exists():
                     return
                 try:

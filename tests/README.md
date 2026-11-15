@@ -154,18 +154,3 @@ are limited to imports after required script path setup, unbreakable qualified
 import paths and descriptive test identifiers. Prompt/output string values are
 preserved through implicit concatenation; there is no global E501 exemption.
 The GitHub Actions lint job checks this policy separately from Docker tests.
-
-
-## Frontend refresh contracts (offline)
-
-With Node.js 22 or later, run from the repository root:
-
-```bash
-node --experimental-default-type=module --test tests/frontend/test_refresh.mjs
-```
-
-These tests import the real frontend ES modules, use a minimal DOM fixture and
-mock `fetch`. They verify the BIS-only API path, module-local refresh helpers,
-non-duplicate results, the 200-venue request limit, exhaustion/reset and recovery
-from provider failures. No browser, paid API, MongoDB or Docker is required.
-They are separate from the Python test groups; they do not test visual layout.
