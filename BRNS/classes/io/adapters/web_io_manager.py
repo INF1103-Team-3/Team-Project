@@ -1,10 +1,21 @@
 """BRNS web IO: reuse input/gateway operations and suppress terminal output."""
-from BRNS.classes.io.contracts.candidate_io_interface import CandidateIOInterface
-from BRNS.classes.io.contracts.navigation_io_interface import NavigationIOInterface
-from BRNS.classes.io.contracts.recommendation_presentation_interface import RecommendationPresentationInterface
+
+from BRNS.classes.io.contracts.candidate_io_interface import (
+    CandidateIOInterface,
+)
+from BRNS.classes.io.contracts.navigation_io_interface import (
+    NavigationIOInterface,
+)
+from BRNS.classes.io.contracts.recommendation_presentation_interface import (
+    RecommendationPresentationInterface,
+)
 
 
-class WebIOManager(CandidateIOInterface, NavigationIOInterface, RecommendationPresentationInterface):
+class WebIOManager(
+    CandidateIOInterface,
+    NavigationIOInterface,
+    RecommendationPresentationInterface,
+):
     def __init__(self, core):
         self._core = core
 

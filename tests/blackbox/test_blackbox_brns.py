@@ -12,9 +12,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(TESTS_ROOT))
 
 
-from reporting import show_case
+from reporting import show_case  # noqa: E402
 
-from blackbox_support import (
+from blackbox_support import (  # noqa: E402
     PLACE_NAMES,
     assert_shows,
     clear_fixture_calls,
@@ -52,90 +52,38 @@ def test_brns_valid_json_shows_match_and_alternative():
             PLACE_NAMES[1],
         )
 
-        restaurant_path = (
-            context["root"]
-            / "BRNS/data/restaurants.json"
-        )
+        restaurant_path = context["root"] / "BRNS/data/restaurants.json"
 
-        restaurant_text = (
-            restaurant_path.read_text(
-                encoding="utf-8"
-            )
-        )
+        restaurant_text = restaurant_path.read_text(encoding="utf-8")
 
-        discovered = json.loads(
-            restaurant_text
-        )
+        discovered = json.loads(restaurant_text)
 
-        saved_history = history(
-            context
-        )
+        saved_history = history(context)
 
         actual = {
-            "http_calls":
-                fixture_paths(
-                    context["fixture"]
-                ),
-
-            "history_count":
-                len(saved_history),
-
-            "top_match_place_ids":
-                saved_history[0][
-                    "top_match_place_ids"
-                ],
-
-            "restaurant_count":
-                len(discovered),
-
+            "http_calls": fixture_paths(context["fixture"]),
+            "history_count": len(saved_history),
+            "top_match_place_ids": saved_history[0]["top_match_place_ids"],
+            "restaurant_count": len(discovered),
             "first_restaurant": {
-                "name":
-                    discovered[0]["name"],
-
-                "rating":
-                    discovered[0]["g_rating"],
-
-                "reviews":
-                    discovered[0]["g_no_reviews"],
-
-                "postal_code":
-                    discovered[0]["postal_code"],
-
-                "number":
-                    discovered[0]["number"],
-
-                "price_low":
-                    discovered[0][
-                        "avg_price_low_sgd"
-                    ],
-
-                "price_high":
-                    discovered[0][
-                        "avg_price_high_sgd"
-                    ],
-
-                "dietary":
-                    discovered[0]["dietary"],
-
-                "opening_hours":
-                    discovered[0][
-                        "opening_hours"
-                    ]["monday"],
-
-                "wheelchair_accessible":
-                    discovered[0][
-                        "wheelchair_accessible"
-                    ],
+                "name": discovered[0]["name"],
+                "rating": discovered[0]["g_rating"],
+                "reviews": discovered[0]["g_no_reviews"],
+                "postal_code": discovered[0]["postal_code"],
+                "number": discovered[0]["number"],
+                "price_low": discovered[0]["avg_price_low_sgd"],
+                "price_high": discovered[0]["avg_price_high_sgd"],
+                "dietary": discovered[0]["dietary"],
+                "opening_hours": discovered[0]["opening_hours"]["monday"],
+                "wheelchair_accessible": discovered[0][
+                    "wheelchair_accessible"
+                ],
             },
-
             "second_restaurant": {
-                "dietary":
-                    discovered[1]["dietary"],
-
-                "wheelchair_accessible":
-                    discovered[1][
-                        "wheelchair_accessible"
-                    ],
+                "dietary": discovered[1]["dietary"],
+                "wheelchair_accessible": discovered[1][
+                    "wheelchair_accessible"
+                ],
             },
         }
 
@@ -145,58 +93,27 @@ def test_brns_valid_json_shows_match_and_alternative():
                 "/matrix",
                 "/chat/completions",
             ],
-
-            "history_count":
-                1,
-
-            "top_match_place_ids": [
-                "test-place-1"
-            ],
-
-            "restaurant_count":
-                2,
-
+            "history_count": 1,
+            "top_match_place_ids": ["test-place-1"],
+            "restaurant_count": 2,
             "first_restaurant": {
-                "name":
-                    PLACE_NAMES[0],
-
-                "rating":
-                    "4.2",
-
-                "reviews":
-                    "125",
-
-                "postal_code":
-                    "123401",
-
-                "number":
-                    "61234001",
-
-                "price_low":
-                    5.0,
-
-                "price_high":
-                    8.0,
-
-                "dietary":
-                    [],
-
+                "name": PLACE_NAMES[0],
+                "rating": "4.2",
+                "reviews": "125",
+                "postal_code": "123401",
+                "number": "61234001",
+                "price_low": 5.0,
+                "price_high": 8.0,
+                "dietary": [],
                 "opening_hours": [
                     "0000",
                     "2359",
                 ],
-
-                "wheelchair_accessible":
-                    True,
+                "wheelchair_accessible": True,
             },
-
             "second_restaurant": {
-                "dietary": [
-                    "vegetarian"
-                ],
-
-                "wheelchair_accessible":
-                    False,
+                "dietary": ["vegetarian"],
+                "wheelchair_accessible": False,
             },
         }
 
@@ -213,15 +130,10 @@ def test_brns_valid_json_shows_match_and_alternative():
 
         assert actual == expected
 
-        assert (
-            '"monday": ["0000", "2359"]'
-            in restaurant_text
-        )
+        assert '"monday": ["0000", "2359"]' in restaurant_text
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_brns_invalid_json_never_calls_places_or_saves_history():
@@ -235,17 +147,16 @@ def test_brns_invalid_json_never_calls_places_or_saves_history():
                 "{bad",
                 "valid BIS search JSON",
             ),
-
             (
-                json.dumps({
-                    key: value
-                    for key, value
-                    in search_request().items()
-                    if key != "traffic_aware"
-                }),
+                json.dumps(
+                    {
+                        key: value
+                        for key, value in search_request().items()
+                        if key != "traffic_aware"
+                    }
+                ),
                 "ten BIS search fields",
             ),
-
             (
                 json.dumps(
                     dict(
@@ -255,49 +166,29 @@ def test_brns_invalid_json_never_calls_places_or_saves_history():
                 ),
                 "ten BIS search fields",
             ),
-
             (
                 json.dumps(
                     search_request(
                         origin=dict(
-                            search_request()[
-                                "origin"
-                            ],
+                            search_request()["origin"],
                             latitude=50,
                         )
                     )
                 ),
                 "within Singapore",
             ),
-
             (
-                json.dumps(
-                    search_request(
-                        max_travel_minutes=20
-                    )
-                ),
+                json.dumps(search_request(max_travel_minutes=20)),
                 "exactly one travel limit",
             ),
-
             (
-                json.dumps(
-                    search_request(
-                        budget_per_person=-1
-                    )
-                ),
+                json.dumps(search_request(budget_per_person=-1)),
                 "budget_per_person must be between",
             ),
-
             (
-                json.dumps(
-                    search_request(
-                        dietary_requirements=
-                            "halal"
-                    )
-                ),
+                json.dumps(search_request(dietary_requirements="halal")),
                 "must be lists",
             ),
-
             (
                 json.dumps(
                     search_request(
@@ -314,7 +205,6 @@ def test_brns_invalid_json_never_calls_places_or_saves_history():
         actual_results = []
 
         for payload, expected_message in invalid_cases:
-
             output = run_cli(
                 context,
                 "BRNS",
@@ -327,54 +217,29 @@ def test_brns_invalid_json_never_calls_places_or_saves_history():
                 expected_message,
             )
 
-            actual_results.append({
-                "expected_message_seen":
-                    expected_message
-                    in output,
-
-                "http_calls":
-                    list(
-                        fixture_paths(
-                            context[
-                                "fixture"
-                            ]
-                        )
-                    ),
-
-                "history":
-                    list(
-                        history(
-                            context
-                        )
-                    ),
-            })
+            actual_results.append(
+                {
+                    "expected_message_seen": expected_message in output,
+                    "http_calls": list(fixture_paths(context["fixture"])),
+                    "history": list(history(context)),
+                }
+            )
 
         expected = [
             {
-                "expected_message_seen":
-                    True,
-
-                "http_calls":
-                    [],
-
-                "history":
-                    [],
+                "expected_message_seen": True,
+                "http_calls": [],
+                "history": [],
             }
-
             for _ in invalid_cases
         ]
 
         test_input = [
             {
-                "payload":
-                    payload[:80],
-
-                "expected_message":
-                    message,
+                "payload": payload[:80],
+                "expected_message": message,
             }
-
-            for payload, message
-            in invalid_cases
+            for payload, message in invalid_cases
         ]
 
         show_case(
@@ -391,9 +256,7 @@ def test_brns_invalid_json_never_calls_places_or_saves_history():
         assert actual_results == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_brns_driving_traffic_changes_matrix_request():
@@ -408,9 +271,7 @@ def test_brns_driving_traffic_changes_matrix_request():
             False,
             True,
         ):
-            clear_fixture_calls(
-                context["fixture"]
-            )
+            clear_fixture_calls(context["fixture"])
 
             request = search_request(
                 mode="drive",
@@ -436,40 +297,24 @@ def test_brns_driving_traffic_changes_matrix_request():
                 "/matrix",
             )
 
-            actual.append({
-                "traffic_aware":
-                    traffic,
-
-                "matrix_calls":
-                    len(matrix),
-
-                "routing_preference":
-                    matrix[0].get(
-                        "routingPreference"
-                    ),
-            })
+            actual.append(
+                {
+                    "traffic_aware": traffic,
+                    "matrix_calls": len(matrix),
+                    "routing_preference": matrix[0].get("routingPreference"),
+                }
+            )
 
         expected = [
             {
-                "traffic_aware":
-                    False,
-
-                "matrix_calls":
-                    1,
-
-                "routing_preference":
-                    None,
+                "traffic_aware": False,
+                "matrix_calls": 1,
+                "routing_preference": None,
             },
-
             {
-                "traffic_aware":
-                    True,
-
-                "matrix_calls":
-                    1,
-
-                "routing_preference":
-                    "TRAFFIC_AWARE",
+                "traffic_aware": True,
+                "matrix_calls": 1,
+                "routing_preference": "TRAFFIC_AWARE",
             },
         ]
 
@@ -491,9 +336,7 @@ def test_brns_driving_traffic_changes_matrix_request():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_brns_transit_time_uses_verified_minutes():
@@ -528,33 +371,17 @@ def test_brns_transit_time_uses_verified_minutes():
         )
 
         actual = {
-            "matrix_calls":
-                len(matrix),
-
-            "travel_mode":
-                matrix[0]["travelMode"],
-
-            "routing_preference_present":
-                "routingPreference"
-                in matrix[0],
-
-            "ten_minute_result_shown":
-                "10 min by transit"
-                in output,
+            "matrix_calls": len(matrix),
+            "travel_mode": matrix[0]["travelMode"],
+            "routing_preference_present": "routingPreference" in matrix[0],
+            "ten_minute_result_shown": "10 min by transit" in output,
         }
 
         expected = {
-            "matrix_calls":
-                1,
-
-            "travel_mode":
-                "TRANSIT",
-
-            "routing_preference_present":
-                False,
-
-            "ten_minute_result_shown":
-                True,
+            "matrix_calls": 1,
+            "travel_mode": "TRANSIT",
+            "routing_preference_present": False,
+            "ten_minute_result_shown": True,
         }
 
         show_case(
@@ -571,9 +398,7 @@ def test_brns_transit_time_uses_verified_minutes():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_brns_invalid_ai_reply_does_not_save_search():
@@ -582,11 +407,7 @@ def test_brns_invalid_ai_reply_does_not_save_search():
     context = create_blackbox_context()
 
     try:
-        context[
-            "fixture"
-        ][
-            "invalid_brns_ai"
-        ] = True
+        context["fixture"]["invalid_brns_ai"] = True
 
         request = search_request()
 
@@ -603,32 +424,17 @@ def test_brns_invalid_ai_reply_does_not_save_search():
         )
 
         actual = {
-            "history":
-                history(context),
-
-            "nearby_calls":
-                fixture_paths(
-                    context["fixture"]
-                ).count(
-                    "/nearby"
-                ),
-
-            "error_shown":
-                (
-                    "BRNS AI could not recommend restaurants"
-                    in output
-                ),
+            "history": history(context),
+            "nearby_calls": fixture_paths(context["fixture"]).count("/nearby"),
+            "error_shown": (
+                "BRNS AI could not recommend restaurants" in output
+            ),
         }
 
         expected = {
-            "history":
-                [],
-
-            "nearby_calls":
-                1,
-
-            "error_shown":
-                True,
+            "history": [],
+            "nearby_calls": 1,
+            "error_shown": True,
         }
 
         show_case(
@@ -645,20 +451,16 @@ def test_brns_invalid_ai_reply_does_not_save_search():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
+
+
 def test_brns_places_failure_stops_safely():
     """Places failure stops the search safely without saving history."""
 
     context = create_blackbox_context()
 
     try:
-        context[
-            "fixture"
-        ][
-            "places_failure"
-        ] = True
+        context["fixture"]["places_failure"] = True
 
         request = search_request()
 
@@ -675,34 +477,18 @@ def test_brns_places_failure_stops_safely():
         )
 
         actual = {
-            "nearby_calls":
-                fixture_paths(
-                    context["fixture"]
-                ).count(
-                    "/nearby"
-                ),
-
-            "history":
-                history(
-                    context
-                ),
-
-            "safe_error_shown":
-                (
-                    "No restaurants found, or restaurant search is unavailable."
-                    in output
-                ),
+            "nearby_calls": fixture_paths(context["fixture"]).count("/nearby"),
+            "history": history(context),
+            "safe_error_shown": (
+                "No restaurants found, or restaurant search is unavailable."
+                in output
+            ),
         }
 
         expected = {
-            "nearby_calls":
-                1,
-
-            "history":
-                [],
-
-            "safe_error_shown":
-                True,
+            "nearby_calls": 1,
+            "history": [],
+            "safe_error_shown": True,
         }
 
         show_case(
@@ -719,9 +505,7 @@ def test_brns_places_failure_stops_safely():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_brns_missing_route_is_not_verified_as_match():
@@ -730,11 +514,7 @@ def test_brns_missing_route_is_not_verified_as_match():
     context = create_blackbox_context()
 
     try:
-        context[
-            "fixture"
-        ][
-            "matrix_no_route"
-        ] = True
+        context["fixture"]["matrix_no_route"] = True
 
         request = search_request()
 
@@ -745,44 +525,17 @@ def test_brns_missing_route_is_not_verified_as_match():
         )
 
         actual = {
-            "matrix_calls":
-                fixture_paths(
-                    context["fixture"]
-                ).count(
-                    "/matrix"
-                ),
-
-            "estimate_warning_shown":
-                (
-                    "(estimate, unverified)"
-                    in output
-                ),
-
-            "alternatives_shown":
-                (
-                    "Alternatives (2)"
-                    in output
-                ),
-
-            "verified_match_heading_shown":
-                (
-                    "Matches ("
-                    in output
-                ),
+            "matrix_calls": fixture_paths(context["fixture"]).count("/matrix"),
+            "estimate_warning_shown": ("(estimate, unverified)" in output),
+            "alternatives_shown": ("Alternatives (2)" in output),
+            "verified_match_heading_shown": ("Matches (" in output),
         }
 
         expected = {
-            "matrix_calls":
-                1,
-
-            "estimate_warning_shown":
-                True,
-
-            "alternatives_shown":
-                True,
-
-            "verified_match_heading_shown":
-                False,
+            "matrix_calls": 1,
+            "estimate_warning_shown": True,
+            "alternatives_shown": True,
+            "verified_match_heading_shown": False,
         }
 
         show_case(
@@ -800,20 +553,16 @@ def test_brns_missing_route_is_not_verified_as_match():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
+
+
 def test_brns_ai_provider_failure_stops_safely():
     """AI provider failure does not crash BRNS or save a false result."""
 
     context = create_blackbox_context()
 
     try:
-        context[
-            "fixture"
-        ][
-            "openrouter_failure"
-        ] = True
+        context["fixture"]["openrouter_failure"] = True
 
         request = search_request()
 
@@ -830,34 +579,19 @@ def test_brns_ai_provider_failure_stops_safely():
         )
 
         actual = {
-            "ai_calls":
-                fixture_paths(
-                    context["fixture"]
-                ).count(
-                    "/chat/completions"
-                ),
-
-            "history":
-                history(
-                    context
-                ),
-
-            "safe_error_shown":
-                (
-                    "BRNS AI could not recommend restaurants"
-                    in output
-                ),
+            "ai_calls": fixture_paths(context["fixture"]).count(
+                "/chat/completions"
+            ),
+            "history": history(context),
+            "safe_error_shown": (
+                "BRNS AI could not recommend restaurants" in output
+            ),
         }
 
         expected = {
-            "ai_calls":
-                1,
-
-            "history":
-                [],
-
-            "safe_error_shown":
-                True,
+            "ai_calls": 1,
+            "history": [],
+            "safe_error_shown": True,
         }
 
         show_case(
@@ -874,9 +608,9 @@ def test_brns_ai_provider_failure_stops_safely():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
+
+
 TESTS = (
     test_brns_valid_json_shows_match_and_alternative,
     test_brns_invalid_json_never_calls_places_or_saves_history,

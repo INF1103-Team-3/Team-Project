@@ -5,16 +5,37 @@ import re
 
 OTHER_PREFERENCES = "other_preferences"
 PREFERENCE_FIELDS = (
-    "location", "max_distance_km", "max_travel_time_minutes",
-    "budget_per_person", "dietary_requirements", "liked_cuisines",
-    "disliked_cuisines", OTHER_PREFERENCES,
+    "location",
+    "max_distance_km",
+    "max_travel_time_minutes",
+    "budget_per_person",
+    "dietary_requirements",
+    "liked_cuisines",
+    "disliked_cuisines",
+    OTHER_PREFERENCES,
 )
 USER_FIELDS = {"userID", "email", "email_verified", "username", "preferences"}
 CUISINES = (
-    "chinese", "malay", "indian", "peranakan", "indonesian", "thai",
-    "vietnamese", "filipino", "japanese", "korean", "western", "italian",
-    "french", "american", "mexican", "turkish", "middle eastern",
-    "mediterranean", "fusion", "lebanese",
+    "chinese",
+    "malay",
+    "indian",
+    "peranakan",
+    "indonesian",
+    "thai",
+    "vietnamese",
+    "filipino",
+    "japanese",
+    "korean",
+    "western",
+    "italian",
+    "french",
+    "american",
+    "mexican",
+    "turkish",
+    "middle eastern",
+    "mediterranean",
+    "fusion",
+    "lebanese",
 )
 DIETARY_CHOICES = ("halal", "vegetarian")
 CUISINE_FIELDS = ("liked_cuisines", "disliked_cuisines")
@@ -29,36 +50,74 @@ PROFILE_NUMBER_LIMITS = {
     "budget_per_person": (0.01, 1000.0),
 }
 SEARCH_MODE_LIMITS = {
-    "walk": {"max_distance_km": (0.01, 15.0), "max_travel_minutes": (1.0, 90.0)},
-    "drive": {"max_distance_km": (0.01, 50.0), "max_travel_minutes": (1.0, 120.0)},
-    "transit": {"max_distance_km": (0.01, 50.0), "max_travel_minutes": (1.0, 150.0)},
+    "walk": {
+        "max_distance_km": (0.01, 15.0),
+        "max_travel_minutes": (1.0, 90.0),
+    },
+    "drive": {
+        "max_distance_km": (0.01, 50.0),
+        "max_travel_minutes": (1.0, 120.0),
+    },
+    "transit": {
+        "max_distance_km": (0.01, 50.0),
+        "max_travel_minutes": (1.0, 150.0),
+    },
 }
 MINUTES_PER_KM = 20
 TRANSIT_MINUTES_RANGE = (1, 150)
-_COORDINATE_TEXT = re.compile(r"^\s*[+-]?\d+(?:\.\d+)?\s*,\s*[+-]?\d+(?:\.\d+)?\s*$")
+_COORDINATE_TEXT = re.compile(
+    r"^\s*[+-]?\d+(?:\.\d+)?\s*,\s*[+-]?\d+(?:\.\d+)?\s*$"
+)
 _WISH_ALLOWED_TEXT = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()+\-=>]*")
 _DECIMAL_SPACE_RX = re.compile(r"\b(\d+)\s*\.\s*(\d+)\b")
 _RATING_WISH_RX = re.compile(
-    r"(?:\b(?:minimum|min\.?|at least|no less than|above|over)\b|>=?)\s*"
-    r"(?:google\s*)?(?:(?:rating|rated)\s*(?:of\s*|is\s*)?(\d+(?:\.\d+)?|\.\d+)"
-    r"(?:\s*(?:\+\s*)?(?:stars?|/\s*5|\+))?"
-    r"|(\d+(?:\.\d+)?|\.\d+)\s*(?:\+\s*)?(?:stars?|/\s*5|rating\b|rated\b))"
-    r"|\b(?:google\s*)?(?:rating|rated)\s*(?:of\s*|is\s*)?"
-    r"(?:>=?|at least|minimum|min\.?|no less than|above|over)?\s*"
-    r"(\d+(?:\.\d+)?|\.\d+)(?:\s*(?:\+\s*)?(?:stars?|/\s*5)|\s*\+(?!\w)|(?=[,.;!?\s]|$))"
-    r"|\b(\d+(?:\.\d+)?|\.\d+)\s*(?:\+\s*)?(?:stars?|/\s*5)(?!\w)"
-    r"(?:\s*(?:or higher|or above|and up|or better|minimum|min\.?|\+)(?!\w))?"
-    r"|\b(\d+(?:\.\d+)?|\.\d+)\s*(?:\+\s*)?(?:rating|rated)\b"
-    r"(?:\s*(?:or higher|or above|and up|or better|minimum|min\.?|\+)(?!\w))?",
+    (
+        "(?:\\b(?:minimum|min\\.?|at least|no less "
+        "than|above|over)\\b|>=?)\\s*(?:google\\s*)?(?:(?:rating|rated)\\s*(?:"
+        "of\\s*|is\\s*)?(\\d+(?:\\.\\d+)?|\\.\\d+)(?:\\s*(?:\\+\\s*)?(?:stars?"
+        "|/\\s*5|\\+))?|(\\d+(?:\\.\\d+)?|\\.\\d+)\\s*(?:\\+\\s*)?(?:stars?|/"
+        "\\s*5|rating\\b|rated\\b))|\\b(?:google\\s*)?(?:rating|rated)\\s*(?:o"
+        "f\\s*|is\\s*)?(?:>=?|at least|minimum|min\\.?|no less "
+        "than|above|over)?\\s*(\\d+(?:\\.\\d+)?|\\.\\d+)(?:\\s*(?:\\+\\s*)?(?:"
+        "stars?|/\\s*5)|\\s*\\+(?!\\w)|(?=[,.;!?\\s]|$))|\\b(\\d+(?:\\.\\d+)?|"
+        "\\.\\d+)\\s*(?:\\+\\s*)?(?:stars?|/\\s*5)(?!\\w)(?:\\s*(?:or "
+        "higher|or above|and up|or better|minimum|min\\.?|\\+)(?!\\w))?|\\b(\\"
+        "d+(?:\\.\\d+)?|\\.\\d+)\\s*(?:\\+\\s*)?(?:rating|rated)\\b(?:\\s*(?:o"
+        "r higher|or above|and up|or better|minimum|min\\.?|\\+)(?!\\w))?"
+    ),
     re.IGNORECASE,
 )
 _WISH_ACRONYMS = {
-    "bbq", "byob", "msg", "cbd", "mrt", "hrs", "gym", "nth", "sgd", "ac", "tv", "vip", "wfh",
+    "bbq",
+    "byob",
+    "msg",
+    "cbd",
+    "mrt",
+    "hrs",
+    "gym",
+    "nth",
+    "sgd",
+    "ac",
+    "tv",
+    "vip",
+    "wfh",
 }
 _WISH_KEYBOARD_MASH = (
-    "asdf", "sdfg", "dfgh", "fghj", "ghjk", "hjkl",
-    "qwer", "wert", "erty", "tyui", "uiop",
-    "zxcv", "xcvb", "cvbn", "vbnm",
+    "asdf",
+    "sdfg",
+    "dfgh",
+    "fghj",
+    "ghjk",
+    "hjkl",
+    "qwer",
+    "wert",
+    "erty",
+    "tyui",
+    "uiop",
+    "zxcv",
+    "xcvb",
+    "cvbn",
+    "vbnm",
 )
 EMAIL_PATTERN = re.compile(
     r"^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@"
@@ -79,8 +138,11 @@ def clean_text(value, maximum=200, allow_empty=False):
     value = value.strip()
     if not value and allow_empty:
         return ""
-    if not value or len(value) > maximum or not any(c.isalnum()
-                                                    for c in value):
+    if (
+        not value
+        or len(value) > maximum
+        or not any(c.isalnum() for c in value)
+    ):
         raise ValueError(f"Enter 1–{maximum} characters of meaningful text.")
     return value
 
@@ -106,13 +168,17 @@ def normalize_email(value):
 
 
 def normalize_wish_text(value):
-    """Collapse spacing and rejoin split decimal numbers such as '4 .5' -> '4.5'."""
+    """Collapse spacing and rejoin split decimal numbers such as '4 .5' ->
+    '4.5'.
+    """
     collapsed = " ".join(str(value or "").strip().split())
     return _DECIMAL_SPACE_RX.sub(r"\1.\2", collapsed)
 
 
 def extract_rating_wishes(text):
-    """Return numeric star ratings found in a special-request string (validating 1..5)."""
+    """Return numeric star ratings found in a special-request string
+    (validating 1..5).
+    """
     normalized = normalize_wish_text(text)
     values = []
     for match in _RATING_WISH_RX.finditer(normalized):
@@ -121,7 +187,9 @@ def extract_rating_wishes(text):
             continue
         rating = float(raw)
         if not 1.0 <= rating <= 5.0:
-            raise ValueError("Google star ratings must be between 1 and 5 stars.")
+            raise ValueError(
+                "Google star ratings must be between 1 and 5 stars."
+            )
         values.append(rating)
     return values
 
@@ -130,24 +198,40 @@ def strip_rating_clauses(text):
     """Remove valid Google star rating clauses, preserving other wish text."""
     normalized = normalize_wish_text(text)
     remainder = _RATING_WISH_RX.sub(" ", normalized)
-    remainder = re.sub(r"^(?:\s*(?:and|with|&|,|/)\b\s*)+", "", remainder, flags=re.IGNORECASE)
-    remainder = re.sub(r"(?:\s*\b(?:and|with)\s*|\s*[,&/]\s*)+$", "", remainder, flags=re.IGNORECASE)
+    remainder = re.sub(
+        r"^(?:\s*(?:and|with|&|,|/)\b\s*)+", "", remainder, flags=re.IGNORECASE
+    )
+    remainder = re.sub(
+        r"(?:\s*\b(?:and|with)\s*|\s*[,&/]\s*)+$",
+        "",
+        remainder,
+        flags=re.IGNORECASE,
+    )
     remainder = re.sub(r"\s{2,}", " ", remainder).strip(" ,;-/")
     return remainder
 
 
-def normalize_list(value, choices=None, required=False, allow_coordinates=False,
-                   allow_ratings=False):
+def normalize_list(
+    value,
+    choices=None,
+    required=False,
+    allow_coordinates=False,
+    allow_ratings=False,
+):
     """Require lists and keep all entries or reject the entire answer."""
     if not isinstance(value, list):
         raise ValueError("Expected a list of text entries.")
     result = []
     for item in value:
-        item = clean_text(normalize_wish_text(item) if allow_ratings else item, 100).lower()
+        item = clean_text(
+            normalize_wish_text(item) if allow_ratings else item, 100
+        ).lower()
         has_rating = bool(allow_ratings and extract_rating_wishes(item))
-        if not any(c.isalpha() for c in item) and not (
-            allow_coordinates and _COORDINATE_TEXT.fullmatch(item)
-        ) and not has_rating:
+        if (
+            not any(c.isalpha() for c in item)
+            and not (allow_coordinates and _COORDINATE_TEXT.fullmatch(item))
+            and not has_rating
+        ):
             raise ValueError("List entries must contain letters.")
         if choices is not None and item not in choices:
             raise ValueError("Choose from: " + ", ".join(choices) + ".")
@@ -190,7 +274,11 @@ def validate_english_preferences(items, field_label="Special requests"):
             if (
                 re.search(r"(.)\1\1", low)
                 or any(seq in low for seq in _WISH_KEYBOARD_MASH)
-                or (len(low) >= 3 and low not in _WISH_ACRONYMS and not any(ch in "aeiouy" for ch in low))
+                or (
+                    len(low) >= 3
+                    and low not in _WISH_ACRONYMS
+                    and not any(ch in "aeiouy" for ch in low)
+                )
                 or re.search(r"[bcdfghjklmnpqrstvwxz]{6,}", low)
             ):
                 raise ValueError(
@@ -201,8 +289,13 @@ def validate_english_preferences(items, field_label="Special requests"):
     return normalized_items
 
 
-def validate_value(field, value, profile_mode=False, allow_empty_location=False,
-                   clamp_legacy_limits=False):
+def validate_value(
+    field,
+    value,
+    profile_mode=False,
+    allow_empty_location=False,
+    clamp_legacy_limits=False,
+):
     """Validate the exact agreed field type, returning normalized values."""
     if field not in PREFERENCE_FIELDS:
         raise ValueError(f"Unsupported preference field: {field}.")
@@ -219,20 +312,24 @@ def validate_value(field, value, profile_mode=False, allow_empty_location=False,
                 legacy_min = NUMBER_LIMITS[field][0]
                 if value < legacy_min:
                     raise ValueError(
-                        f"{field} must be between {minimum:g} and {maximum:g}.")
+                        f"{field} must be between {minimum:g} and {maximum:g}."
+                    )
                 return round(max(minimum, min(maximum, float(value))), 2)
             if not minimum <= value <= maximum:
                 raise ValueError(
-                    f"{field} must be between {minimum:g} and {maximum:g}.")
+                    f"{field} must be between {minimum:g} and {maximum:g}."
+                )
             return round(float(value), 2)
         minimum, maximum = NUMBER_LIMITS[field]
         if not minimum <= value <= maximum:
             raise ValueError(
-                f"{field} must be between {minimum} and {maximum}.")
+                f"{field} must be between {minimum} and {maximum}."
+            )
         return round(value, 2)
     if field == "location":
         return normalize_list(
-            value, required=not allow_empty_location, allow_coordinates=True)
+            value, required=not allow_empty_location, allow_coordinates=True
+        )
     if field == "dietary_requirements":
         return normalize_list(value, DIETARY_CHOICES)
     if field == OTHER_PREFERENCES:
@@ -246,19 +343,32 @@ def validate_search_distance(value, mode=None):
     """Validate a search-only maximum distance in kilometres for a mode."""
     limits = SEARCH_MODE_LIMITS.get(mode) if mode else None
     low, high = limits["max_distance_km"] if limits else (0.01, 50.0)
-    if (isinstance(value, bool) or not isinstance(value, (int, float))
-            or not math.isfinite(value) or not low <= value <= high):
-        raise ValueError(f"max_distance_km must be between {low:g} and {high:g}.")
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or not low <= value <= high
+    ):
+        raise ValueError(
+            f"max_distance_km must be between {low:g} and {high:g}."
+        )
     return round(float(value), 2)
 
 
 def validate_travel_minutes(value, mode=None):
     """Validate a search-only maximum journey time in minutes."""
     limits = SEARCH_MODE_LIMITS.get(mode) if mode else None
-    low, high = limits["max_travel_minutes"] if limits else TRANSIT_MINUTES_RANGE
-    if (type(value) not in (int, float) or not math.isfinite(value)
-            or not low <= value <= high):
-        raise ValueError(f"Travel time must be between {low:g} and {high:g} minutes.")
+    low, high = (
+        limits["max_travel_minutes"] if limits else TRANSIT_MINUTES_RANGE
+    )
+    if (
+        type(value) not in (int, float)
+        or not math.isfinite(value)
+        or not low <= value <= high
+    ):
+        raise ValueError(
+            f"Travel time must be between {low:g} and {high:g} minutes."
+        )
     return round(value, 2)
 
 
@@ -269,7 +379,9 @@ def validate_updates(updates, profile_mode=False, allow_empty_location=False):
     normalized = {}
     for field, value in updates.items():
         value = validate_value(
-            field, value, profile_mode=profile_mode,
+            field,
+            value,
+            profile_mode=profile_mode,
             allow_empty_location=allow_empty_location,
         )
         if value is not None:
@@ -282,10 +394,15 @@ def validate_preferences(preferences, clamp_legacy_limits=False):
     if not isinstance(preferences, dict) or set(preferences) != set(
         PREFERENCE_FIELDS
     ):
-        raise ValueError("Saved profile does not match the current BIS schema.")
+        raise ValueError(
+            "Saved profile does not match the current BIS schema."
+        )
     result = {
         key: validate_value(
-            key, value, profile_mode=True, allow_empty_location=True,
+            key,
+            value,
+            profile_mode=True,
+            allow_empty_location=True,
             clamp_legacy_limits=clamp_legacy_limits,
         )
         for key, value in preferences.items()
@@ -301,7 +418,9 @@ def validate_preferences(preferences, clamp_legacy_limits=False):
 def validate_user(user, clamp_legacy_limits=False):
     """Require the exact account and preference schema."""
     if not isinstance(user, dict) or set(user) != USER_FIELDS:
-        raise ValueError("Saved account does not match the current BIS schema.")
+        raise ValueError(
+            "Saved account does not match the current BIS schema."
+        )
     if not isinstance(user["userID"], str) or not user["userID"]:
         raise ValueError("Invalid userID.")
     if type(user["email_verified"]) is not bool:
@@ -310,8 +429,11 @@ def validate_user(user, clamp_legacy_limits=False):
         "userID": user["userID"],
         "email": normalize_email(user["email"]),
         "email_verified": user["email_verified"],
-        "username": (normalize_username(user["username"])
-                     if user["username"] is not None else None),
+        "username": (
+            normalize_username(user["username"])
+            if user["username"] is not None
+            else None
+        ),
         "preferences": validate_preferences(
             user["preferences"], clamp_legacy_limits=clamp_legacy_limits
         ),
@@ -320,7 +442,19 @@ def validate_user(user, clamp_legacy_limits=False):
 
 # Recognition-only unsupported cuisine names.
 UNSUPPORTED_CUISINES = {
-    "spanish", "greek", "brazilian", "ethiopian", "german",
-    "british", "pakistani", "bangladeshi", "nepalese", "sri lankan",
-    "cambodian", "laotian", "burmese", "taiwanese", "singaporean",
+    "spanish",
+    "greek",
+    "brazilian",
+    "ethiopian",
+    "german",
+    "british",
+    "pakistani",
+    "bangladeshi",
+    "nepalese",
+    "sri lankan",
+    "cambodian",
+    "laotian",
+    "burmese",
+    "taiwanese",
+    "singaporean",
 }

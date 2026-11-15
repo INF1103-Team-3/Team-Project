@@ -126,19 +126,25 @@ def draw_overview(trace, directory):
     groups = defaultdict(list)
     labels = {}
     for program in PROGRAMS:
-        modules = {trace.modules[name] for name in trace.calls
-                   if name.startswith(program + ".")}
+        modules = {
+            trace.modules[name]
+            for name in trace.calls
+            if name.startswith(program + ".")
+        }
         if not modules:
             node = f"{program}.not_called"
             groups[f"{PROGRAMS.index(program) + 1:02d} {program}"].append(node)
             labels[node] = f"{program}: not called in this session"
             continue
-        for group_name in sorted({stage(module) for module in modules},
-                                 key=stage_order):
+        for group_name in sorted(
+            {stage(module) for module in modules}, key=stage_order
+        ):
             node = f"{program}.{group_name}"
-            count = sum(stage(trace.modules[name]) == group_name
-                        for name in trace.calls
-                        if name.startswith(program + "."))
+            count = sum(
+                stage(trace.modules[name]) == group_name
+                for name in trace.calls
+                if name.startswith(program + ".")
+            )
             labels[node] = f"{program} {group_name} · {count} functions"
             for module in modules:
                 if stage(module) == group_name:
@@ -151,38 +157,58 @@ def draw_overview(trace, directory):
         if first != second:
             edges.add((first, second))
     nodes = {node for items in groups.values() for node in items}
-    draw_graph(directory / "overview.png",
-               "BiteFinder | observed program and manager calls",
-               nodes, edges, groups, node_kind="program stages",
-               sort_nodes=False, labels=labels, route_cross_package=True)
+    draw_graph(
+        directory / "overview.png",
+        "BiteFinder | observed program and manager calls",
+        nodes,
+        edges,
+        groups,
+        node_kind="program stages",
+        sort_nodes=False,
+        labels=labels,
+        route_cross_package=True,
+    )
 
 
 def draw_program_details(trace, directory, program):
     """Show actual functions in columns for main, managers, and other files."""
-    nodes = {name for name in trace.calls
-             if name.startswith(program + ".")}
+    nodes = {name for name in trace.calls if name.startswith(program + ".")}
     if not nodes:
         print(f"{program}: no functions called during this BIS session.")
         return
-    modules = sorted({trace.modules[name] for name in nodes},
-                     key=lambda module: (stage_order(stage(module)), module))
+    modules = sorted(
+        {trace.modules[name] for name in nodes},
+        key=lambda module: (stage_order(stage(module)), module),
+    )
     module_files = {trace.modules[name]: trace.files[name] for name in nodes}
     observed_order = {name: index for index, name in enumerate(trace.calls)}
     groups = defaultdict(list)
     labels = {}
     for index, module in enumerate(modules, 1):
         label = f"{index:02d} {stage(module)} · {module_files[module]}"
-        groups[label].extend(sorted(
-            (name for name in nodes if trace.modules[name] == module),
-            key=observed_order.__getitem__))
+        groups[label].extend(
+            sorted(
+                (name for name in nodes if trace.modules[name] == module),
+                key=observed_order.__getitem__,
+            )
+        )
     for name in nodes:
         function = name.removeprefix(trace.modules[name] + ".")
         labels[name] = f"{function}() · {trace.calls[name]} calls"
-    edges = {(source, target) for source, target in trace.edges
-             if source in nodes and target in nodes and source != target}
-    draw_graph(directory / f"{program.lower()}_functions.png",
-               f"{program} | functions called in this BIS session",
-               nodes, edges, groups, sort_nodes=False, labels=labels)
+    edges = {
+        (source, target)
+        for source, target in trace.edges
+        if source in nodes and target in nodes and source != target
+    }
+    draw_graph(
+        directory / f"{program.lower()}_functions.png",
+        f"{program} | functions called in this BIS session",
+        nodes,
+        edges,
+        groups,
+        sort_nodes=False,
+        labels=labels,
+    )
 
 
 def run_session():
@@ -191,8 +217,10 @@ def run_session():
     root_path = str(ROOT)
     sys.path.insert(0, bis_path)
     sys.path.insert(1, root_path)
-    print("Tracing BIS/main.py. Use BiteFinder normally; quit to save graphs.",
-          flush=True)
+    print(
+        "Tracing BIS/main.py. Use BiteFinder normally; quit to save graphs.",
+        flush=True,
+    )
     try:
         sys.setprofile(trace.record)
         runpy.run_path(str(ROOT / "BIS" / "main.py"), run_name="__main__")

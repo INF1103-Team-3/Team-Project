@@ -1,4 +1,5 @@
 """Expiring bearer sessions; only a digest of each bearer is persisted."""
+
 import hashlib
 import secrets
 import time
@@ -14,19 +15,33 @@ class MongoSessionStore:
         return hashlib.sha256(token.encode()).hexdigest()
 
     def ensure_indexes(self):
-        self._connection.execute(lambda db: db.sessions.create_index("expires_at", expireAfterSeconds=0))
+        self._connection.execute(
+            lambda db: db.sessions.create_index(
+                "expires_at", expireAfterSeconds=0
+            )
+        )
 
     def create(self, user_id):
         token = secrets.token_urlsafe(32)
-        self._connection.execute(lambda db: db.sessions.insert_one({
-            "_id": self._key(token), "user_id": user_id,
-            "expires_at": datetime.fromtimestamp(self._clock() + self._ttl, timezone.utc)}))
+        self._connection.execute(
+            lambda db: db.sessions.insert_one(
+                {
+                    "_id": self._key(token),
+                    "user_id": user_id,
+                    "expires_at": datetime.fromtimestamp(
+                        self._clock() + self._ttl, timezone.utc
+                    ),
+                }
+            )
+        )
         return token
 
     def resolve(self, token):
         if not token:
             return None
-        row = self._connection.execute(lambda db: db.sessions.find_one({"_id": self._key(token)}))
+        row = self._connection.execute(
+            lambda db: db.sessions.find_one({"_id": self._key(token)})
+        )
         if not row:
             return None
         expires = row["expires_at"].replace(tzinfo=timezone.utc).timestamp()
@@ -34,4 +49,6 @@ class MongoSessionStore:
 
     def revoke(self, token):
         if token:
-            self._connection.execute(lambda db: db.sessions.delete_one({"_id": self._key(token)}))
+            self._connection.execute(
+                lambda db: db.sessions.delete_one({"_id": self._key(token)})
+            )

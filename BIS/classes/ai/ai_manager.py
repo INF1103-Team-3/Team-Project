@@ -2,7 +2,9 @@
 
 import json
 
-from BIS.classes.ai.contracts.bis_ai_manager_interface import BISAIManagerInterface
+from BIS.classes.ai.contracts.bis_ai_manager_interface import (
+    BISAIManagerInterface,
+)
 from BIS.classes.ai.contracts.chat_ai_interface import ChatAIInterface
 from BIS.classes.ai.tasks.bis_interpreter import BISInterpreter
 from sources.profile_schema import (
@@ -15,8 +17,14 @@ from sources.profile_schema import (
 class AIManager(BISAIManagerInterface, ChatAIInterface):
     """Own BIS AI request schemas while using an injected provider router."""
 
-    def __init__(self, fallback_request, profile_prompt_builder,
-                 profile_response_validator, search_validator, interpreter=None):
+    def __init__(
+        self,
+        fallback_request,
+        profile_prompt_builder,
+        profile_response_validator,
+        search_validator,
+        interpreter=None,
+    ):
         self.interpreter = interpreter or BISInterpreter(fallback_request)
         self._request = fallback_request
         self._profile_prompt_builder = profile_prompt_builder
@@ -41,8 +49,7 @@ class AIManager(BISAIManagerInterface, ChatAIInterface):
             "temperature": 0,
             "max_tokens": 700,
         }
-        return self._request(
-            payload, config, self._validate_profile_response)
+        return self._request(payload, config, self._validate_profile_response)
 
     def interpret_search_request(self, request, today_request, config):
         if config.get("ai_bypass"):
@@ -50,43 +57,60 @@ class AIManager(BISAIManagerInterface, ChatAIInterface):
         payload = {
             "model": config["openrouter_model"],
             "messages": [
-                {"role": "system", "content": (
-                    "Interpret today's restaurant wish into one JSON search "
-                    "request with exactly these keys: origin, mode, "
-                    "max_distance_km, max_travel_minutes, traffic_aware, "
-                    "cuisine, budget_per_person, other_preferences, "
-                    "dietary_requirements, disliked_cuisines. Copy origin, "
-                    "mode, distance, journey time, traffic_aware, budget, "
-                    "dietary requirements, disliked cuisines, and selected "
-                    "cuisine exactly from confirmed_choices. Preserve every "
-                    "selected other preference. Do not duplicate a selected "
-                    "preference with equivalent wording. Add to "
-                    "other_preferences only wishes explicitly stated in "
-                    "today_request; use short strings. Preserve any stated "
-                    "minimum Google star rating exactly as a numeric star "
-                    "threshold. Other preferences are the strongest part of "
-                    "the search. Preserve words such as only, must, minimum, "
-                    "and at least because they mark hard constraints. A bare "
-                    "star rating without minimum wording remains a soft "
-                    "preference. If today_request conflicts with a confirmed "
-                    "choice, reflect the conflicting choice so the next "
-                    "layer can ask the user. Do not invent locations, "
-                    "restrictions, or restaurant facts. Return JSON only.")},
-                {"role": "user", "content": json.dumps({
-                    "confirmed_choices": request,
-                    "today_request": today_request,
-                }, ensure_ascii=False)},
+                {
+                    "role": "system",
+                    "content": (
+                        "Interpret today's restaurant wish into one JSON "
+                        "search request with exactly these keys: origin, "
+                        "mode, max_distance_km, max_travel_minutes, "
+                        "traffic_aware, cuisine, budget_per_person, "
+                        "other_preferences, dietary_requirements, "
+                        "disliked_cuisines. Copy origin, mode, distance, "
+                        "journey time, traffic_aware, budget, dietary "
+                        "requirements, disliked cuisines, and selected "
+                        "cuisine exactly from confirmed_choices. Preserve "
+                        "every selected other preference. Do not "
+                        "duplicate a selected preference with equivalent "
+                        "wording. Add to other_preferences only wishes "
+                        "explicitly stated in today_request; use short "
+                        "strings. Preserve any stated minimum Google star "
+                        "rating exactly as a numeric star threshold. "
+                        "Other preferences are the strongest part of the "
+                        "search. Preserve words such as only, must, "
+                        "minimum, and at least because they mark hard "
+                        "constraints. A bare star rating without minimum "
+                        "wording remains a soft preference. If "
+                        "today_request conflicts with a confirmed choice, "
+                        "reflect the conflicting choice so the next layer "
+                        "can ask the user. Do not invent locations, "
+                        "restrictions, or restaurant facts. Return JSON "
+                        "only."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "confirmed_choices": request,
+                            "today_request": today_request,
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
             ],
             "temperature": 0,
             "max_tokens": 700,
         }
         return self._request(
-            payload, config,
-            lambda parsed: self._validate_search(parsed))
+            payload, config, lambda parsed: self._validate_search(parsed)
+        )
 
-    def chat_turn(self, message, current_filters, history, saved_profile, config):
+    def chat_turn(
+        self, message, current_filters, history, saved_profile, config
+    ):
         return self.interpreter.interpret_chat_turn(
-            message, current_filters, history, saved_profile, config)
+            message, current_filters, history, saved_profile, config
+        )
 
     def review_profile_wishes(self, wishes, config):
         return self.interpreter.review_profile_wishes(wishes, config)

@@ -1,7 +1,11 @@
 """BRC workflow for building the cleaned MUIS database."""
 
-from BRC.classes.services.workflows.contracts.base_brc_workflow import BaseBRCWorkflow
-from BRC.classes.services.workflows.cuisine_tagging_workflow import CuisineTaggingWorkflow
+from BRC.classes.services.workflows.contracts.base_brc_workflow import (
+    BaseBRCWorkflow,
+)
+from BRC.classes.services.workflows.cuisine_tagging_workflow import (
+    CuisineTaggingWorkflow,
+)
 
 
 class BuildDatabaseWorkflow(BaseBRCWorkflow):
@@ -18,15 +22,16 @@ class BuildDatabaseWorkflow(BaseBRCWorkflow):
     def announce(self, data, logic, report):
         report(
             f"IO Manager: loaded {len(self._snapshot.listings)} "
-            "complete MUIS restaurant listings.")
+            "complete MUIS restaurant listings."
+        )
         self._cache = data.load_cuisine_cache()
-        recovered = data.bootstrap_cuisine_cache(
-            self._snapshot, self._cache)
+        recovered = data.bootstrap_cuisine_cache(self._snapshot, self._cache)
         if recovered:
             data.save_cuisine_cache(self._cache)
             report(
                 f"Data Manager: recovered {recovered} cuisine tags "
-                "from the existing cleaned database.")
+                "from the existing cleaned database."
+            )
         self._save_cache = data.save_cuisine_cache
         self._logic = logic
         self._report = report
@@ -34,13 +39,18 @@ class BuildDatabaseWorkflow(BaseBRCWorkflow):
     def ask_ai(self, ai):
         if not self._use_ai:
             tags, _pending = self._logic.prepare_cuisine_tags(
-                self._snapshot.listings, self._cache)
+                self._snapshot.listings, self._cache
+            )
             if self._save_cache:
                 self._save_cache(self._cache)
             return tags
         return CuisineTaggingWorkflow(self._report).run(
-            self._snapshot.listings, self._cache, ai, self._logic,
-            self._save_cache)
+            self._snapshot.listings,
+            self._cache,
+            ai,
+            self._logic,
+            self._save_cache,
+        )
 
     def apply_rules(self, logic, cuisines):
         return logic.build_database(self._snapshot, cuisines)
@@ -49,5 +59,6 @@ class BuildDatabaseWorkflow(BaseBRCWorkflow):
         data.save_clean_database(database)
         report(
             f"Data Manager: saved {len(database)} restaurants to "
-            f"{data.clean_path}.")
+            f"{data.clean_path}."
+        )
         return database.to_list()

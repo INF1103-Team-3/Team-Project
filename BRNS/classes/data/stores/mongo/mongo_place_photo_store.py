@@ -40,13 +40,17 @@ class MongoPlacePhotoStore(PlacePhotoStoreInterface):
         return datetime.now(timezone.utc) - normalized > NOT_FOUND_TTL
 
     def get_photo(self, place_id):
-        """Return stored photo payload/status for place_id, or None when uncached."""
+        """Return stored photo payload/status for place_id, or None when
+        uncached.
+        """
         doc = self._connection.execute(
             lambda db, pid=place_id: db.place_photos.find_one({"_id": pid})
         )
         if not isinstance(doc, dict) or self._is_stale_missing(doc):
             return None
-        status = doc.get("status") or ("ok" if doc.get("data") else "not_found")
+        status = doc.get("status") or (
+            "ok" if doc.get("data") else "not_found"
+        )
         if status == "not_found":
             return {"place_id": place_id, "status": "not_found"}
         raw = doc.get("data")
@@ -64,13 +68,17 @@ class MongoPlacePhotoStore(PlacePhotoStoreInterface):
 
     def save_photo(self, place_id, record):
         """Upsert one photo blob or `not_found` marker in `place_photos`."""
-        status = record.get("status") or ("ok" if record.get("data") else "not_found")
+        status = record.get("status") or (
+            "ok" if record.get("data") else "not_found"
+        )
         raw = bytes(record.get("data") or b"") if status == "ok" else b""
         payload = {
             "_id": place_id,
             "status": status,
             "data": raw,
-            "content_type": str(record.get("content_type") or "") if status == "ok" else "",
+            "content_type": str(record.get("content_type") or "")
+            if status == "ok"
+            else "",
             "size_bytes": len(raw),
             "photo_name": str(record.get("photo_name") or ""),
             "author_attribution": str(record.get("author_attribution") or ""),

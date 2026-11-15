@@ -52,10 +52,13 @@ def show_case(case_id, function, purpose, test_input, expected, actual):
     print(pformat(expected, sort_dicts=False))
     print(style("\nActual output:", "actual"))
     print(pformat(actual, sort_dicts=False))
-    print("\n" + style(
-        f"Result: {'PASS' if passed else 'FAIL'}",
-        "pass" if passed else "fail",
-    ))
+    print(
+        "\n"
+        + style(
+            f"Result: {'PASS' if passed else 'FAIL'}",
+            "pass" if passed else "fail",
+        )
+    )
     return passed
 
 
@@ -72,10 +75,12 @@ def show_summary(group_name, total_tests, failures):
     if failures:
         print(style("\nFailed tests:", "fail"))
         for test_name, error in failures:
-            print(style(
-                f"- {test_name}: {type(error).__name__}: {error}",
-                "fail",
-            ))
+            print(
+                style(
+                    f"- {test_name}: {type(error).__name__}: {error}",
+                    "fail",
+                )
+            )
 
 
 def show_group_start(group_name, description):

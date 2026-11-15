@@ -13,5 +13,5 @@ class NullPlacePhotoStore(PlacePhotoStoreInterface):
         return None
 
     def save_photo(self, place_id, record):
-        """Accept writes without persisting binary image payloads to JSON files."""
+        "Accept writes without persisting binary image payloads to JSON files."
         return False

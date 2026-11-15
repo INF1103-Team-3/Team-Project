@@ -45,11 +45,17 @@ def colors_enabled():
 
 
 def _console():
-    # Create a console at the point of use so stdout capture and redirection work.
+    # Create a console at the point of use so stdout capture and redirection
+    # work.
     interactive = _interactive()
-    return Console(file=sys.stdout, highlight=False, markup=False,
-                   soft_wrap=True, force_terminal=interactive,
-                   color_system="truecolor" if interactive else None)
+    return Console(
+        file=sys.stdout,
+        highlight=False,
+        markup=False,
+        soft_wrap=True,
+        force_terminal=interactive,
+        color_system="truecolor" if interactive else None,
+    )
 
 
 def _interactive():
@@ -68,8 +74,7 @@ def _content(value, role, highlight_commands=False):
     """Style semantic text; highlight all commands on help pages."""
     value = str(value)
     rendered = Text(value, style=COLORS[role])
-    pattern = (r"(?<!\w)/[a-z][a-z-]*\b" if highlight_commands
-               else r"/help\b")
+    pattern = r"(?<!\w)/[a-z][a-z-]*\b" if highlight_commands else r"/help\b"
     for match in re.finditer(pattern, value):
         rendered.stylize(COLORS["help"], match.start(), match.end())
     return rendered

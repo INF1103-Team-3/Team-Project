@@ -19,7 +19,8 @@ def send_verification_email(email, code, config):
 def send_maps_link_email(email, restaurant_name, link, config):
     """Send one selected restaurant's Google Maps directions link."""
     return _email_delivery.send_maps_link_email(
-        email, restaurant_name, link, config)
+        email, restaurant_name, link, config
+    )
 
 
 def _send_message(message, config, kind):

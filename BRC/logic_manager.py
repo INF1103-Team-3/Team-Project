@@ -26,13 +26,17 @@ def check_restaurants(records, database, chosen_certificates):
     ]
     object_database = database
     if not isinstance(database, HalalDatabase):
-        object_database = HalalDatabase([
-            item if isinstance(item, HalalOutlet)
-            else HalalOutlet.from_dict(item)
-            for item in database
-        ])
+        object_database = HalalDatabase(
+            [
+                item
+                if isinstance(item, HalalOutlet)
+                else HalalOutlet.from_dict(item)
+                for item in database
+            ]
+        )
     return _default_manager.check_restaurants(
-        object_records, object_database, chosen_certificates)
+        object_records, object_database, chosen_certificates
+    )
 
 
 def evaluate(record):
@@ -43,7 +47,8 @@ def evaluate(record):
     if context["scenario"] == "build_database":
         return build_database(context["raw_snapshot"], output["cuisines"])
     return check_restaurants(
-        context["records"], context["database"], output["matches"])
+        context["records"], context["database"], output["matches"]
+    )
 
 
 def score(record):

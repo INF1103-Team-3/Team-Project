@@ -20,13 +20,18 @@ def _initialize_cli():
     from BIS import ai_manager, data_manager, io_manager, logic_manager
     from BIS.classes.services.cli.bis_search_workflow import BISSearchWorkflow
     from BIS.classes.services.cli.interaction_session import InteractionSession
-    from BIS.classes.services.cli.search_preference_recorder import SearchPreferenceRecorder
-    from BIS.classes.services.cli.search_results_controller import SearchResultsController
+    from BIS.classes.services.cli.search_preference_recorder import (
+        SearchPreferenceRecorder,
+    )
+    from BIS.classes.services.cli.search_results_controller import (
+        SearchResultsController,
+    )
     from BRNS.runtime import build_cli_brns_service
     from sources.profile_schema import OTHER_PREFERENCES
     from support import config as settings
     from support.email_verification import email_delivery
     from common import debug_log, terminal_ui
+
     _INITIALIZED = True
 
 
@@ -55,12 +60,25 @@ def _search_workflow():
     io, ai, logic, data = _search_managers()
     preferences = _search_preference_recorder(data)
     results = SearchResultsController(
-        io, ai, logic, data, preferences, build_cli_brns_service(),
-        email_delivery, debug_log, OTHER_PREFERENCES,
+        io,
+        ai,
+        logic,
+        data,
+        preferences,
+        build_cli_brns_service(),
+        email_delivery,
+        debug_log,
+        OTHER_PREFERENCES,
     )
     return BISSearchWorkflow(
-        io, ai, logic, data, preferences, results,
-        debug_log, OTHER_PREFERENCES,
+        io,
+        ai,
+        logic,
+        data,
+        preferences,
+        results,
+        debug_log,
+        OTHER_PREFERENCES,
     )
 
 
@@ -73,13 +91,15 @@ def run_search(session, config, automatic=False):
 def remember_search_wishes(session, today_request, config):
     """Keep confirmed wording in the profile for later searches."""
     return _search_preference_recorder().remember_wishes(
-        session, today_request, config)
+        session, today_request, config
+    )
 
 
 def remember_search_cuisine(session, cuisine, config):
     """Save an explicitly approved search cuisine to the user's likes."""
     return _search_preference_recorder().remember_cuisine(
-        session, cuisine, config)
+        session, cuisine, config
+    )
 
 
 def _interaction_session(state, config):
@@ -118,8 +138,7 @@ def end_session(intent, session, config):
 
 def handle_action(action, session, config, from_ai=False):
     """Dispatch an action with guard clauses instead of nested branches."""
-    return _interaction_session(session, config).handle_action(
-        action, from_ai)
+    return _interaction_session(session, config).handle_action(action, from_ai)
 
 
 def run_session(user, config):
@@ -170,15 +189,22 @@ def main(argv=None):
     import argparse
     from BIS.classes.services.launcher.bis_launcher import BISLauncher
     from BIS.classes.io.cli.helpers.launcher_io import LauncherIO
-    from BIS.classes.services.launcher.web_interface_launcher import WebInterfaceLauncher
-    parser = argparse.ArgumentParser(description="BiteFinder CLI and web launcher")
+    from BIS.classes.services.launcher.web_interface_launcher import (
+        WebInterfaceLauncher,
+    )
+
+    parser = argparse.ArgumentParser(
+        description="BiteFinder CLI and web launcher"
+    )
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--cli", action="store_true")
     modes.add_argument("--web", action="store_true")
     args = parser.parse_args(argv)
     mode = "cli" if args.cli else "web" if args.web else None
     try:
-        return BISLauncher(LauncherIO(), run_cli, WebInterfaceLauncher()).run(mode)
+        return BISLauncher(LauncherIO(), run_cli, WebInterfaceLauncher()).run(
+            mode
+        )
     except (EOFError, KeyboardInterrupt):
         LauncherIO().display_message("Goodbye!")
 

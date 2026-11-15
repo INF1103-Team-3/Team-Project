@@ -14,7 +14,7 @@ class AIProviderInterface(ABC):
     @property
     @abstractmethod
     def primary(self):
-        """Whether this provider is the primary attempt in the fallback chain."""
+        "Whether this provider is the primary attempt in the fallback chain."
 
     @abstractmethod
     def request(self, payload, config):

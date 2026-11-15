@@ -1,10 +1,14 @@
-"""Headless BRNS gateway coordinating search, navigation, history, and model metadata."""
+"""Headless BRNS gateway coordinating search, navigation, history, and
+model metadata.
+"""
 
-from BRNS.classes.services.gateway.brns_gateway_interface import BRNSGatewayInterface
+from BRNS.classes.services.gateway.brns_gateway_interface import (
+    BRNSGatewayInterface,
+)
 
 
 class BRNSService(BRNSGatewayInterface):
-    """Own downstream BRNS operations so callers interact through one boundary."""
+    "Own downstream BRNS operations so callers interact through one boundary."
 
     def __init__(
         self,
@@ -46,7 +50,9 @@ class BRNSService(BRNSGatewayInterface):
         with self._history_scope.for_user(user_id):
             if previous_restaurants:
                 return self._workflow.search(
-                    bis_json, previous_restaurants=previous_restaurants, **kwargs
+                    bis_json,
+                    previous_restaurants=previous_restaurants,
+                    **kwargs,
                 )
             return self._workflow.search(bis_json, **kwargs)
 
@@ -73,7 +79,9 @@ class BRNSService(BRNSGatewayInterface):
     def load_history(self, user_id):
         return self._data.load_user_history(user_id)
 
-    def save_history_summary(self, user_id, request, results, source="live-google"):
+    def save_history_summary(
+        self, user_id, request, results, source="live-google"
+    ):
         with self._history_scope.for_user(user_id):
             return self._data.save_search_results(request, results, source)
 

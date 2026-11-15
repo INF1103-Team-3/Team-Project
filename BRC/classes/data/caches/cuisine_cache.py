@@ -5,8 +5,7 @@ class CuisineCache:
     """Retain cuisine tags keyed by stable MUIS listing identity."""
 
     def __init__(self, tags=None):
-        self._tags = {
-            key: list(value) for key, value in (tags or {}).items()}
+        self._tags = {key: list(value) for key, value in (tags or {}).items()}
 
     def __contains__(self, listing):
         return listing.cuisine_cache_key in self._tags

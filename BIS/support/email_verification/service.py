@@ -2,7 +2,9 @@
 
 import data_manager
 
-from .classes.service.email_verification_service import EmailVerificationService
+from .classes.service.email_verification_service import (
+    EmailVerificationService,
+)
 from .classes.delivery.smtp_email_delivery import SMTPEmailDelivery
 from .classes.challenge.verification_challenge_manager import (
     VerificationChallengeManager,
@@ -10,7 +12,8 @@ from .classes.challenge.verification_challenge_manager import (
 
 
 _verification_service = EmailVerificationService(
-    data_manager, VerificationChallengeManager(), SMTPEmailDelivery())
+    data_manager, VerificationChallengeManager(), SMTPEmailDelivery()
+)
 
 
 def get_challenge(user_id):

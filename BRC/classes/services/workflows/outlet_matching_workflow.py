@@ -1,4 +1,4 @@
-"""Coordinate outlet AI requests while preserving exact matches and failures."""
+"Coordinate outlet AI requests while preserving exact matches and failures."
 
 from BRC.classes.ai.errors.ai_response_error import AIResponseError
 from BRC.classes.ai.errors.ai_service_error import AIServiceError
@@ -15,25 +15,28 @@ class OutletMatchingWorkflow:
         chosen = []
         ai_available = True
         for number, (record, candidates, exact) in enumerate(
-                zip(records, candidate_groups, exact_matches), 1):
+            zip(records, candidate_groups, exact_matches), 1
+        ):
             self._report(
                 f"AI: checking restaurant {number} of {len(records)} "
-                f"({record.to_dict().get('name', 'unknown')})")
+                f"({record.to_dict().get('name', 'unknown')})"
+            )
             if not candidates or exact is not None or not ai_available:
                 chosen.append(exact)
                 continue
             try:
-                chosen.append(
-                    ai.propose_match(number, record, candidates))
+                chosen.append(ai.propose_match(number, record, candidates))
             except AIResponseError as error:
                 self._report(
                     f"AI: no valid answer for restaurant {number} "
-                    f"({error}); it is marked not verified.")
+                    f"({error}); it is marked not verified."
+                )
                 chosen.append(None)
             except AIServiceError as error:
                 self._report(
                     f"AI: Gemini is unavailable ({error}); the remaining "
-                    "restaurants are marked not verified.")
+                    "restaurants are marked not verified."
+                )
                 chosen.append(None)
                 ai_available = False
         return chosen

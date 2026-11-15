@@ -11,9 +11,12 @@ class BISLogicManagerInterface(ABC):
         """Validate a confirmed or AI-proposed request."""
 
     @abstractmethod
-    def preserve_search_wish(self, confirmed, request, today_request,
-                             field="other_preferences"):
-        """Retain explicitly stated wishes omitted by AI without mutating inputs."""
+    def preserve_search_wish(
+        self, confirmed, request, today_request, field="other_preferences"
+    ):
+        """Retain explicitly stated wishes omitted by AI without mutating
+        inputs.
+        """
 
     @abstractmethod
     def next_field(self, preferences):

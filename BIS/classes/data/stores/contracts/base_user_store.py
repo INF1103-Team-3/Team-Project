@@ -1,8 +1,12 @@
 """Storage-neutral BIS account operations using validated domain records."""
+
 from abc import ABC, abstractmethod
 from uuid import uuid4
 from BIS.sources.profile_schema import (
-    MINUTES_PER_KM, empty_preferences, normalize_email, normalize_username,
+    MINUTES_PER_KM,
+    empty_preferences,
+    normalize_email,
+    normalize_username,
     validate_preferences,
 )
 
@@ -29,22 +33,24 @@ class BaseUserStore(ABC):
         users = self.registry()
         if any(user["email"] == email for user in users.values()):
             raise ValueError(
-                "This email is already registered. Choose resume.")
+                "This email is already registered. Choose resume."
+            )
         user_id = str(uuid4())
         while user_id in users:
             user_id = str(uuid4())
-        return self.save({
-            "userID": user_id,
-            "email": email,
-            "email_verified": False,
-            "username": username,
-            "preferences": empty_preferences(),
-        })
+        return self.save(
+            {
+                "userID": user_id,
+                "email": email,
+                "email_verified": False,
+                "username": username,
+                "preferences": empty_preferences(),
+            }
+        )
 
     def email_exists(self, email):
         email = normalize_email(email)
-        return any(
-            user["email"] == email for user in self.registry().values())
+        return any(user["email"] == email for user in self.registry().values())
 
     def find_user(self, email):
         email = normalize_email(email)
@@ -52,7 +58,8 @@ class BaseUserStore(ABC):
             if user["email"] == email:
                 return user
         raise ValueError(
-            "No profile found for this email. Please sign up first.")
+            "No profile found for this email. Please sign up first."
+        )
 
     def get_user(self, user_id):
         users = self.registry()

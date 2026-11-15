@@ -3,7 +3,9 @@
 import json
 
 from sources.profile_schema import (
-    CUISINES, OTHER_PREFERENCES, PREFERENCE_FIELDS,
+    CUISINES,
+    OTHER_PREFERENCES,
+    PREFERENCE_FIELDS,
 )
 
 QUESTIONS = {
@@ -19,7 +21,9 @@ QUESTIONS = {
         "(halal, vegetarian, both, or none)"
     ),
     "liked_cuisines": "Which cuisines do you like? (describe them, or none)",
-    "disliked_cuisines": "Which cuisines do you avoid? (describe them, or none)",
+    ("disliked_cuisines"): (
+        "Which cuisines do you avoid? (describe them, or none)"
+    ),
     OTHER_PREFERENCES: (
         "Any other preferences? List them with commas "
         "(spicy food, quiet cafes; Enter = none)"
@@ -38,20 +42,35 @@ LABELS = {
 }
 
 COMMANDS = {
-    "/profile": "show_profile", "/help": "help", "/reset": "reset_profile",
-    "/search": "search", "/password": "change_password",
-    "/logout": "logout", "/quit": "exit", "/exit": "exit",
+    "/profile": "show_profile",
+    "/help": "help",
+    "/reset": "reset_profile",
+    "/search": "search",
+    "/password": "change_password",
+    "/logout": "logout",
+    "/quit": "exit",
+    "/exit": "exit",
 }
 
-INTENTS = {"profile_update", "show_profile", "reset_profile", "search", "help",
-           "change_password", "exit", "logout", "unknown"}
+INTENTS = {
+    "profile_update",
+    "show_profile",
+    "reset_profile",
+    "search",
+    "help",
+    "change_password",
+    "exit",
+    "logout",
+    "unknown",
+}
 
 SYSTEM_PROMPT = (
     "You assist BiteFinder profile collection, not recommendations. "
     "Return only JSON: {intent, profile_updates, location_action}. "
     "Intent is one of " + ", ".join(sorted(INTENTS)) + ". "
     "profile_updates is a dictionary using only these exact keys: "
-    + json.dumps(list(PREFERENCE_FIELDS)) + ". "
+    + json.dumps(list(PREFERENCE_FIELDS))
+    + ". "
     "Never output account fields, name, username, allergies, "
     "spice_preference, or dining_preferences. "
     "location is a list of distinct areas. For space-separated known place "
@@ -84,28 +103,34 @@ SYSTEM_PROMPT = (
 
 
 EDIT_ALIASES = {
-    "budget": "budget_per_person", "travel": "max_distance_km",
-    "diet": "dietary_requirements", "likes": "liked_cuisines",
-    "dislikes": "disliked_cuisines", "other": OTHER_PREFERENCES,
+    "budget": "budget_per_person",
+    "travel": "max_distance_km",
+    "diet": "dietary_requirements",
+    "likes": "liked_cuisines",
+    "dislikes": "disliked_cuisines",
+    "other": OTHER_PREFERENCES,
     "password": "password",
 }
 
 
-HELP_TEXT = """What would you like to do?
-/profile — View your saved profile.
-/search — Choose today's search options and describe what you want.
-/color off — Turn off terminal colors for your account. Use /color on to restore them.
-/edit — See how to change an answer, such as your budget or password.
-/password — Change your account password.
-/add-location — Add an area to your saved locations.
-/remove-location — Remove an area from your saved locations.
-/reset — Clear all preferences. Keep your account and username.
-/logout — Save and switch to another account.
-/quit — Save and close the chatbot.
-
-Use /help [command] for more detailed info.
-At the main prompt, you can also ask naturally, such as "search me a
-restaurant", "show my profile", "change my budget", or "color off"."""
+HELP_TEXT = (
+    "What would you like to do?\n"
+    "/profile — View your saved profile.\n"
+    "/search — Choose today's search options and describe what you want.\n"
+    "/color off — Turn off terminal colors for your account. Use /color on "
+    "to restore them.\n"
+    "/edit — See how to change an answer, such as your budget or password.\n"
+    "/password — Change your account password.\n"
+    "/add-location — Add an area to your saved locations.\n"
+    "/remove-location — Remove an area from your saved locations.\n"
+    "/reset — Clear all preferences. Keep your account and username.\n"
+    "/logout — Save and switch to another account.\n"
+    "/quit — Save and close the chatbot.\n"
+    "\n"
+    "Use /help [command] for more detailed info.\n"
+    'At the main prompt, you can also ask naturally, such as "search me a\n'
+    'restaurant", "show my profile", "change my budget", or "color off".'
+)
 
 EDIT_HINT = """Choose what you want to change. For example, type:
 /edit budget
@@ -137,20 +162,26 @@ Use /profile to check your saved answers."""
 
 EDIT_HELP += "\nAccepted cuisine values: " + ", ".join(CUISINES) + ".\n"
 
-EDIT_HELP += """
-
-Accepted values when answering:
-username: 1–50 characters after trimming spaces.
-location: Describe one or more areas; each 1–100 characters with a letter.
-          At least one area is required.
-budget: 0.01–1000 SGD, entered as a number (up to two decimal places).
-travel: 0.01–100 km walking or 0.1–2000 mins walking (up to two decimal places).
-        Include units; distance and time use approximately 20 mins per km.
-diet: halal, vegetarian, both, or none.
-likes/dislikes: Supported cuisine names, or none. Natural phrases are accepted;
-               typo suggestions require confirmation.
-other: Comma-separated preferences (each up to 100 characters), or none.
-"""
+EDIT_HELP += (
+    "\n"
+    "\n"
+    "Accepted values when answering:\n"
+    "username: 1–50 characters after trimming spaces.\n"
+    "location: Describe one or more areas; each 1–100 characters with a "
+    "letter.\n"
+    "          At least one area is required.\n"
+    "budget: 0.01–1000 SGD, entered as a number (up to two decimal places).\n"
+    "travel: 0.01–100 km walking or 0.1–2000 mins walking (up to two decimal "
+    "places).\n"
+    "        Include units; distance and time use approximately 20 mins per "
+    "km.\n"
+    "diet: halal, vegetarian, both, or none.\n"
+    "likes/dislikes: Supported cuisine names, or none. Natural phrases are "
+    "accepted;\n"
+    "               typo suggestions require confirmation.\n"
+    "other: Comma-separated preferences (each up to 100 characters), or "
+    "none.\n"
+)
 
 COMMAND_HELP = {
     "color": """/color off — Disable terminal colors for your account.
@@ -162,40 +193,65 @@ saved for your next session and does not change your food preferences.""",
 Accepted values: None; type the command on its own.
 Example: /profile
 This only displays your profile; it does not change your answers.""",
-    "search": """/search — Set up a restaurant search using your saved profile.
-It starts automatically once when a profile becomes complete, or on the next
-resume if it was already complete. Run /search again for new choices. You will
-confirm your current location,
-then choose walk, drive, or transit. Walking, driving, and transit let you choose a
-maximum distance in km (up to 15 km walk; 50 km drive/transit) or journey time in
-minutes (up to 90 walk; 120 drive; 150 transit).
-Driving time searches then offer live traffic (1 = no, 2 = yes; Enter = no).
-Choose one cuisine
-or none, today's budget, and one optional special request. Press Enter for
-none, select a previous request by number or all, or describe a new request
-in English. BIS checks the input,
-uses AI to review new wording, and asks before applying a correction. BIS AI
-also compares a new special request with saved requests and reuses the first
-logically equivalent one instead of saving a duplicate. Wording such as
-"only Korean" or "at least 4.5 stars" is treated as a possible hard
-requirement and must be confirmed because it may return no matches. A bare
-rating such as "4.5 stars" can remain a soft preference or be confirmed as a
-hard minimum. Confirmed hard requests take priority over today's budget and
-travel limit; those two limits become secondary cautions.
-Google text search receives the full special request, including requests such
-as spicy food.
-BIS AI
-can interpret natural budget, distance, and journey-time answers, such as
-"i think 12" or "about 500 metres"; confirm the proposed number before use.
-BIS AI then interprets the request; press Enter to confirm its proposed
-search, or answer no to cancel. After results, choose "Search again with the
-same choices" to request fresh recommendations without repeating the form.
-Confirmed new special requests are saved for the next search; other today's
-choices do not change your saved profile. Live search needs BIS and BRNS AI;
-chatbot test mode skips both AI calls and BRNS. The location prompt accepts a
-Singapore six-digit postal code, address, landmark, or latitude,longitude.
-Type /help at any prompt to see help and return to that prompt.
-Example: /search""",
+    "search": (
+        "/search — Set up a restaurant search using your saved profile.\n"
+        "It starts automatically once when a profile becomes complete, or on "
+        "the next\n"
+        "resume if it was already complete. Run /search again for new "
+        "choices. You will\n"
+        "confirm your current location,\n"
+        "then choose walk, drive, or transit. Walking, driving, and transit "
+        "let you choose a\n"
+        "maximum distance in km (up to 15 km walk; 50 km drive/transit) or "
+        "journey time in\n"
+        "minutes (up to 90 walk; 120 drive; 150 transit).\n"
+        "Driving time searches then offer live traffic (1 = no, 2 = yes; "
+        "Enter = no).\n"
+        "Choose one cuisine\n"
+        "or none, today's budget, and one optional special request. Press "
+        "Enter for\n"
+        "none, select a previous request by number or all, or describe a new "
+        "request\n"
+        "in English. BIS checks the input,\n"
+        "uses AI to review new wording, and asks before applying a "
+        "correction. BIS AI\n"
+        "also compares a new special request with saved requests and reuses "
+        "the first\n"
+        "logically equivalent one instead of saving a duplicate. Wording "
+        "such as\n"
+        '"only Korean" or "at least 4.5 stars" is treated as a possible hard\n'
+        "requirement and must be confirmed because it may return no matches. "
+        "A bare\n"
+        'rating such as "4.5 stars" can remain a soft preference or be '
+        "confirmed as a\n"
+        "hard minimum. Confirmed hard requests take priority over today's "
+        "budget and\n"
+        "travel limit; those two limits become secondary cautions.\n"
+        "Google text search receives the full special request, including "
+        "requests such\n"
+        "as spicy food.\n"
+        "BIS AI\n"
+        "can interpret natural budget, distance, and journey-time answers, "
+        "such as\n"
+        '"i think 12" or "about 500 metres"; confirm the proposed number '
+        "before use.\n"
+        "BIS AI then interprets the request; press Enter to confirm its "
+        "proposed\n"
+        'search, or answer no to cancel. After results, choose "Search again '
+        "with the\n"
+        'same choices" to request fresh recommendations without repeating '
+        "the form.\n"
+        "Confirmed new special requests are saved for the next search; other "
+        "today's\n"
+        "choices do not change your saved profile. Live search needs BIS and "
+        "BRNS AI;\n"
+        "chatbot test mode skips both AI calls and BRNS. The location prompt "
+        "accepts a\n"
+        "Singapore six-digit postal code, address, landmark, or "
+        "latitude,longitude.\n"
+        "Type /help at any prompt to see help and return to that prompt.\n"
+        "Example: /search"
+    ),
     "add-location": """/add-location — Add areas to your saved locations.
 Accepted values: No value after the command. When prompted, enter areas
 separated by commas; each must be 1–100 characters and contain a letter.
@@ -224,13 +280,17 @@ You can then resume another account by email or sign up.""",
 Accepted values: None; type the command on its own. /exit also works.
 Example: /quit
 You can resume your saved account by email the next time you start.""",
-    "help": """/help — Show commands or explain one command.
-Accepted values: No value for the overview, or one command name:
-profile, search, color, edit, add-location, remove-location, reset, logout, quit,
-exit, help.
-Example: /help edit explains editing options and accepted answers.
-Example: /help logout explains how to switch accounts.
-A leading slash on the command name is optional: /help /logout also works.
-Help only displays instructions; it never changes your profile.""",
+    "help": (
+        "/help — Show commands or explain one command.\n"
+        "Accepted values: No value for the overview, or one command name:\n"
+        "profile, search, color, edit, add-location, remove-location, reset, "
+        "logout, quit,\n"
+        "exit, help.\n"
+        "Example: /help edit explains editing options and accepted answers.\n"
+        "Example: /help logout explains how to switch accounts.\n"
+        "A leading slash on the command name is optional: /help /logout also "
+        "works.\n"
+        "Help only displays instructions; it never changes your profile."
+    ),
 }
 COMMAND_HELP["exit"] = COMMAND_HELP["quit"]

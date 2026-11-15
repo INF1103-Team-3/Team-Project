@@ -9,7 +9,9 @@ class AIProviderFactoryRegistry:
 
     def register(self, provider_name, factory, enabled=None):
         self.__entries[provider_name] = (
-            factory, enabled or (lambda _config: True))
+            factory,
+            enabled or (lambda _config: True),
+        )
 
     def create(self, provider_name, model, config):
         entry = self.__entries.get(provider_name)

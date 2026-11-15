@@ -8,7 +8,8 @@ class HalalEvidencePolicy:
     def brc_record(candidate):
         record = dict(candidate)
         dietary = [
-            item for item in candidate.get("dietary_requirements") or []
+            item
+            for item in candidate.get("dietary_requirements") or []
             if item in ("halal", "vegetarian")
         ]
         record["dietary"] = dietary
@@ -19,17 +20,16 @@ class HalalEvidencePolicy:
         )
         return record
 
-
     @staticmethod
     def initial_candidate(original):
         candidate = dict(original)
-        google_halal = (
-            original.get("halal_hint") is True
-            or "halal" in (
-                original.get("dietary_requirements") or []))
+        google_halal = original.get("halal_hint") is True or "halal" in (
+            original.get("dietary_requirements") or []
+        )
         candidate["muis_check"] = {"status": "not_verified"}
         candidate["halal_certification"] = (
-            "unofficial" if google_halal else "none")
+            "unofficial" if google_halal else "none"
+        )
         candidate["halal_hint"] = google_halal
         candidate["dietary_requirements"] = [
             item
@@ -49,15 +49,16 @@ class HalalEvidencePolicy:
             and muis_check.get("status") == "verified"
         )
         candidate["muis_check"] = (
-            muis_check if isinstance(muis_check, dict)
+            muis_check
+            if isinstance(muis_check, dict)
             else {"status": "not_verified"}
         )
         candidate["halal_certification"] = (
-            "official" if verified
-            else candidate["halal_certification"]
+            "official" if verified else candidate["halal_certification"]
         )
         candidate["halal_hint"] = (
-            False if verified else candidate["halal_hint"])
+            False if verified else candidate["halal_hint"]
+        )
         dietary = [
             item
             for item in candidate.get("dietary_requirements") or []

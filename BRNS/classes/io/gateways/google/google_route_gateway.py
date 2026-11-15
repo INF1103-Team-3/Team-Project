@@ -21,7 +21,8 @@ class GoogleRouteGateway:
         )
         value = (
             math.sin((lat2 - lat1) / 2) ** 2
-            + math.cos(lat1) * math.cos(lat2)
+            + math.cos(lat1)
+            * math.cos(lat2)
             * math.sin((lng2 - lng1) / 2) ** 2
         )
         return 2 * 6371.0 * math.asin(math.sqrt(value))
@@ -30,34 +31,61 @@ class GoogleRouteGateway:
         if mode not in {"walk", "drive"}:
             raise ValueError("Transit journey times require a real route.")
         speed = 80 if mode == "walk" else 500
-        meters = self.haversine_km(
-            origin, (restaurant["lat"], restaurant["lng"])) * 1000 * 1.2
+        meters = (
+            self.haversine_km(origin, (restaurant["lat"], restaurant["lng"]))
+            * 1000
+            * 1.2
+        )
         return max(1, round(meters / speed))
 
     def travel_times_matrix(
-            self, origin, restaurants, mode, traffic_aware=False):
+        self, origin, restaurants, mode, traffic_aware=False
+    ):
         if not restaurants:
             return
         self._log.debug_log(
             f"Route matrix requested for {len(restaurants)} candidates.",
-            "INFO", "BRNS.io_manager.travel_times_matrix")
+            "INFO",
+            "BRNS.io_manager.travel_times_matrix",
+        )
         headers = {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": self._config.GOOGLE_MAPS_API_KEY,
             "X-Goog-FieldMask": (
                 "originIndex,destinationIndex,duration,"
-                "distanceMeters,status,condition"),
+                "distanceMeters,status,condition"
+            ),
         }
         body = {
-            "origins": [{"waypoint": {"location": {"latLng": {
-                "latitude": origin[0], "longitude": origin[1],
-            }}}}],
-            "destinations": [{"waypoint": {"location": {"latLng": {
-                "latitude": restaurant["lat"],
-                "longitude": restaurant["lng"],
-            }}}} for restaurant in restaurants],
+            "origins": [
+                {
+                    "waypoint": {
+                        "location": {
+                            "latLng": {
+                                "latitude": origin[0],
+                                "longitude": origin[1],
+                            }
+                        }
+                    }
+                }
+            ],
+            "destinations": [
+                {
+                    "waypoint": {
+                        "location": {
+                            "latLng": {
+                                "latitude": restaurant["lat"],
+                                "longitude": restaurant["lng"],
+                            }
+                        }
+                    }
+                }
+                for restaurant in restaurants
+            ],
             "travelMode": {
-                "walk": "WALK", "drive": "DRIVE", "transit": "TRANSIT",
+                "walk": "WALK",
+                "drive": "DRIVE",
+                "transit": "TRANSIT",
             }[mode],
         }
         if traffic_aware and mode == "drive":
@@ -72,7 +100,8 @@ class GoogleRouteGateway:
             response.raise_for_status()
             data = response.json()
             elements = (
-                data if isinstance(data, list) else data.get("elements", []))
+                data if isinstance(data, list) else data.get("elements", [])
+            )
             for element in elements:
                 try:
                     index = element["destinationIndex"]
@@ -82,35 +111,45 @@ class GoogleRouteGateway:
                     if status_code not in (0, None):
                         continue
                     restaurants[index][f"{mode}_minutes"] = (
-                        int(element["duration"].rstrip("s")) / 60)
+                        int(element["duration"].rstrip("s")) / 60
+                    )
                     restaurants[index][f"{mode}_meters"] = int(
-                        element["distanceMeters"])
+                        element["distanceMeters"]
+                    )
                     restaurants[index][f"{mode}_source"] = "route"
                 except (KeyError, ValueError, TypeError):
                     continue
         except (
-                requests.RequestException, AttributeError,
-                KeyError, ValueError) as error:
+            requests.RequestException,
+            AttributeError,
+            KeyError,
+            ValueError,
+        ) as error:
             self._error_logger(f"routes_matrix_{mode}", error)
         routed = sum(
             restaurant.get(f"{mode}_source") == "route"
-            for restaurant in restaurants)
+            for restaurant in restaurants
+        )
         self._log.debug_log(
-            f"Route matrix supplied {routed} routes.", "INFO",
-            "BRNS.io_manager.travel_times_matrix")
+            f"Route matrix supplied {routed} routes.",
+            "INFO",
+            "BRNS.io_manager.travel_times_matrix",
+        )
 
     def fill_travel_estimates(self, origin, restaurants):
         for restaurant in restaurants:
             for mode in ("walk", "drive"):
                 if restaurant.get(f"{mode}_minutes") is None:
                     restaurant[f"{mode}_minutes"] = (
-                        self.estimate_travel_minutes(
-                            origin, restaurant, mode))
+                        self.estimate_travel_minutes(origin, restaurant, mode)
+                    )
                     restaurant[f"{mode}_meters"] = int(
                         self.haversine_km(
                             origin,
                             (restaurant["lat"], restaurant["lng"]),
-                        ) * 1000)
+                        )
+                        * 1000
+                    )
                     restaurant[f"{mode}_source"] = "estimate"
 
     @staticmethod
@@ -121,8 +160,11 @@ class GoogleRouteGateway:
         line = details.get("transitLine") or {}
         vehicle = (line.get("vehicle") or {}).get("name") or {}
         service = (
-            line.get("nameShort") or line.get("name")
-            or vehicle.get("text") or "Transit")
+            line.get("nameShort")
+            or line.get("name")
+            or vehicle.get("text")
+            or "Transit"
+        )
         text = f"Take {service}"
         if details.get("headsign"):
             text += f" toward {details['headsign']}"
@@ -197,34 +239,51 @@ class GoogleRouteGateway:
         for leg in route.get("legs", []):
             for step in leg.get("steps", []):
                 step_mode = self._normalize_step_mode(
-                    step.get("travelMode"), mode)
+                    step.get("travelMode"), mode
+                )
                 text = (
                     self.format_transit_step(step)
                     if mode == "transit"
                     else step.get("navigationInstruction", {}).get(
-                        "instructions"))
+                        "instructions"
+                    )
+                )
                 if text:
                     steps.append(text)
                 step_poly = (step.get("polyline") or {}).get(
-                    "encodedPolyline") or ""
+                    "encodedPolyline"
+                ) or ""
                 if step_poly:
                     self._append_segment_points(
-                        segments, step_mode, self.decode_polyline(step_poly))
+                        segments, step_mode, self.decode_polyline(step_poly)
+                    )
         return steps, segments
 
     def get_route(self, origin, destination, mode, traffic_aware=False):
         self._log.debug_log(
-            "Directions request started.", "INFO",
-            "BRNS.io_manager.get_route")
+            "Directions request started.", "INFO", "BRNS.io_manager.get_route"
+        )
         body = {
-            "origin": {"location": {"latLng": {
-                "latitude": origin[0], "longitude": origin[1],
-            }}},
-            "destination": {"location": {"latLng": {
-                "latitude": destination[0], "longitude": destination[1],
-            }}},
+            "origin": {
+                "location": {
+                    "latLng": {
+                        "latitude": origin[0],
+                        "longitude": origin[1],
+                    }
+                }
+            },
+            "destination": {
+                "location": {
+                    "latLng": {
+                        "latitude": destination[0],
+                        "longitude": destination[1],
+                    }
+                }
+            },
             "travelMode": {
-                "walk": "WALK", "drive": "DRIVE", "transit": "TRANSIT",
+                "walk": "WALK",
+                "drive": "DRIVE",
+                "transit": "TRANSIT",
             }[mode],
         }
         if traffic_aware and mode == "drive":
@@ -234,7 +293,8 @@ class GoogleRouteGateway:
             "routes.polyline.encodedPolyline,"
             "routes.legs.steps.navigationInstruction,"
             "routes.legs.steps.travelMode,"
-            "routes.legs.steps.polyline.encodedPolyline")
+            "routes.legs.steps.polyline.encodedPolyline"
+        )
         if mode == "transit":
             field_mask += ",routes.legs.steps.transitDetails"
         headers = {
@@ -253,13 +313,16 @@ class GoogleRouteGateway:
             routes = response.json().get("routes", [])
             if not routes:
                 self._log.debug_log(
-                    "Directions returned no route.", "WARNING",
-                    "BRNS.io_manager.get_route")
+                    "Directions returned no route.",
+                    "WARNING",
+                    "BRNS.io_manager.get_route",
+                )
                 return None
             route = routes[0]
             steps, segments = self._extract_steps_and_segments(route, mode)
-            encoded_poly = (
-                (route.get("polyline") or {}).get("encodedPolyline") or "")
+            encoded_poly = (route.get("polyline") or {}).get(
+                "encodedPolyline"
+            ) or ""
             path = self.decode_polyline(encoded_poly)
             if not path and segments:
                 for segment in segments:
@@ -267,11 +330,12 @@ class GoogleRouteGateway:
                         if not path or path[-1] != point:
                             path.append(point)
             self._log.debug_log(
-                "Directions route returned.", "INFO",
-                "BRNS.io_manager.get_route")
+                "Directions route returned.",
+                "INFO",
+                "BRNS.io_manager.get_route",
+            )
             return {
-                "duration_min": round(
-                    int(route["duration"].rstrip("s")) / 60),
+                "duration_min": round(int(route["duration"].rstrip("s")) / 60),
                 "distance_m": route["distanceMeters"],
                 "steps": steps,
                 "encoded_polyline": encoded_poly,
@@ -285,7 +349,9 @@ class GoogleRouteGateway:
     @staticmethod
     def build_maps_link(origin, destination, mode):
         travelmode = {
-            "walk": "walking", "drive": "driving", "transit": "transit",
+            "walk": "walking",
+            "drive": "driving",
+            "transit": "transit",
         }[mode]
         return (
             "https://www.google.com/maps/dir/?api=1"

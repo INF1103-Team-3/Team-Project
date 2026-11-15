@@ -1,7 +1,11 @@
 """Rating-first BRNS result sorting strategy."""
 
-from BRNS.classes.logic.sorting.contracts.base_result_sorter import BaseResultSorter
-from BRNS.classes.logic.sorting.contracts.result_sorter_interface import ResultSorterInterface
+from BRNS.classes.logic.sorting.contracts.base_result_sorter import (
+    BaseResultSorter,
+)
+from BRNS.classes.logic.sorting.contracts.result_sorter_interface import (
+    ResultSorterInterface,
+)
 
 
 class RatingResultSorter(BaseResultSorter, ResultSorterInterface):
@@ -14,6 +18,10 @@ class RatingResultSorter(BaseResultSorter, ResultSorterInterface):
     def key(self, item, mode):
         rating, reviews, distance, name = self._facts(item, mode)
         return (
-            rating is None, -(rating or 0), -reviews,
-            distance is None, distance or 0, name,
+            rating is None,
+            -(rating or 0),
+            -reviews,
+            distance is None,
+            distance or 0,
+            name,
         )

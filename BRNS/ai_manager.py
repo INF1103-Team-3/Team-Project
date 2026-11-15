@@ -1,6 +1,10 @@
 """AI layer — prompt building, API call, JSON parsing, schema validation.
-Multi-provider chain (OpenRouter + direct Gemini) with automatic fallback.
-Zero domain logic here. Never crashes: returns (ok, result_or_error, model_used_or_None)."""
+Multi-provider chain (OpenRouter + direct Gemini) with automatic
+fallback.
+Zero domain logic here. Never crashes: returns (ok, result_or_error,
+model_used_or_None).
+"""
+
 from contextvars import ContextVar
 import json
 import re
@@ -13,48 +17,76 @@ import requests
 from BRNS import config, logic_manager
 from BRNS.classes.ai.ai_manager import AIManager
 from BRNS.classes.ai.fallback.ai_provider_router import AIProviderRouter
-from BRNS.classes.ai.fallback.ai_provider_factory_registry import AIProviderFactoryRegistry
-from BRNS.classes.ai.providers.clients.gemini_ai_provider import GeminiAIProvider
+from BRNS.classes.ai.fallback.ai_provider_factory_registry import (
+    AIProviderFactoryRegistry,
+)
+from BRNS.classes.ai.providers.clients.gemini_ai_provider import (
+    GeminiAIProvider,
+)
 from BRNS.classes.ai.providers.clients.groq_ai_provider import GroqAIProvider
-from BRNS.classes.ai.providers.clients.openrouter_ai_provider import OpenRouterAIProvider
-from BRNS.classes.ai.providers.clients.unsupported_ai_provider import UnsupportedAIProvider
+from BRNS.classes.ai.providers.clients.openrouter_ai_provider import (
+    OpenRouterAIProvider,
+)
+from BRNS.classes.ai.providers.clients.unsupported_ai_provider import (
+    UnsupportedAIProvider,
+)
 from common import debug_log as log
 
-SYSTEM_PROMPT = """You convert a user's food request into strict JSON.
+SYSTEM_PROMPT = (
+    "You convert a user's food request into strict JSON.\n"
+    "\n"
+    "Return ONLY a JSON object with exactly these keys:\n"
+    "{\n"
+    '  "cuisine": string,\n'
+    '  "dietary": string,\n'
+    '  "budget_band": "any" | "inexpensive" | "moderate" | "expensive" | '
+    '"very_expensive",\n'
+    '  "budget_min": number or null,\n'
+    '  "budget_max": number or null,\n'
+    '  "min_rating": number (1-5) or null,\n'
+    '  "max_walk_minutes": number or null,\n'
+    '  "max_drive_km": number or null,\n'
+    '  "eat_time": string,\n'
+    '  "free_text_notes": string\n'
+    "}\n"
+    "\n"
+    "Rules:\n"
+    '- "dietary" must be one of: "none", "halal", "vegetarian", "vegan".\n'
+    "- Budget: if the record already contains budget_band / budget_min / "
+    "budget_max\n"
+    "  (chosen from a menu), copy them through exactly.\n"
+    '  Free-text dollars: "$10" or "under 10" -> budget_max 10, budget_band '
+    '"any".\n'
+    '  "between 5 and 15" or "5 to 15 dollars" -> budget_min 5, budget_max '
+    '15, budget_band "any".\n'
+    '  "cheap"/"budget"/"affordable" with no dollars -> budget_band '
+    '"inexpensive".\n'
+    '  No budget mention -> budget_band "any", budget_min null, budget_max '
+    "null.\n"
+    '- "min_rating": "well reviewed" -> 4.0; "top rated" -> 4.5; no mention '
+    "-> null.\n"
+    '- "max_drive_km": copy from the record\'s max_drive_km (driving mode); '
+    "null otherwise.\n"
+    '- "max_walk_minutes": copy from the record\'s max_walk_minutes (walking '
+    "mode); null otherwise.\n"
+    '- Normalise: "ten minutes" -> 10. Use null when unmentioned\n'
+    '  ("any" cuisine, "now" eat_time if unspecified).\n'
+    '- Keep extra wishes (spicy, quiet, etc.) in "free_text_notes".\n'
+    "- Output JSON only. No explanations, no markdown fences."
+)
 
-Return ONLY a JSON object with exactly these keys:
-{
-  "cuisine": string,
-  "dietary": string,
-  "budget_band": "any" | "inexpensive" | "moderate" | "expensive" | "very_expensive",
-  "budget_min": number or null,
-  "budget_max": number or null,
-  "min_rating": number (1-5) or null,
-  "max_walk_minutes": number or null,
-  "max_drive_km": number or null,
-  "eat_time": string,
-  "free_text_notes": string
-}
-
-Rules:
-- "dietary" must be one of: "none", "halal", "vegetarian", "vegan".
-- Budget: if the record already contains budget_band / budget_min / budget_max
-  (chosen from a menu), copy them through exactly.
-  Free-text dollars: "$10" or "under 10" -> budget_max 10, budget_band "any".
-  "between 5 and 15" or "5 to 15 dollars" -> budget_min 5, budget_max 15, budget_band "any".
-  "cheap"/"budget"/"affordable" with no dollars -> budget_band "inexpensive".
-  No budget mention -> budget_band "any", budget_min null, budget_max null.
-- "min_rating": "well reviewed" -> 4.0; "top rated" -> 4.5; no mention -> null.
-- "max_drive_km": copy from the record's max_drive_km (driving mode); null otherwise.
-- "max_walk_minutes": copy from the record's max_walk_minutes (walking mode); null otherwise.
-- Normalise: "ten minutes" -> 10. Use null when unmentioned
-  ("any" cuisine, "now" eat_time if unspecified).
-- Keep extra wishes (spicy, quiet, etc.) in "free_text_notes".
-- Output JSON only. No explanations, no markdown fences."""
-
-REQUIRED_KEYS = ["cuisine", "dietary", "budget_band",
-                 "budget_min", "budget_max", "min_rating",
-                 "max_walk_minutes", "max_drive_km", "eat_time", "free_text_notes"]
+REQUIRED_KEYS = [
+    "cuisine",
+    "dietary",
+    "budget_band",
+    "budget_min",
+    "budget_max",
+    "min_rating",
+    "max_walk_minutes",
+    "max_drive_km",
+    "eat_time",
+    "free_text_notes",
+]
 VALID_BANDS = ("any", "inexpensive", "moderate", "expensive", "very_expensive")
 _ACTIVE_CHAIN_DEADLINE = ContextVar("brns_ai_deadline", default=None)
 _LAST_USED_MODEL = ContextVar("brns_ai_model", default=None)
@@ -80,8 +112,12 @@ def manager():
     global _MANAGER
     if _MANAGER is None:
         _MANAGER = AIManager(
-            config, _recommend_candidates, _recommendation_deadline, _recommend_prepared,
-            _provider_registry())
+            config,
+            _recommend_candidates,
+            _recommendation_deadline,
+            _recommend_prepared,
+            _provider_registry(),
+        )
     return _MANAGER
 
 
@@ -92,7 +128,7 @@ def validate_chain():
         model = entry.get("model", "")
         if "<" in model or ">" in model or " " in model:
             problems.append(f"{entry.get('provider')}/{model}")
-    return problems   # empty list = healthy
+    return problems  # empty list = healthy
 
 
 def build_prompt(user_record):
@@ -109,24 +145,36 @@ def parse_json_reply(content):
     end = text.rfind("}")
     if start == -1 or end == -1 or end <= start:
         raise ValueError("no JSON object found in AI reply")
-    return json.loads(text[start:end + 1])
+    return json.loads(text[start: end + 1])
 
 
 def validate_ai_output(data):
-    """Schema validation required by the spec. Returns (True, data) or (False, error)."""
+    """Schema validation required by the spec. Returns (True, data) or
+    (False, error).
+    """
     if not isinstance(data, dict):
         return False, "AI output is not a JSON object"
     for key in REQUIRED_KEYS:
         if key not in data:
             return False, f"AI output missing required key: {key}"
-    for key in ("max_walk_minutes", "max_drive_km", "min_rating",
-                "budget_min", "budget_max"):
+    for key in (
+        "max_walk_minutes",
+        "max_drive_km",
+        "min_rating",
+        "budget_min",
+        "budget_max",
+    ):
         if data[key] is not None and not isinstance(data[key], (int, float)):
             return False, f"AI output field '{key}' must be a number or null"
-    if data.get("min_rating") is not None and not (1 <= data["min_rating"] <= 5):
+    if data.get("min_rating") is not None and not (
+        1 <= data["min_rating"] <= 5
+    ):
         return False, "AI output field 'min_rating' must be between 1 and 5"
-    if data.get("budget_min") is not None and data.get("budget_max") is not None \
-            and data["budget_min"] > data["budget_max"]:
+    if (
+        data.get("budget_min") is not None
+        and data.get("budget_max") is not None
+        and data["budget_min"] > data["budget_max"]
+    ):
         return False, "AI output budget_min exceeds budget_max"
     if data.get("budget_band") not in VALID_BANDS:
         return False, "AI output field 'budget_band' has an invalid value"
@@ -152,9 +200,11 @@ def _log_ai_event(context, detail, level="WARNING"):
     global _CURRENT_ACTIVE_MODEL
     if isinstance(detail, str):
         if detail.startswith("Trying ") and detail.endswith("."):
-            _CURRENT_ACTIVE_MODEL = detail[len("Trying "):-1].strip()
+            _CURRENT_ACTIVE_MODEL = detail[len("Trying "): -1].strip()
         elif detail.startswith("Accepted ") and detail.endswith(" response."):
-            _CURRENT_ACTIVE_MODEL = detail[len("Accepted "):-len(" response.")].strip()
+            _CURRENT_ACTIVE_MODEL = detail[
+                len("Accepted "): -len(" response.")
+            ].strip()
     log.debug_log(detail, level, f"BRNS.ai_manager.{context}")
 
 
@@ -243,15 +293,26 @@ def _post(url, **kwargs):
                 if chunk:
                     chunks.append(chunk)
                 if timed_out.is_set() or time.monotonic() >= wall_deadline:
-                    raise requests.Timeout("AI provider exceeded its total deadline")
+                    raise requests.Timeout(
+                        "AI provider exceeded its total deadline"
+                    )
             if timed_out.is_set() or time.monotonic() >= wall_deadline:
-                raise requests.Timeout("AI provider exceeded its total deadline")
+                raise requests.Timeout(
+                    "AI provider exceeded its total deadline"
+                )
             resp._content = b"".join(chunks)
             resp._content_consumed = True
             return resp
-        except (requests.RequestException, AttributeError, OSError, ValueError):
+        except (
+            requests.RequestException,
+            AttributeError,
+            OSError,
+            ValueError,
+        ):
             if timed_out.is_set():
-                raise requests.Timeout("AI provider exceeded its total deadline")
+                raise requests.Timeout(
+                    "AI provider exceeded its total deadline"
+                )
             raise
         finally:
             timer.cancel()
@@ -283,10 +344,11 @@ def _provider_registry():
         "openrouter",
         lambda model: OpenRouterAIProvider(
             model,
-            lambda system_prompt, text, selected=model:
-            _track_provider_call(
-                "openrouter", selected,
-                lambda: _call_openrouter(selected, system_prompt, text)),
+            lambda system_prompt, text, selected=model: _track_provider_call(
+                "openrouter",
+                selected,
+                lambda: _call_openrouter(selected, system_prompt, text),
+            ),
         ),
         enabled=lambda settings: bool(settings.OPENROUTER_API_KEY),
     )
@@ -294,10 +356,11 @@ def _provider_registry():
         "gemini",
         lambda model: GeminiAIProvider(
             model,
-            lambda system_prompt, text, selected=model:
-            _track_provider_call(
-                "gemini", selected,
-                lambda: _call_gemini(selected, system_prompt, text)),
+            lambda system_prompt, text, selected=model: _track_provider_call(
+                "gemini",
+                selected,
+                lambda: _call_gemini(selected, system_prompt, text),
+            ),
         ),
         enabled=lambda settings: bool(settings.GEMINI_API_KEY),
     )
@@ -305,10 +368,11 @@ def _provider_registry():
         "groq",
         lambda model: GroqAIProvider(
             model,
-            lambda system_prompt, text, selected=model:
-            _track_provider_call(
-                "groq", selected,
-                lambda: _call_groq(selected, system_prompt, text)),
+            lambda system_prompt, text, selected=model: _track_provider_call(
+                "groq",
+                selected,
+                lambda: _call_groq(selected, system_prompt, text),
+            ),
         ),
         enabled=lambda settings: bool(settings.GROQ_API_KEY),
     )
@@ -323,8 +387,7 @@ def _provider_objects(configured_only=False):
         if configured_only and not registry.is_configured(provider, config):
             continue
         configured = registry.create(provider, model)
-        providers.append(
-            configured or UnsupportedAIProvider(provider, model))
+        providers.append(configured or UnsupportedAIProvider(provider, model))
     return providers
 
 
@@ -358,58 +421,96 @@ def validate_response(data):
 
 
 REASON_CODES = {
-    "cuisine_match", "within_budget", "within_route", "well_rated",
-    "vegetarian_options", "halal_hint_unofficial", "spicy_options",
+    "cuisine_match",
+    "within_budget",
+    "within_route",
+    "well_rated",
+    "vegetarian_options",
+    "halal_hint_unofficial",
+    "spicy_options",
 }
 
-RECOMMEND_SYSTEM_PROMPT = """Rank every supplied restaurant candidate for the
-validated search request using Pure Best-Fit Within Limit ranking. Return only
-JSON in this exact shape:
-{"recommendations":[{"id":0,"reason_codes":["cuisine_match"]}]}.
-Include every candidate ID exactly once, most suitable first. Use only these
-reason codes when supported by the supplied facts: cuisine_match,
-within_budget, within_route, well_rated, vegetarian_options,
-halal_hint_unofficial, spicy_options. Use [] if no code is supported.
-Treat other_preferences as the strongest part of the search. Google text
-search already uses their complete wording, so use that wording when ordering
-candidates. google_search_rank preserves Google's text-query relevance for
-free-text wishes such as spicy food; prefer that evidence for requests not
-covered by another candidate fact. Words such as only, must, exclusively, minimum, and at least mark
-hard constraints. A bare rating such as "4.5 stars" is a soft preference.
-When hard_preferences is true, prioritize the hard request ahead of budget
-and travel because those two limits are relaxed by Logic.
-minimum_rating is a hard minimum Google star rating extracted from the user's
-other preferences. Put candidates below it or without a rating after those
-that meet it. The next layer will enforce the minimum.
-For candidates that satisfy hard requirements and the travel limit (anywhere
-inside 0..max limit regardless of 5 mins vs 25 mins), jointly optimize budget
-fit (`budget_fit_score`, `estimated_price`, `price_end`, `price_level`) AND
-rating quality (`confidence_adjusted_rating`):
-- budget_fit_score (0.0-1.0) measures how well estimated_price fits the user's
-  exact budget intent: e.g. for SGD 50 (Casual Dining), favor ~SGD 30-50 sit-down
-  spots over SGD 8 hawker stalls; for SGD >100 ($100+ Fine Dine), strongly favor
-  expensive/very_expensive ($80+) venues over cheap cafes; for <= SGD 15, favor
-  inexpensive budget spots.
-- Weigh review count alongside star rating via confidence_adjusted_rating (e.g.,
-  4.3 stars from 1,920 reviews beats 4.5 stars from 75 reviews). A missing
-  review count provides weak evidence.
-- Use shorter travel time/distance ONLY as a gentle tie-breaker when budget fit
-  and confidence_adjusted_rating are nearly tied.
-When previous_restaurants is supplied, prefer suitable candidates not named
-there over similarly suitable candidates already returned. Include every ID.
-Use within_budget when avg_price <= budget_per_person, price_end <= budget,
-or estimated_price (from price range midpoint or price_level tier) aligns with
-budget_per_person (including SGD >100 fine-dining tier). price_start alone
-without price_end or price_level does not prove a meal fits the budget.
-Use vegetarian_options only when vegetarian is requested and listed in the
-candidate dietary_requirements. Use halal_hint_unofficial only when halal is
-requested and the candidate has halal_hint_unofficial true.
-Use cuisine_match only when the requested cuisine is in candidate cuisines.
-When the requested cuisine is none, never use cuisine_match.
-Use within_route only for a verified route within the chosen distance or
-journey-time limit. Check the selected limit field, not the other route metric.
-Do not invent restaurant facts or claim official halal certification.
-The next layer will verify every reason and enforce hard requirements."""
+RECOMMEND_SYSTEM_PROMPT = (
+    "Rank every supplied restaurant candidate for the\n"
+    "validated search request using Pure Best-Fit Within Limit ranking. "
+    "Return only\n"
+    "JSON in this exact shape:\n"
+    '{"recommendations":[{"id":0,"reason_codes":["cuisine_match"]}]}.\n'
+    "Include every candidate ID exactly once, most suitable first. Use only "
+    "these\n"
+    "reason codes when supported by the supplied facts: cuisine_match,\n"
+    "within_budget, within_route, well_rated, vegetarian_options,\n"
+    "halal_hint_unofficial, spicy_options. Use [] if no code is supported.\n"
+    "Treat other_preferences as the strongest part of the search. Google "
+    "text\n"
+    "search already uses their complete wording, so use that wording when "
+    "ordering\n"
+    "candidates. google_search_rank preserves Google's text-query relevance "
+    "for\n"
+    "free-text wishes such as spicy food; prefer that evidence for requests "
+    "not\n"
+    "covered by another candidate fact. Words such as only, must, "
+    "exclusively, minimum, and at least mark\n"
+    'hard constraints. A bare rating such as "4.5 stars" is a soft '
+    "preference.\n"
+    "When hard_preferences is true, prioritize the hard request ahead of "
+    "budget\n"
+    "and travel because those two limits are relaxed by Logic.\n"
+    "minimum_rating is a hard minimum Google star rating extracted from the "
+    "user's\n"
+    "other preferences. Put candidates below it or without a rating after "
+    "those\n"
+    "that meet it. The next layer will enforce the minimum.\n"
+    "For candidates that satisfy hard requirements and the travel limit "
+    "(anywhere\n"
+    "inside 0..max limit regardless of 5 mins vs 25 mins), jointly optimize "
+    "budget\n"
+    "fit (`budget_fit_score`, `estimated_price`, `price_end`, `price_level`) "
+    "AND\n"
+    "rating quality (`confidence_adjusted_rating`):\n"
+    "- budget_fit_score (0.0-1.0) measures how well estimated_price fits the "
+    "user's\n"
+    "  exact budget intent: e.g. for SGD 50 (Casual Dining), favor ~SGD "
+    "30-50 sit-down\n"
+    "  spots over SGD 8 hawker stalls; for SGD >100 ($100+ Fine Dine), "
+    "strongly favor\n"
+    "  expensive/very_expensive ($80+) venues over cheap cafes; for <= SGD "
+    "15, favor\n"
+    "  inexpensive budget spots.\n"
+    "- Weigh review count alongside star rating via "
+    "confidence_adjusted_rating (e.g.,\n"
+    "  4.3 stars from 1,920 reviews beats 4.5 stars from 75 reviews). A "
+    "missing\n"
+    "  review count provides weak evidence.\n"
+    "- Use shorter travel time/distance ONLY as a gentle tie-breaker when "
+    "budget fit\n"
+    "  and confidence_adjusted_rating are nearly tied.\n"
+    "When previous_restaurants is supplied, prefer suitable candidates not "
+    "named\n"
+    "there over similarly suitable candidates already returned. Include "
+    "every ID.\n"
+    "Use within_budget when avg_price <= budget_per_person, price_end <= "
+    "budget,\n"
+    "or estimated_price (from price range midpoint or price_level tier) "
+    "aligns with\n"
+    "budget_per_person (including SGD >100 fine-dining tier). price_start "
+    "alone\n"
+    "without price_end or price_level does not prove a meal fits the budget.\n"
+    "Use vegetarian_options only when vegetarian is requested and listed in "
+    "the\n"
+    "candidate dietary_requirements. Use halal_hint_unofficial only when "
+    "halal is\n"
+    "requested and the candidate has halal_hint_unofficial true.\n"
+    "Use cuisine_match only when the requested cuisine is in candidate "
+    "cuisines.\n"
+    "When the requested cuisine is none, never use cuisine_match.\n"
+    "Use within_route only for a verified route within the chosen distance "
+    "or\n"
+    "journey-time limit. Check the selected limit field, not the other route "
+    "metric.\n"
+    "Do not invent restaurant facts or claim official halal certification.\n"
+    "The next layer will verify every reason and enforce hard requirements."
+)
 
 
 def has_configured_provider():
@@ -433,53 +534,61 @@ def _validate_recommendation_output(reply, candidate_count):
             and isinstance(item["reason_codes"], list)
             and all(
                 isinstance(code, str) and code in REASON_CODES
-                for code in item["reason_codes"])
+                for code in item["reason_codes"]
+            )
             and len(item["reason_codes"]) == len(set(item["reason_codes"]))
-            for item in recommendations)
+            for item in recommendations
+        )
         and len({item["id"] for item in recommendations}) == candidate_count
     )
-    return (
-        (True, recommendations)
-        if valid else (False, "invalid schema"))
+    return (True, recommendations) if valid else (False, "invalid schema")
 
 
 def _recommend_candidates(request, candidates, previous_restaurants=()):
-    """Legacy request API; prepare domain facts outside the AI implementation."""
+    "Legacy request API; prepare domain facts outside the AI implementation."
     if not candidates:
         return None
     context = logic_manager.manager().recommendation_context(
-        request, candidates, previous_restaurants)
+        request, candidates, previous_restaurants
+    )
     return _recommend_prepared(context, len(candidates))
 
 
 def _recommend_prepared(context, candidate_count):
-    """Send prepared facts and validate model output without evaluating rules."""
-    _log_ai_event("recommend_candidates",
-                  f"Preparing {candidate_count} candidate summaries.", "INFO")
-    _log_ai_event("recommend_candidates", "Candidate facts sent to model: "
-                  + json.dumps(context["candidates"], ensure_ascii=False,
-                               separators=(",", ":")), "DEBUG")
+    "Send prepared facts and validate model output without evaluating rules."
+    _log_ai_event(
+        "recommend_candidates",
+        f"Preparing {candidate_count} candidate summaries.",
+        "INFO",
+    )
+    _log_ai_event(
+        "recommend_candidates",
+        "Candidate facts sent to model: "
+        + json.dumps(
+            context["candidates"], ensure_ascii=False, separators=(",", ":")
+        ),
+        "DEBUG",
+    )
     user_text = json.dumps(context, separators=(",", ":"))
     router = AIProviderRouter(
         _provider_objects(configured_only=True),
         parse_json_reply,
-        lambda reply: _validate_recommendation_output(
-            reply, candidate_count),
+        lambda reply: _validate_recommendation_output(reply, candidate_count),
         _safe_failure,
         _log_ai_event,
         time.sleep,
     )
-    ok, result, model_used = router.route(
-        RECOMMEND_SYSTEM_PROMPT, user_text)
+    ok, result, model_used = router.route(RECOMMEND_SYSTEM_PROMPT, user_text)
     if ok:
         _LAST_USED_MODEL.set(model_used)
         _log_ai_event(
-            "recommend_candidates",
-            f"Accepted {model_used} response.", "INFO")
+            "recommend_candidates", f"Accepted {model_used} response.", "INFO"
+        )
         _log_ai_event(
             "recommend_candidates",
-            "AI recommendation: " + json.dumps(
-                result, separators=(",", ":")), "DEBUG")
+            "AI recommendation: " + json.dumps(result, separators=(",", ":")),
+            "DEBUG",
+        )
         return result
     _log_ai_event("recommend_candidates", "No model returned a valid order.")
     return None
@@ -488,7 +597,8 @@ def _recommend_prepared(context, candidate_count):
 def recommend_candidates(request, candidates, previous_restaurants=()):
     """Rank candidates while enforcing one deadline across all providers."""
     return manager().recommend_candidates(
-        request, candidates, previous_restaurants)
+        request, candidates, previous_restaurants
+    )
 
 
 def last_used_model():
@@ -504,7 +614,9 @@ def current_active_model():
         model = entry.get("model", "")
         if provider == "gemini" and getattr(config, "GEMINI_API_KEY", ""):
             return f"{provider}/{model}"
-        if provider == "openrouter" and getattr(config, "OPENROUTER_API_KEY", ""):
+        if provider == "openrouter" and getattr(
+            config, "OPENROUTER_API_KEY", ""
+        ):
             return f"{provider}/{model}"
         if provider == "groq" and getattr(config, "GROQ_API_KEY", ""):
             return f"{provider}/{model}"
@@ -512,5 +624,10 @@ def current_active_model():
 
 
 def _transport():
-    from BRNS.classes.ai.providers.clients.provider_transport import ProviderTransport
-    return ProviderTransport(config, lambda *args, **kwargs: _post(*args, **kwargs))
+    from BRNS.classes.ai.providers.clients.provider_transport import (
+        ProviderTransport,
+    )
+
+    return ProviderTransport(
+        config, lambda *args, **kwargs: _post(*args, **kwargs)
+    )

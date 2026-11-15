@@ -72,7 +72,7 @@ class BISWebIOInterface(ABC):
 
     @abstractmethod
     def place_photo(self, place_id):
-        """Return cached or freshly fetched thumbnail bytes for one place ID."""
+        "Return cached or freshly fetched thumbnail bytes for one place ID."
 
     @abstractmethod
     def favorites(self, authorization):

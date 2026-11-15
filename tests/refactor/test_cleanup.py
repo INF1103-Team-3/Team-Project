@@ -10,9 +10,9 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / "BIS")]
 
-from BIS.classes.logic.chat.chat_filter_policy import ChatFilterPolicy
-from BRNS import io_manager
-from BRNS.classes.data.stores.json.json_recommendation_store import (
+from BIS.classes.logic.chat.chat_filter_policy import ChatFilterPolicy  # noqa: E402
+from BRNS import io_manager  # noqa: E402
+from BRNS.classes.data.stores.json.json_recommendation_store import (  # noqa: E402
     JsonRecommendationStore,
 )
 
@@ -30,11 +30,19 @@ class CleanupContractTests(unittest.TestCase):
             application_run=lambda: calls.append("selected handler"),
         )
         server = BRCHTTPServer(
-            port=0, handler=handler,
-            server_factory=lambda _address, _handler: SimpleNamespace())
-        with patch.dict("os.environ", {"BRC_AUTO_WARM": "1"}), patch(
+            port=0,
+            handler=handler,
+            server_factory=lambda _address, _handler: SimpleNamespace(),
+        )
+        with (
+            patch.dict("os.environ", {"BRC_AUTO_WARM": "1"}),
+            patch(
                 "BRC.classes.io.http.server.brc_http_server.threading.Thread",
-                side_effect=lambda target, daemon: SimpleNamespace(start=target)):
+                side_effect=lambda target, daemon: SimpleNamespace(
+                    start=target
+                ),
+            ),
+        ):
             server._start_background_warm()
         self.assertEqual(calls, ["selected handler"])
 
@@ -45,21 +53,30 @@ class CleanupContractTests(unittest.TestCase):
 
         original = {"halal_hint": True, "dietary_requirements": []}
         for certification, status, expected in (
-                ("official", "not_verified", False),
-                ("none", "verified", False),
-                ("official", "verified", True)):
+            ("official", "not_verified", False),
+            ("none", "verified", False),
+            ("official", "verified", True),
+        ):
             candidate = HalalEvidencePolicy.initial_candidate(original)
-            actual = HalalEvidencePolicy.apply(candidate, {
-                "halal_certification": certification,
-                "muis_check": {"status": status},
-            })
+            actual = HalalEvidencePolicy.apply(
+                candidate,
+                {
+                    "halal_certification": certification,
+                    "muis_check": {"status": status},
+                },
+            )
             self.assertEqual(actual, expected)
-            self.assertEqual(candidate["halal_certification"],
-                             "official" if expected else "unofficial")
-        self.assertEqual(original, {
-            "halal_hint": True, "dietary_requirements": []})
+            self.assertEqual(
+                candidate["halal_certification"],
+                "official" if expected else "unofficial",
+            )
+        self.assertEqual(
+            original, {"halal_hint": True, "dietary_requirements": []}
+        )
 
-    def test_bis_ai_uses_injected_chat_capability_without_module_callback(self):
+    def test_bis_ai_uses_injected_chat_capability_without_module_callback(
+        self,
+    ):
         from types import SimpleNamespace
         from BIS.classes.ai.ai_manager import AIManager
 
@@ -68,10 +85,13 @@ class CleanupContractTests(unittest.TestCase):
             review_profile_wishes=lambda *_args: ["quiet"],
         )
         ai = AIManager(None, None, None, None, interpreter=interpreter)
-        with patch("BIS.ai_manager.interpret_chat_turn",
-                   side_effect=AssertionError("reverse dependency")):
-            self.assertEqual(ai.chat_turn("hi", {}, [], {}, {}),
-                             {"intent": "search"})
+        with patch(
+            "BIS.ai_manager.interpret_chat_turn",
+            side_effect=AssertionError("reverse dependency"),
+        ):
+            self.assertEqual(
+                ai.chat_turn("hi", {}, [], {}, {}), {"intent": "search"}
+            )
         self.assertEqual(ai.review_profile_wishes(["quiet"], {}), ["quiet"])
 
     def test_brns_provider_availability_extends_through_registry(self):
@@ -83,8 +103,11 @@ class CleanupContractTests(unittest.TestCase):
         )
 
         registry = AIProviderFactoryRegistry()
-        registry.register("fixture", lambda _model: object(),
-                          enabled=lambda settings: settings.enabled)
+        registry.register(
+            "fixture",
+            lambda _model: object(),
+            enabled=lambda settings: settings.enabled,
+        )
         config = SimpleNamespace(
             MODEL_CHAIN=[{"provider": "fixture", "model": "sample"}],
             enabled=True,
@@ -99,28 +122,42 @@ class CleanupContractTests(unittest.TestCase):
         from BIS.sources.profile_schema import empty_preferences
 
         logic = LogicManager()
-        user = {"userID": "fixture", "email": "test@example.com",
-                "email_verified": False, "username": "Tester",
-                "preferences": empty_preferences()}
+        user = {
+            "userID": "fixture",
+            "email": "test@example.com",
+            "email_verified": False,
+            "username": "Tester",
+            "preferences": empty_preferences(),
+        }
         with self.assertRaisesRegex(ValueError, "Verify your email"):
             logic.prepare_preferences_save(
-                user, user["preferences"], {"smtp_bypass": False})
+                user, user["preferences"], {"smtp_bypass": False}
+            )
         with self.assertRaisesRegex(PermissionError, "Verify your email"):
             logic.prepare_profile_save(user, {}, smtp_bypass=False)
-        self.assertEqual(logic.prepare_preferences_save(
-            user, user["preferences"], {"smtp_bypass": True}),
-            user["preferences"])
+        self.assertEqual(
+            logic.prepare_preferences_save(
+                user, user["preferences"], {"smtp_bypass": True}
+            ),
+            user["preferences"],
+        )
 
     def test_discovery_plan_preserves_fallback_sequence_without_http(self):
-        plan = io_manager.discovery_policy().profile_searches({
-            "mode": "walk", "max_distance_km": 2,
-            "cuisine": "japanese", "budget_per_person": 50,
-            "other_preferences": [],
-        })
+        plan = io_manager.discovery_policy().profile_searches(
+            {
+                "mode": "walk",
+                "max_distance_km": 2,
+                "cuisine": "japanese",
+                "budget_per_person": 50,
+                "other_preferences": [],
+            }
+        )
         args, options = next(plan)
         self.assertEqual(args[0], "japanese food")
-        self.assertEqual(options["price_levels"],
-                         ["PRICE_LEVEL_MODERATE", "PRICE_LEVEL_EXPENSIVE"])
+        self.assertEqual(
+            options["price_levels"],
+            ["PRICE_LEVEL_MODERATE", "PRICE_LEVEL_EXPENSIVE"],
+        )
         args, options = plan.send(([], True))
         self.assertEqual(args[0], "japanese restaurants")
         args, options = plan.send([])
@@ -143,11 +180,11 @@ class CleanupContractTests(unittest.TestCase):
     def test_wrong_restaurant_schema_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "places.json"
-            path.write_text('{}')
+            path.write_text("{}")
             store = JsonRecommendationStore(path, path.parent / "history.json")
             with self.assertRaisesRegex(RuntimeError, "JSON list"):
                 store.save_restaurants([])
-            self.assertEqual(path.read_text(), '{}')
+            self.assertEqual(path.read_text(), "{}")
 
     def test_atomic_replace_failure_retains_history_and_cleans_temporary(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -156,21 +193,25 @@ class CleanupContractTests(unittest.TestCase):
             path.write_text(original)
             store = JsonRecommendationStore(path.parent / "places.json", path)
             with patch(
-                    "BRNS.classes.data.stores.contracts.base_json_store."
-                    "os.replace", side_effect=OSError("fixture failure")):
+                "BRNS.classes.data.stores.contracts.base_json_store."
+                "os.replace",
+                side_effect=OSError("fixture failure"),
+            ):
                 self.assertFalse(store.save_history({"search": "new"}))
             self.assertEqual(path.read_text(), original)
             self.assertEqual(list(path.parent.glob("*.tmp")), [])
 
     def test_chat_filters_keep_time_precedence_and_normalize_lists(self):
-        result = ChatFilterPolicy.normalize_filters({
-            "locations": ["bugis", "bugis"],
-            "mode": "walk",
-            "max_travel_minutes": 20,
-            "max_distance_km": 2,
-            "budget_per_person": 25,
-            "dietary_requirements": ["HALAL", "halal"],
-        })
+        result = ChatFilterPolicy.normalize_filters(
+            {
+                "locations": ["bugis", "bugis"],
+                "mode": "walk",
+                "max_travel_minutes": 20,
+                "max_distance_km": 2,
+                "budget_per_person": 25,
+                "dietary_requirements": ["HALAL", "halal"],
+            }
+        )
         self.assertEqual(result["locations"], ["Bugis"])
         self.assertEqual(result["max_travel_minutes"], 20)
         self.assertIsNone(result["max_distance_km"])
@@ -192,8 +233,7 @@ class CleanupContractTests(unittest.TestCase):
                 "disliked_cuisines": ["halal", "chinese"],
             },
         }
-        result = ChatFilterPolicy.reconcile_ai_updates(
-            deterministic, ai, {})
+        result = ChatFilterPolicy.reconcile_ai_updates(deterministic, ai, {})
         self.assertEqual(result["updates"]["dietary_action"], "remove")
         self.assertEqual(result["updates"]["disliked_cuisines"], ["chinese"])
         self.assertEqual(ai["updates"]["dietary_action"], "add")
@@ -201,25 +241,31 @@ class CleanupContractTests(unittest.TestCase):
     def test_discovery_preserves_zone_quota_and_order(self):
         places = [
             {"name": f"{zone}{index}", "lat": latitude, "lng": 103.8}
-            for zone, latitude in (("Near", 1.31), ("Mid", 1.35),
-                                   ("Outer", 1.38))
+            for zone, latitude in (
+                ("Near", 1.31),
+                ("Mid", 1.35),
+                ("Outer", 1.38),
+            )
             for index in range(10)
         ]
-        result = io_manager._sample_zone_slice(
-            places, (1.3, 103.8), 10000, 20)
-        expected = ([f"Near{i}" for i in range(7)]
-                    + [f"Mid{i}" for i in range(7)]
-                    + [f"Outer{i}" for i in range(6)])
+        result = io_manager._sample_zone_slice(places, (1.3, 103.8), 10000, 20)
+        expected = (
+            [f"Near{i}" for i in range(7)]
+            + [f"Mid{i}" for i in range(7)]
+            + [f"Outer{i}" for i in range(6)]
+        )
         self.assertEqual([row["name"] for row in result], expected)
 
     def test_json_history_appends_in_order_across_store_instances(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder)
             store = JsonRecommendationStore(
-                path / "restaurants.json", path / "history.json")
+                path / "restaurants.json", path / "history.json"
+            )
             self.assertTrue(store.save_history({"search": 1}))
             reloaded = JsonRecommendationStore(
-                path / "restaurants.json", path / "history.json")
+                path / "restaurants.json", path / "history.json"
+            )
             self.assertTrue(reloaded.save_history({"search": 2}))
             self.assertEqual(
                 json.loads((path / "history.json").read_text()),

@@ -1,4 +1,16 @@
-"""Conversational BIS assistant: parses chat turns into synced search and profile actions."""
+"""Conversational BIS assistant: parses chat turns into synced search and
+profile actions.
+"""
+
+from BIS.classes.logic.chat.chat_filter_policy import ChatFilterPolicy
+from BIS.classes.logic.chat.deterministic_chat_parser import (
+    DeterministicChatParser,
+)
+from BIS.classes.io.web.chat.chat_presenter import (
+    ChatPresenter,
+    _ONBOARDING_QUESTIONS,
+)
+
 from copy import deepcopy
 import re
 
@@ -13,9 +25,16 @@ from BIS.sources.profile_schema import (
     validate_english_preferences,
 )
 
-def validate_special_preferences(items, ai=None, config=None, field_label="Special requests"):
-    """Validate deterministic English wording and optional AI sense for special wishes."""
-    cleaned = [normalize_wish_text(w) for w in (items or []) if normalize_wish_text(w)]
+
+def validate_special_preferences(
+    items, ai=None, config=None, field_label="Special requests"
+):
+    """Validate deterministic English wording and optional AI sense for
+    special wishes.
+    """
+    cleaned = [
+        normalize_wish_text(w) for w in (items or []) if normalize_wish_text(w)
+    ]
     if not cleaned:
         return []
     cleaned = validate_english_preferences(cleaned, field_label=field_label)
@@ -35,33 +54,41 @@ def validate_special_preferences(items, ai=None, config=None, field_label="Speci
             pass
         except ValueError as err:
             msg = str(err).strip()
-            if msg.startswith("Default special wishes") and field_label != "Default special wishes":
+            if (
+                msg.startswith("Default special wishes")
+                and field_label != "Default special wishes"
+            ):
                 msg = field_label + msg[len("Default special wishes"):]
             raise ValueError(
-                msg or f"{field_label} must be proper, meaningful English preferences."
+                msg
+                or (
+                    f"{field_label}"
+                    " must be proper, meaningful English preferences."
+                )
             ) from err
     return cleaned
 
 
-from BIS.classes.logic.chat.chat_filter_policy import ChatFilterPolicy
-from BIS.classes.logic.chat.deterministic_chat_parser import DeterministicChatParser
-from BIS.classes.io.web.chat.chat_presenter import ChatPresenter, _ONBOARDING_QUESTIONS
-
-
 class BISChatbotService:
-    """Turn natural-language user messages into incremental filter updates and actions."""
+    """Turn natural-language user messages into incremental filter updates
+    and actions.
+    """
 
-
-    def __init__(self, ai, logic, config, model_reader=lambda: None, profile_saver=None):
+    def __init__(
+        self, ai, logic, config, model_reader=lambda: None, profile_saver=None
+    ):
         self._ai = ai
         self._logic = logic
         self._config = config
         self._model = model_reader
         self._save_profile = profile_saver
-        self._filters = getattr(logic, "chat_filters", None) or ChatFilterPolicy()
+        self._filters = (
+            getattr(logic, "chat_filters", None) or ChatFilterPolicy()
+        )
         self._presenter = ChatPresenter(model_reader)
         self._parser = DeterministicChatParser(
-            self._presenter.format_profile_summary)
+            self._presenter.format_profile_summary
+        )
 
     def _handle_onboarding(self, user, message, awaiting_field, current):
         prefs = deepcopy((user or {}).get("preferences") or {})
@@ -82,12 +109,18 @@ class BISChatbotService:
                     ),
                     "filters": filters,
                     "changes": [],
-                    "quick_replies": self._presenter.confirmation_quick_replies(filters, True),
+                    (
+                        "quick_replies"
+                    ): self._presenter.confirmation_quick_replies(
+                        filters, True
+                    ),
                     "model_used": self._model() or "BiteFinder Assistant",
                     "saved_to_profile": False,
                 }
             prompt, quick_replies = _ONBOARDING_QUESTIONS[next_needed]
-            step_num = list(_ONBOARDING_QUESTIONS.keys()).index(next_needed) + 1
+            step_num = (
+                list(_ONBOARDING_QUESTIONS.keys()).index(next_needed) + 1
+            )
             return {
                 "success": True,
                 "action": "onboarding",
@@ -102,33 +135,78 @@ class BISChatbotService:
                 "saved_to_profile": False,
             }
 
-        target_field = awaiting_field if awaiting_field in _ONBOARDING_QUESTIONS else next_needed
-        is_none_answer = lower in ("none", "no", "nil", "n/a", "skip", "skip for now", "anything", "any")
+        target_field = (
+            awaiting_field
+            if awaiting_field in _ONBOARDING_QUESTIONS
+            else next_needed
+        )
+        is_none_answer = lower in (
+            "none",
+            "no",
+            "nil",
+            "n/a",
+            "skip",
+            "skip for now",
+            "anything",
+            "any",
+        )
         updates = {}
 
-        if target_field in ("dietary_requirements", "liked_cuisines", "disliked_cuisines", "other_preferences") and is_none_answer:
+        if (
+            target_field
+            in (
+                "dietary_requirements",
+                "liked_cuisines",
+                "disliked_cuisines",
+                "other_preferences",
+            )
+            and is_none_answer
+        ):
             prefs[target_field] = []
         else:
             parsed = None
-            if not self._config.get("ai_bypass") and hasattr(self._ai, "chat_turn"):
+            if not self._config.get("ai_bypass") and hasattr(
+                self._ai, "chat_turn"
+            ):
                 try:
                     parsed = self._ai.chat_turn(
-                        f"[Profile setup question for {target_field}] User answered: {text}",
-                        current, [], prefs, deepcopy(self._config),
+                        (
+                            "[Profile setup question for "
+                            f"{target_field}"
+                            "] User answered: "
+                            f"{text}"
+                        ),
+                        current,
+                        [],
+                        prefs,
+                        deepcopy(self._config),
                     )
                 except (RuntimeError, ValueError, TypeError):
                     parsed = None
-            det_parsed = self._parser.parse(text, current, user, awaiting_field=target_field)
-            reconciled = self._filters.reconcile_ai_updates(det_parsed, parsed, current) if parsed is not None else det_parsed
+            det_parsed = self._parser.parse(
+                text, current, user, awaiting_field=target_field
+            )
+            reconciled = (
+                self._filters.reconcile_ai_updates(det_parsed, parsed, current)
+                if parsed is not None
+                else det_parsed
+            )
             merged_updates = dict(reconciled.get("updates") or {})
             if is_none_answer and target_field == "dietary_requirements":
                 merged_updates["dietary_requirements"] = []
                 merged_updates["dietary_action"] = "clear"
 
-            updated_filters = self._filters.apply_updates(current, merged_updates, user=user)
+            updated_filters = self._filters.apply_updates(
+                current, merged_updates, user=user
+            )
             accepted = self._filters.apply_onboarding_answer(
-                prefs, updated_filters, merged_updates, target_field, lower,
-                self._logic.estimate_travel_limits)
+                prefs,
+                updated_filters,
+                merged_updates,
+                target_field,
+                lower,
+                self._logic.estimate_travel_limits,
+            )
             onboarding_err = ""
             if target_field == "other_preferences":
                 if merged_updates.get("other_action") == "clear":
@@ -154,33 +232,48 @@ class BISChatbotService:
                             accepted = True
 
             if not accepted:
-                return self._presenter.onboarding_retry(target_field, current, onboarding_err or None)
+                return self._presenter.onboarding_retry(
+                    target_field, current, onboarding_err or None
+                )
 
-        # Persist only already-answered profile fields directly via save_profile when possible
+        # Persist only already-answered profile fields directly via
+        # save_profile when possible
         saved_user = user
         if self._save_profile is not None:
             answered_payload = {"user_id": user["userID"]}
             for field in (
-                "location", "max_distance_km", "max_travel_time_minutes",
-                "budget_per_person", "dietary_requirements", "liked_cuisines",
-                "disliked_cuisines", "other_preferences",
+                "location",
+                "max_distance_km",
+                "max_travel_time_minutes",
+                "budget_per_person",
+                "dietary_requirements",
+                "liked_cuisines",
+                "disliked_cuisines",
+                "other_preferences",
             ):
                 if prefs.get(field) is not None:
                     answered_payload[field] = prefs[field]
             try:
                 saved_user = self._save_profile(user, answered_payload)
             except ValueError as err:
-                return self._presenter.onboarding_retry(target_field, current, str(err))
+                return self._presenter.onboarding_retry(
+                    target_field, current, str(err)
+                )
 
         updated_filters = self._filters.default_filters(saved_user)
         if not updated_filters.get("locations") and prefs.get("location"):
-            updated_filters["locations"] = [self._filters.normalize_location(loc) for loc in prefs["location"]]
+            updated_filters["locations"] = [
+                self._filters.normalize_location(loc)
+                for loc in prefs["location"]
+            ]
             updated_filters["location"] = updated_filters["locations"][0]
         if current.get("mode") in ("walk", "drive", "transit"):
             updated_filters["mode"] = current["mode"]
 
         changes = self._presenter.summarize_changes(current, updated_filters)
-        remaining = self._filters.next_onboarding_field(saved_user.get("preferences") or prefs)
+        remaining = self._filters.next_onboarding_field(
+            saved_user.get("preferences") or prefs
+        )
         if remaining:
             next_prompt, quick_replies = _ONBOARDING_QUESTIONS[remaining]
             step_num = list(_ONBOARDING_QUESTIONS.keys()).index(remaining) + 1
@@ -210,7 +303,9 @@ class BISChatbotService:
             ),
             "filters": updated_filters,
             "changes": changes,
-            "quick_replies": self._presenter.confirmation_quick_replies(updated_filters, True),
+            "quick_replies": self._presenter.confirmation_quick_replies(
+                updated_filters, True
+            ),
             "model_used": self._model() or "BiteFinder Assistant",
             "saved_to_profile": True,
         }
@@ -218,13 +313,19 @@ class BISChatbotService:
     def respond(self, user, payload):
         message = str(payload.get("message") or "").strip()
         if not message:
-            raise ValueError("Please enter a message for the BiteFinder chatbot.")
+            raise ValueError(
+                "Please enter a message for the BiteFinder chatbot."
+            )
 
-        current = self._filters.normalize_filters(payload.get("current_filters"), user=user)
+        current = self._filters.normalize_filters(
+            payload.get("current_filters"), user=user
+        )
         awaiting_field = payload.get("awaiting_field")
 
         if payload.get("onboarding") and user:
-            return self._handle_onboarding(user, message, awaiting_field, current)
+            return self._handle_onboarding(
+                user, message, awaiting_field, current
+            )
 
         lower = message.casefold().strip()
         edit_reply = self._presenter.handle_edit_request(lower, current)
@@ -234,7 +335,9 @@ class BISChatbotService:
         if self._filters.is_search_confirmation(lower):
             missing_field = self._filters.next_missing_search_field(current)
             if missing_field:
-                prompt, qrs = self._presenter.prompt_for_missing_search_field(missing_field)
+                prompt, qrs = self._presenter.prompt_for_missing_search_field(
+                    missing_field
+                )
                 return {
                     "success": True,
                     "action": "clarify",
@@ -259,46 +362,75 @@ class BISChatbotService:
                 "success": True,
                 "action": "search",
                 "awaiting_field": None,
-                "reply": "Confirmed! Searching Google Places, travel routes, and MUIS records now.",
+                ("reply"): (
+                    "Confirmed! Searching Google Places, travel routes, and "
+                    "MUIS records now."
+                ),
                 "filters": current,
                 "changes": [],
-                "quick_replies": self._presenter.default_quick_replies(current, bool(user)),
+                "quick_replies": self._presenter.default_quick_replies(
+                    current, bool(user)
+                ),
                 "model_used": self._model() or "BiteFinder Assistant",
                 "saved_to_profile": False,
             }
 
         history = [
-            {"role": str(item.get("role", "")), "text": str(item.get("text", ""))[:300]}
+            {
+                "role": str(item.get("role", "")),
+                "text": str(item.get("text", ""))[:300],
+            }
             for item in (payload.get("history") or [])[-6:]
             if isinstance(item, dict) and item.get("text")
         ]
 
         parsed = None
-        if not self._config.get("ai_bypass") and hasattr(self._ai, "chat_turn"):
-            is_utility = lower in ("/help", "help", "/profile", "/reset", "reset", "/save")
+        if not self._config.get("ai_bypass") and hasattr(
+            self._ai, "chat_turn"
+        ):
+            is_utility = lower in (
+                "/help",
+                "help",
+                "/profile",
+                "/reset",
+                "reset",
+                "/save",
+            )
             if not is_utility:
                 try:
                     saved_profile = (user or {}).get("preferences") or {}
                     ai_msg = (
                         f"[Answering question for {awaiting_field}] {message}"
-                        if awaiting_field and awaiting_field != "confirm" else message
+                        if awaiting_field and awaiting_field != "confirm"
+                        else message
                     )
-                    parsed = self._ai.chat_turn(ai_msg, current, history, saved_profile, deepcopy(self._config))
+                    parsed = self._ai.chat_turn(
+                        ai_msg,
+                        current,
+                        history,
+                        saved_profile,
+                        deepcopy(self._config),
+                    )
                 except (RuntimeError, ValueError, TypeError):
                     parsed = None
 
         det_awaiting = None if awaiting_field == "confirm" else awaiting_field
-        det_parsed = self._parser.parse(message, current, user, awaiting_field=det_awaiting)
+        det_parsed = self._parser.parse(
+            message, current, user, awaiting_field=det_awaiting
+        )
 
         if parsed is None:
             parsed = det_parsed
         else:
-            parsed = self._filters.reconcile_ai_updates(det_parsed, parsed, current)
+            parsed = self._filters.reconcile_ai_updates(
+                det_parsed, parsed, current
+            )
 
         intent = parsed["intent"]
         reply = str(parsed.get("reply") or "").strip()
         quick_replies = [
-            str(q).strip()[:45] for q in (parsed.get("quick_replies") or [])
+            str(q).strip()[:45]
+            for q in (parsed.get("quick_replies") or [])
             if str(q).strip()
         ][:4]
 
@@ -314,19 +446,26 @@ class BISChatbotService:
                 "reply": reply or "Filters reset.",
                 "filters": updated,
                 "changes": changes,
-                "quick_replies": quick_replies or self._presenter.default_quick_replies(updated, bool(user)),
+                "quick_replies": quick_replies
+                or self._presenter.default_quick_replies(updated, bool(user)),
                 "model_used": self._model() or "BiteFinder Assistant",
                 "saved_to_profile": False,
             }
 
         updates_dict = dict(parsed.get("updates") or {})
-        if updates_dict.get("other_action") not in ("clear", "clear_rating", "remove") and updates_dict.get("other_preferences"):
+        if updates_dict.get("other_action") not in (
+            "clear",
+            "clear_rating",
+            "remove",
+        ) and updates_dict.get("other_preferences"):
             try:
-                updates_dict["other_preferences"] = validate_special_preferences(
-                    updates_dict["other_preferences"],
-                    ai=self._ai,
-                    config=self._config,
-                    field_label="Special requests",
+                updates_dict["other_preferences"] = (
+                    validate_special_preferences(
+                        updates_dict["other_preferences"],
+                        ai=self._ai,
+                        config=self._config,
+                        field_label="Special requests",
+                    )
                 )
             except ValueError as err:
                 return self._presenter.reject_invalid_wishes(current, err)
@@ -341,20 +480,27 @@ class BISChatbotService:
                     "success": True,
                     "action": "clarify",
                     "awaiting_field": None,
-                    "reply": "Please sign in first so I can save your preferences to your BiteFinder profile.",
+                    ("reply"): (
+                        "Please sign in first so I can save your preferences "
+                        "to your BiteFinder profile."
+                    ),
                     "filters": updated,
                     "changes": changes,
                     "quick_replies": ["Yes, search now", "Help"],
                     "model_used": self._model() or "BiteFinder Assistant",
                     "saved_to_profile": False,
                 }
-            profile_payload = self._filters.build_safe_profile_payload(user, updated)
+            profile_payload = self._filters.build_safe_profile_payload(
+                user, updated
+            )
             try:
                 self._save_profile(user, profile_payload)
             except ValueError as err:
                 return self._presenter.reject_invalid_wishes(current, err)
             saved_to_profile = True
-            reply = "Saved your current preferences to your BiteFinder profile."
+            reply = (
+                "Saved your current preferences to your BiteFinder profile."
+            )
 
         elif intent == "show_profile":
             reply = self._presenter.format_profile_summary(user)
@@ -363,7 +509,11 @@ class BISChatbotService:
             missing_field = self._filters.next_missing_search_field(updated)
             if missing_field:
                 intent = "clarify"
-                reply, quick_replies = self._presenter.prompt_for_missing_search_field(missing_field)
+                reply, quick_replies = (
+                    self._presenter.prompt_for_missing_search_field(
+                        missing_field
+                    )
+                )
                 return {
                     "success": True,
                     "action": intent,
@@ -388,10 +538,15 @@ class BISChatbotService:
                 "success": True,
                 "action": "confirm",
                 "awaiting_field": "confirm",
-                "reply": self._presenter.format_confirmation_reply(updated, prefix="Got it! Please check if everything looks right:"),
+                "reply": self._presenter.format_confirmation_reply(
+                    updated,
+                    prefix="Got it! Please check if everything looks right:",
+                ),
                 "filters": updated,
                 "changes": changes,
-                "quick_replies": self._presenter.confirmation_quick_replies(updated, bool(user)),
+                "quick_replies": self._presenter.confirmation_quick_replies(
+                    updated, bool(user)
+                ),
                 "model_used": self._model() or "BiteFinder Assistant",
                 "saved_to_profile": False,
             }
@@ -400,7 +555,8 @@ class BISChatbotService:
         if intent == "clarify":
             next_awaiting = (
                 "other_preferences"
-                if awaiting_field == "other_preferences" and not parsed.get("updates")
+                if awaiting_field == "other_preferences"
+                and not parsed.get("updates")
                 else self._filters.next_missing_search_field(updated)
             )
         return {
@@ -410,7 +566,8 @@ class BISChatbotService:
             "reply": reply,
             "filters": updated,
             "changes": changes,
-            "quick_replies": quick_replies or self._presenter.default_quick_replies(updated, bool(user)),
+            "quick_replies": quick_replies
+            or self._presenter.default_quick_replies(updated, bool(user)),
             "model_used": self._model() or "BiteFinder Assistant",
             "saved_to_profile": saved_to_profile,
         }

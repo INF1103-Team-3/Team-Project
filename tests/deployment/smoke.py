@@ -16,24 +16,19 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(TESTS_ROOT))
 
 
-from reporting import show_case, show_summary
+from reporting import show_case, show_summary  # noqa: E402
 
 
 def test_running_inside_docker():
     """The deployment smoke test must run inside the submitted container."""
 
     test_input = {
-        "docker_marker":
-            "/.dockerenv",
+        "docker_marker": "/.dockerenv",
     }
 
     expected = True
 
-    actual = (
-        Path(
-            "/.dockerenv"
-        ).exists()
-    )
+    actual = Path("/.dockerenv").exists()
 
     show_case(
         "DEP-01: Test is running inside Docker",
@@ -64,25 +59,13 @@ def test_required_application_files_are_packaged():
     ]
 
     test_input = {
-        "required_files":
-            required_files,
+        "required_files": required_files,
     }
 
-    expected = {
-        file_name: True
-        for file_name
-        in required_files
-    }
+    expected = {file_name: True for file_name in required_files}
 
     actual = {
-        file_name:
-            (
-                ROOT /
-                file_name
-            ).exists()
-
-        for file_name
-        in required_files
+        file_name: (ROOT / file_name).exists() for file_name in required_files
     }
 
     show_case(
@@ -101,10 +84,7 @@ def test_required_application_files_are_packaged():
 def check_directory_writable(directory):
     """Write and remove a marker without changing stored application data."""
 
-    marker = (
-        directory /
-        ".deployment_smoke_test"
-    )
+    marker = directory / ".deployment_smoke_test"
 
     try:
         marker.write_text(
@@ -115,7 +95,6 @@ def check_directory_writable(directory):
         return marker.exists()
 
     finally:
-
         if marker.exists():
             marker.unlink()
 
@@ -124,18 +103,11 @@ def test_persistent_data_directories_are_writable():
     """BIS and BRNS Docker data locations can be written successfully."""
 
     directories = {
-        "BIS":
-            ROOT / "BIS" / "data",
-
-        "BRNS":
-            ROOT / "BRNS" / "data",
+        "BIS": ROOT / "BIS" / "data",
+        "BRNS": ROOT / "BRNS" / "data",
     }
 
-    test_input = {
-        name: str(path)
-        for name, path
-        in directories.items()
-    }
+    test_input = {name: str(path) for name, path in directories.items()}
 
     expected = {
         "BIS": True,
@@ -143,13 +115,8 @@ def test_persistent_data_directories_are_writable():
     }
 
     actual = {
-        name:
-            check_directory_writable(
-                path
-            )
-
-        for name, path
-        in directories.items()
+        name: check_directory_writable(path)
+        for name, path in directories.items()
     }
 
     show_case(
@@ -173,17 +140,11 @@ def test_brc_service_is_reachable():
         "http://brc:8000",
     ).rstrip("/")
 
-    health_url = (
-        base_url +
-        "/health"
-    )
+    health_url = base_url + "/health"
 
     test_input = {
-        "service":
-            "BRC",
-
-        "health_url":
-            health_url,
+        "service": "BRC",
+        "health_url": health_url,
     }
 
     expected = {
@@ -195,20 +156,10 @@ def test_brc_service_is_reachable():
             health_url,
             timeout=5,
         ) as response:
-
-            actual = json.loads(
-                response.read().decode(
-                    "utf-8"
-                )
-            )
+            actual = json.loads(response.read().decode("utf-8"))
 
     except Exception as error:
-
-        actual = {
-            "error":
-                f"{type(error).__name__}: "
-                f"{error}"
-        }
+        actual = {"error": f"{type(error).__name__}: {error}"}
 
     show_case(
         "DEP-05: BRC container reachable",
@@ -226,9 +177,7 @@ def test_brc_service_is_reachable():
 def run_core_test_script(relative_path):
     """Run a core test file with live provider credentials removed."""
 
-    environment = (
-        os.environ.copy()
-    )
+    environment = os.environ.copy()
 
     provider_keys = (
         "GEMINI_API_KEY",
@@ -240,7 +189,6 @@ def run_core_test_script(relative_path):
     )
 
     for key in provider_keys:
-
         environment.pop(
             key,
             None,
@@ -249,10 +197,7 @@ def run_core_test_script(relative_path):
     result = subprocess.run(
         [
             sys.executable,
-            str(
-                ROOT /
-                relative_path
-            ),
+            str(ROOT / relative_path),
         ],
         cwd=ROOT,
         env=environment,
@@ -262,20 +207,12 @@ def run_core_test_script(relative_path):
     )
 
     output_lines = [
-        line.strip()
-
-        for line
-        in result.stdout.splitlines()
-
-        if line.strip()
+        line.strip() for line in result.stdout.splitlines() if line.strip()
     ]
 
     return {
-        "exit_code":
-            result.returncode,
-
-        "summary":
-            output_lines[-4:],
+        "exit_code": result.returncode,
+        "summary": output_lines[-4:],
     }
 
 
@@ -283,26 +220,18 @@ def test_bis_core_tests_pass_without_api_credentials():
     """BIS automated tests run successfully without live AI credentials."""
 
     test_input = {
-        "script":
-            "tests/bis/test_bis.py",
-
-        "live_api_credentials":
-            "removed",
+        "script": "tests/bis/test_bis.py",
+        "live_api_credentials": "removed",
     }
 
     expected = {
         "exit_code": 0,
     }
 
-    result = (
-        run_core_test_script(
-            "tests/bis/test_bis.py"
-        )
-    )
+    result = run_core_test_script("tests/bis/test_bis.py")
 
     actual = {
-        "exit_code":
-            result["exit_code"],
+        "exit_code": result["exit_code"],
     }
 
     show_case(
@@ -316,16 +245,10 @@ def test_bis_core_tests_pass_without_api_credentials():
     )
 
     if result["summary"]:
-
-        print(
-            "BIS test summary:"
-        )
+        print("BIS test summary:")
 
         for line in result["summary"]:
-
-            print(
-                f"  {line}"
-            )
+            print(f"  {line}")
 
     assert actual == expected
 
@@ -334,26 +257,18 @@ def test_brns_core_tests_pass_without_api_credentials():
     """BRNS automated tests run successfully without live AI credentials."""
 
     test_input = {
-        "script":
-            "tests/brns/test_brns.py",
-
-        "live_api_credentials":
-            "removed",
+        "script": "tests/brns/test_brns.py",
+        "live_api_credentials": "removed",
     }
 
     expected = {
         "exit_code": 0,
     }
 
-    result = (
-        run_core_test_script(
-            "tests/brns/test_brns.py"
-        )
-    )
+    result = run_core_test_script("tests/brns/test_brns.py")
 
     actual = {
-        "exit_code":
-            result["exit_code"],
+        "exit_code": result["exit_code"],
     }
 
     show_case(
@@ -367,16 +282,10 @@ def test_brns_core_tests_pass_without_api_credentials():
     )
 
     if result["summary"]:
-
-        print(
-            "BRNS test summary:"
-        )
+        print("BRNS test summary:")
 
         for line in result["summary"]:
-
-            print(
-                f"  {line}"
-            )
+            print(f"  {line}")
 
     assert actual == expected
 
@@ -397,12 +306,10 @@ def run_tests():
     failures = []
 
     for test in TESTS:
-
         try:
             test()
 
         except Exception as error:
-
             failures.append(
                 (
                     test.__name__,
@@ -410,11 +317,7 @@ def run_tests():
                 )
             )
 
-            print(
-                f"\nFAILED: "
-                f"{test.__name__}: "
-                f"{error}"
-            )
+            print(f"\nFAILED: {test.__name__}: {error}")
 
     show_summary(
         "Deployment",

@@ -4,10 +4,17 @@ import re
 from difflib import SequenceMatcher
 
 from sources.profile_schema import (
-    CUISINES, CUISINE_FIELDS, MINUTES_PER_KM, OTHER_PREFERENCES,
+    CUISINES,
+    CUISINE_FIELDS,
+    MINUTES_PER_KM,
+    OTHER_PREFERENCES,
     UNSUPPORTED_CUISINES,
-    PREFERENCE_FIELDS, clean_text, validate_preferences, validate_updates,
-    validate_value, validate_travel_minutes,
+    PREFERENCE_FIELDS,
+    clean_text,
+    validate_preferences,
+    validate_updates,
+    validate_value,
+    validate_travel_minutes,
 )
 from BIS.classes.logic.logic_manager import LogicManager
 
@@ -16,9 +23,16 @@ COORDINATES = re.compile(
 )
 
 SEARCH_FIELDS = {
-    "origin", "mode", "max_distance_km", "max_travel_minutes", "traffic_aware", "cuisine",
-    "budget_per_person", OTHER_PREFERENCES,
-    "dietary_requirements", "disliked_cuisines",
+    "origin",
+    "mode",
+    "max_distance_km",
+    "max_travel_minutes",
+    "traffic_aware",
+    "cuisine",
+    "budget_per_person",
+    OTHER_PREFERENCES,
+    "dietary_requirements",
+    "disliked_cuisines",
 }
 
 
@@ -53,11 +67,13 @@ def validate_special_request_text(text):
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ,.'!?/&()+\-]*", text):
         raise ValueError(
             "Write your special request in English letters and words, "
-            "such as chicken rice or a quiet cafe.")
+            "such as chicken rice or a quiet cafe."
+        )
     words = re.findall(r"[A-Za-z]+", text)
     if not words or not any(len(word) > 1 for word in words):
         raise ValueError(
-            "Describe your request in English words, or press Enter for none.")
+            "Describe your request in English words, or press Enter for none."
+        )
     return text
 
 
@@ -92,9 +108,10 @@ def apply_updates(preferences, updates, location_action="add"):
 def cuisine_conflicts(preferences, updates):
     proposed = dict(preferences)
     proposed.update(updates)
-    return sorted(set(proposed.get("liked_cuisines") or []) & set(
-        proposed.get("disliked_cuisines") or []
-    ))
+    return sorted(
+        set(proposed.get("liked_cuisines") or [])
+        & set(proposed.get("disliked_cuisines") or [])
+    )
 
 
 def cuisine_tokens(text, field):
@@ -103,7 +120,8 @@ def cuisine_tokens(text, field):
     if text in {"none", "no preference", "no preferences"}:
         return []
     negative = re.match(
-        r"(?:i\s+)?(?:don't like|do not like|dislike|avoid|hate)\b", text)
+        r"(?:i\s+)?(?:don't like|do not like|dislike|avoid|hate)\b", text
+    )
     positive = re.match(r"(?:i\s+)?(?:like|love|enjoy|prefer)\b", text)
     if negative and field == "liked_cuisines":
         raise ValueError("That describes dislikes. Enter cuisines you like.")
@@ -111,18 +129,22 @@ def cuisine_tokens(text, field):
         raise ValueError("That describes likes. Enter cuisines you avoid.")
     text = re.sub(
         r"^(?:i\s+)?(?:don't like|do not like|dislike|avoid|hate|like|love|"
-        r"enjoy|prefer)(?:\s+eating)?\s+", "", text,
+        r"enjoy|prefer)(?:\s+eating)?\s+",
+        "",
+        text,
     )
     parts = re.split(r"\s*(?:,|\band\b|&)\s*", text)
     tokens = []
-    names = sorted(CUISINES + tuple(UNSUPPORTED_CUISINES),
-                   key=len, reverse=True)
+    names = sorted(
+        CUISINES + tuple(UNSUPPORTED_CUISINES), key=len, reverse=True
+    )
     name_pattern = re.compile("|".join(re.escape(name) for name in names))
     for part in parts:
         part = re.sub(r"\s+(?:food|cuisines?|dishes)$", "", part).strip()
         if not part or not re.fullmatch(r"[a-z]+(?:[ -][a-z]+)*", part):
             raise ValueError(
-                "Describe cuisines you like or avoid, or enter none.")
+                "Describe cuisines you like or avoid, or enter none."
+            )
         if part in names:
             found = [part]
         else:
@@ -150,8 +172,10 @@ def cuisine_suggestions(token):
     if len(token) < 4:
         return []
     ranked = sorted(
-        ((SequenceMatcher(None, token, name).ratio(), name)
-         for name in CUISINES),
+        (
+            (SequenceMatcher(None, token, name).ratio(), name)
+            for name in CUISINES
+        ),
         reverse=True,
     )
     best = ranked[0][0]
@@ -164,8 +188,10 @@ def needs_cuisine_interpretation(text, field):
     """Use AI for complex phrasing; keep typo confirmations local."""
     tokens = cuisine_tokens(text, field)
     unresolved = any(
-        token not in CUISINES and token not in UNSUPPORTED_CUISINES
-        and not cuisine_suggestions(token) for token in tokens
+        token not in CUISINES
+        and token not in UNSUPPORTED_CUISINES
+        and not cuisine_suggestions(token)
+        for token in tokens
     )
     known_mention = any(
         re.search(r"\b" + re.escape(name) + r"\b", text.lower())
@@ -181,16 +207,21 @@ def parse_local_answer(text, field):
     text = clean_text(text, 1000)
     if field in {"max_distance_km", "max_travel_time_minutes"}:
         match = re.fullmatch(
-            r"(\d+(?:\.\d{1,2})?)\s*(km|mins?|minutes?)?", text.lower(),
+            r"(\d+(?:\.\d{1,2})?)\s*(km|mins?|minutes?)?",
+            text.lower(),
         )
         if not match or (field == "max_distance_km" and match[2] is None):
             raise ValueError(
-                "Enter a number with units, e.g. 1 km or 20 mins.")
-        target = "max_distance_km" if match[2] == "km" else (
-            "max_travel_time_minutes"
+                "Enter a number with units, e.g. 1 km or 20 mins."
+            )
+        target = (
+            "max_distance_km"
+            if match[2] == "km"
+            else ("max_travel_time_minutes")
         )
         return estimate_travel_limits(
-            validate_updates({target: float(match[1])}))
+            validate_updates({target: float(match[1])})
+        )
     if field == "budget_per_person":
         if not re.fullmatch(r"\d+(?:\.\d{1,2})?", text):
             raise ValueError("Enter SGD as a number, e.g. 5 or 5.50.")
@@ -209,9 +240,16 @@ def parse_local_answer(text, field):
     if field in CUISINE_FIELDS:
         return validate_updates({field: cuisine_tokens(text, field)})
     if field == OTHER_PREFERENCES:
-        items = [] if text.lower() in {
-            "none", "no preference", "no preferences",
-        } else text.split(",")
+        items = (
+            []
+            if text.lower()
+            in {
+                "none",
+                "no preference",
+                "no preferences",
+            }
+            else text.split(",")
+        )
         return validate_updates({field: items})
     raise ValueError("Choose a valid preference field.")
 
@@ -223,17 +261,22 @@ def next_field(preferences):
 def evaluate(record):
     """Apply profile business rules to one AI-enriched update record."""
     if not isinstance(record, dict) or not isinstance(
-            record.get("preferences"), dict):
+        record.get("preferences"), dict
+    ):
         raise ValueError("Logic evaluation needs preferences and AI updates.")
     updated = apply_updates(
-        record["preferences"], record.get("updates", {}),
-        record.get("location_action", "add"))
+        record["preferences"],
+        record.get("updates", {}),
+        record.get("location_action", "add"),
+    )
     return {"preferences": updated, "next_field": next_field(updated)}
 
 
 def score(record):
     """Return a numeric profile-completeness score."""
-    preferences = record.get("preferences") if isinstance(record, dict) else None
+    preferences = (
+        record.get("preferences") if isinstance(record, dict) else None
+    )
     preferences = validate_preferences(preferences)
     return sum(preferences[field] is not None for field in PREFERENCE_FIELDS)
 

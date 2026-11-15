@@ -23,15 +23,18 @@ def safe_error_detail(error, max_length=600):
     text = re.sub(r"\s+", " ", text).strip()
     substitutions = (
         (r"(?i)(bearer\s+)[^\s,;}]+", r"\1<redacted>"),
-        (r"(?i)((?:api[_ -]?key|password|access[_ -]?token)\s*[:=]\s*)"
-         r"[^\s,;}]+", r"\1<redacted>"),
+        (
+            r"(?i)((?:api[_ -]?key|password|access[_ -]?token)\s*[:=]\s*)"
+            r"[^\s,;}]+",
+            r"\1<redacted>",
+        ),
         (r"(?i)([?&](?:key|token)=)[^&\s]+", r"\1<redacted>"),
     )
     for pattern, replacement in substitutions:
         text = re.sub(pattern, replacement, text)
     if not text:
         return "No exception message was provided."
-    return text if len(text) <= max_length else text[:max_length - 3] + "..."
+    return text if len(text) <= max_length else text[: max_length - 3] + "..."
 
 
 def _emit_python_log(record):
@@ -51,8 +54,10 @@ def _shared_log_handler():
 def configure_python_logging():
     """Connect BRC's existing Python loggers to the global log once."""
     root = logging.getLogger()
-    if not any(getattr(handler, "bitefinder_shared_handler", False)
-               for handler in root.handlers):
+    if not any(
+        getattr(handler, "bitefinder_shared_handler", False)
+        for handler in root.handlers
+    ):
         root.addHandler(_shared_log_handler())
     root.setLevel(logging.INFO)
 
@@ -75,7 +80,8 @@ def adopt_trace(trace_id):
     if _TRACE_ID.get() is not None:
         return None
     if not isinstance(trace_id, str) or not re.fullmatch(
-            r"[0-9a-f]{12}", trace_id):
+        r"[0-9a-f]{12}", trace_id
+    ):
         return start_trace()
     return _TRACE_ID.set(trace_id)
 

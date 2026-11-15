@@ -5,8 +5,14 @@ class AIProviderRouter:
     """Try configured provider objects in order until one validates."""
 
     def __init__(
-            self, providers, parser, validator, failure_sanitizer,
-            event_logger, delay):
+        self,
+        providers,
+        parser,
+        validator,
+        failure_sanitizer,
+        event_logger,
+        delay,
+    ):
         self.__providers = tuple(providers)
         self._parser = parser
         self._validator = validator
@@ -30,19 +36,19 @@ class AIProviderRouter:
                 except ValueError:
                     errors.append(f"{provider.label}: unparseable")
                     self._event_logger(
-                        "fallback", f"{provider.label}: invalid JSON")
+                        "fallback", f"{provider.label}: invalid JSON"
+                    )
                     continue
                 is_valid, result = self._validator(parsed)
                 if is_valid:
                     return True, result, provider.label
-                errors.append(
-                    f"{provider.label}: schema invalid ({result})")
+                errors.append(f"{provider.label}: schema invalid ({result})")
                 self._event_logger(
-                    "fallback", f"{provider.label} schema: {result}")
+                    "fallback", f"{provider.label} schema: {result}"
+                )
                 continue
             safe_failure = self._failure_sanitizer(content)
             errors.append(f"{provider.label}: {safe_failure}")
-            self._event_logger(
-                "fallback", f"{provider.label}: {safe_failure}")
+            self._event_logger("fallback", f"{provider.label}: {safe_failure}")
             self._delay(1)
         return False, "; ".join(errors), None

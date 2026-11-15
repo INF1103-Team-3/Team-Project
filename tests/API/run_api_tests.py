@@ -22,7 +22,7 @@ sys.path.insert(0, str(TESTS_ROOT))
 
 load_dotenv(ROOT / ".env")
 
-from reporting import show_group_start, style
+from reporting import show_group_start, style  # noqa: E402
 
 
 TEST_SCRIPTS = (
@@ -32,7 +32,7 @@ TEST_SCRIPTS = (
 
 
 def run_test_script(name: str, script_path: Path) -> int:
-    """Run one API test script as a subprocess preserving all environment keys."""
+    "Run one API test script as a subprocess preserving all environment keys."
     relative = script_path.relative_to(ROOT)
     print("\n" + style("=" * 72, "rule"))
     print(style(f"Running API Test Suite: {name} ({relative})", "running"))
@@ -56,14 +56,19 @@ def main() -> int:
     """Execute all API test suites and return overall status code."""
     show_group_start(
         "LIVE API & FALLBACK CHAIN TESTS",
-        "Validates OpenRouter, Gemini, Groq, and Google Maps API keys, as well as\n"
-        "AI multi-tier fallback cascade and Google offline fallback resilience.",
+        (
+            "Validates OpenRouter, Gemini, Groq, and Google Maps API keys, as "
+            "well as\nAI multi-tier fallback cascade and Google offline "
+            "fallback resilience."
+        ),
     )
 
     failed_suites = []
     for name, script_path in TEST_SCRIPTS:
         if not script_path.exists():
-            print(style(f"\nError: Test script not found: {script_path}", "fail"))
+            print(
+                style(f"\nError: Test script not found: {script_path}", "fail")
+            )
             failed_suites.append(name)
             continue
 

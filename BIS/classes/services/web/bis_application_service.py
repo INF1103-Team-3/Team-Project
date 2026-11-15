@@ -1,4 +1,6 @@
-"""Adapter-independent BIS profile and search use cases (IO -> AI -> Logic -> Data)."""
+"""Adapter-independent BIS profile and search use cases (IO -> AI -> Logic
+-> Data).
+"""
 
 from copy import deepcopy
 
@@ -10,10 +12,21 @@ from BIS.support.config import is_smtp_bypass
 
 
 class BISApplicationService:
-    """Coordinate BIS domain workflows across AI, Logic, Data, and the BRNS gateway."""
+    """Coordinate BIS domain workflows across AI, Logic, Data, and the BRNS
+    gateway.
+    """
 
-    def __init__(self, data, ai, logic, brns, config,
-                 model_reader=None, chatbot=None, location_gateway=None):
+    def __init__(
+        self,
+        data,
+        ai,
+        logic,
+        brns,
+        config,
+        model_reader=None,
+        chatbot=None,
+        location_gateway=None,
+    ):
         self._locations = location_gateway
         self._data = data
         self._ai = ai
@@ -22,14 +35,19 @@ class BISApplicationService:
         self._config = config
         self._model = model_reader or self._read_last_used_model
         self._chatbot = chatbot or BISChatbotService(
-            ai, logic, config, model_reader=self._model, profile_saver=self.save_profile)
+            ai,
+            logic,
+            config,
+            model_reader=self._model,
+            profile_saver=self.save_profile,
+        )
 
     def _read_last_used_model(self):
         reader = getattr(self._brns, "last_used_model", None)
         return reader() if callable(reader) else None
 
     def active_model(self):
-        """Return the active AI model reported by the downstream BRNS gateway."""
+        "Return the active AI model reported by the downstream BRNS gateway."
         reader = getattr(self._brns, "active_model", None)
         if callable(reader):
             model = reader()
@@ -56,7 +74,8 @@ class BISApplicationService:
 
     def save_profile(self, user, payload):
         updated = self._logic.prepare_profile_save(
-            user, payload, smtp_bypass=is_smtp_bypass(self._config))
+            user, payload, smtp_bypass=is_smtp_bypass(self._config)
+        )
         if self._locations is not None:
             api_key = self._config.get("google_maps_api_key")
             for loc in updated["preferences"].get("location") or []:
@@ -64,15 +83,21 @@ class BISApplicationService:
                     self._locations.resolve(loc, api_key)
                 except (ValueError, RuntimeError):
                     raise ValueError(
-                        f"Default location '{loc}' must be a valid Singapore location."
+                        (
+                            "Default location '"
+                            f"{loc}"
+                            "' must be a valid Singapore location."
+                        )
                     )
         wishes = updated["preferences"].get("other_preferences")
         if wishes:
-            updated["preferences"]["other_preferences"] = validate_special_preferences(
-                wishes,
-                ai=self._ai,
-                config=self._config,
-                field_label="Default special wishes",
+            updated["preferences"]["other_preferences"] = (
+                validate_special_preferences(
+                    wishes,
+                    ai=self._ai,
+                    config=self._config,
+                    field_label="Default special wishes",
+                )
             )
         return self._data.save(updated)
 
@@ -80,30 +105,47 @@ class BISApplicationService:
         api_key = self._config.get("google_maps_api_key")
         if self._locations is None:
             raise RuntimeError("Location lookup is not configured.")
-        resolved = [self._locations.resolve(loc, api_key) for loc in raw_locations]
+        resolved = [
+            self._locations.resolve(loc, api_key) for loc in raw_locations
+        ]
         return self._logic.compute_midpoint_origin(resolved), resolved
 
     def _build_validated_request(self, payload, origin, cuisine_target):
-        request = self._logic.build_base_search_request(payload, origin, cuisine_target)
+        request = self._logic.build_base_search_request(
+            payload, origin, cuisine_target
+        )
         config = deepcopy(self._config)
         wishes = ", ".join(request["other_preferences"])
-        interpreted = self._ai.interpret_search_request(request, wishes, config)
+        interpreted = self._ai.interpret_search_request(
+            request, wishes, config
+        )
         return self._logic.preserve_search_wish(
-            request, self._logic.validate_search_request(request, interpreted), wishes)
+            request,
+            self._logic.validate_search_request(request, interpreted),
+            wishes,
+        )
 
     @staticmethod
     def _is_no_open_error(exc):
         msg = str(exc).lower()
         return "no restaurants found" in msg or "no confirmed open" in msg
 
-    def _run_search(self, owner, payload, origin, resolved_origins, selected_cuisines,
-                    first_request=None):
+    def _run_search(
+        self,
+        owner,
+        payload,
+        origin,
+        resolved_origins,
+        selected_cuisines,
+        first_request=None,
+    ):
         cuisines_breakdown = {}
         try:
             if len(selected_cuisines) <= 1:
                 single_c = selected_cuisines[0] if selected_cuisines else None
                 request = first_request or self._build_validated_request(
-                    payload, origin, single_c)
+                    payload, origin, single_c
+                )
                 results = self._brns.search(
                     self._data.serialize_search_request(request),
                     user_id=owner,
@@ -116,7 +158,9 @@ class BISApplicationService:
                     for item in matches + alternatives:
                         if isinstance(item, dict):
                             item["matched_cuisine"] = single_c
-                    cuisines_breakdown[single_c] = len(matches) + len(alternatives)
+                    cuisines_breakdown[single_c] = len(matches) + len(
+                        alternatives
+                    )
                 hidden = results.get("hidden", 0)
             else:
                 fetched = []
@@ -124,7 +168,8 @@ class BISApplicationService:
                 base_request = None
                 for c_target in selected_cuisines:
                     sub_request = self._build_validated_request(
-                        payload, origin, c_target)
+                        payload, origin, c_target
+                    )
                     if base_request is None:
                         base_request = sub_request
                     try:
@@ -148,8 +193,13 @@ class BISApplicationService:
                     cuisines_breakdown,
                     hidden,
                 ) = self._logic.merge_multi_cuisine_results(
-                    fetched, len(selected_cuisines), max_total=20)
-                if not matches and not alternatives and last_empty_error is not None:
+                    fetched, len(selected_cuisines), max_total=20
+                )
+                if (
+                    not matches
+                    and not alternatives
+                    and last_empty_error is not None
+                ):
                     raise last_empty_error
 
                 summary_req = dict(base_request or {})
@@ -189,10 +239,11 @@ class BISApplicationService:
                     "exclusions_count": 0,
                     "model_used": self._model() or "AI provider unavailable",
                     "message": (
-                        "No open restaurants found near this location right now. "
-                        "Note: In Singapore, many mall outlets close after 10:00 PM. "
-                        "Try searching a 24-hour hotspot (e.g. 'Rivervale Plaza' or 'Jewel Changi') "
-                        "or increasing travel limits."
+                        "No open restaurants found near this location "
+                        "right now. Note: In Singapore, many mall outlets "
+                        "close after 10:00 PM. Try searching a 24-hour "
+                        "hotspot (e.g. 'Rivervale Plaza' or 'Jewel "
+                        "Changi') or increasing travel limits."
                     ),
                 }
             raise
@@ -209,15 +260,18 @@ class BISApplicationService:
             )
             resolved_origins = (
                 proposal.get("resolved_origins")
-                if isinstance(proposal, dict) and "resolved_origins" in proposal
+                if isinstance(proposal, dict)
+                and "resolved_origins" in proposal
                 else [request["origin"]]
             )
             selected_cuisines = (
                 proposal.get("selected_cuisines")
-                if isinstance(proposal, dict) and "selected_cuisines" in proposal
+                if isinstance(proposal, dict)
+                and "selected_cuisines" in proposal
                 else (
                     [request["cuisine"]]
-                    if request.get("cuisine") and request.get("cuisine") != "none"
+                    if request.get("cuisine")
+                    and request.get("cuisine") != "none"
                     else []
                 )
             )
@@ -243,7 +297,9 @@ class BISApplicationService:
             payload = dict(payload, other_preferences=normalized_wishes)
 
         if payload.get("confirm_only"):
-            single_c = selected_cuisines[0] if len(selected_cuisines) == 1 else None
+            single_c = (
+                selected_cuisines[0] if len(selected_cuisines) == 1 else None
+            )
             request = self._build_validated_request(payload, origin, single_c)
             proposal_token = self._data.create_search_proposal(
                 owner,
@@ -261,7 +317,8 @@ class BISApplicationService:
             }
 
         return self._run_search(
-            owner, payload, origin, resolved_origins, selected_cuisines)
+            owner, payload, origin, resolved_origins, selected_cuisines
+        )
 
     def route(self, payload):
         request = {

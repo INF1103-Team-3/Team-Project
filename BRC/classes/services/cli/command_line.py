@@ -39,7 +39,8 @@ class CommandLine:
             arguments = arguments[1:]
         interactive = not arguments
         parser = argparse.ArgumentParser(
-            description="Build or use the BRC halal database.")
+            description="Build or use the BRC halal database."
+        )
         inputs = parser.add_mutually_exclusive_group()
         inputs.add_argument("--input", type=Path)
         inputs.add_argument("--stdin", action="store_true")
@@ -60,23 +61,26 @@ class CommandLine:
             else:
                 value = NO_INPUT
             app = BRCApplication(
-                io=self._io,
-                verbose=interactive,
-                scrape_progress=progress)
+                io=self._io, verbose=interactive, scrape_progress=progress
+            )
             result = app.run(value, args.output)
             if args.stdout:
                 self._io.write_raw(
-                    JsonFile.format_json(result, compact_hours=True))
+                    JsonFile.format_json(result, compact_hours=True)
+                )
             elif value is NO_INPUT:
                 self._io.display_status(
-                    f"Built {len(result)} verified halal restaurant records.")
+                    f"Built {len(result)} verified halal restaurant records."
+                )
             else:
                 self._io.display_result(result)
             return 0
         except Exception as error:
             debug_log.debug_log(
                 f"BRC failed: {type(error).__name__}: {error}",
-                "ERROR", "BRC.main")
+                "ERROR",
+                "BRC.main",
+            )
             self._io.display_status(f"BRC failed: {error}", error=True)
             return 1
         finally:

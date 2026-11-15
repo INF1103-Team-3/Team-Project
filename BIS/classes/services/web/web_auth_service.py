@@ -1,4 +1,5 @@
-"""Web authentication coordinated with the existing BIS verification service."""
+"Web authentication coordinated with the existing BIS verification service."
+
 import time
 from threading import RLock
 from BIS.sources.profile_schema import normalize_email, normalize_username
@@ -8,7 +9,11 @@ from BIS.support.config import is_smtp_bypass
 class WebAuthService:
     def __init__(self, data, verification, hasher, config, clock=time.time):
         self._lock = RLock()
-        self._data, self._verification, self._hasher = data, verification, hasher
+        self._data, self._verification, self._hasher = (
+            data,
+            verification,
+            hasher,
+        )
         self._config, self._clock = config, clock
 
     def authenticate(self, token):
@@ -42,8 +47,12 @@ class WebAuthService:
         pending = dict(pending, expires_at=self._clock() + 600)
         self._verification.request_code(user, self._config)
         self._data.set_state("web_auth", user["userID"], pending)
-        return {"success": True, "otp_required": True, "email": user["email"],
-                "message": "A verification code was sent to your email."}
+        return {
+            "success": True,
+            "otp_required": True,
+            "email": user["email"],
+            "message": "A verification code was sent to your email.",
+        }
 
     def register(self, email, username, password):
         with self._lock:
@@ -55,10 +64,13 @@ class WebAuthService:
         if self._data.email_exists(email):
             user = self._data.find_user(email)
             if self._data.get_credentials(user["userID"]):
-                raise ValueError("This email is already registered. Please sign in.")
+                raise ValueError(
+                    "This email is already registered. Please sign in."
+                )
         else:
             user = self._data.register_user(email, username)
-        # An existing CLI identity is enrolled only AFTER proof of email ownership.
+        # An existing CLI identity is enrolled only AFTER proof of email
+        # ownership.
         return self._send(user, dict(credential=credential, username=username))
 
     def login(self, email, password):
@@ -94,8 +106,12 @@ class WebAuthService:
         if pending.get("username"):
             user = self._data.save(dict(user, username=pending["username"]))
         self._data.set_state("web_auth", user["userID"], None)
-        return {"success": True, "otp_required": False,
-                "token": self._data.issue_session(user["userID"]), "user": user}
+        return {
+            "success": True,
+            "otp_required": False,
+            "token": self._data.issue_session(user["userID"]),
+            "user": user,
+        }
 
     def resend(self, email):
         with self._lock:

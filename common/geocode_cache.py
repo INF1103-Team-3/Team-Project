@@ -10,7 +10,9 @@ from pathlib import Path
 
 from common.debug_log import debug_log
 
-CACHE_FILE = Path(__file__).resolve().parent.parent / "data" / "geocode_cache.json"
+CACHE_FILE = (
+    Path(__file__).resolve().parent.parent / "data" / "geocode_cache.json"
+)
 
 
 def _key(query):
@@ -20,8 +22,10 @@ def _key(query):
 def _point(value):
     if not isinstance(value, list) or len(value) != 2:
         return None
-    if any(type(number) not in (int, float) or not math.isfinite(number)
-           for number in value):
+    if any(
+        type(number) not in (int, float) or not math.isfinite(number)
+        for number in value
+    ):
         return None
     latitude, longitude = value
     if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
@@ -35,6 +39,7 @@ def _use_mongo():
 
 def _mongo_collection():
     from common.storage_dependencies import mongo_connection
+
     return mongo_connection()
 
 
@@ -46,7 +51,9 @@ def _read():
     except (OSError, ValueError) as error:
         raise RuntimeError("Cannot read the shared geocode cache.") from error
     if not isinstance(data, dict):
-        raise RuntimeError("The shared geocode cache must contain a JSON object.")
+        raise RuntimeError(
+            "The shared geocode cache must contain a JSON object."
+        )
     return data
 
 
@@ -58,11 +65,15 @@ def lookup(query):
     if _use_mongo():
         try:
             row = _mongo_collection().execute(
-                lambda db, k=key: db.geocode_cache.find_one({"_id": k}))
+                lambda db, k=key: db.geocode_cache.find_one({"_id": k})
+            )
             return _point(row.get("point")) if isinstance(row, dict) else None
         except (RuntimeError, OSError):
-            debug_log("Mongo geocode cache lookup unavailable.",
-                      "WARNING", "common.geocode_cache.lookup")
+            debug_log(
+                "Mongo geocode cache lookup unavailable.",
+                "WARNING",
+                "common.geocode_cache.lookup",
+            )
             return None
     return _point(_read().get(key))
 
@@ -109,12 +120,23 @@ def remember(queries, latitude, longitude):
             conn = _mongo_collection()
             pts = list(point)
             for key in keys:
-                conn.execute(lambda db, k=key: db.geocode_cache.update_one(
-                    {"_id": k}, {"$set": {"_id": k, "point": pts}}, upsert=True))
+                conn.execute(
+                    lambda db, k=key: db.geocode_cache.update_one(
+                        {"_id": k},
+                        {"$set": {"_id": k, "point": pts}},
+                        upsert=True,
+                    )
+                )
             return True
         except (RuntimeError, OSError):
-            debug_log("Mongo geocode cache write unavailable; using resolved location.",
-                      "WARNING", "common.geocode_cache.remember")
+            debug_log(
+                (
+                    "Mongo geocode cache write unavailable; using resolved "
+                    "location."
+                ),
+                "WARNING",
+                "common.geocode_cache.remember",
+            )
             return False
     temporary = None
     try:
@@ -125,11 +147,17 @@ def remember(queries, latitude, longitude):
             for key in keys:
                 data[key] = list(point)
             with tempfile.NamedTemporaryFile(
-                "w", encoding="utf-8", dir=CACHE_FILE.parent,
-                prefix=".geocode-", suffix=".tmp", delete=False,
+                "w",
+                encoding="utf-8",
+                dir=CACHE_FILE.parent,
+                prefix=".geocode-",
+                suffix=".tmp",
+                delete=False,
             ) as file:
                 temporary = Path(file.name)
-                json.dump(data, file, indent=2, ensure_ascii=False, allow_nan=False)
+                json.dump(
+                    data, file, indent=2, ensure_ascii=False, allow_nan=False
+                )
                 file.write("\n")
                 file.flush()
                 os.fsync(file.fileno())
@@ -148,8 +176,14 @@ def remember(queries, latitude, longitude):
             try:
                 temporary.unlink(missing_ok=True)
             except OSError:
-                debug_log("Temporary geocode cache file could not be removed.",
-                          "WARNING", "common.geocode_cache.remember")
-    debug_log("Geocode cache write unavailable; using resolved location.",
-              "WARNING", "common.geocode_cache.remember")
+                debug_log(
+                    "Temporary geocode cache file could not be removed.",
+                    "WARNING",
+                    "common.geocode_cache.remember",
+                )
+    debug_log(
+        "Geocode cache write unavailable; using resolved location.",
+        "WARNING",
+        "common.geocode_cache.remember",
+    )
     return False

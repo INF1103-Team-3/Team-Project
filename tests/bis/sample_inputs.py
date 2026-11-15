@@ -64,7 +64,7 @@ def valid_ai_search_response():
 
 
 def conflicting_ai_search_response():
-    """Return hardcoded AI output that incorrectly changes a confirmed budget."""
+    "Return hardcoded AI output that incorrectly changes a confirmed budget."
     response = deepcopy(confirmed_search_request())
     response["budget_per_person"] = 50.0
     return response

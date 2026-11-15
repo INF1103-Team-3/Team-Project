@@ -38,7 +38,9 @@ def load_config():
         "gemini_api_key": os.getenv("GEMINI_API_KEY", "").strip(),
         "groq_api_key": os.getenv("GROQ_API_KEY", "").strip(),
         "google_maps_api_key": os.getenv("GOOGLE_MAPS_API_KEY", "").strip(),
-        "google_maps_js_api_key": os.getenv("GOOGLE_MAPS_JS_API_KEY", "").strip(),
+        "google_maps_js_api_key": os.getenv(
+            "GOOGLE_MAPS_JS_API_KEY", ""
+        ).strip(),
         "use_live_google": (
             os.getenv("USE_LIVE_GOOGLE", "true").strip().lower() != "false"
         ),
@@ -51,12 +53,14 @@ def load_config():
             os.getenv("SMTP_SECURITY", "starttls").strip().lower()
         ),
         "smtp_port": _read_positive_int(
-            os.getenv("SMTP_PORT", "587"), default=587,
+            os.getenv("SMTP_PORT", "587"),
+            default=587,
         ),
         "smtp_username": os.getenv("SMTP_USERNAME", "").strip(),
         "smtp_password": os.getenv("SMTP_PASSWORD", ""),
         "smtp_from_email": os.getenv("SMTP_FROM_EMAIL", "").strip(),
-        "verification_attempt_reset_seconds": 60 * _read_positive_int(
+        "verification_attempt_reset_seconds": 60
+        * _read_positive_int(
             os.getenv("VERIFICATION_ATTEMPT_RESET_MINUTES", "10"),
             default=10,
         ),
@@ -67,14 +71,15 @@ def load_config():
 
 
 def is_smtp_bypass(config):
-    """Read SMTP_BYPASS live from .env unless explicitly overridden in memory."""
+    "Read SMTP_BYPASS live from .env unless explicitly overridden in memory."
     if not isinstance(config, dict):
         return False
     env_path_str = config.get("_env_file")
     if not env_path_str:
         return config.get("smtp_bypass") is True
     if "_smtp_bypass_initial" in config and (
-        bool(config.get("smtp_bypass")) != bool(config.get("_smtp_bypass_initial"))
+        bool(config.get("smtp_bypass"))
+        != bool(config.get("_smtp_bypass_initial"))
     ):
         return config.get("smtp_bypass") is True
     env_path = Path(env_path_str)
@@ -92,20 +97,26 @@ def validate_config(config):
     errors = []
     if config.get("ai_bypass") is True:
         return errors
-    if (not config.get("openrouter_api_keys")
-            and not ai_manager.has_fallback_provider(config)):
+    if not config.get(
+        "openrouter_api_keys"
+    ) and not ai_manager.has_fallback_provider(config):
         errors.append(
             "Set OPENROUTER_API_KEYS, OPENROUTER_API_KEY, or "
             "GEMINI_API_KEY for BIS in .env."
         )
 
-    if (config.get("openrouter_api_keys")
-            and not config.get("openrouter_model")
-            and not ai_manager.has_fallback_provider(config)):
+    if (
+        config.get("openrouter_api_keys")
+        and not config.get("openrouter_model")
+        and not ai_manager.has_fallback_provider(config)
+    ):
         errors.append("Set OPENROUTER_MODEL in .env.")
 
-    debug_log(f"Configuration validated with {len(errors)} error(s).",
-              "DEBUG", "BIS.config.validate")
+    debug_log(
+        f"Configuration validated with {len(errors)} error(s).",
+        "DEBUG",
+        "BIS.config.validate",
+    )
     return errors
 
 

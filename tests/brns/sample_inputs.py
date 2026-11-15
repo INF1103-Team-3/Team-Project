@@ -24,9 +24,7 @@ MONDAY_EVENING = datetime(
 )
 
 MONDAY_OPENING_HOURS = {
-    "monday": [
-        ["0900", "1800"]
-    ],
+    "monday": [["0900", "1800"]],
 }
 
 
@@ -56,42 +54,32 @@ def restaurant(**changes):
     value = {
         "name": "Sakura Test Cafe",
         "address": "1 Test Street, Singapore",
-
         "source": "saved + google places",
         "open_now": True,
-
-        "cuisines": [
-            "japanese"
-        ],
-
+        "cuisines": ["japanese"],
         "dietary_requirements": [],
         "halal_status": "unverified",
-
         "avg_price": 12,
         "price_start": None,
         "price_end": None,
-
         "rating": 4.5,
         "rating_count": 200,
-
         "walk_minutes": 10,
         "walk_meters": 800,
         "walk_source": "route",
-
         "drive_minutes": None,
         "drive_meters": None,
         "drive_source": None,
-
         "transit_minutes": None,
         "transit_meters": None,
         "transit_source": None,
-
         "spicy_options": False,
     }
 
     value.update(changes)
 
     return value
+
 
 def restaurant_with_missing_facts():
     """Return a restaurant with important facts deliberately unavailable."""
@@ -108,6 +96,7 @@ def restaurant_with_missing_facts():
         walk_source=None,
     )
 
+
 def verified_halal_restaurant():
     """Return restaurant data with verified official MUIS evidence."""
 
@@ -118,9 +107,7 @@ def verified_halal_restaurant():
 
     value["halal_certification"] = "official"
 
-    value["muis_check"] = {
-        "status": "verified"
-    }
+    value["muis_check"] = {"status": "verified"}
 
     return value
 
@@ -148,7 +135,6 @@ def ranking_restaurants():
             walk_minutes=8,
             walk_meters=600,
         ),
-
         restaurant(
             name="Tokyo Choice",
             rating=4.8,
@@ -171,7 +157,6 @@ def valid_ai_recommendations():
                 "well_rated",
             ],
         },
-
         {
             "id": 0,
             "reason_codes": [
@@ -192,7 +177,6 @@ def duplicate_ai_recommendations():
             "id": 0,
             "reason_codes": [],
         },
-
         {
             "id": 0,
             "reason_codes": [],

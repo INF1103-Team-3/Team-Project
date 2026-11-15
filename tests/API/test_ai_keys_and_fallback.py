@@ -37,13 +37,14 @@ sys.path.insert(0, str(TESTS_ROOT))
 # Load .env explicitly for live API credentials
 load_dotenv(ROOT / ".env")
 
-from reporting import show_case, show_summary, style
-import BIS.ai_manager as bis_ai
+from reporting import show_case, show_summary, style  # noqa: E402
+import BIS.ai_manager as bis_ai  # noqa: E402
+
 sys.modules["ai_manager"] = bis_ai
-import BIS.support.config as bis_config
-import BRNS.ai_manager as brns_ai
-import BRNS.config as brns_config
-from common.groq_models import fetch_chat_models
+import BIS.support.config as bis_config  # noqa: E402
+import BRNS.ai_manager as brns_ai  # noqa: E402
+import BRNS.config as brns_config  # noqa: E402
+from common.groq_models import fetch_chat_models  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -100,24 +101,36 @@ SAMPLE_CANDIDATES = [
 # Part 1: Individual Key Connectivity
 # ---------------------------------------------------------------------------
 
+
 def test_openrouter_api_key_connectivity():
     """Verify that OPENROUTER_API_KEY is valid and can generate text."""
     key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not key:
-        actual = {"status": "SKIPPED", "reason": "OPENROUTER_API_KEY not set in .env"}
+        actual = {
+            "status": "SKIPPED",
+            "reason": "OPENROUTER_API_KEY not set in .env",
+        }
         expected = deepcopy(actual)
         show_case(
             "API-AI-01: OpenRouter API Key Connectivity",
             "openrouter.ai/api/v1/chat/completions",
-            "Verify OpenRouter API key authentication and minimal chat completion.",
+            (
+                "Verify OpenRouter API key authentication and minimal chat "
+                "completion."
+            ),
             {"api_key_present": False},
             expected,
             actual,
         )
         return
 
-    model = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free")
-    url = f"{os.getenv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')}/chat/completions"
+    model = os.getenv(
+        "OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free"
+    )
+    url = (
+        f"{os.getenv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')}"
+        "/chat/completions"
+    )
     headers = {
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
@@ -135,7 +148,14 @@ def test_openrouter_api_key_connectivity():
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=20)
         is_ok = resp.status_code == 200
-        content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "") if is_ok else resp.text
+        content = (
+            resp.json()
+            .get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+            if is_ok
+            else resp.text
+        )
         actual = {
             "status_code": resp.status_code,
             "has_content": bool(content.strip()),
@@ -149,7 +169,10 @@ def test_openrouter_api_key_connectivity():
     show_case(
         "API-AI-01: OpenRouter API Key Connectivity",
         "openrouter.ai/api/v1/chat/completions",
-        "Verify OpenRouter API key authentication and minimal chat completion.",
+        (
+            "Verify OpenRouter API key authentication and minimal chat "
+            "completion."
+        ),
         {"provider": "openrouter", "model": model},
         expected,
         actual,
@@ -161,12 +184,18 @@ def test_gemini_api_key_connectivity():
     """Verify that GEMINI_API_KEY is valid and can generate text."""
     key = os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
-        actual = {"status": "SKIPPED", "reason": "GEMINI_API_KEY not set in .env"}
+        actual = {
+            "status": "SKIPPED",
+            "reason": "GEMINI_API_KEY not set in .env",
+        }
         expected = deepcopy(actual)
         show_case(
             "API-AI-02: Google Gemini API Key Connectivity",
             "generativelanguage.googleapis.com",
-            "Verify Gemini API key authentication and generateContent response.",
+            (
+                "Verify Gemini API key authentication and generateContent "
+                "response."
+            ),
             {"api_key_present": False},
             expected,
             actual,
@@ -175,7 +204,11 @@ def test_gemini_api_key_connectivity():
 
     # Test with standard flash or lite model
     model = "gemini-3.5-flash-lite"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{model}"
+        ":generateContent"
+    )
     headers = {
         "x-goog-api-key": key,
         "Content-Type": "application/json",
@@ -192,7 +225,11 @@ def test_gemini_api_key_connectivity():
         is_ok = resp.status_code == 200
         if is_ok:
             data = resp.json()
-            parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+            parts = (
+                data.get("candidates", [{}])[0]
+                .get("content", {})
+                .get("parts", [])
+            )
             text = "".join(part.get("text", "") for part in parts)
         else:
             text = resp.text
@@ -218,10 +255,15 @@ def test_gemini_api_key_connectivity():
 
 
 def test_groq_api_key_connectivity():
-    """Verify that GROQ_API_KEY is valid and can discover models and generate text."""
+    """Verify that GROQ_API_KEY is valid and can discover models and
+    generate text.
+    """
     key = os.getenv("GROQ_API_KEY", "").strip()
     if not key:
-        actual = {"status": "SKIPPED", "reason": "GROQ_API_KEY not set in .env"}
+        actual = {
+            "status": "SKIPPED",
+            "reason": "GROQ_API_KEY not set in .env",
+        }
         expected = deepcopy(actual)
         show_case(
             "API-AI-03: Groq API Key Connectivity",
@@ -253,7 +295,11 @@ def test_groq_api_key_connectivity():
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=20)
         is_ok = resp.status_code == 200
-        msg = resp.json().get("choices", [{}])[0].get("message", {}) if is_ok else {}
+        msg = (
+            resp.json().get("choices", [{}])[0].get("message", {})
+            if is_ok
+            else {}
+        )
         content = msg.get("content", "") or msg.get("reasoning", "")
         actual = {
             "status_code": resp.status_code,
@@ -262,7 +308,11 @@ def test_groq_api_key_connectivity():
             "authenticated": is_ok,
         }
     except Exception as err:
-        actual = {"error": str(err), "authenticated": False, "models_discovered": False}
+        actual = {
+            "error": str(err),
+            "authenticated": False,
+            "models_discovered": False,
+        }
 
     expected = {
         "status_code": 200,
@@ -274,7 +324,10 @@ def test_groq_api_key_connectivity():
     show_case(
         "API-AI-03: Groq API Key Connectivity",
         "api.groq.com/openai/v1/chat/completions",
-        "Verify Groq API key authentication, model discovery, and chat completion.",
+        (
+            "Verify Groq API key authentication, model discovery, and chat "
+            "completion."
+        ),
         {"provider": "groq", "model": model, "models_found": len(models)},
         expected,
         actual,
@@ -286,14 +339,20 @@ def test_groq_api_key_connectivity():
 # Part 2: BIS AI Fallback Chain Tests
 # ---------------------------------------------------------------------------
 
+
 def test_bis_fallback_chain_normal_execution():
-    """Verify that BIS AI executes successfully using the configured fallback pipeline."""
+    """Verify that BIS AI executes successfully using the configured
+    fallback pipeline.
+    """
     config = bis_config.load_config()
     payload = {
         "messages": [
             {
                 "role": "system",
-                "content": "Return valid JSON with key 'status' set to 'ok' and key 'app' set to 'BiteFinder'.",
+                ("content"): (
+                    "Return valid JSON with key 'status' set to 'ok' and key "
+                    "'app' set to 'BiteFinder'."
+                ),
             },
             {"role": "user", "content": "Return the JSON."},
         ],
@@ -310,7 +369,10 @@ def test_bis_fallback_chain_normal_execution():
     show_case(
         "API-AI-04: BIS Fallback Chain Normal Execution",
         "BIS.ai_manager._call_json_with_fallback()",
-        "Test that BIS obtains valid JSON through its configured model pipeline.",
+        (
+            "Test that BIS obtains valid JSON through its configured model "
+            "pipeline."
+        ),
         {"configured_primary": config.get("openrouter_model")},
         expected,
         actual,
@@ -319,13 +381,17 @@ def test_bis_fallback_chain_normal_execution():
 
 
 def test_bis_fallback_activates_on_primary_failure():
-    """Verify that BIS smoothly falls back to secondary provider when primary fails."""
+    """Verify that BIS smoothly falls back to secondary provider when
+    primary fails.
+    """
     config = bis_config.load_config()
     payload = {
         "messages": [
             {
                 "role": "system",
-                "content": "Return valid JSON with key 'fallback' set to true.",
+                ("content"): (
+                    "Return valid JSON with key 'fallback' set to true."
+                ),
             },
             {"role": "user", "content": "Generate JSON."},
         ],
@@ -333,7 +399,10 @@ def test_bis_fallback_activates_on_primary_failure():
     }
 
     # Simulate primary OpenRouter failure
-    with patch("BIS.ai_manager._call_openrouter", side_effect=RuntimeError("Simulated primary failure")):
+    with patch(
+        "BIS.ai_manager._call_openrouter",
+        side_effect=RuntimeError("Simulated primary failure"),
+    ):
         result = bis_ai._call_json_with_fallback(payload, config)
 
     actual = {
@@ -345,7 +414,10 @@ def test_bis_fallback_activates_on_primary_failure():
     show_case(
         "API-AI-05: BIS Fallback Activation On Primary Failure",
         "BIS.ai_manager._call_json_with_fallback()",
-        "Simulate OpenRouter primary outage and assert automatic fallback to Gemini/Groq.",
+        (
+            "Simulate OpenRouter primary outage and assert automatic fallback "
+            "to Gemini/Groq."
+        ),
         {"simulated_failure": "OpenRouter RuntimeError"},
         expected,
         actual,
@@ -354,7 +426,7 @@ def test_bis_fallback_activates_on_primary_failure():
 
 
 def test_bis_fallback_cascades_multi_tier():
-    """Verify that BIS cascades down to tertiary provider when first two fail."""
+    "Verify that BIS cascades down to tertiary provider when first two fail."
     config = bis_config.load_config()
     payload = {
         "messages": [
@@ -367,9 +439,18 @@ def test_bis_fallback_cascades_multi_tier():
         "temperature": 0,
     }
 
-    # Simulate failure on OpenRouter and Gemini, forcing Groq (or subsequent model)
-    with patch("BIS.ai_manager._call_openrouter", side_effect=RuntimeError("Simulated primary failure")), \
-         patch("BIS.ai_manager._call_gemini", side_effect=RuntimeError("Simulated secondary failure")):
+    # Simulate failure on OpenRouter and Gemini, forcing Groq (or subsequent
+    # model)
+    with (
+        patch(
+            "BIS.ai_manager._call_openrouter",
+            side_effect=RuntimeError("Simulated primary failure"),
+        ),
+        patch(
+            "BIS.ai_manager._call_gemini",
+            side_effect=RuntimeError("Simulated secondary failure"),
+        ),
+    ):
         result = bis_ai._call_json_with_fallback(payload, config)
 
     actual = {
@@ -381,7 +462,10 @@ def test_bis_fallback_cascades_multi_tier():
     show_case(
         "API-AI-06: BIS Multi-Tier Fallback Cascade",
         "BIS.ai_manager._call_json_with_fallback()",
-        "Simulate OpenRouter and Gemini failures and assert fallback to tertiary provider.",
+        (
+            "Simulate OpenRouter and Gemini failures and assert fallback to "
+            "tertiary provider."
+        ),
         {"simulated_failures": ["OpenRouter", "Gemini"]},
         expected,
         actual,
@@ -390,7 +474,7 @@ def test_bis_fallback_cascades_multi_tier():
 
 
 def test_bis_fallback_graceful_exhaustion():
-    """Verify that BIS raises RuntimeError safely when all fallback models fail."""
+    "Verify that BIS raises RuntimeError safely when all fallback models fail."
     config = bis_config.load_config()
     payload = {
         "messages": [
@@ -399,9 +483,20 @@ def test_bis_fallback_graceful_exhaustion():
         ],
     }
 
-    with patch("BIS.ai_manager._call_openrouter", side_effect=RuntimeError("Simulated failure")), \
-         patch("BIS.ai_manager._call_gemini", side_effect=RuntimeError("Simulated failure")), \
-         patch("BIS.ai_manager._call_groq", side_effect=RuntimeError("Simulated failure")):
+    with (
+        patch(
+            "BIS.ai_manager._call_openrouter",
+            side_effect=RuntimeError("Simulated failure"),
+        ),
+        patch(
+            "BIS.ai_manager._call_gemini",
+            side_effect=RuntimeError("Simulated failure"),
+        ),
+        patch(
+            "BIS.ai_manager._call_groq",
+            side_effect=RuntimeError("Simulated failure"),
+        ),
+    ):
         try:
             bis_ai._call_json_with_fallback(payload, config)
             actual = "no_error"
@@ -413,7 +508,10 @@ def test_bis_fallback_graceful_exhaustion():
     show_case(
         "API-AI-07: BIS Fallback Graceful Exhaustion",
         "BIS.ai_manager._call_json_with_fallback()",
-        "Simulate failure across all providers and assert clear user-facing error.",
+        (
+            "Simulate failure across all providers and assert clear "
+            "user-facing error."
+        ),
         {"simulated_failures": "ALL_PROVIDERS"},
         expected,
         actual,
@@ -425,17 +523,27 @@ def test_bis_fallback_graceful_exhaustion():
 # Part 3: BRNS AI Fallback Chain Tests
 # ---------------------------------------------------------------------------
 
+
 def test_brns_candidate_ranking_normal_execution():
-    """Verify that BRNS candidate ranking executes successfully with live models."""
-    recommendation = brns_ai.recommend_candidates(SAMPLE_SEARCH_REQUEST, SAMPLE_CANDIDATES)
+    """Verify that BRNS candidate ranking executes successfully with live
+    models.
+    """
+    recommendation = brns_ai.recommend_candidates(
+        SAMPLE_SEARCH_REQUEST, SAMPLE_CANDIDATES
+    )
 
     actual = {
         "is_list": isinstance(recommendation, list),
-        "candidate_count": len(recommendation) if isinstance(recommendation, list) else 0,
+        "candidate_count": len(recommendation)
+        if isinstance(recommendation, list)
+        else 0,
         "has_reasons": bool(
             recommendation
             and isinstance(recommendation[0], dict)
-            and ("reason_codes" in recommendation[0] or "reasons" in recommendation[0])
+            and (
+                "reason_codes" in recommendation[0]
+                or "reasons" in recommendation[0]
+            )
         ),
     }
     expected = {
@@ -447,7 +555,10 @@ def test_brns_candidate_ranking_normal_execution():
     show_case(
         "API-AI-08: BRNS Candidate Ranking Live Execution",
         "BRNS.ai_manager.recommend_candidates()",
-        "Test candidate ranking and reason code generation using live model chain.",
+        (
+            "Test candidate ranking and reason code generation using live "
+            "model chain."
+        ),
         {"candidate_count": len(SAMPLE_CANDIDATES)},
         expected,
         actual,
@@ -456,14 +567,24 @@ def test_brns_candidate_ranking_normal_execution():
 
 
 def test_brns_fallback_activates_on_provider_failure():
-    """Verify that BRNS cascades to next model in MODEL_CHAIN when first model fails."""
-    # Patch the first provider in BRNS MODEL_CHAIN (gemini) to fail with rate limit
-    with patch("BRNS.ai_manager._call_gemini", return_value=(False, "429 rate limited")):
-        recommendation = brns_ai.recommend_candidates(SAMPLE_SEARCH_REQUEST, SAMPLE_CANDIDATES)
+    """Verify that BRNS cascades to next model in MODEL_CHAIN when first
+    model fails.
+    """
+    # Patch the first provider in BRNS MODEL_CHAIN (gemini) to fail with rate
+    # limit
+    with patch(
+        "BRNS.ai_manager._call_gemini",
+        return_value=(False, "429 rate limited"),
+    ):
+        recommendation = brns_ai.recommend_candidates(
+            SAMPLE_SEARCH_REQUEST, SAMPLE_CANDIDATES
+        )
 
     actual = {
         "is_list": isinstance(recommendation, list),
-        "candidate_count": len(recommendation) if isinstance(recommendation, list) else 0,
+        "candidate_count": len(recommendation)
+        if isinstance(recommendation, list)
+        else 0,
         "fallback_succeeded": bool(recommendation),
     }
     expected = {
@@ -475,7 +596,10 @@ def test_brns_fallback_activates_on_provider_failure():
     show_case(
         "API-AI-09: BRNS Fallback Activation On Provider Outage",
         "BRNS.ai_manager.recommend_candidates()",
-        "Simulate 429 quota exhaustion on primary model and assert fallback recovery.",
+        (
+            "Simulate 429 quota exhaustion on primary model and assert "
+            "fallback recovery."
+        ),
         {"simulated_failure": "Gemini 429 rate limited"},
         expected,
         actual,
@@ -484,11 +608,22 @@ def test_brns_fallback_activates_on_provider_failure():
 
 
 def test_brns_fallback_exhaustion_returns_none():
-    """Verify that BRNS returns None gracefully when every model in MODEL_CHAIN fails."""
-    with patch("BRNS.ai_manager._call_gemini", return_value=(False, "HTTP 500")), \
-         patch("BRNS.ai_manager._call_openrouter", return_value=(False, "HTTP 500")), \
-         patch("BRNS.ai_manager._call_groq", return_value=(False, "HTTP 500")):
-        recommendation = brns_ai.recommend_candidates(SAMPLE_SEARCH_REQUEST, SAMPLE_CANDIDATES)
+    """Verify that BRNS returns None gracefully when every model in
+    MODEL_CHAIN fails.
+    """
+    with (
+        patch(
+            "BRNS.ai_manager._call_gemini", return_value=(False, "HTTP 500")
+        ),
+        patch(
+            "BRNS.ai_manager._call_openrouter",
+            return_value=(False, "HTTP 500"),
+        ),
+        patch("BRNS.ai_manager._call_groq", return_value=(False, "HTTP 500")),
+    ):
+        recommendation = brns_ai.recommend_candidates(
+            SAMPLE_SEARCH_REQUEST, SAMPLE_CANDIDATES
+        )
 
     actual = recommendation is None
     expected = True
@@ -496,7 +631,10 @@ def test_brns_fallback_exhaustion_returns_none():
     show_case(
         "API-AI-10: BRNS Fallback Total Exhaustion",
         "BRNS.ai_manager.recommend_candidates()",
-        "Simulate failure across all BRNS providers and assert graceful None return.",
+        (
+            "Simulate failure across all BRNS providers and assert graceful "
+            "None return."
+        ),
         {"simulated_failures": "ALL_BRNS_MODELS"},
         expected,
         actual,

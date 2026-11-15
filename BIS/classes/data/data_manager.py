@@ -2,16 +2,29 @@
 
 import json
 
-from BIS.classes.data.contracts.bis_data_manager_interface import BISDataManagerInterface
+from BIS.classes.data.contracts.bis_data_manager_interface import (
+    BISDataManagerInterface,
+)
 
 
 class DataManager(BISDataManagerInterface):
     """Coordinate BIS repositories without owning UI or business rules."""
 
-    def __init__(self, user_store, sessions=None, favorites=None,
-                 credentials=None, proposals=None, user_sync=None):
+    def __init__(
+        self,
+        user_store,
+        sessions=None,
+        favorites=None,
+        credentials=None,
+        proposals=None,
+        user_sync=None,
+    ):
         self._proposals = proposals
-        self._sessions, self._favorites, self._credentials = sessions, favorites, credentials
+        self._sessions, self._favorites, self._credentials = (
+            sessions,
+            favorites,
+            credentials,
+        )
         self._user_store = user_store
         self._user_sync = user_sync
 
@@ -30,8 +43,8 @@ class DataManager(BISDataManagerInterface):
 
     def serialize_search_request(self, request):
         return json.dumps(
-            request, ensure_ascii=False, allow_nan=False,
-            separators=(",", ":"))
+            request, ensure_ascii=False, allow_nan=False, separators=(",", ":")
+        )
 
     def load(self):
         self._sync_from_cli()
@@ -46,7 +59,9 @@ class DataManager(BISDataManagerInterface):
 
     def register_user(self, email, username):
         self._sync_from_cli()
-        return self._sync_to_cli(self._user_store.register_user(email, username))
+        return self._sync_to_cli(
+            self._user_store.register_user(email, username)
+        )
 
     def email_exists(self, email):
         self._sync_from_cli()

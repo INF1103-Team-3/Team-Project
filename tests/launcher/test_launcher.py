@@ -1,4 +1,5 @@
-"""Launch-menu and web startup checks without Docker, browser, or external IO."""
+"Launch-menu and web startup checks without Docker, browser, or external IO."
+
 import io
 import json
 from pathlib import Path
@@ -9,9 +10,11 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from BIS.classes.io.cli.helpers.launcher_io import LauncherIO
-from BIS.classes.services.launcher.bis_launcher import BISLauncher
-from BIS.classes.services.launcher.web_interface_launcher import WebInterfaceLauncher
+from BIS.classes.io.cli.helpers.launcher_io import LauncherIO  # noqa: E402
+from BIS.classes.services.launcher.bis_launcher import BISLauncher  # noqa: E402
+from BIS.classes.services.launcher.web_interface_launcher import (  # noqa: E402
+    WebInterfaceLauncher,
+)
 
 
 class LauncherTests(unittest.TestCase):
@@ -38,7 +41,12 @@ class LauncherTests(unittest.TestCase):
         web.start.assert_not_called()
 
     def test_eof_exits(self):
-        self.assertEqual(LauncherIO(Mock(side_effect=EOFError), lambda _m: None).choose_interface(), "exit")
+        self.assertEqual(
+            LauncherIO(
+                Mock(side_effect=EOFError), lambda _m: None
+            ).choose_interface(),
+            "exit",
+        )
 
     @staticmethod
     def ready_response():
@@ -48,49 +56,84 @@ class LauncherTests(unittest.TestCase):
 
     def test_already_running_reuses_stack_and_opens_host_browser(self):
         runner, browser = Mock(), Mock(return_value=True)
-        launcher = WebInterfaceLauncher(runner=runner, browser=browser,
-                  opener=lambda *_a, **_k: self.ready_response(), in_container=False)
+        launcher = WebInterfaceLauncher(
+            runner=runner,
+            browser=browser,
+            opener=lambda *_a, **_k: self.ready_response(),
+            in_container=False,
+        )
         self.assertTrue(launcher.start()["browser_opened"])
         runner.assert_not_called()
         browser.assert_called_once()
 
     def test_container_never_runs_docker_or_opens_a_browser(self):
         runner, browser = Mock(), Mock()
-        launcher = WebInterfaceLauncher(runner=runner, browser=browser,
-                  opener=lambda *_a, **_k: self.ready_response(), in_container=True)
+        launcher = WebInterfaceLauncher(
+            runner=runner,
+            browser=browser,
+            opener=lambda *_a, **_k: self.ready_response(),
+            in_container=True,
+        )
         self.assertFalse(launcher.start()["browser_opened"])
         runner.assert_not_called()
         browser.assert_not_called()
 
     def test_docker_failure_is_explained(self):
-        launcher = WebInterfaceLauncher(runner=Mock(side_effect=FileNotFoundError),
-                  opener=Mock(side_effect=OSError), in_container=False)
+        launcher = WebInterfaceLauncher(
+            runner=Mock(side_effect=FileNotFoundError),
+            opener=Mock(side_effect=OSError),
+            in_container=False,
+        )
         with self.assertRaisesRegex(RuntimeError, "Check Docker"):
             launcher.start()
 
-    def test_root_and_bis_entry_points_exit_without_loading_optional_services(self):
+    def test_root_and_bis_entry_points_exit_without_loading_optional_services(
+        self,
+    ):
         import os
         import subprocess
+
         environment = os.environ.copy()
-        environment.update(BITEFINDER_STORAGE="mongo", MONGO_URI="mongodb://unavailable.invalid:27017/")
+        environment.update(
+            BITEFINDER_STORAGE="mongo",
+            MONGO_URI="mongodb://unavailable.invalid:27017/",
+        )
         for relative in ("main.py", "BIS/main.py"):
-            result = subprocess.run([sys.executable, str(ROOT / relative)],
-                                    input="0\n", text=True, capture_output=True,
-                                    env=environment, cwd=ROOT, timeout=10)
+            result = subprocess.run(
+                [sys.executable, str(ROOT / relative)],
+                input="0\n",
+                text=True,
+                capture_output=True,
+                env=environment,
+                cwd=ROOT,
+                timeout=10,
+            )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Start the web interface", result.stdout)
             self.assertIn("Goodbye", result.stdout)
             self.assertNotIn("MongoDB", result.stdout)
 
     def test_browser_failure_still_returns_running_web_url(self):
-        launcher = WebInterfaceLauncher(browser=Mock(side_effect=OSError),
-                  opener=lambda *_a, **_k: self.ready_response(), in_container=False)
-        self.assertEqual(launcher.start(), {"url": "http://localhost:8080", "browser_opened": False})
+        launcher = WebInterfaceLauncher(
+            browser=Mock(side_effect=OSError),
+            opener=lambda *_a, **_k: self.ready_response(),
+            in_container=False,
+        )
+        self.assertEqual(
+            launcher.start(),
+            {"url": "http://localhost:8080", "browser_opened": False},
+        )
 
     def test_readiness_timeout_is_bounded(self):
         times = iter([0, 1])
-        launcher = WebInterfaceLauncher(runner=Mock(), opener=Mock(side_effect=OSError),
-                  clock=lambda: next(times), sleep=Mock(), timeout=.1, in_container=False)
+        launcher = WebInterfaceLauncher(
+            runner=Mock(),
+            opener=Mock(side_effect=OSError),
+            clock=lambda: next(times),
+            sleep=Mock(),
+            timeout=0.1,
+            in_container=False,
+        )
         with self.assertRaisesRegex(RuntimeError, "timed out"):
             launcher.start()
 

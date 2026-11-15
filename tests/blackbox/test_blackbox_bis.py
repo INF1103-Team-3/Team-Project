@@ -12,9 +12,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(TESTS_ROOT))
 
 
-from reporting import show_case
+from reporting import show_case  # noqa: E402
 
-from blackbox_support import (
+from blackbox_support import (  # noqa: E402
     TEST_PASSWORD,
     assert_shows,
     clear_fixture_calls,
@@ -31,58 +31,34 @@ from blackbox_support import (
 def read_users(context):
     """Read BIS users saved during a black-box test."""
 
-    path = (
-        context["root"]
-        / "BIS"
-        / "data"
-        / "users.json"
-    )
+    path = context["root"] / "BIS" / "data" / "users.json"
 
     if not path.exists():
         return {}
 
-    return json.loads(
-        path.read_text(
-            encoding="utf-8"
-        )
-    )
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def read_credentials(context):
     """Read BIS password credentials saved during a black-box test."""
 
-    path = (
-        context["root"]
-        / "BIS"
-        / "data"
-        / "credentials.json"
-    )
+    path = context["root"] / "BIS" / "data" / "credentials.json"
 
     if not path.exists():
         return {}
 
-    return json.loads(
-        path.read_text(
-            encoding="utf-8"
-        )
-    )
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def save_user(context, user):
     """Save one BIS user into the isolated black-box environment."""
 
-    path = (
-        context["root"]
-        / "BIS"
-        / "data"
-        / "users.json"
-    )
+    path = context["root"] / "BIS" / "data" / "users.json"
 
     path.write_text(
         json.dumps(
             {
-                user["userID"]:
-                    user,
+                user["userID"]: user,
             }
         ),
         encoding="utf-8",
@@ -121,26 +97,15 @@ def test_signup_rejects_bad_email_without_saving_it():
             "Signed up.",
         )
 
-        accounts = read_users(
-            context
-        )
+        accounts = read_users(context)
 
         actual = {
-            "saved_emails": [
-                user["email"]
-                for user
-                in accounts.values()
-            ],
-            "external_calls":
-                fixture_paths(
-                    context["fixture"]
-                ),
+            "saved_emails": [user["email"] for user in accounts.values()],
+            "external_calls": fixture_paths(context["fixture"]),
         }
 
         expected = {
-            "saved_emails": [
-                "new@example.com"
-            ],
+            "saved_emails": ["new@example.com"],
             "external_calls": [],
         }
 
@@ -157,13 +122,11 @@ def test_signup_rejects_bad_email_without_saving_it():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_profile_setup_retries_invalid_budget():
-    """Profile setup retries an invalid budget and stores the corrected value."""
+    "Profile setup retries an invalid budget and stores the corrected value."
 
     context = create_blackbox_context()
 
@@ -204,42 +167,21 @@ def test_profile_setup_retries_invalid_budget():
             "Search cancelled",
         )
 
-        accounts = read_users(
-            context
-        )
+        accounts = read_users(context)
 
-        profile = next(
-            iter(
-                accounts.values()
-            )
-        )["preferences"]
+        profile = next(iter(accounts.values()))["preferences"]
 
         actual = {
-            "account_count":
-                len(accounts),
-
-            "location":
-                profile["location"],
-
-            "budget_per_person":
-                profile[
-                    "budget_per_person"
-                ],
-
-            "max_distance_km":
-                profile[
-                    "max_distance_km"
-                ],
-
-            "search_history":
-                history(context),
+            "account_count": len(accounts),
+            "location": profile["location"],
+            "budget_per_person": profile["budget_per_person"],
+            "max_distance_km": profile["max_distance_km"],
+            "search_history": history(context),
         }
 
         expected = {
             "account_count": 1,
-            "location": [
-                "tampines"
-            ],
+            "location": ["tampines"],
             "budget_per_person": 10,
             "max_distance_km": 2,
             "search_history": [],
@@ -258,9 +200,7 @@ def test_profile_setup_retries_invalid_budget():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_bare_travel_number_gets_unit_and_space_separated_cuisines():
@@ -305,36 +245,15 @@ def test_bare_travel_number_gets_unit_and_space_separated_cuisines():
             "Search cancelled",
         )
 
-        accounts = read_users(
-            context
-        )
+        accounts = read_users(context)
 
-        profile = next(
-            iter(
-                accounts.values()
-            )
-        )["preferences"]
+        profile = next(iter(accounts.values()))["preferences"]
 
         actual = {
-            "travel_minutes":
-                profile[
-                    "max_travel_time_minutes"
-                ],
-
-            "distance_km":
-                profile[
-                    "max_distance_km"
-                ],
-
-            "liked_cuisines":
-                profile[
-                    "liked_cuisines"
-                ],
-
-            "other_preferences":
-                profile[
-                    "other_preferences"
-                ],
+            "travel_minutes": profile["max_travel_time_minutes"],
+            "distance_km": profile["max_distance_km"],
+            "liked_cuisines": profile["liked_cuisines"],
+            "other_preferences": profile["other_preferences"],
         }
 
         expected = {
@@ -360,9 +279,7 @@ def test_bare_travel_number_gets_unit_and_space_separated_cuisines():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_written_travel_number_requires_explicit_unit_choice():
@@ -371,17 +288,11 @@ def test_written_travel_number_requires_explicit_unit_choice():
     context = create_blackbox_context()
 
     try:
-        user = seed_complete_user(
-            context
-        )
+        user = seed_complete_user(context)
 
-        user["preferences"][
-            "max_distance_km"
-        ] = None
+        user["preferences"]["max_distance_km"] = None
 
-        user["preferences"][
-            "max_travel_time_minutes"
-        ] = None
+        user["preferences"]["max_travel_time_minutes"] = None
 
         save_user(
             context,
@@ -412,37 +323,20 @@ def test_written_travel_number_requires_explicit_unit_choice():
             "Use 10 mins for your travel preference?",
         )
 
-        accounts = read_users(
-            context
-        )
+        accounts = read_users(context)
 
-        profile = accounts[
-            user["userID"]
-        ]["preferences"]
+        profile = accounts[user["userID"]]["preferences"]
 
         actual = {
-            "travel_minutes":
-                profile[
-                    "max_travel_time_minutes"
-                ],
-
-            "distance_km":
-                profile[
-                    "max_distance_km"
-                ],
-
-            "external_calls":
-                fixture_paths(
-                    context["fixture"]
-                ),
+            "travel_minutes": profile["max_travel_time_minutes"],
+            "distance_km": profile["max_distance_km"],
+            "external_calls": fixture_paths(context["fixture"]),
         }
 
         expected = {
             "travel_minutes": 10,
             "distance_km": 0.5,
-            "external_calls": [
-                "/chat/completions"
-            ],
+            "external_calls": ["/chat/completions"],
         }
 
         show_case(
@@ -458,28 +352,20 @@ def test_written_travel_number_requires_explicit_unit_choice():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_declined_written_travel_interpretation_is_not_saved():
-    """Declining the interpreted travel value leaves travel preferences empty."""
+    "Declining the interpreted travel value leaves travel preferences empty."
 
     context = create_blackbox_context()
 
     try:
-        user = seed_complete_user(
-            context
-        )
+        user = seed_complete_user(context)
 
-        user["preferences"][
-            "max_distance_km"
-        ] = None
+        user["preferences"]["max_distance_km"] = None
 
-        user["preferences"][
-            "max_travel_time_minutes"
-        ] = None
+        user["preferences"]["max_travel_time_minutes"] = None
 
         save_user(
             context,
@@ -509,24 +395,13 @@ def test_declined_written_travel_interpretation_is_not_saved():
             "No preference update was applied",
         )
 
-        accounts = read_users(
-            context
-        )
+        accounts = read_users(context)
 
-        profile = accounts[
-            user["userID"]
-        ]["preferences"]
+        profile = accounts[user["userID"]]["preferences"]
 
         actual = {
-            "distance_km":
-                profile[
-                    "max_distance_km"
-                ],
-
-            "travel_minutes":
-                profile[
-                    "max_travel_time_minutes"
-                ],
+            "distance_km": profile["max_distance_km"],
+            "travel_minutes": profile["max_travel_time_minutes"],
         }
 
         expected = {
@@ -547,9 +422,7 @@ def test_declined_written_travel_interpretation_is_not_saved():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_ai_unit_conflict_with_explicit_minutes_is_rejected():
@@ -558,17 +431,11 @@ def test_ai_unit_conflict_with_explicit_minutes_is_rejected():
     context = create_blackbox_context()
 
     try:
-        user = seed_complete_user(
-            context
-        )
+        user = seed_complete_user(context)
 
-        user["preferences"][
-            "max_distance_km"
-        ] = None
+        user["preferences"]["max_distance_km"] = None
 
-        user["preferences"][
-            "max_travel_time_minutes"
-        ] = None
+        user["preferences"]["max_travel_time_minutes"] = None
 
         save_user(
             context,
@@ -595,24 +462,13 @@ def test_ai_unit_conflict_with_explicit_minutes_is_rejected():
             "Could not confirm the travel unit",
         )
 
-        accounts = read_users(
-            context
-        )
+        accounts = read_users(context)
 
-        profile = accounts[
-            user["userID"]
-        ]["preferences"]
+        profile = accounts[user["userID"]]["preferences"]
 
         actual = {
-            "distance_km":
-                profile[
-                    "max_distance_km"
-                ],
-
-            "travel_minutes":
-                profile[
-                    "max_travel_time_minutes"
-                ],
+            "distance_km": profile["max_distance_km"],
+            "travel_minutes": profile["max_travel_time_minutes"],
         }
 
         expected = {
@@ -633,9 +489,7 @@ def test_ai_unit_conflict_with_explicit_minutes_is_rejected():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_ai_extracted_locations_are_saved_after_confirmation():
@@ -668,28 +522,15 @@ def test_ai_extracted_locations_are_saved_after_confirmation():
             "Preferences saved.",
         )
 
-        accounts = read_users(
-            context
-        )
+        accounts = read_users(context)
 
-        profile = next(
-            iter(
-                accounts.values()
-            )
-        )["preferences"]
+        profile = next(iter(accounts.values()))["preferences"]
 
-        calls = fixture_paths(
-            context["fixture"]
-        )
+        calls = fixture_paths(context["fixture"])
 
         actual = {
-            "locations":
-                profile["location"],
-
-            "ai_call_count":
-                calls.count(
-                    "/chat/completions"
-                ),
+            "locations": profile["location"],
+            "ai_call_count": calls.count("/chat/completions"),
         }
 
         expected = {
@@ -714,9 +555,7 @@ def test_ai_extracted_locations_are_saved_after_confirmation():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_declined_location_list_is_not_saved():
@@ -749,15 +588,9 @@ def test_declined_location_list_is_not_saved():
             "No preference update was applied",
         )
 
-        accounts = read_users(
-            context
-        )
+        accounts = read_users(context)
 
-        profile = next(
-            iter(
-                accounts.values()
-            )
-        )["preferences"]
+        profile = next(iter(accounts.values()))["preferences"]
 
         expected = None
         actual = profile["location"]
@@ -775,9 +608,7 @@ def test_declined_location_list_is_not_saved():
         assert actual is expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_ai_corrects_cuisine_typo_only_after_confirmation():
@@ -786,33 +617,20 @@ def test_ai_corrects_cuisine_typo_only_after_confirmation():
     context = create_blackbox_context()
 
     try:
-        user = seed_complete_user(
-            context
-        )
+        user = seed_complete_user(context)
 
-        user["preferences"][
-            "liked_cuisines"
-        ] = None
+        user["preferences"]["liked_cuisines"] = None
 
-        user["preferences"][
-            "disliked_cuisines"
-        ] = None
+        user["preferences"]["disliked_cuisines"] = None
 
-        user["preferences"][
-            "other_preferences"
-        ] = None
+        user["preferences"]["other_preferences"] = None
 
         save_user(
             context,
             user,
         )
 
-        (
-            context["root"]
-            / "BIS"
-            / "data"
-            / "profile_state.json"
-        ).write_text(
+        (context["root"] / "BIS" / "data" / "profile_state.json").write_text(
             "{}",
             encoding="utf-8",
         )
@@ -844,33 +662,16 @@ def test_ai_corrects_cuisine_typo_only_after_confirmation():
             "Profile complete.",
         )
 
-        accounts = read_users(
-            context
-        )
+        accounts = read_users(context)
 
-        profile = accounts[
-            user["userID"]
-        ]["preferences"]
+        profile = accounts[user["userID"]]["preferences"]
 
-        calls = fixture_paths(
-            context["fixture"]
-        )
+        calls = fixture_paths(context["fixture"])
 
         actual = {
-            "liked_cuisines":
-                profile[
-                    "liked_cuisines"
-                ],
-
-            "other_preferences":
-                profile[
-                    "other_preferences"
-                ],
-
-            "ai_call_count":
-                calls.count(
-                    "/chat/completions"
-                ),
+            "liked_cuisines": profile["liked_cuisines"],
+            "other_preferences": profile["other_preferences"],
+            "ai_call_count": calls.count("/chat/completions"),
         }
 
         expected = {
@@ -895,24 +696,18 @@ def test_ai_corrects_cuisine_typo_only_after_confirmation():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_declined_cuisine_correction_does_not_save():
-    """Rejecting a cuisine correction leaves the liked-cuisine field unchanged."""
+    "Rejecting a cuisine correction leaves the liked-cuisine field unchanged."
 
     context = create_blackbox_context()
 
     try:
-        user = seed_complete_user(
-            context
-        )
+        user = seed_complete_user(context)
 
-        user["preferences"][
-            "liked_cuisines"
-        ] = None
+        user["preferences"]["liked_cuisines"] = None
 
         save_user(
             context,
@@ -941,31 +736,18 @@ def test_declined_cuisine_correction_does_not_save():
             "No preference update was applied",
         )
 
-        accounts = read_users(
-            context
-        )
+        accounts = read_users(context)
 
         actual = {
-            "liked_cuisines":
-                accounts[
-                    user["userID"]
-                ]["preferences"][
-                    "liked_cuisines"
-                ],
-
-            "external_calls":
-                fixture_paths(
-                    context["fixture"]
-                ),
+            "liked_cuisines": accounts[user["userID"]]["preferences"][
+                "liked_cuisines"
+            ],
+            "external_calls": fixture_paths(context["fixture"]),
         }
 
         expected = {
-            "liked_cuisines":
-                None,
-
-            "external_calls": [
-                "/chat/completions"
-            ],
+            "liked_cuisines": None,
+            "external_calls": ["/chat/completions"],
         }
 
         show_case(
@@ -981,9 +763,7 @@ def test_declined_cuisine_correction_does_not_save():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_invalid_search_answers_retry_and_valid_search_is_saved():
@@ -992,13 +772,9 @@ def test_invalid_search_answers_retry_and_valid_search_is_saved():
     context = create_blackbox_context()
 
     try:
-        seed_complete_user(
-            context
-        )
+        seed_complete_user(context)
 
-        context["env"][
-            "AI_BYPASS"
-        ] = "true"
+        context["env"]["AI_BYPASS"] = "true"
 
         test_input = [
             "2",
@@ -1037,32 +813,14 @@ def test_invalid_search_answers_retry_and_valid_search_is_saved():
             "restaurant search skipped",
         )
 
-        state_path = (
-            context["root"]
-            / "BIS"
-            / "data"
-            / "profile_state.json"
-        )
+        state_path = context["root"] / "BIS" / "data" / "profile_state.json"
 
-        state = json.loads(
-            state_path.read_text(
-                encoding="utf-8"
-            )
-        )
+        state = json.loads(state_path.read_text(encoding="utf-8"))
 
         actual = {
-            "search_completed":
-                state["search"][
-                    "blackbox-user"
-                ]["completed"],
-
-            "search_history":
-                history(context),
-
-            "external_calls":
-                fixture_paths(
-                    context["fixture"]
-                ),
+            "search_completed": state["search"]["blackbox-user"]["completed"],
+            "search_history": history(context),
+            "external_calls": fixture_paths(context["fixture"]),
         }
 
         expected = {
@@ -1085,24 +843,18 @@ def test_invalid_search_answers_retry_and_valid_search_is_saved():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_transit_search_uses_profile_time_when_enter_pressed():
-    """Transit search uses the saved profile travel time when Enter is pressed."""
+    "Transit search uses the saved profile travel time when Enter is pressed."
 
     context = create_blackbox_context()
 
     try:
-        seed_complete_user(
-            context
-        )
+        seed_complete_user(context)
 
-        context["env"][
-            "AI_BYPASS"
-        ] = "true"
+        context["env"]["AI_BYPASS"] = "true"
 
         test_input = [
             "2",
@@ -1135,20 +887,15 @@ def test_transit_search_uses_profile_time_when_enter_pressed():
         )
 
         actual = {
-            "search_history":
-                history(context),
-
-            "summary_contains_profile_time":
-                (
-                    "Transit up to 40 min"
-                    in output
-                ),
+            "search_history": history(context),
+            "summary_contains_profile_time": (
+                "Transit up to 40 min" in output
+            ),
         }
 
         expected = {
             "search_history": [],
-            "summary_contains_profile_time":
-                True,
+            "summary_contains_profile_time": True,
         }
 
         show_case(
@@ -1164,24 +911,18 @@ def test_transit_search_uses_profile_time_when_enter_pressed():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_drive_search_uses_profile_time_when_enter_pressed():
-    """Driving search uses the saved profile travel time when Enter is pressed."""
+    "Driving search uses the saved profile travel time when Enter is pressed."
 
     context = create_blackbox_context()
 
     try:
-        seed_complete_user(
-            context
-        )
+        seed_complete_user(context)
 
-        context["env"][
-            "AI_BYPASS"
-        ] = "true"
+        context["env"]["AI_BYPASS"] = "true"
 
         test_input = [
             "2",
@@ -1216,20 +957,13 @@ def test_drive_search_uses_profile_time_when_enter_pressed():
         )
 
         actual = {
-            "search_history":
-                history(context),
-
-            "summary_contains_profile_time":
-                (
-                    "Drive up to 40 min"
-                    in output
-                ),
+            "search_history": history(context),
+            "summary_contains_profile_time": ("Drive up to 40 min" in output),
         }
 
         expected = {
             "search_history": [],
-            "summary_contains_profile_time":
-                True,
+            "summary_contains_profile_time": True,
         }
 
         show_case(
@@ -1245,9 +979,7 @@ def test_drive_search_uses_profile_time_when_enter_pressed():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_ai_search_interpretation_can_be_declined_before_brns():
@@ -1256,9 +988,7 @@ def test_ai_search_interpretation_can_be_declined_before_brns():
     context = create_blackbox_context()
 
     try:
-        seed_complete_user(
-            context
-        )
+        seed_complete_user(context)
 
         test_input = [
             "2",
@@ -1291,43 +1021,22 @@ def test_ai_search_interpretation_can_be_declined_before_brns():
             "Search cancelled",
         )
 
-        assert (
-            "Your profile is saved"
-            not in output
-        )
+        assert "Your profile is saved" not in output
 
-        assert (
-            "Profile saved. Goodbye!"
-            not in output
-        )
+        assert "Profile saved. Goodbye!" not in output
 
-        assert (
-            "Goodbye!"
-            in output
-        )
+        assert "Goodbye!" in output
 
         actual = {
-            "external_calls":
-                fixture_paths(
-                    context["fixture"]
-                ),
-
-            "search_history":
-                history(context),
-
-            "goodbye_shown":
-                "Goodbye!" in output,
+            "external_calls": fixture_paths(context["fixture"]),
+            "search_history": history(context),
+            "goodbye_shown": "Goodbye!" in output,
         }
 
         expected = {
-            "external_calls": [
-                "/chat/completions"
-            ],
-
+            "external_calls": ["/chat/completions"],
             "search_history": [],
-
-            "goodbye_shown":
-                True,
+            "goodbye_shown": True,
         }
 
         show_case(
@@ -1343,9 +1052,7 @@ def test_ai_search_interpretation_can_be_declined_before_brns():
         assert actual == expected
 
     finally:
-        close_blackbox_context(
-            context
-        )
+        close_blackbox_context(context)
 
 
 def test_signup_rejects_short_and_mismatched_passwords():
@@ -1506,11 +1213,13 @@ def test_legacy_passwordless_user_enrolls_password_on_signin():
         saved_cred = credentials.get(user["userID"])
 
         actual = {
-            "prompted_to_create": "No password is set for this account yet." in output,
+            "prompted_to_create": "No password is set for this account yet."
+            in output,
             "credential_saved": saved_cred is not None,
             "password_verified": (
                 PasswordHasher().verify("enrolled.secret7!", saved_cred)
-                if saved_cred else False
+                if saved_cred
+                else False
             ),
         }
         expected = {
@@ -1536,7 +1245,7 @@ def test_legacy_passwordless_user_enrolls_password_on_signin():
 
 
 def test_change_password_command_verifies_current_and_updates_hash():
-    """Users can change their password via /edit password and sign in with it."""
+    "Users can change their password via /edit password and sign in with it."
 
     context = create_blackbox_context()
 
@@ -1583,7 +1292,10 @@ def test_change_password_command_verifies_current_and_updates_hash():
         actual = {
             "cancelled_keeps_old": "Password unchanged." in output,
             "updated_password": "Password updated." in output,
-            "old_password_rejected_after_logout": output.count("Incorrect password.") >= 2,
+            "old_password_rejected_after_logout": output.count(
+                "Incorrect password."
+            )
+            >= 2,
             "re_authenticated": output.count("Hi Tester!") == 2,
         }
         expected = {

@@ -20,7 +20,9 @@ class BISLauncher:
                 result = self._web.start()
                 self._io.display_message("Open BiteFinder: " + result["url"])
                 if not result["browser_opened"]:
-                    self._io.display_message("Open this URL in your host browser.")
+                    self._io.display_message(
+                        "Open this URL in your host browser."
+                    )
                 return result
             except (OSError, RuntimeError) as error:
                 self._io.display_message(str(error))

@@ -1,6 +1,8 @@
 """Compatibility adapter for an unsupported BRNS provider entry."""
 
-from BRNS.classes.ai.providers.contracts.ai_provider_interface import AIProviderInterface
+from BRNS.classes.ai.providers.contracts.ai_provider_interface import (
+    AIProviderInterface,
+)
 from BRNS.classes.ai.providers.contracts.base_ai_provider import BaseAIProvider
 
 

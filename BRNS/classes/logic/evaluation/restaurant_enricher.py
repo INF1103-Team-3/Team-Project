@@ -6,13 +6,18 @@ from BRNS.classes.logic.evaluation.budget_fit_policy import BudgetFitPolicy
 
 
 class RestaurantEnricher:
-    """Own saved-outlet matching, merge precedence, and price/cuisine policy."""
+    "Own saved-outlet matching, merge precedence, and price/cuisine policy."
 
     CUISINE_MAP = {
-        "cafe": "cafe", "fast_food_restaurant": "fast food", "bakery": "bakery",
-        "american_restaurant": "western", "pizza_restaurant": "western",
-        "hamburger_restaurant": "western", "indian_restaurant": "indian",
-        "malaysian_restaurant": "malaysian", "indonesian_restaurant": "indonesian",
+        "cafe": "cafe",
+        "fast_food_restaurant": "fast food",
+        "bakery": "bakery",
+        "american_restaurant": "western",
+        "pizza_restaurant": "western",
+        "hamburger_restaurant": "western",
+        "indian_restaurant": "indian",
+        "malaysian_restaurant": "malaysian",
+        "indonesian_restaurant": "indonesian",
     }
 
     BAND_THRESHOLDS = (8.0, 15.0, 30.0)
@@ -26,7 +31,8 @@ class RestaurantEnricher:
             "postal_code": place.get("postal_code"),
             "number": place.get("number"),
             "rating_count": place.get("rating_count"),
-            "serves_vegetarian_food": place.get("serves_vegetarian_food") is True,
+            "serves_vegetarian_food": place.get("serves_vegetarian_food")
+            is True,
             "halal_hint": place.get("halal_hint") is True,
             "wheelchair_accessible": place.get("wheelchair_accessible"),
             "open_now": place.get("open_now"),
@@ -35,31 +41,54 @@ class RestaurantEnricher:
         }
         if entry:
             avg_price = entry.get("avg_price")
-            saved_cuisines = [cuisine for cuisine in (
-                entry.get("cuisines") or
-                ([entry["cuisine"]] if entry.get("cuisine") else []))
-                if cuisine in CUISINES]
-            saved_dietary = (entry.get("dietary_requirements")
-                             or entry.get("dietary") or [])
-            band = (self.price_to_band(avg_price) if avg_price is not None
-                    else (place.get("price_level")
-                          or self._band_from_range(place.get("price_start"), place.get("price_end"))))
-            est_price, _ = BudgetFitPolicy.estimate_price({
-                "avg_price": avg_price,
-                "price_start": place.get("price_start"),
-                "price_end": place.get("price_end"),
-                "price_level": place.get("price_level"),
-                "price_band": band,
-            })
+            saved_cuisines = [
+                cuisine
+                for cuisine in (
+                    entry.get("cuisines")
+                    or ([entry["cuisine"]] if entry.get("cuisine") else [])
+                )
+                if cuisine in CUISINES
+            ]
+            saved_dietary = (
+                entry.get("dietary_requirements") or entry.get("dietary") or []
+            )
+            band = (
+                self.price_to_band(avg_price)
+                if avg_price is not None
+                else (
+                    place.get("price_level")
+                    or self._band_from_range(
+                        place.get("price_start"), place.get("price_end")
+                    )
+                )
+            )
+            est_price, _ = BudgetFitPolicy.estimate_price(
+                {
+                    "avg_price": avg_price,
+                    "price_start": place.get("price_start"),
+                    "price_end": place.get("price_end"),
+                    "price_level": place.get("price_level"),
+                    "price_band": band,
+                }
+            )
             return {
                 **live_fields,
                 "name": entry.get("name", place["name"]),
                 "address": place["address"],
-                "lat": place["lat"], "lng": place["lng"],
-                "cuisines": saved_cuisines or [self._cuisine_from_types(place["types"])],
-                "dietary_requirements": sorted(set(
-                    saved_dietary
-                    + (["vegetarian"] if place.get("serves_vegetarian_food") else []))),
+                "lat": place["lat"],
+                "lng": place["lng"],
+                "cuisines": saved_cuisines
+                or [self._cuisine_from_types(place["types"])],
+                "dietary_requirements": sorted(
+                    set(
+                        saved_dietary
+                        + (
+                            ["vegetarian"]
+                            if place.get("serves_vegetarian_food")
+                            else []
+                        )
+                    )
+                ),
                 "avg_price": avg_price,
                 "price_band": band,
                 "price_level": place.get("price_level"),
@@ -71,27 +100,35 @@ class RestaurantEnricher:
                 "open_hours": entry.get("open_hours"),
                 "spicy_options": entry.get("spicy_options"),
                 "certification": entry.get("certification", "unknown"),
-                "walk_minutes": None, "walk_meters": None,
-                "drive_minutes": None, "drive_meters": None,
-                "transit_minutes": None, "transit_meters": None,
+                "walk_minutes": None,
+                "walk_meters": None,
+                "drive_minutes": None,
+                "drive_meters": None,
+                "transit_minutes": None,
+                "transit_meters": None,
                 "source": "saved + google places",
             }
-        live_band = (place.get("price_level")
-                     or self._band_from_range(place.get("price_start"), place.get("price_end")))
-        live_est_price, _ = BudgetFitPolicy.estimate_price({
-            "price_start": place.get("price_start"),
-            "price_end": place.get("price_end"),
-            "price_level": place.get("price_level"),
-            "price_band": live_band,
-        })
+        live_band = place.get("price_level") or self._band_from_range(
+            place.get("price_start"), place.get("price_end")
+        )
+        live_est_price, _ = BudgetFitPolicy.estimate_price(
+            {
+                "price_start": place.get("price_start"),
+                "price_end": place.get("price_end"),
+                "price_level": place.get("price_level"),
+                "price_band": live_band,
+            }
+        )
         return {
             **live_fields,
             "name": place["name"],
             "address": place["address"],
-            "lat": place["lat"], "lng": place["lng"],
+            "lat": place["lat"],
+            "lng": place["lng"],
             "cuisines": [self._cuisine_from_types(place["types"])],
             "dietary_requirements": (
-                ["vegetarian"] if place.get("serves_vegetarian_food") else []),
+                ["vegetarian"] if place.get("serves_vegetarian_food") else []
+            ),
             "avg_price": None,
             "price_band": live_band,
             "price_level": place.get("price_level"),
@@ -103,9 +140,12 @@ class RestaurantEnricher:
             "open_hours": None,
             "spicy_options": None,
             "certification": "unknown",
-            "walk_minutes": None, "walk_meters": None,
-            "drive_minutes": None, "drive_meters": None,
-            "transit_minutes": None, "transit_meters": None,
+            "walk_minutes": None,
+            "walk_meters": None,
+            "drive_minutes": None,
+            "drive_meters": None,
+            "transit_minutes": None,
+            "transit_meters": None,
             "source": "google places",
         }
 
@@ -125,13 +165,17 @@ class RestaurantEnricher:
         return re.sub(r"[^a-z0-9 ]", " ", (name or "").lower()).strip()
 
     def price_to_band(self, avg_price):
-        for band, upper in zip(("inexpensive", "moderate", "expensive"), self.BAND_THRESHOLDS):
+        for band, upper in zip(
+            ("inexpensive", "moderate", "expensive"), self.BAND_THRESHOLDS
+        ):
             if avg_price <= upper:
                 return band
         return "very_expensive"
 
     def _band_from_range(self, start, end):
-        """Derive a budget band from a price range (midpoint). None if no numbers."""
+        """Derive a budget band from a price range (midpoint). None if no
+        numbers.
+        """
         vals = [v for v in (start, end) if v is not None]
         if not vals:
             return None
@@ -139,7 +183,11 @@ class RestaurantEnricher:
 
     def _cuisine_from_types(self, types):
         for t in types or []:
-            if t in ("halal_restaurant", "vegetarian_restaurant", "vegan_restaurant"):
+            if t in (
+                "halal_restaurant",
+                "vegetarian_restaurant",
+                "vegan_restaurant",
+            ):
                 continue
             if t in self.CUISINE_MAP:
                 return self.CUISINE_MAP[t]

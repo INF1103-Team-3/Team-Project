@@ -20,13 +20,19 @@ GEOCODE_URL = os.getenv(
 
 _BACKEND = os.getenv("BITEFINDER_STORAGE", "json").strip().lower()
 if _BACKEND == "json":
-    from BIS.classes.data.stores.json.json_credential_store import JsonCredentialStore
+    from BIS.classes.data.stores.json.json_credential_store import (
+        JsonCredentialStore,
+    )
+
     _STORE = JsonUserStore(USERS_FILE, STATE_FILE)
     _CREDENTIALS = JsonCredentialStore(CREDENTIALS_FILE)
 elif _BACKEND == "mongo":
     from common.storage_dependencies import mongo_connection
     from BIS.classes.data.stores.mongo.mongo_user_store import MongoUserStore
-    from BIS.classes.data.stores.mongo.mongo_credential_store import MongoCredentialStore
+    from BIS.classes.data.stores.mongo.mongo_credential_store import (
+        MongoCredentialStore,
+    )
+
     _CONNECTION = mongo_connection()
     _STORE = MongoUserStore(_CONNECTION)
     _STORE.ensure_indexes()
@@ -99,7 +105,8 @@ def save_credentials(user_id, credential):
 
 def save_preferences(user_id, preferences, config):
     preferences = logic_manager.manager().prepare_preferences_save(
-        _MANAGER.get_user(user_id), preferences, config)
+        _MANAGER.get_user(user_id), preferences, config
+    )
     return _MANAGER.save_preferences(user_id, preferences, config)
 
 

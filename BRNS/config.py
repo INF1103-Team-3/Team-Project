@@ -16,25 +16,35 @@ def _bounded_seconds(name, default, maximum):
         value = float(default)
     return min(max(value, 1.0), float(maximum))
 
+
 # --- AI layer: OpenRouter + direct Gemini + Groq (separate quota pools) ---
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")   # from aistudio.google.com — free, no card
+# from aistudio.google.com — free, no card
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 AI_REQUEST_TIMEOUT_SECONDS = _bounded_seconds(
-    "BRNS_AI_REQUEST_TIMEOUT_SECONDS", 12, 60)
+    "BRNS_AI_REQUEST_TIMEOUT_SECONDS", 12, 60
+)
 AI_CHAIN_TIMEOUT_SECONDS = _bounded_seconds(
-    "BRNS_AI_CHAIN_TIMEOUT_SECONDS", 45, 180)
+    "BRNS_AI_CHAIN_TIMEOUT_SECONDS", 45, 180
+)
 
-OPENROUTER_URL = os.getenv("BITEFINDER_OPENROUTER_URL",
-                            "https://openrouter.ai/api/v1/chat/completions")
-GEMINI_URL = os.getenv("BITEFINDER_GEMINI_URL",
-                        "https://generativelanguage.googleapis.com/v1beta/models")
-GROQ_URL = os.getenv("BITEFINDER_GROQ_URL",
-                      "https://api.groq.com/openai/v1/chat/completions")
+OPENROUTER_URL = os.getenv(
+    "BITEFINDER_OPENROUTER_URL",
+    "https://openrouter.ai/api/v1/chat/completions",
+)
+GEMINI_URL = os.getenv(
+    "BITEFINDER_GEMINI_URL",
+    "https://generativelanguage.googleapis.com/v1beta/models",
+)
+GROQ_URL = os.getenv(
+    "BITEFINDER_GROQ_URL", "https://api.groq.com/openai/v1/chat/completions"
+)
 
 # Try the responsive direct provider first; retain OpenRouter as fallback.
 MODEL_CHAIN = [
-    {"provider": "gemini", "model": "gemini-3.5-flash-lite"},   # from Google's 404 notice
+    # from Google's 404 notice
+    {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
 ]
 
 
@@ -43,32 +53,51 @@ def _extend_chain_with_groq():
     if not GROQ_API_KEY:
         return
     from common.groq_models import fetch_chat_models
+
     for model_id in fetch_chat_models(GROQ_API_KEY):
         MODEL_CHAIN.append({"provider": "groq", "model": model_id})
 
 
 _extend_chain_with_groq()
-MODEL_CHAIN.extend([
-    {"provider": "gemini", "model": "gemini-3.6-flash"},        # separate daily pool
-    {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
-])
+MODEL_CHAIN.extend(
+    [
+        {
+            "provider": "gemini",
+            "model": "gemini-3.6-flash",
+        },  # separate daily pool
+        {
+            "provider": "openrouter",
+            "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        },
+    ]
+)
 
 # --- IO layer: Google Maps Platform ---
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
-GEOCODE_URL = os.getenv("BITEFINDER_GEOCODE_URL",
-                        "https://maps.googleapis.com/maps/api/geocode/json")
-TEXT_SEARCH_URL = os.getenv("BITEFINDER_TEXT_SEARCH_URL",
-                            "https://places.googleapis.com/v1/places:searchText")
-PLACES_URL = os.getenv("BITEFINDER_PLACES_URL",
-                        "https://places.googleapis.com/v1/places:searchNearby")
+GEOCODE_URL = os.getenv(
+    "BITEFINDER_GEOCODE_URL",
+    "https://maps.googleapis.com/maps/api/geocode/json",
+)
+TEXT_SEARCH_URL = os.getenv(
+    "BITEFINDER_TEXT_SEARCH_URL",
+    "https://places.googleapis.com/v1/places:searchText",
+)
+PLACES_URL = os.getenv(
+    "BITEFINDER_PLACES_URL",
+    "https://places.googleapis.com/v1/places:searchNearby",
+)
 PLACES_DETAILS_BASE_URL = os.getenv(
     "BITEFINDER_PLACES_DETAILS_URL",
     "https://places.googleapis.com/v1",
 ).rstrip("/")
-MATRIX_URL = os.getenv("BITEFINDER_MATRIX_URL",
-                        "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix")
-ROUTES_URL = os.getenv("BITEFINDER_ROUTES_URL",
-                        "https://routes.googleapis.com/directions/v2:computeRoutes")
+MATRIX_URL = os.getenv(
+    "BITEFINDER_MATRIX_URL",
+    "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix",
+)
+ROUTES_URL = os.getenv(
+    "BITEFINDER_ROUTES_URL",
+    "https://routes.googleapis.com/directions/v2:computeRoutes",
+)
 
 # --- Display limits (tunable without touching logic) ---
 MAX_MATCHES_SHOWN = 5

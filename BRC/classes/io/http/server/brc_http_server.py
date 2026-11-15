@@ -12,11 +12,16 @@ from common import debug_log
 class BRCHTTPServer:
     """Create, run, and gracefully stop the BRC HTTP server."""
 
-    def __init__(self, host="0.0.0.0", port=None,
-                 handler=BRCRequestHandler,
-                 server_factory=ThreadingHTTPServer):
+    def __init__(
+        self,
+        host="0.0.0.0",
+        port=None,
+        handler=BRCRequestHandler,
+        server_factory=ThreadingHTTPServer,
+    ):
         selected_port = int(
-            os.getenv("BRC_PORT", "8000") if port is None else port)
+            os.getenv("BRC_PORT", "8000") if port is None else port
+        )
         self._server = server_factory((host, selected_port), handler)
         self._handler = handler
         self._server.daemon_threads = True
@@ -27,7 +32,9 @@ class BRCHTTPServer:
         self._install_signal_handlers()
         debug_log.debug_log(
             f"BRC service listening on port {self._port}.",
-            "INFO", "BRC.service")
+            "INFO",
+            "BRC.service",
+        )
         self._start_background_warm()
         try:
             self._server.serve_forever()
@@ -47,21 +54,26 @@ class BRCHTTPServer:
                 try:
                     debug_log.debug_log(
                         "BRC background database build started.",
-                        "INFO", "BRC.service")
+                        "INFO",
+                        "BRC.service",
+                    )
                     self._handler.application_run()
                     debug_log.debug_log(
                         "BRC background database build finished.",
-                        "INFO", "BRC.service")
+                        "INFO",
+                        "BRC.service",
+                    )
                 except Exception as error:
                     debug_log.debug_log(
                         f"BRC background database build failed: {error}",
-                        "WARNING", "BRC.service")
+                        "WARNING",
+                        "BRC.service",
+                    )
 
         threading.Thread(target=warm, daemon=True).start()
 
     def stop(self, *_):
-        threading.Thread(
-            target=self._server.shutdown, daemon=True).start()
+        threading.Thread(target=self._server.shutdown, daemon=True).start()
 
     def _install_signal_handlers(self):
         signal.signal(signal.SIGTERM, self.stop)
