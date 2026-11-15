@@ -181,8 +181,6 @@ The generators are development tools excluded from the Docker build context.
 
 ## SOLID cleanup migration
 
-See [SOLID_REFACTOR.md](SOLID_REFACTOR.md) for the current ownership map,
-intentional persistence/error corrections, test evidence and remaining limits.
 The full generator resolves the new chat, discovery, AI transport and BRC workflow
 locations without hand-maintained class lists. Unresolved dynamic relationships
 remain explicitly reported in `uml/analysis.json`.
