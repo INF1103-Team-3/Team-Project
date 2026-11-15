@@ -15,7 +15,7 @@ class DistanceResultSorter(BaseResultSorter, ResultSorterInterface):
     def name(self):
         return "distance"
 
-    def key(self, item, mode):
+    def _key(self, item, mode):
         rating, reviews, distance, name = self._facts(item, mode)
         return (
             distance is None,

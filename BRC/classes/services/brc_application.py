@@ -17,9 +17,6 @@ from BRC.classes.data.data_manager import (
 from BRC.classes.data.storage.data_unavailable_error import (
     DataUnavailableError,
 )
-from BRC.classes.ai.providers.fallback.fallback_ai_client import (
-    FallbackAIClient,
-)
 from BRC.classes.io.console.io_manager import NO_INPUT, IOManager
 from BRC.classes.logic.logic_manager import LogicManager
 from BRC.models import RestaurantRecord
@@ -54,7 +51,7 @@ class BRCApplication:
 
     def run(self, value=NO_INPUT, output=None):
         self.report("IO Manager: validating input and loading BRC data...")
-        workflow = self._choose_workflow(value)
+        workflow = self.__choose_workflow(value)
         debug_log.debug_log(
             f"BRC IO selected {workflow.name}.",
             "INFO",
@@ -70,19 +67,19 @@ class BRCApplication:
         )
         return result
 
-    def _choose_workflow(self, value):
+    def __choose_workflow(self, value):
         if value is NO_INPUT:
             use_ai = os.getenv("BRC_BUILD_CUISINES_WITH_AI", "1") != "0"
             return BuildDatabaseWorkflow(
-                self._load_or_download_snapshot(), use_ai=use_ai
+                self.__load_or_download_snapshot(), use_ai=use_ai
             )
         records, single = self._io.validate_restaurants(value)
-        database = self._load_or_build_database()
+        database = self.__load_or_build_database()
         return CheckRestaurantsWorkflow(
             [RestaurantRecord(record) for record in records], single, database
         )
 
-    def _load_or_download_snapshot(self):
+    def __load_or_download_snapshot(self):
         try:
             return self._data.load_raw_snapshot()
         except (DataUnavailableError, OSError):
@@ -92,7 +89,7 @@ class BRCApplication:
                 self._data, progress=self._scrape_progress
             ).scrape_all()
 
-    def _load_or_build_database(self):
+    def __load_or_build_database(self):
         try:
             return self._data.load_clean_database()
         except (DataUnavailableError, OSError):
@@ -123,11 +120,7 @@ class BRCApplication:
             settings["chain_timeout_seconds"],
         )
         if cls._shared_ai is None or fingerprint != cls._shared_settings:
-            client = FallbackAIClient(
-                settings,
-                ai_facade._call_gemini,
-                ai_facade._call_chat_completions,
-            )
+            client = ai_facade.create_client(settings)
             cls._shared_ai = AIManager(client)
             cls._shared_settings = fingerprint
         return cls._shared_ai

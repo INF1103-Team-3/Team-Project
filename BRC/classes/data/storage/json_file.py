@@ -49,7 +49,7 @@ class JsonFile:
                 stream.write(self.format_json(value, compact_hours))
                 stream.flush()
                 os.fsync(stream.fileno())
-            self._replace(temporary)
+            self.__replace(temporary)
             temporary = None
         finally:
             if temporary is not None:
@@ -58,7 +58,7 @@ class JsonFile:
     def delete(self):
         self._path.unlink(missing_ok=True)
 
-    def _replace(self, temporary):
+    def __replace(self, temporary):
         for attempt in range(8):
             try:
                 os.replace(temporary, self._path)
