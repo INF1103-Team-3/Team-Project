@@ -112,6 +112,66 @@ class AccessLevelTests(unittest.TestCase):
                 chat.call_args.args[:4], ("sample", settings, "groq", "second")
             )
 
+    def test_seen_matcher_public_contract_keeps_its_index_private(self):
+        from BRNS.classes.logic.evaluation.previous_restaurant_matcher import (
+            PreviousRestaurantMatcher,
+        )
+
+        previous = [
+            {
+                "google_place_id": " id-1 ",
+                "name": " Café ",
+                "address": " 1 Road ",
+            }
+        ]
+        matcher = PreviousRestaurantMatcher(previous)
+        previous.clear()
+        self.assertFalse(matcher.is_empty)
+        self.assertTrue(matcher.matches({"google_place_id": "id-1"}))
+        self.assertTrue(matcher.matches({"name": "CAFÉ", "address": "1 road"}))
+        self.assertFalse(
+            matcher.matches({"name": "Café", "address": "2 Road"})
+        )
+        self.assertFalse(PreviousRestaurantMatcher().matches({"name": "Café"}))
+        for field in ("place_ids", "name_address_keys", "_clean_field"):
+            self.assertFalse(hasattr(matcher, field))
+
+    def test_nearby_status_distinguishes_empty_success_and_context_failures(
+        self,
+    ):  # noqa: E501
+        from contextvars import copy_context
+        from unittest.mock import patch
+        import requests
+        from BRNS import io_manager
+
+        places = io_manager.places_gateway()
+        origin = (1.3, 103.8)
+        empty_response = type(
+            "EmptyResponse",
+            (),
+            {
+                "raise_for_status": lambda self: None,
+                "json": lambda self: {"places": []},
+            },
+        )()
+        with patch.object(requests, "post", return_value=empty_response):
+            self.assertEqual(places.fetch_nearby_restaurants(origin, {}), [])
+        self.assertFalse(places.last_call_failed())
+
+        def fail_in_separate_context():
+            with patch.object(
+                requests,
+                "post",
+                side_effect=requests.RequestException("offline"),
+            ):
+                self.assertEqual(
+                    places.fetch_nearby_restaurants(origin, {}), []
+                )
+            return places.last_call_failed()
+
+        self.assertTrue(copy_context().run(fail_in_separate_context))
+        self.assertFalse(places.last_call_failed())
+
     def test_sorter_public_api_dispatches_protected_hook(self):
         class NameSorter(BaseResultSorter):
             def _key(self, item, mode):
