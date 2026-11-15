@@ -18,6 +18,41 @@ from BRNS.classes.data.stores.json.json_recommendation_store import (
 
 
 class CleanupContractTests(unittest.TestCase):
+    def test_bis_ai_uses_injected_chat_capability_without_module_callback(self):
+        from types import SimpleNamespace
+        from BIS.classes.ai.ai_manager import AIManager
+
+        interpreter = SimpleNamespace(
+            interpret_chat_turn=lambda *_args: {"intent": "search"},
+            review_profile_wishes=lambda *_args: ["quiet"],
+        )
+        ai = AIManager(None, None, None, None, interpreter=interpreter)
+        with patch("BIS.ai_manager.interpret_chat_turn",
+                   side_effect=AssertionError("reverse dependency")):
+            self.assertEqual(ai.chat_turn("hi", {}, [], {}, {}),
+                             {"intent": "search"})
+        self.assertEqual(ai.review_profile_wishes(["quiet"], {}), ["quiet"])
+
+    def test_brns_provider_availability_extends_through_registry(self):
+        from contextlib import nullcontext
+        from types import SimpleNamespace
+        from BRNS.classes.ai.ai_manager import AIManager
+        from BRNS.classes.ai.fallback.ai_provider_factory_registry import (
+            AIProviderFactoryRegistry,
+        )
+
+        registry = AIProviderFactoryRegistry()
+        registry.register("fixture", lambda _model: object(),
+                          enabled=lambda settings: settings.enabled)
+        config = SimpleNamespace(
+            MODEL_CHAIN=[{"provider": "fixture", "model": "sample"}],
+            enabled=True,
+        )
+        manager = AIManager(config, None, nullcontext, None, registry)
+        self.assertTrue(manager.has_configured_provider())
+        config.enabled = False
+        self.assertFalse(manager.has_configured_provider())
+
     def test_profile_authorization_is_shared_by_cli_and_web_logic(self):
         from BIS.classes.logic.logic_manager import LogicManager
         from BIS.sources.profile_schema import empty_preferences

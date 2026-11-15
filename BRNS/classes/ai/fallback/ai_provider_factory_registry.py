@@ -7,12 +7,16 @@ class AIProviderFactoryRegistry:
     def __init__(self):
         self.__factories = {}
 
-    def register(self, provider_name, factory):
-        self.__factories[provider_name] = factory
+    def register(self, provider_name, factory, enabled=None):
+        self.__factories[provider_name] = (factory, enabled)
+
+    def is_configured(self, provider_name, config):
+        entry = self.__factories.get(provider_name)
+        return bool(entry and (entry[1] is None or entry[1](config)))
 
     def create(self, provider_name, model):
-        factory = self.__factories.get(provider_name)
-        return factory(model) if factory else None
+        entry = self.__factories.get(provider_name)
+        return entry[0](model) if entry else None
 
     @property
     def provider_names(self):

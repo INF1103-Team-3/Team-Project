@@ -6,7 +6,9 @@ from BRNS.classes.ai.contracts.brns_ai_manager_interface import BRNSAIManagerInt
 class AIManager(BRNSAIManagerInterface):
     """Own BRNS AI requests using an injected recommendation engine."""
 
-    def __init__(self, config, recommendation_runner, deadline_scope, prepared_runner):
+    def __init__(self, config, recommendation_runner, deadline_scope, prepared_runner,
+                 provider_registry):
+        self._providers = provider_registry
         self._prepared = prepared_runner
         self._config = config
         self._recommend = recommendation_runner
@@ -14,14 +16,7 @@ class AIManager(BRNSAIManagerInterface):
 
     def has_configured_provider(self):
         return any(
-            (
-                entry.get("provider") == "openrouter"
-                and self._config.OPENROUTER_API_KEY
-                or entry.get("provider") == "gemini"
-                and self._config.GEMINI_API_KEY
-                or entry.get("provider") == "groq"
-                and self._config.GROQ_API_KEY
-            )
+            self._providers.is_configured(entry.get("provider"), self._config)
             and entry.get("model")
             and not any(char in entry["model"] for char in "<> ")
             for entry in self._config.MODEL_CHAIN)
