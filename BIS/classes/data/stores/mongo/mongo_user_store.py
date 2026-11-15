@@ -67,7 +67,7 @@ class MongoUserStore(BaseUserStore, UserStoreInterface, RecordStoreInterface):
             return users
         except (ValueError, RuntimeError) as error:
             self._last_error = str(error)
-            raise
+            return []
 
     def save(self, record):
         user = validate_user(record)

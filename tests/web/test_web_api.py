@@ -48,7 +48,7 @@ class WebIntegrationTests(unittest.TestCase):
             store.ensure_indexes()
         self.gateway = SimpleNamespace(resolve=lambda query, _key: dict(
             query=query, label=query, latitude=1.35, longitude=103.94))
-        self.data = DataManager(self.users, self.gateway, self.sessions, self.favorites,
+        self.data = DataManager(self.users, self.sessions, self.favorites,
                                 MongoCredentialStore(self.conn), self.proposals)
         self.sent = []
         delivery = SimpleNamespace(send_verification_email=lambda email, code, _config: self.sent.append((email, code)))
@@ -79,6 +79,7 @@ class WebIntegrationTests(unittest.TestCase):
             self._make_brns_gateway(search),
             self.config,
             lambda: "fixture/provider",
+            location_gateway=self.gateway,
         )
         self.io = WebIOManager(self.auth, self.application, FavoriteService(self.data), self.conn.ready)
         self.client = TestClient(create_app(lambda: WebRuntime(self.io, self.conn)))
@@ -330,7 +331,7 @@ class WebIntegrationTests(unittest.TestCase):
             sync.sync_from_file(force=True)
 
             data = DataManager(
-                self.users, self.gateway, self.sessions, self.favorites,
+                self.users, self.sessions, self.favorites,
                 MongoCredentialStore(self.conn), self.proposals, user_sync=sync,
             )
             cfg = dict(self.config, smtp_bypass=True)
@@ -344,6 +345,7 @@ class WebIntegrationTests(unittest.TestCase):
                 self._make_brns_gateway(lambda *_, **_kw: {}, lambda *_: {}),
                 cfg,
                 lambda: None,
+                location_gateway=self.gateway,
             )
             io = WebIOManager(auth, app_svc, FavoriteService(data), self.conn.ready)
             with TestClient(create_app(lambda: WebRuntime(io, self.conn))) as client:

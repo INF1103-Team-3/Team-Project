@@ -13,7 +13,8 @@ class BISApplicationService:
     """Coordinate BIS domain workflows across AI, Logic, Data, and the BRNS gateway."""
 
     def __init__(self, data, ai, logic, brns, config,
-                 model_reader=None, chatbot=None):
+                 model_reader=None, chatbot=None, location_gateway=None):
+        self._locations = location_gateway
         self._data = data
         self._ai = ai
         self._logic = logic
@@ -56,11 +57,11 @@ class BISApplicationService:
     def save_profile(self, user, payload):
         updated = self._logic.prepare_profile_save(
             user, payload, smtp_bypass=is_smtp_bypass(self._config))
-        if hasattr(self._data, "resolve_location"):
+        if self._locations is not None:
             api_key = self._config.get("google_maps_api_key")
             for loc in updated["preferences"].get("location") or []:
                 try:
-                    self._data.resolve_location(loc, api_key)
+                    self._locations.resolve(loc, api_key)
                 except (ValueError, RuntimeError):
                     raise ValueError(
                         f"Default location '{loc}' must be a valid Singapore location."
@@ -77,7 +78,9 @@ class BISApplicationService:
 
     def _resolve_origins(self, raw_locations):
         api_key = self._config.get("google_maps_api_key")
-        resolved = [self._data.resolve_location(loc, api_key) for loc in raw_locations]
+        if self._locations is None:
+            raise RuntimeError("Location lookup is not configured.")
+        resolved = [self._locations.resolve(loc, api_key) for loc in raw_locations]
         return self._logic.compute_midpoint_origin(resolved), resolved
 
     def _build_validated_request(self, payload, origin, cuisine_target):

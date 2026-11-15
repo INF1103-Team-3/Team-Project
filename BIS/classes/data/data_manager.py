@@ -8,12 +8,11 @@ from BIS.classes.data.contracts.bis_data_manager_interface import BISDataManager
 class DataManager(BISDataManagerInterface):
     """Coordinate BIS repositories without owning UI or business rules."""
 
-    def __init__(self, user_store, location_gateway, sessions=None, favorites=None,
+    def __init__(self, user_store, sessions=None, favorites=None,
                  credentials=None, proposals=None, user_sync=None):
         self._proposals = proposals
         self._sessions, self._favorites, self._credentials = sessions, favorites, credentials
         self._user_store = user_store
-        self._location_gateway = location_gateway
         self._user_sync = user_sync
 
     @property
@@ -62,23 +61,14 @@ class DataManager(BISDataManagerInterface):
         return self._user_store.get_user(user_id)
 
     def save_preferences(self, user_id, preferences, config):
-        return self._sync_to_cli(self._user_store.save_preferences(
-            user_id, preferences, config))
+        user = self.get_user(user_id)
+        return self.save(dict(user, preferences=preferences))
 
     def get_state(self, section, user_id):
         return self._user_store.get_state(section, user_id)
 
     def set_state(self, section, user_id, value):
         return self._user_store.set_state(section, user_id, value)
-
-    def lookup_cached_location(self, query):
-        return self._location_gateway.lookup_cached(query)
-
-    def resolve_location(self, query, api_key):
-        return self._location_gateway.resolve(query, api_key)
-
-    def remember_location(self, queries, location):
-        return self._location_gateway.remember(queries, location)
 
     def get_credentials(self, user_id):
         if self._credentials is None:

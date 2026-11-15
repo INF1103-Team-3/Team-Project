@@ -22,6 +22,25 @@ from BRNS.classes.data.helpers.search_history_scope import SearchHistoryScope
 
 
 class StorageContractTests(unittest.TestCase):
+    def test_user_store_read_failures_have_the_same_contract(self):
+        path = self.root / "users.json"
+        path.write_text(json.dumps({"invalid": {"userID": "invalid"}}))
+        self.conn.db.users.insert_one({"_id": "invalid", "userID": "invalid"})
+        stores = (
+            JsonUserStore(path, self.root / "state.json"),
+            MongoUserStore(self.conn),
+        )
+        for store in stores:
+            with self.subTest(store=type(store).__name__):
+                self.assertEqual(store.load(), [])
+                self.assertTrue(store.last_error)
+                self.assertEqual(store.query(lambda _row: True), [])
+        path.write_text("{}")
+        self.conn.db.users.delete_many({})
+        for store in stores:
+            self.assertEqual(store.load(), [])
+            self.assertIsNone(store.last_error)
+
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)

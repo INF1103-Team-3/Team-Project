@@ -44,6 +44,12 @@ class InteractionSession:
         """Return the compatibility session dictionary."""
         return self.__state
 
+    def _persist_preferences(self, user, preferences):
+        preferences = self._logic.prepare_preferences_save(
+            user, preferences, self._config)
+        return self._data.save_preferences(
+            user["userID"], preferences, self._config)
+
     def save_update(self, action, from_ai):
         trace_token = self._debug_log.start_trace()
         try:
@@ -67,8 +73,7 @@ class InteractionSession:
                 "Profile update validated.", "INFO",
                 "BIS.logic.apply_updates",
             )
-            saved = self._data.save_preferences(
-                user["userID"], preferences, self._config)
+            saved = self._persist_preferences(user, preferences)
             self._debug_log.debug_log(
                 "Preferences saved.", "INFO",
                 "BIS.data.save_preferences",
@@ -105,10 +110,8 @@ class InteractionSession:
         self._io.display_message("Password updated.")
 
     def reset_preferences(self):
-        saved = self._data.save_preferences(
-            self.__state["user"]["userID"], empty_preferences(),
-            self._config,
-        )
+        saved = self._persist_preferences(
+            self.__state["user"], empty_preferences())
         self.__state.update(
             user=saved, field=None, location_action="add")
         self._io.display_message(
@@ -116,8 +119,7 @@ class InteractionSession:
 
     def end(self, intent):
         user = self.__state["user"]
-        self._data.save_preferences(
-            user["userID"], user["preferences"], self._config)
+        self._persist_preferences(user, user["preferences"])
         message = {"logout": "Logged out.", "exit": "Goodbye!"}[intent]
         if (intent == "exit"
                 and self._logic.next_field(user["preferences"]) is not None):

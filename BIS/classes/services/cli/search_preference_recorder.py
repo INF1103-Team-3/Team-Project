@@ -4,7 +4,8 @@
 class SearchPreferenceRecorder:
     """Own profile updates derived from explicitly confirmed search input."""
 
-    def __init__(self, data_manager, logger, other_preferences_field):
+    def __init__(self, data_manager, logger, other_preferences_field, logic):
+        self._logic = logic
         self._data = data_manager
         self._log = logger
         self._other_preferences = other_preferences_field
@@ -19,6 +20,7 @@ class SearchPreferenceRecorder:
             return
         preferences = dict(user["preferences"])
         preferences[self._other_preferences] = saved + [wish]
+        preferences = self._logic.prepare_preferences_save(user, preferences, config)
         session["user"] = self._data.save_preferences(
             user["userID"], preferences, config)
         self._log.debug_log(
@@ -33,6 +35,7 @@ class SearchPreferenceRecorder:
         preferences["disliked_cuisines"] = [
             item for item in preferences["disliked_cuisines"] or []
             if item != cuisine]
+        preferences = self._logic.prepare_preferences_save(user, preferences, config)
         session["user"] = self._data.save_preferences(
             user["userID"], preferences, config)
         self._log.debug_log(

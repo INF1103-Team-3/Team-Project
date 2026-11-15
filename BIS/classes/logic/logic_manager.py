@@ -4,6 +4,8 @@ import math
 import re
 from copy import deepcopy
 from BIS.classes.logic.chat.chat_filter_policy import ChatFilterPolicy
+from BIS.classes.logic.security.profile_access_policy import ProfileAccessPolicy
+from BIS.support.config import is_smtp_bypass
 
 from BIS.classes.logic.contracts.bis_logic_manager_interface import BISLogicManagerInterface
 from BIS.classes.logic.validators.search_request_validator import (
@@ -31,6 +33,7 @@ class LogicManager(BISLogicManagerInterface):
     """Own BIS profile updates and validated search-request decisions."""
 
     def __init__(self, search_validator=None, chat_filters=None):
+        self._profile_access = ProfileAccessPolicy()
         self.chat_filters = chat_filters or ChatFilterPolicy()
         self._search_validator = (
             search_validator or create_search_request_validator())
@@ -189,13 +192,8 @@ class LogicManager(BISLogicManagerInterface):
 
     def prepare_profile_save(self, user, payload, smtp_bypass=False):
         """Validate ownership/verification rules and apply profile updates."""
-        if payload.get("user_id") not in (None, user["userID"]):
-            raise PermissionError("A profile can only be changed by its owner.")
-        if payload.get("email") not in (None, user["email"]):
-            raise ValueError(
-                "Changing the verified email is not supported by this profile form.")
-        if not user["email_verified"] and smtp_bypass is not True:
-            raise PermissionError("Verify your email before changing preferences.")
+        self._profile_access.check_owner(user, payload)
+        self._profile_access.require_verified(user, smtp_bypass)
         updates = {key: payload[key] for key in PREFERENCE_FIELDS if key in payload}
         if "location" in updates and isinstance(updates["location"], list):
             updates["location"] = self.normalize_profile_items(
@@ -209,6 +207,12 @@ class LogicManager(BISLogicManagerInterface):
             user["preferences"], updates, "replace", allow_empty_location=True)
         username = normalize_username(payload.get("username") or user["username"])
         return dict(user, username=username, preferences=preferences)
+
+    def prepare_preferences_save(self, user, preferences, config):
+        """Authorize CLI profile changes before Data persists them."""
+        self._profile_access.require_verified(
+            user, is_smtp_bypass(config), error_type=ValueError)
+        return validate_preferences(preferences)
 
     @staticmethod
     def collect_search_locations(payload):

@@ -8,7 +8,7 @@ class RecordStoreInterface(ABC):
 
     @abstractmethod
     def load(self):
-        """Load all valid account records."""
+        """Load accounts; on read failure return [] and expose last_error."""
 
     @abstractmethod
     def save(self, record):
