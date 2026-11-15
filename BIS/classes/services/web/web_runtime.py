@@ -3,8 +3,13 @@
 
 class WebRuntime:
     def __init__(self, io, connection):
-        self.io = io
-        self._connection = connection
+        self.__io = io
+        self.__connection = connection
+
+    @property
+    def io(self):
+        """Return the configured BIS boundary used by HTTP dependencies."""
+        return self.__io
 
     def close(self):
-        self._connection.close()
+        self.__connection.close()

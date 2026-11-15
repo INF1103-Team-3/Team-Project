@@ -47,7 +47,7 @@ class SMTPEmailDelivery(EmailDeliveryInterface):
             "This code expires in 10 minutes. If you did not request it, "
             "you can ignore this email.\n"
         )
-        self._send_message(message, config, "verification email")
+        self.__send_message(message, config, "verification email")
         debug_log("Verification email sent.", "INFO", "BIS.email.send")
 
     def send_maps_link_email(self, email, restaurant_name, link, config):
@@ -60,10 +60,10 @@ class SMTPEmailDelivery(EmailDeliveryInterface):
         message.set_content(
             f"Google Maps directions to {restaurant_name}:\n{link}\n"
         )
-        self._send_message(message, config, "Maps link email")
+        self.__send_message(message, config, "Maps link email")
         debug_log("Maps link email sent.", "INFO", "BIS.email.send")
 
-    def _send_message(self, message, config, kind):
+    def __send_message(self, message, config, kind):
         """Deliver an SMTP message without logging contents or credentials."""
         context = ssl.create_default_context()
         try:

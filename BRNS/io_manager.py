@@ -81,14 +81,6 @@ def accept_bis_json(payload):
     return manager().accept_bis_json(payload)
 
 
-def _strip_rating_terms(text):
-    return _DISCOVERY_POLICY.strip_rating_terms(text)
-
-
-def _clean_free_text_query(preferences):
-    return _DISCOVERY_POLICY.clean_free_text_query(preferences)
-
-
 def find_candidates(request, previous_restaurants=(), strict_exclude=False):
     """Collect restaurant facts through Places or saved records."""
     if strict_exclude and previous_restaurants:
@@ -103,11 +95,6 @@ def find_candidates(request, previous_restaurants=(), strict_exclude=False):
 def last_discovery_failed():
     """Return True if the latest build failed exclusively on API errors."""
     return _DISCOVERY_SEARCH.last_discovery_failed()
-
-
-def _last_places_call_failed():
-    checker = getattr(_PLACES_GATEWAY, "last_call_failed", None)
-    return bool(checker()) if callable(checker) else False
 
 
 def show_results(results, announce_no_matches=True):
@@ -210,7 +197,7 @@ def load_saved_restaurants(path=config.RESTAURANT_FILE):
     )
 
 
-def _log_api_error(context, err):
+def log_api_error(context, err):
     """Record only error type and HTTP status, never URL or response body."""
     if isinstance(err, str):
         kind = "invalid response"
@@ -240,10 +227,6 @@ def _fmt_price_range(pr):
     return _PLACES_GATEWAY.fmt_price_range(pr)
 
 
-def _band_from_range(start, end):
-    return _ENRICHER._band_from_range(start, end)
-
-
 # ---------- Google Geocoding API (classic, with permanent cache) ----------
 
 
@@ -256,10 +239,6 @@ def geocode_location(address_text):
 _CUISINE_MAP = RestaurantEnricher.CUISINE_MAP
 
 
-def _cuisine_from_types(types):
-    return _ENRICHER._cuisine_from_types(types)
-
-
 def _weekday_index(name):
     return _PLACES_GATEWAY.weekday_index(name)
 
@@ -270,14 +249,6 @@ def _hours_string_for_day(regular_hours, weekday_index):
 
 def _parse_place(p):
     return _PLACES_GATEWAY.parse_place(p)
-
-
-def _travel_radius(req):
-    return _DISCOVERY_POLICY.travel_radius(req)
-
-
-def _search_radius(req):
-    return _DISCOVERY_POLICY.search_radius(req)
 
 
 def fetch_nearby_restaurants(origin, req, debug=False):
@@ -298,46 +269,6 @@ _VENUE_WORDS = (
     "bakery",
     "bar",
 )
-
-
-def _build_text_query(req, default_query=None):
-    return _DISCOVERY_POLICY.build_text_query(req, default_query)
-
-
-def _complementary_venue_query(query):
-    return _DISCOVERY_POLICY.complementary_venue_query(query)
-
-
-def _run_text_search(
-    origin,
-    query,
-    radius_m,
-    error_tag,
-    max_pages=1,
-    price_levels=None,
-    min_rating=None,
-    rank_preference="RELEVANCE",
-    return_status=False,
-):
-    return _PLACES_GATEWAY.run_text_search(
-        origin,
-        query,
-        radius_m,
-        error_tag,
-        max_pages,
-        price_levels,
-        min_rating,
-        rank_preference,
-        return_status,
-    )
-
-
-def _merge_unique_places(primary, secondary):
-    return _DISCOVERY_POLICY.merge_unique_places(primary, secondary)
-
-
-def _qualifying_open_count(places, min_rating=None):
-    return _DISCOVERY_POLICY.qualifying_open_count(places, min_rating)
 
 
 def fetch_by_profile_text(
@@ -373,11 +304,7 @@ def fetch_open_places(
 
 
 def _norm(name):
-    return _ENRICHER._norm(name)
-
-
-def _match_saved_restaurant(place, saved_restaurants):
-    return _ENRICHER._match_saved_restaurant(place, saved_restaurants)
+    return _ENRICHER.normalize_name(name)
 
 
 def enrich_place(place, saved_restaurants):
@@ -386,7 +313,7 @@ def enrich_place(place, saved_restaurants):
 
 
 # ---------- Google Routes API ----------
-_ROUTE_GATEWAY = GoogleRouteGateway(config, log, _log_api_error)
+_ROUTE_GATEWAY = GoogleRouteGateway(config, log, log_api_error)
 
 
 def _haversine_km(first, second):
@@ -419,18 +346,6 @@ def build_maps_link(origin, destination, mode):
     return _ROUTE_GATEWAY.build_maps_link(origin, destination, mode)
 
 
-def _sample_zone_slice(candidates, origin, radius_m, limit):
-    return _DISCOVERY_POLICY.sample_zone_slice(
-        candidates, origin, radius_m, limit
-    )
-
-
-def _select_zone_places(places, origin, radius_m, limit=20, min_rating=None):
-    return _DISCOVERY_POLICY.select_zone_places(
-        places, origin, radius_m, limit, min_rating
-    )
-
-
 # ---------- candidate builder ----------
 
 
@@ -455,14 +370,14 @@ def build_candidates(
 # Composition of discovery policy, provider transport and application workflow.
 
 _DISCOVERY_POLICY = DiscoveryPolicy(
-    logic_manager, _haversine_km, _norm, log, _log_api_error
+    logic_manager, _haversine_km, _norm, log, log_api_error
 )
 _PLACES_GATEWAY = GooglePlacesGateway(
     config,
     logic_manager,
     _DISCOVERY_POLICY,
     log,
-    _log_api_error,
+    log_api_error,
     _haversine_km,
     geocode_cache,
 )
@@ -470,6 +385,16 @@ _PLACES_GATEWAY = GooglePlacesGateway(
 
 def discovery_policy():
     return _DISCOVERY_POLICY
+
+
+def places_gateway():
+    """Return the configured provider IO capability."""
+    return _PLACES_GATEWAY
+
+
+def route_gateway():
+    """Return the configured route IO capability."""
+    return _ROUTE_GATEWAY
 
 
 _DISCOVERY_SEARCH = CandidateSearch(None, None, sys.modules[__name__], log)

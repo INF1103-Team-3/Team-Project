@@ -44,7 +44,7 @@ class BISApplicationService:
         self._logic = logic
         self._brns = brns
         self._config = config
-        self._model = model_reader or self._read_last_used_model
+        self._model = model_reader or self.__read_last_used_model
         self._chatbot = chatbot or BISChatbotService(
             ai,
             logic,
@@ -53,7 +53,7 @@ class BISApplicationService:
             profile_saver=self.save_profile,
         )
 
-    def _read_last_used_model(self):
+    def __read_last_used_model(self):
         reader = getattr(self._brns, "last_used_model", None)
         return reader() if callable(reader) else None
 
@@ -112,7 +112,7 @@ class BISApplicationService:
             )
         return self._data.save(updated)
 
-    def _resolve_origins(self, raw_locations):
+    def __resolve_origins(self, raw_locations):
         api_key = self._config.get("google_maps_api_key")
         if self._locations is None:
             raise RuntimeError("Location lookup is not configured.")
@@ -121,7 +121,7 @@ class BISApplicationService:
         ]
         return self._logic.compute_midpoint_origin(resolved), resolved
 
-    def _build_validated_request(self, payload, origin, cuisine_target):
+    def __build_validated_request(self, payload, origin, cuisine_target):
         request = self._logic.build_base_search_request(
             payload, origin, cuisine_target
         )
@@ -137,12 +137,14 @@ class BISApplicationService:
         )
 
     @staticmethod
-    def _is_no_open_error(exc):
+    def __is_no_open_error(exc):
         msg = str(exc).lower()
+        if "unavailable" in msg:
+            return False
         return "no restaurants found" in msg or "no confirmed open" in msg
 
     @staticmethod
-    def _normalize_previous_restaurants(raw_previous):
+    def __normalize_previous_restaurants(raw_previous):
         """Convert Pydantic models or dicts into seen-restaurant dicts."""
         normalized = []
         for item in raw_previous or ():
@@ -166,7 +168,7 @@ class BISApplicationService:
         return normalized
 
     @staticmethod
-    def _build_previous_matcher(previous_restaurants):
+    def __build_previous_matcher(previous_restaurants):
         """Build a seen predicate keyed by place ID or (name, address)."""
         seen_pids = set()
         seen_name_addrs = set()
@@ -198,7 +200,7 @@ class BISApplicationService:
 
         return is_seen
 
-    def _search_brns(
+    def __search_brns(
         self, request, user_id, previous_restaurants, strict_exclude
     ):
         """Call the BRNS gateway, forwarding seen venues only on refresh."""
@@ -219,7 +221,7 @@ class BISApplicationService:
             max_alternatives=20,
         )
 
-    def _build_search_response(
+    def __build_search_response(
         self,
         origin,
         resolved_origins,
@@ -254,7 +256,7 @@ class BISApplicationService:
             response["message"] = message
         return response
 
-    def _run_search(
+    def __run_search(
         self,
         owner,
         payload,
@@ -267,12 +269,12 @@ class BISApplicationService:
     ):
         cuisines_breakdown = {}
         normalized_previous = (
-            self._normalize_previous_restaurants(previous_restaurants)
+            self.__normalize_previous_restaurants(previous_restaurants)
             if strict_exclude and previous_restaurants
             else []
         )
         is_seen = (
-            self._build_previous_matcher(normalized_previous)
+            self.__build_previous_matcher(normalized_previous)
             if normalized_previous
             else None
         )
@@ -280,10 +282,10 @@ class BISApplicationService:
             exhausted_previous = False
             if len(selected_cuisines) <= 1:
                 single_c = selected_cuisines[0] if selected_cuisines else None
-                request = first_request or self._build_validated_request(
+                request = first_request or self.__build_validated_request(
                     payload, origin, single_c
                 )
-                results = self._search_brns(
+                results = self.__search_brns(
                     request, owner, normalized_previous, strict_exclude
                 )
                 matches = list(results.get("matches", []) or [])
@@ -327,20 +329,20 @@ class BISApplicationService:
                 base_request = None
                 any_sub_exhausted = False
                 for c_target in selected_cuisines:
-                    sub_request = self._build_validated_request(
+                    sub_request = self.__build_validated_request(
                         payload, origin, c_target
                     )
                     if base_request is None:
                         base_request = sub_request
                     try:
-                        sub_res = self._search_brns(
+                        sub_res = self.__search_brns(
                             sub_request,
                             None,
                             normalized_previous,
                             strict_exclude,
                         )
                     except RuntimeError as sub_exc:
-                        if self._is_no_open_error(sub_exc):
+                        if self.__is_no_open_error(sub_exc):
                             last_empty_error = sub_exc
                             fetched.append((c_target, None))
                             continue
@@ -401,7 +403,7 @@ class BISApplicationService:
             message = (
                 _EXHAUSTED_REFRESH_MESSAGE if exhausted_previous else None
             )
-            return self._build_search_response(
+            return self.__build_search_response(
                 origin,
                 resolved_origins,
                 selected_cuisines,
@@ -414,9 +416,9 @@ class BISApplicationService:
                 message=message,
             )
         except RuntimeError as exc:
-            if self._is_no_open_error(exc):
+            if self.__is_no_open_error(exc):
                 if strict_exclude and normalized_previous:
-                    return self._build_search_response(
+                    return self.__build_search_response(
                         origin,
                         resolved_origins,
                         selected_cuisines,
@@ -428,7 +430,7 @@ class BISApplicationService:
                         exhausted_previous=True,
                         message=_EXHAUSTED_REFRESH_MESSAGE,
                     )
-                return self._build_search_response(
+                return self.__build_search_response(
                     origin,
                     resolved_origins,
                     selected_cuisines,
@@ -445,7 +447,7 @@ class BISApplicationService:
     def search(self, user, payload):
         owner = user["userID"] if user else None
         strict_exclude = bool(payload.get("strict_exclude"))
-        previous_restaurants = self._normalize_previous_restaurants(
+        previous_restaurants = self.__normalize_previous_restaurants(
             payload.get("previous_restaurants")
         )
         token = payload.get("confirmation_token")
@@ -473,7 +475,7 @@ class BISApplicationService:
                     else []
                 )
             )
-            return self._run_search(
+            return self.__run_search(
                 owner,
                 payload,
                 request["origin"],
@@ -483,7 +485,7 @@ class BISApplicationService:
             )
 
         raw_locations = self._logic.collect_search_locations(payload)
-        origin, resolved_origins = self._resolve_origins(raw_locations)
+        origin, resolved_origins = self.__resolve_origins(raw_locations)
         selected_cuisines = self._logic.collect_search_cuisines(payload)
         normalized_wishes = validate_special_preferences(
             payload.get("other_preferences"),
@@ -498,7 +500,7 @@ class BISApplicationService:
             single_c = (
                 selected_cuisines[0] if len(selected_cuisines) == 1 else None
             )
-            request = self._build_validated_request(payload, origin, single_c)
+            request = self.__build_validated_request(payload, origin, single_c)
             proposal_token = self._data.create_search_proposal(
                 owner,
                 {
@@ -514,7 +516,7 @@ class BISApplicationService:
                 "confirmation_token": proposal_token,
             }
 
-        return self._run_search(
+        return self.__run_search(
             owner,
             payload,
             origin,
