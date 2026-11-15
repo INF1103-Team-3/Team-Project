@@ -7,6 +7,7 @@ from BRNS.classes.logic.sorting.recommendation_sorter import RecommendationSorte
 from BRNS.classes.logic.evaluation.budget_fit_policy import BudgetFitPolicy
 from BRNS.classes.logic.evaluation.restaurant_enricher import RestaurantEnricher
 from BIS.sources.profile_schema import CUISINES
+from BRNS.classes.logic.evaluation.halal_evidence_policy import HalalEvidencePolicy
 
 
 def _default_confidence_rating(rating, review_count):
@@ -41,6 +42,14 @@ class LogicManager(BRNSLogicManagerInterface):
 
     def enrich_place(self, place, saved_restaurants):
         return self._enricher.enrich(place, saved_restaurants)
+
+    @staticmethod
+    def prepare_halal_candidate(candidate):
+        return HalalEvidencePolicy.initial_candidate(candidate)
+
+    @staticmethod
+    def apply_halal_evidence(candidate, checked):
+        return HalalEvidencePolicy.apply(candidate, checked)
 
     def saved_candidates(self, data):
         restaurants = []

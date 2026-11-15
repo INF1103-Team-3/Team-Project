@@ -18,6 +18,47 @@ from BRNS.classes.data.stores.json.json_recommendation_store import (
 
 
 class CleanupContractTests(unittest.TestCase):
+    def test_brc_warmup_uses_selected_handler_without_real_services(self):
+        from threading import Lock
+        from types import SimpleNamespace
+        from BRC.classes.io.http.server.brc_http_server import BRCHTTPServer
+
+        calls = []
+        handler = SimpleNamespace(
+            database_path=SimpleNamespace(exists=lambda: False),
+            _run_lock=Lock(),
+            application_run=lambda: calls.append("selected handler"),
+        )
+        server = BRCHTTPServer(
+            port=0, handler=handler,
+            server_factory=lambda _address, _handler: SimpleNamespace())
+        with patch.dict("os.environ", {"BRC_AUTO_WARM": "1"}), patch(
+                "BRC.classes.io.http.server.brc_http_server.threading.Thread",
+                side_effect=lambda target, daemon: SimpleNamespace(start=target)):
+            server._start_background_warm()
+        self.assertEqual(calls, ["selected handler"])
+
+    def test_halal_evidence_requires_both_official_and_verified(self):
+        from BRNS.classes.logic.evaluation.halal_evidence_policy import (
+            HalalEvidencePolicy,
+        )
+
+        original = {"halal_hint": True, "dietary_requirements": []}
+        for certification, status, expected in (
+                ("official", "not_verified", False),
+                ("none", "verified", False),
+                ("official", "verified", True)):
+            candidate = HalalEvidencePolicy.initial_candidate(original)
+            actual = HalalEvidencePolicy.apply(candidate, {
+                "halal_certification": certification,
+                "muis_check": {"status": status},
+            })
+            self.assertEqual(actual, expected)
+            self.assertEqual(candidate["halal_certification"],
+                             "official" if expected else "unofficial")
+        self.assertEqual(original, {
+            "halal_hint": True, "dietary_requirements": []})
+
     def test_bis_ai_uses_injected_chat_capability_without_module_callback(self):
         from types import SimpleNamespace
         from BIS.classes.ai.ai_manager import AIManager

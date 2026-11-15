@@ -424,7 +424,13 @@ class WebIntegrationTests(unittest.TestCase):
             show_halal_verification_start=lambda *_a: None,
             show_halal_verification_summary=lambda *_a: None,
         )
-        logic_stub = SimpleNamespace(recommendation_order=lambda cands, _recs: list(range(len(cands))))
+        from BRNS import logic_manager as recommendation_logic
+        real_logic = recommendation_logic.manager()
+        logic_stub = SimpleNamespace(
+            recommendation_order=lambda cands, _recs: list(range(len(cands))),
+            prepare_halal_candidate=real_logic.prepare_halal_candidate,
+            apply_halal_evidence=real_logic.apply_halal_evidence,
+        )
         coord = HalalVerificationCoordinator(logic_stub, io_stub, BatchVerifier(), debug_log)
         checked, summary = coord.verify(
             [{"name": "A", "dietary_requirements": []}, {"name": "B", "dietary_requirements": []}],
