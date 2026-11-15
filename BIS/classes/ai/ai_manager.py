@@ -25,11 +25,16 @@ class AIManager(BISAIManagerInterface, ChatAIInterface):
         search_validator,
         interpreter=None,
     ):
-        self.interpreter = interpreter or BISInterpreter(fallback_request)
+        self.__interpreter = interpreter or BISInterpreter(fallback_request)
         self._request = fallback_request
         self._profile_prompt_builder = profile_prompt_builder
         self._validate_profile_response = profile_response_validator
         self._validate_search = search_validator
+
+    @property
+    def interpreter(self):
+        """Expose configured interpretation tasks without replacing the wiring."""
+        return self.__interpreter
 
     def process(self, record, config):
         if config.get("ai_bypass"):

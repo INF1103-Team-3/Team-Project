@@ -39,10 +39,15 @@ class LogicManager(BISLogicManagerInterface):
 
     def __init__(self, search_validator=None, chat_filters=None):
         self._profile_access = ProfileAccessPolicy()
-        self.chat_filters = chat_filters or ChatFilterPolicy()
+        self.__chat_filters = chat_filters or ChatFilterPolicy()
         self._search_validator = (
             search_validator or create_search_request_validator()
         )
+
+    @property
+    def chat_filters(self):
+        """Expose the chat policy without allowing callers to replace it."""
+        return self.__chat_filters
 
     @property
     def search_validator(self):
@@ -185,7 +190,7 @@ class LogicManager(BISLogicManagerInterface):
 
     @staticmethod
     def clarification_message(error):
-        return str(error)[len(SEARCH_CLARIFICATION_PREFIX):]
+        return str(error)[len(SEARCH_CLARIFICATION_PREFIX) :]
 
     @staticmethod
     def in_singapore(latitude, longitude):
