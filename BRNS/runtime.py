@@ -9,7 +9,7 @@ from BRNS import ai_manager, config, io_manager, logic_manager
 from BRNS.classes.io.gateways.verification.brc_restaurant_checker_adapter import BRCRestaurantCheckerAdapter
 from BRNS.classes.services.workflows.brns_recommendation_workflow import BRNSRecommendationWorkflow
 from BRNS.classes.services.gateway.brns_service import BRNSService
-from BRNS.classes.io.gateways.google.candidate_search import CandidateSearch
+from BRNS.classes.services.workflows.candidate_search import CandidateSearch
 from BRNS.classes.data.data_manager import DataManager as RecommendationData
 from BRNS.classes.services.workflows.halal_verification_coordinator import HalalVerificationCoordinator
 from BRNS.classes.io.adapters.io_manager import IOManager as RecommendationIO

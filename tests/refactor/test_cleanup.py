@@ -18,6 +18,25 @@ from BRNS.classes.data.stores.json.json_recommendation_store import (
 
 
 class CleanupContractTests(unittest.TestCase):
+    def test_discovery_plan_preserves_fallback_sequence_without_http(self):
+        plan = io_manager.discovery_policy().profile_searches({
+            "mode": "walk", "max_distance_km": 2,
+            "cuisine": "japanese", "budget_per_person": 50,
+            "other_preferences": [],
+        })
+        args, options = next(plan)
+        self.assertEqual(args[0], "japanese food")
+        self.assertEqual(options["price_levels"],
+                         ["PRICE_LEVEL_MODERATE", "PRICE_LEVEL_EXPENSIVE"])
+        args, options = plan.send(([], True))
+        self.assertEqual(args[0], "japanese restaurants")
+        args, options = plan.send([])
+        self.assertEqual(args[0], "japanese food")
+        self.assertIsNone(options["price_levels"])
+        with self.assertRaises(StopIteration) as finished:
+            plan.send([])
+        self.assertEqual(finished.exception.value, [])
+
     def test_corrupt_history_is_retained_and_save_reports_failure(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "history.json"
