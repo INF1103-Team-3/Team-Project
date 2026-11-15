@@ -1,5 +1,14 @@
 "Coordinate candidate retrieval using Data, Logic, and an external gateway."
 
+from contextvars import ContextVar
+
+from BRNS.classes.logic.evaluation.previous_restaurant_matcher import (
+    PreviousRestaurantMatcher,
+)
+
+_DISCOVERY_TRACKER = ContextVar("brns_discovery_tracker", default=None)
+_LAST_DISCOVERY_ERROR = ContextVar("brns_last_discovery_error", default=False)
+
 
 class CandidateSearch:
     """Assemble candidates without owning storage or preference policies."""
@@ -13,7 +22,86 @@ class CandidateSearch:
         self._helpers = gateway
         self._log = logger
 
-    def find(self, request):
+    def last_discovery_failed(self):
+        """Return True if the latest build failed only on API errors."""
+        return bool(_LAST_DISCOVERY_ERROR.get())
+
+    @staticmethod
+    def _active_matcher(previous_restaurants, strict_exclude):
+        if not strict_exclude or not previous_restaurants:
+            return None
+        matcher = PreviousRestaurantMatcher(previous_restaurants)
+        return None if matcher.is_empty else matcher
+
+    @staticmethod
+    def _record_discovery_status(succeeded):
+        tracker = _DISCOVERY_TRACKER.get()
+        if tracker is not None:
+            tracker["api_success" if succeeded else "api_error"] = True
+
+    @staticmethod
+    def _filter_excluded_places(places, matcher):
+        if matcher is None:
+            return list(places)
+        kept = []
+        excluded = 0
+        for place in places:
+            if isinstance(place, dict) and matcher.matches(place):
+                excluded += 1
+            else:
+                kept.append(place)
+        tracker = _DISCOVERY_TRACKER.get()
+        if tracker is not None and excluded:
+            tracker["excluded_count"] += excluded
+        return kept
+
+    @staticmethod
+    def _confirmed_open_count(places):
+        return sum(
+            1
+            for place in places
+            if isinstance(place, dict) and place.get("open_now") is True
+        )
+
+    def _run_text_search_tracked(self, origin, *args, matcher=None, **kwargs):
+        want_status = bool(kwargs.get("return_status"))
+        call_kwargs = dict(kwargs, return_status=True)
+        if matcher is not None:
+            call_kwargs["max_pages"] = 3
+        result = self._helpers._run_text_search(origin, *args, **call_kwargs)
+        if isinstance(result, tuple) and len(result) == 2:
+            places, ok = result
+            self._record_discovery_status(ok)
+        else:
+            places, ok = result, True
+        places = self._filter_excluded_places(places, matcher)
+        return (places, ok) if want_status else places
+
+    def _fetch_open_filtered(self, origin, req, previous_restaurants, matcher):
+        if matcher is not None:
+            raw = self._helpers.fetch_open_places(
+                origin,
+                req,
+                previous_restaurants=previous_restaurants,
+                strict_exclude=True,
+            )
+        else:
+            raw = self._helpers.fetch_open_places(origin, req)
+        return self._filter_excluded_places(raw, matcher)
+
+    def _fetch_nearby_filtered(self, origin, req, matcher):
+        raw = self._helpers.fetch_nearby_restaurants(origin, req)
+        if raw:
+            self._record_discovery_status(True)
+        else:
+            checker = getattr(
+                self._helpers, "_last_places_call_failed", None
+            )
+            if callable(checker) and checker():
+                self._record_discovery_status(False)
+        return self._filter_excluded_places(raw, matcher)
+
+    def find(self, request, previous_restaurants=(), strict_exclude=False):
         origin = (
             request["origin"]["latitude"],
             request["origin"]["longitude"],
@@ -27,9 +115,18 @@ class CandidateSearch:
             "DEBUG",
             "BRNS.io_manager.find_candidates",
         )
-        candidates = self._helpers.build_candidates(
-            origin, lookup, saved_restaurants
-        )
+        if strict_exclude and previous_restaurants:
+            candidates = self._helpers.build_candidates(
+                origin,
+                lookup,
+                saved_restaurants,
+                previous_restaurants=previous_restaurants,
+                strict_exclude=True,
+            )
+        else:
+            candidates = self._helpers.build_candidates(
+                origin, lookup, saved_restaurants
+            )
         self._log.debug_log(
             f"Candidate builder returned {len(candidates)} records.",
             "DEBUG",
@@ -37,22 +134,23 @@ class CandidateSearch:
         )
         return candidates
 
-    def build(self, origin, req, saved_restaurants):
-        "Live Places search with saved enrichment or offline saved records."
-        if not self._config.USE_LIVE_GOOGLE:
-            candidates = self._policy.saved_open_candidates(saved_restaurants)
-            self._log.debug_log(
-                f"Saved fallback returned {len(candidates)} open candidates.",
-                "INFO",
-                "BRNS.io_manager.build_candidates",
-            )
-            return candidates
-        min_rating = self._rules.minimum_rating(
-            req.get("other_preferences") or []
-        )
+    def _collect_live_places(
+        self, origin, req, previous_restaurants, matcher, strict_active
+    ):
         places = []
+        ran_nearby = False
+        ran_open_places = False
         if self._policy.use_profile_search(req):
-            places = self._helpers.fetch_by_profile_text(origin, req)
+            if strict_active:
+                places = self._helpers.fetch_by_profile_text(
+                    origin,
+                    req,
+                    previous_restaurants=previous_restaurants,
+                    strict_exclude=True,
+                )
+            else:
+                places = self._helpers.fetch_by_profile_text(origin, req)
+            places = self._filter_excluded_places(places, matcher)
             if places and (
                 not any(
                     (
@@ -77,18 +175,40 @@ class CandidateSearch:
                 "INFO",
                 "BRNS.io_manager.build_candidates",
             )
-            places = self._helpers.fetch_nearby_restaurants(origin, req)
+            places = self._fetch_nearby_filtered(origin, req, matcher)
+            ran_nearby = True
             radius_m = float(min(self._helpers._search_radius(req), 50000))
             if self._policy.open_backfill_needed(places, origin, radius_m):
-                places = self._helpers._merge_unique_places(
-                    places, self._helpers.fetch_open_places(origin, req)
+                open_extra = self._fetch_open_filtered(
+                    origin, req, previous_restaurants, matcher
                 )
-        if not places:
-            return []
-        radius_m = float(min(self._helpers._search_radius(req), 50000))
-        sampled = self._helpers._select_zone_places(
-            places, origin, radius_m, limit=20, min_rating=min_rating
-        )
+                ran_open_places = True
+                places = self._helpers._merge_unique_places(
+                    places, open_extra
+                )
+        if strict_active and self._confirmed_open_count(places) < 5:
+            if not ran_nearby:
+                nearby_extra = self._fetch_nearby_filtered(
+                    origin, req, matcher
+                )
+                ran_nearby = True
+                places = self._helpers._merge_unique_places(
+                    places, nearby_extra
+                )
+            if (
+                self._confirmed_open_count(places) < 5
+                and not ran_open_places
+            ):
+                open_extra = self._fetch_open_filtered(
+                    origin, req, previous_restaurants, matcher
+                )
+                ran_open_places = True
+                places = self._helpers._merge_unique_places(
+                    places, open_extra
+                )
+        return places
+
+    def _assemble_candidates(self, origin, req, sampled, saved_restaurants):
         candidates = []
         for p in sampled:
             c = self._helpers.enrich_place(p, saved_restaurants)
@@ -120,7 +240,63 @@ class CandidateSearch:
         )
         return candidates
 
-    def fetch_profile(self, origin, request):
+    def build(
+        self,
+        origin,
+        req,
+        saved_restaurants,
+        previous_restaurants=(),
+        strict_exclude=False,
+    ):
+        "Live Places search with saved enrichment or offline saved records."
+        matcher = self._active_matcher(previous_restaurants, strict_exclude)
+        strict_active = matcher is not None
+        _LAST_DISCOVERY_ERROR.set(False)
+        if not self._config.USE_LIVE_GOOGLE:
+            candidates = self._policy.saved_open_candidates(saved_restaurants)
+            candidates = self._filter_excluded_places(candidates, matcher)
+            self._log.debug_log(
+                f"Saved fallback returned {len(candidates)} open candidates.",
+                "INFO",
+                "BRNS.io_manager.build_candidates",
+            )
+            return candidates
+        min_rating = self._rules.minimum_rating(
+            req.get("other_preferences") or []
+        )
+        tracker = {
+            "api_success": False,
+            "api_error": False,
+            "excluded_count": 0,
+        }
+        token = _DISCOVERY_TRACKER.set(tracker)
+        try:
+            places = self._collect_live_places(
+                origin, req, previous_restaurants, matcher, strict_active
+            )
+            if not places:
+                return []
+            radius_m = float(min(self._helpers._search_radius(req), 50000))
+            sampled = self._helpers._select_zone_places(
+                places, origin, radius_m, limit=20, min_rating=min_rating
+            )
+            if not sampled:
+                return []
+            return self._assemble_candidates(
+                origin, req, sampled, saved_restaurants
+            )
+        finally:
+            _DISCOVERY_TRACKER.reset(token)
+            _LAST_DISCOVERY_ERROR.set(
+                tracker["api_error"]
+                and not tracker["api_success"]
+                and tracker["excluded_count"] == 0
+            )
+
+    def fetch_profile(
+        self, origin, request, previous_restaurants=(), strict_exclude=False
+    ):
+        matcher = self._active_matcher(previous_restaurants, strict_exclude)
         self._log.debug_log(
             "Text Places request started.",
             "INFO",
@@ -132,16 +308,21 @@ class CandidateSearch:
             try:
                 args, kwargs = plan.send(response)
             except StopIteration as finished:
-                places = finished.value
+                places = self._filter_excluded_places(finished.value, matcher)
                 self._log.debug_log(
                     f"Text Places returned {len(places)} usable records.",
                     "INFO",
                     "BRNS.io_manager.fetch_by_profile_text",
                 )
                 return places
-            response = self._helpers._run_text_search(origin, *args, **kwargs)
+            response = self._run_text_search_tracked(
+                origin, *args, matcher=matcher, **kwargs
+            )
 
-    def fetch_open(self, origin, request):
+    def fetch_open(
+        self, origin, request, previous_restaurants=(), strict_exclude=False
+    ):
+        matcher = self._active_matcher(previous_restaurants, strict_exclude)
         self._log.debug_log(
             "Open-now Text Places request started.",
             "INFO",
@@ -150,7 +331,9 @@ class CandidateSearch:
         args, kwargs = self._policy.open_search(
             request, self._helpers.OPEN_SEARCH_MAX_PAGES
         )
-        places = self._helpers._run_text_search(origin, *args, **kwargs)
+        places = self._run_text_search_tracked(
+            origin, *args, matcher=matcher, **kwargs
+        )
         self._log.debug_log(
             f"Open-now Text Places returned {len(places)} usable records.",
             "INFO",

@@ -89,9 +89,25 @@ def _clean_free_text_query(preferences):
     return _DISCOVERY_POLICY.clean_free_text_query(preferences)
 
 
-def find_candidates(request):
+def find_candidates(request, previous_restaurants=(), strict_exclude=False):
     """Collect restaurant facts through Places or saved records."""
+    if strict_exclude and previous_restaurants:
+        return manager().find_candidates(
+            request,
+            previous_restaurants=previous_restaurants,
+            strict_exclude=True,
+        )
     return manager().find_candidates(request)
+
+
+def last_discovery_failed():
+    """Return True if the latest build failed exclusively on API errors."""
+    return _DISCOVERY_SEARCH.last_discovery_failed()
+
+
+def _last_places_call_failed():
+    checker = getattr(_PLACES_GATEWAY, "last_call_failed", None)
+    return bool(checker()) if callable(checker) else False
 
 
 def show_results(results, announce_no_matches=True):
@@ -324,14 +340,32 @@ def _qualifying_open_count(places, min_rating=None):
     return _DISCOVERY_POLICY.qualifying_open_count(places, min_rating)
 
 
-def fetch_by_profile_text(origin, req):
+def fetch_by_profile_text(
+    origin, req, previous_restaurants=(), strict_exclude=False
+):
+    if strict_exclude and previous_restaurants:
+        return _DISCOVERY_SEARCH.fetch_profile(
+            origin,
+            req,
+            previous_restaurants=previous_restaurants,
+            strict_exclude=True,
+        )
     return _DISCOVERY_SEARCH.fetch_profile(origin, req)
 
 
 OPEN_SEARCH_MAX_PAGES = 1  # Keep open-now fallback fast within API budget
 
 
-def fetch_open_places(origin, req):
+def fetch_open_places(
+    origin, req, previous_restaurants=(), strict_exclude=False
+):
+    if strict_exclude and previous_restaurants:
+        return _DISCOVERY_SEARCH.fetch_open(
+            origin,
+            req,
+            previous_restaurants=previous_restaurants,
+            strict_exclude=True,
+        )
     return _DISCOVERY_SEARCH.fetch_open(origin, req)
 
 
@@ -400,7 +434,21 @@ def _select_zone_places(places, origin, radius_m, limit=20, min_rating=None):
 # ---------- candidate builder ----------
 
 
-def build_candidates(origin, req, saved_restaurants):
+def build_candidates(
+    origin,
+    req,
+    saved_restaurants,
+    previous_restaurants=(),
+    strict_exclude=False,
+):
+    if strict_exclude and previous_restaurants:
+        return _DISCOVERY_SEARCH.build(
+            origin,
+            req,
+            saved_restaurants,
+            previous_restaurants=previous_restaurants,
+            strict_exclude=True,
+        )
     return _DISCOVERY_SEARCH.build(origin, req, saved_restaurants)
 
 

@@ -151,8 +151,22 @@ class IOManager(
             ),
         }
 
-    def find_candidates(self, request):
+    def find_candidates(
+        self, request, previous_restaurants=(), strict_exclude=False
+    ):
+        if strict_exclude and previous_restaurants:
+            return self._candidate_search.find(
+                request,
+                previous_restaurants=previous_restaurants,
+                strict_exclude=True,
+            )
         return self._candidate_search.find(request)
+
+    def last_discovery_failed(self):
+        checker = getattr(
+            self._candidate_search, "last_discovery_failed", None
+        )
+        return bool(checker()) if callable(checker) else False
 
     def show_ai_ranking_start(self, count, timeout):
         return self._helpers.show_ai_ranking_start(count, timeout)

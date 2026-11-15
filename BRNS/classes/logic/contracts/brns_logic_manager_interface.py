@@ -45,5 +45,14 @@ class BRNSLogicManagerInterface(ABC):
         """Validate and return AI candidate order."""
 
     @abstractmethod
-    def rank_restaurants(self, *args, **kwargs):
+    def rank_restaurants(
+        self,
+        restaurants,
+        request,
+        recommendations=None,
+        previous_restaurants=(),
+        max_matches=None,
+        max_alternatives=None,
+        strict_exclude=False,
+    ):
         """Classify and rank candidate restaurants."""

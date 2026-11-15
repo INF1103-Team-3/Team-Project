@@ -30,6 +30,7 @@ class BRNSRecommendationWorkflow:
         previous_restaurants=(),
         max_matches=None,
         max_alternatives=None,
+        strict_exclude=False,
     ):
         trace_token = self._log.start_trace()
         started = time.monotonic()
@@ -53,13 +54,42 @@ class BRNSRecommendationWorkflow:
                 raise RuntimeError(
                     "Set GOOGLE_MAPS_API_KEY for live restaurant search."
                 )
-            candidates = self._io.find_candidates(request)
+            if strict_exclude and previous_restaurants:
+                candidates = self._io.find_candidates(
+                    request,
+                    previous_restaurants=previous_restaurants,
+                    strict_exclude=True,
+                )
+            else:
+                candidates = self._io.find_candidates(request)
             self._log.debug_log(
                 f"Gathered {len(candidates)} candidates.",
                 "INFO",
                 "BRNS.io_manager.find_candidates",
             )
             if not candidates:
+                discovery_failed = getattr(
+                    self._io, "last_discovery_failed", lambda: False
+                )()
+                if (
+                    strict_exclude
+                    and previous_restaurants
+                    and not discovery_failed
+                ):
+                    self._log.debug_log(
+                        "Strict refresh exhausted unseen candidates.",
+                        "INFO",
+                        "BRNS.main.search",
+                    )
+                    return {
+                        "matches": [],
+                        "alternatives": [],
+                        "hidden": 0,
+                        "new_count": 0,
+                        "exhausted_previous": True,
+                        "mode": request.get("mode", "walk"),
+                        "origin": request.get("origin"),
+                    }
                 raise RuntimeError(
                     "No restaurants found, or restaurant search is "
                     "unavailable."
@@ -92,6 +122,8 @@ class BRNSRecommendationWorkflow:
                 rank_kwargs["max_matches"] = max_matches
             if max_alternatives is not None:
                 rank_kwargs["max_alternatives"] = max_alternatives
+            if strict_exclude:
+                rank_kwargs["strict_exclude"] = True
             results = self._logic.rank_restaurants(
                 candidates, request, recommendations, **rank_kwargs
             )
