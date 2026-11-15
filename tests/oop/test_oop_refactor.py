@@ -1786,7 +1786,9 @@ class OOPRefactorTests(unittest.TestCase):
             self.assertEqual(mock_get.call_count, 3)
 
             # Second access hits MongoDB blob cache with zero HTTP calls.
-            cached_doc = conn.db.place_photos.find_one({"_id": "ChIJPin1"})
+            cached_doc = conn.execute(
+                lambda db: db.place_photos.find_one({"_id": "ChIJPin1"})
+            )
             self.assertIsNotNone(cached_doc)
             self.assertEqual(
                 bytes(cached_doc["data"]), b"\xff\xd8\xff\xe0TESTJPEG"
