@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / "BIS")]
@@ -17,6 +18,38 @@ from BRNS.classes.data.stores.json.json_recommendation_store import (
 
 
 class CleanupContractTests(unittest.TestCase):
+    def test_corrupt_history_is_retained_and_save_reports_failure(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "history.json"
+            original = '[{"search": "previous"},'
+            path.write_text(original)
+            store = JsonRecommendationStore(path.parent / "places.json", path)
+            with self.assertRaisesRegex(RuntimeError, "retained"):
+                store.save_history({"search": "new"})
+            self.assertEqual(path.read_text(), original)
+
+    def test_wrong_restaurant_schema_is_not_overwritten(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "places.json"
+            path.write_text('{}')
+            store = JsonRecommendationStore(path, path.parent / "history.json")
+            with self.assertRaisesRegex(RuntimeError, "JSON list"):
+                store.save_restaurants([])
+            self.assertEqual(path.read_text(), '{}')
+
+    def test_atomic_replace_failure_retains_history_and_cleans_temporary(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "history.json"
+            original = '[{"search": "previous"}]\n'
+            path.write_text(original)
+            store = JsonRecommendationStore(path.parent / "places.json", path)
+            with patch(
+                    "BRNS.classes.data.stores.contracts.base_json_store."
+                    "os.replace", side_effect=OSError("fixture failure")):
+                self.assertFalse(store.save_history({"search": "new"}))
+            self.assertEqual(path.read_text(), original)
+            self.assertEqual(list(path.parent.glob("*.tmp")), [])
+
     def test_chat_filters_keep_time_precedence_and_normalize_lists(self):
         result = BISChatbotService.normalize_filters({
             "locations": ["bugis", "bugis"],

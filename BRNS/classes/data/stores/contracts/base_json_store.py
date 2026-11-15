@@ -1,7 +1,9 @@
 """Shared list-oriented JSON persistence behavior for BRNS."""
 
 import json
+import os
 import re
+import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -14,7 +16,7 @@ class BaseJsonStore(ABC):
     def __init__(self, records_path):
         self._records_path = Path(records_path)
 
-    def _load_json(self, path):
+    def _load_json(self, path, *, for_update=False):
         path = Path(path)
         if not path.exists():
             debug_log(
@@ -25,7 +27,12 @@ class BaseJsonStore(ABC):
         try:
             with path.open("r", encoding="utf-8") as file:
                 return json.load(file)
-        except (json.JSONDecodeError, OSError):
+        except (ValueError, UnicodeError, OSError) as error:
+            if for_update:
+                raise RuntimeError(
+                    "Cannot update unreadable saved JSON; restore the file "
+                    "before saving. The existing file was retained."
+                ) from error
             debug_log(
                 "Saved JSON file is unreadable; using an empty collection.",
                 "ERROR", "BRNS.data.load",
@@ -34,6 +41,7 @@ class BaseJsonStore(ABC):
 
     def _save_json(self, path, data, *, compact_hours=False):
         path = Path(path)
+        temporary = None
         try:
             if compact_hours:
                 data = self._ordered_hours(data)
@@ -49,11 +57,22 @@ class BaseJsonStore(ABC):
                         r'\["\d{4}", "\d{4}"\]', match.group(0))) + "]",
                     formatted,
                 )
-            with path.open("w", encoding="utf-8") as file:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                    "w", encoding="utf-8", dir=path.parent,
+                    prefix=f".{path.name}.", suffix=".tmp",
+                    delete=False) as file:
+                temporary = Path(file.name)
                 file.write(formatted + "\n")
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(temporary, path)
             return True
         except OSError:
             return False
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     @staticmethod
     def _ordered_hours(data):
