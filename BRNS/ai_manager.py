@@ -80,7 +80,8 @@ def manager():
     global _MANAGER
     if _MANAGER is None:
         _MANAGER = AIManager(
-            config, _recommend_candidates, _recommendation_deadline, _recommend_prepared)
+            config, _recommend_candidates, _recommendation_deadline, _recommend_prepared,
+            _provider_registry())
     return _MANAGER
 
 
@@ -258,101 +259,15 @@ def _post(url, **kwargs):
 
 
 def _call_openrouter(model_id, system_prompt, user_text):
-    """One OpenRouter attempt. Returns (True, reply_text) or (False, error)."""
-    headers = {"Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
-               "Content-Type": "application/json"}
-    messages = [{"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_text}]
-    for use_json_mode in (True, False):
-        payload = {
-            "model": model_id,
-            "messages": messages,
-            "temperature": 0,
-            "max_tokens": 2048,
-        }
-        if use_json_mode:
-            payload["response_format"] = {"type": "json_object"}
-        try:
-            resp = _post(
-                config.OPENROUTER_URL, headers=headers, json=payload)
-        except requests.RequestException as err:
-            return False, f"network error: {err}"
-        if resp.status_code == 429:
-            return False, "429 rate limited / free quota used"
-        if resp.status_code == 400 and use_json_mode:
-            continue                        # retry same model without json mode
-        if resp.status_code != 200:
-            return False, f"HTTP {resp.status_code}: {resp.text[:300]}"
-        try:
-            return True, resp.json()["choices"][0]["message"]["content"]
-        except (KeyError, ValueError) as err:
-            return False, f"unexpected response shape: {err}"
-    return False, "request rejected"
+    return _transport().call_openrouter(model_id, system_prompt, user_text)
 
 
 def _call_gemini(model_name, system_prompt, user_text):
-    """One direct Google-Gemini attempt. Returns (True, reply_text) or (False, error)."""
-    url = f"{config.GEMINI_URL}/{model_name}:generateContent"
-    headers = {"x-goog-api-key": config.GEMINI_API_KEY, "Content-Type": "application/json"}
-    body = {
-        "systemInstruction": {"parts": [{"text": system_prompt}]},
-        "contents": [{"role": "user", "parts": [{"text": user_text}]}],
-        "generationConfig": {"temperature": 0,
-                             "maxOutputTokens": 2048,
-                             "responseMimeType": "application/json"},
-    }
-    for use_json in (True, False):
-        if not use_json:
-            body.pop("generationConfig", None)
-        try:
-            resp = _post(url, headers=headers, json=body)
-        except requests.RequestException as err:
-            return False, f"network error: {err}"
-        if resp.status_code == 429:
-            return False, "429 rate limited"
-        if resp.status_code == 400 and use_json:
-            continue                        # retry without json mime type
-        if resp.status_code != 200:
-            return False, f"HTTP {resp.status_code}: {resp.text[:300]}"
-        try:
-            parts = resp.json()["candidates"][0]["content"]["parts"]
-            return True, "".join(p.get("text", "") for p in parts)
-        except (KeyError, IndexError, ValueError) as err:
-            return False, f"unexpected response shape: {err}"
-    return False, "request rejected"
+    return _transport().call_gemini(model_name, system_prompt, user_text)
 
 
 def _call_groq(model_id, system_prompt, user_text):
-    """One Groq attempt. Returns (True, reply_text) or (False, error)."""
-    headers = {"Authorization": f"Bearer {config.GROQ_API_KEY}",
-               "Content-Type": "application/json"}
-    messages = [{"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_text}]
-    for use_json_mode in (True, False):
-        payload = {
-            "model": model_id,
-            "messages": messages,
-            "temperature": 0,
-            "max_tokens": 2048,
-        }
-        if use_json_mode:
-            payload["response_format"] = {"type": "json_object"}
-        try:
-            resp = _post(
-                config.GROQ_URL, headers=headers, json=payload)
-        except requests.RequestException as err:
-            return False, f"network error: {err}"
-        if resp.status_code == 429:
-            return False, "429 rate limited"
-        if resp.status_code == 400 and use_json_mode:
-            continue                        # retry same model without json mode
-        if resp.status_code != 200:
-            return False, f"HTTP {resp.status_code}: {resp.text[:300]}"
-        try:
-            return True, resp.json()["choices"][0]["message"]["content"]
-        except (KeyError, ValueError) as err:
-            return False, f"unexpected response shape: {err}"
-    return False, "request rejected"
+    return _transport().call_groq(model_id, system_prompt, user_text)
 
 
 def _track_provider_call(provider, model, fn):
@@ -373,6 +288,7 @@ def _provider_registry():
                 "openrouter", selected,
                 lambda: _call_openrouter(selected, system_prompt, text)),
         ),
+        enabled=lambda settings: bool(settings.OPENROUTER_API_KEY),
     )
     registry.register(
         "gemini",
@@ -383,6 +299,7 @@ def _provider_registry():
                 "gemini", selected,
                 lambda: _call_gemini(selected, system_prompt, text)),
         ),
+        enabled=lambda settings: bool(settings.GEMINI_API_KEY),
     )
     registry.register(
         "groq",
@@ -393,16 +310,9 @@ def _provider_registry():
                 "groq", selected,
                 lambda: _call_groq(selected, system_prompt, text)),
         ),
+        enabled=lambda settings: bool(settings.GROQ_API_KEY),
     )
     return registry
-
-
-def _provider_is_configured(provider):
-    return (
-        provider == "openrouter" and bool(config.OPENROUTER_API_KEY)
-        or provider == "gemini" and bool(config.GEMINI_API_KEY)
-        or provider == "groq" and bool(config.GROQ_API_KEY)
-    )
 
 
 def _provider_objects(configured_only=False):
@@ -410,7 +320,7 @@ def _provider_objects(configured_only=False):
     providers = []
     for entry in config.MODEL_CHAIN:
         provider, model = entry["provider"], entry["model"]
-        if configured_only and not _provider_is_configured(provider):
+        if configured_only and not registry.is_configured(provider, config):
             continue
         configured = registry.create(provider, model)
         providers.append(
@@ -599,3 +509,8 @@ def current_active_model():
         if provider == "groq" and getattr(config, "GROQ_API_KEY", ""):
             return f"{provider}/{model}"
     return "Gemini AI"
+
+
+def _transport():
+    from BRNS.classes.ai.providers.clients.provider_transport import ProviderTransport
+    return ProviderTransport(config, lambda *args, **kwargs: _post(*args, **kwargs))

@@ -3,6 +3,8 @@
 import json
 
 from BIS.classes.ai.contracts.bis_ai_manager_interface import BISAIManagerInterface
+from BIS.classes.ai.contracts.chat_ai_interface import ChatAIInterface
+from BIS.classes.ai.tasks.bis_interpreter import BISInterpreter
 from sources.profile_schema import (
     PREFERENCE_FIELDS,
     clean_text,
@@ -10,11 +12,12 @@ from sources.profile_schema import (
 )
 
 
-class AIManager(BISAIManagerInterface):
+class AIManager(BISAIManagerInterface, ChatAIInterface):
     """Own BIS AI request schemas while using an injected provider router."""
 
     def __init__(self, fallback_request, profile_prompt_builder,
-                 profile_response_validator, search_validator):
+                 profile_response_validator, search_validator, interpreter=None):
+        self.interpreter = interpreter or BISInterpreter(fallback_request)
         self._request = fallback_request
         self._profile_prompt_builder = profile_prompt_builder
         self._validate_profile_response = profile_response_validator
@@ -82,10 +85,8 @@ class AIManager(BISAIManagerInterface):
             lambda parsed: self._validate_search(parsed))
 
     def chat_turn(self, message, current_filters, history, saved_profile, config):
-        from BIS import ai_manager as bis_ai
-        return bis_ai.interpret_chat_turn(
+        return self.interpreter.interpret_chat_turn(
             message, current_filters, history, saved_profile, config)
 
     def review_profile_wishes(self, wishes, config):
-        from BIS import ai_manager as bis_ai
-        return bis_ai.review_profile_wishes(wishes, config)
+        return self.interpreter.review_profile_wishes(wishes, config)
