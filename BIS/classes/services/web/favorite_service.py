@@ -40,3 +40,15 @@ class FavoriteService:
     def delete(self, user, key):
         self._data.delete_favorite(user["userID"], key)
         return {"success": True}
+
+    def clear(self, user):
+        with self._toggle_lock:
+            clear_fn = getattr(self._data, "clear_favorites", None)
+            if callable(clear_fn):
+                clear_fn(user["userID"])
+            else:
+                for row in self._data.load_favorites(user["userID"]):
+                    self._data.delete_favorite(
+                        user["userID"], row["place_key"]
+                    )
+            return {"success": True}

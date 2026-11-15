@@ -46,6 +46,10 @@ def register_routes(app):
     def map_config(io=Depends(get_web_io)):
         return io.map_config()
 
+    @router.get("/locations/suggest")
+    def suggest_locations(q: str = "", limit: int = 6, io=Depends(get_web_io)):
+        return io.suggest_locations(q, limit)
+
     @router.post("/auth/register")
     def register(payload: RegisterModel, io=Depends(get_web_io)):
         return io.register(payload.model_dump())
@@ -146,10 +150,12 @@ def register_routes(app):
 
     @router.delete("/favorites")
     def delete_favorite(
-        place_key: str,
+        place_key: str | None = None,
         authorization: str | None = Header(default=None),
         io=Depends(get_web_io),
     ):
+        if place_key is None:
+            return io.clear_favorites(authorization)
         return io.delete_favorite(authorization, place_key)
 
     @router.get("/history")

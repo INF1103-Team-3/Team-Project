@@ -465,6 +465,74 @@ def test_hardcoded_ai_response_cannot_change_confirmed_budget():
     assert actual == expected
 
 
+def test_location_syntax_and_country_fallback_rejection():
+    """Verify SG syntax checks and rejection of country-only fallbacks."""
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from BIS.classes.io.gateways.location_gateway import LocationGateway
+    from common.singapore_locations import validate_location_syntax
+
+    for valid in (
+        "Bugis",
+        "Compass One",
+        "Liberty St",
+        "NUS",
+        "545078",
+        "Singapore 828761",
+        "1.352, 103.944",
+    ):
+        assert validate_location_syntax(valid)
+
+    for bad in (
+        "",
+        "asdfghjkl",
+        "qwrty",
+        "zzzz",
+        "12345",
+        "999999",
+        "000000",
+        "Singapore",
+        "xx",
+        "1.90, 103.80",
+    ):
+        try:
+            validate_location_syntax(bad)
+            raise AssertionError(f"Expected ValueError for {bad!r}")
+        except ValueError:
+            pass
+
+    remembered = []
+    cache = SimpleNamespace(
+        lookup=lambda _q: None,
+        remember=lambda queries, lat, lng: remembered.append(
+            (list(queries), lat, lng)
+        ),
+    )
+    gw = LocationGateway(bis_logic, cache, "https://example.invalid/geocode")
+    country_payload = {
+        "results": [
+            {
+                "formatted_address": "Singapore",
+                "types": ["country", "political"],
+                "partial_match": True,
+                "geometry": {"location": {"lat": 1.352083, "lng": 103.819836}},
+            }
+        ]
+    }
+    with patch(
+        "BIS.classes.io.gateways.location_gateway.requests.get",
+        return_value=SimpleNamespace(
+            raise_for_status=lambda: None, json=lambda: country_payload
+        ),
+    ):
+        try:
+            gw.resolve("hogwarts", "fake-key")
+            raise AssertionError("Expected country fallback rejection")
+        except ValueError as err:
+            assert "No Singapore location found" in str(err)
+    assert remembered == []
+
+
 TESTS = (
     test_valid_singapore_coordinates_are_parsed,
     test_overseas_coordinates_are_rejected,
@@ -480,6 +548,7 @@ TESTS = (
     test_invalid_special_request_text_is_rejected,
     test_hardcoded_ai_response_can_add_soft_preferences,
     test_hardcoded_ai_response_cannot_change_confirmed_budget,
+    test_location_syntax_and_country_fallback_rejection,
 )
 
 

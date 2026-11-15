@@ -8,15 +8,17 @@ import {
   refreshIcons,
   state,
   validateEnglishWishesInput,
-} from './state.js?v=20261116-1';
-import { apiJson } from './api.js?v=20261116-1';
-import { showToast } from './toast.js?v=20261116-1';
+  validateLocationSyntax,
+} from './state.js?v=20261116-4';
+import { apiJson } from './api.js?v=20261116-4';
+import { showToast } from './toast.js?v=20261116-4';
+import { attachLocationAutocomplete } from './location_autocomplete.js?v=20261116-4';
 import {
   renderExhaustedRefreshState,
   renderResults,
   renderResultsSkeleton,
   updateResultsSkeletonModel,
-} from './results.js?v=20261116-1';
+} from './results.js?v=20261116-4';
 
 let isSearchInFlight = false;
 
@@ -401,7 +403,7 @@ export function addExtraLocationInput(initialValue = '') {
   row.innerHTML = `
     <div class="relative flex-1">
       <i data-lucide="users" class="w-4 h-4 absolute left-3 top-2.5 text-indigo-500"></i>
-      <input type="text" class="extra-location-input w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+      <input type="text" autocomplete="off" class="extra-location-input w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
         placeholder="Location 2 (e.g. Punggol)">
     </div>
     <button type="button" class="remove-loc-btn p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-rose-500 hover:border-rose-300 transition" title="Remove this location">
@@ -410,9 +412,17 @@ export function addExtraLocationInput(initialValue = '') {
   `;
   const inp = row.querySelector('.extra-location-input');
   inp.value = initialValue;
+  inp.addEventListener('input', () => {
+    const errEl = document.getElementById('locationInputError');
+    if (errEl && !errEl.classList.contains('hidden')) {
+      validateSearchLocationsInput(true);
+    }
+  });
+  attachLocationAutocomplete({ inputEl: inp });
   row.querySelector('.remove-loc-btn').addEventListener('click', () => {
     row.remove();
     updateMidpointHint();
+    validateSearchLocationsInput(true);
     chatCallbacks.renderSummary();
   });
   extraLocationsContainer.appendChild(row);
@@ -441,6 +451,7 @@ export function setEnteredLocations(locArray) {
     list.slice(1).forEach((val) => addExtraLocationInput(val));
   }
   updateMidpointHint();
+  setLocationInputError('');
 }
 
 function ensureCuisineChip(containerId, chipClass, hoverBorderCls, cuisine, toggleFn) {
@@ -1131,6 +1142,63 @@ export function validateSpecialFilterInput(showErrorUi = true) {
   return err;
 }
 
+function setLocationInputError(message = '', targetEl = null) {
+  const primary = document.getElementById('locationInput');
+  const errEl = document.getElementById('locationInputError');
+  const extras = Array.from(document.querySelectorAll('#extraLocationsContainer .extra-location-input'));
+  const err = String(message || '').trim();
+
+  [primary, ...extras].filter(Boolean).forEach((el) => {
+    el.classList.remove('border-rose-400', 'dark:border-rose-500', 'focus:ring-rose-500', 'focus:border-rose-500');
+    if (el === primary) {
+      el.classList.add('border-slate-300', 'dark:border-slate-700', 'focus:ring-brand-500', 'focus:border-brand-500');
+    } else {
+      el.classList.add('border-indigo-200', 'dark:border-indigo-800', 'focus:ring-indigo-500', 'focus:border-indigo-500');
+    }
+  });
+
+  if (!errEl) return;
+  if (err) {
+    errEl.textContent = err;
+    errEl.classList.remove('hidden');
+    const highlight = targetEl || primary;
+    if (highlight) {
+      highlight.classList.remove('border-slate-300', 'dark:border-slate-700', 'border-indigo-200', 'dark:border-indigo-800', 'focus:ring-brand-500', 'focus:border-brand-500', 'focus:ring-indigo-500', 'focus:border-indigo-500');
+      highlight.classList.add('border-rose-400', 'dark:border-rose-500', 'focus:ring-rose-500', 'focus:border-rose-500');
+    }
+  } else {
+    errEl.textContent = '';
+    errEl.classList.add('hidden');
+  }
+}
+
+function validateSearchLocationsInput(showErrorUi = true) {
+  const primaryEl = document.getElementById('locationInput');
+  const primaryVal = primaryEl ? primaryEl.value.trim() : '';
+  if (!primaryVal) {
+    const msg = 'Please enter a starting location before searching.';
+    if (showErrorUi) setLocationInputError(msg, primaryEl);
+    return { err: msg, targetEl: primaryEl };
+  }
+  const primaryErr = validateLocationSyntax(primaryVal, 'Starting location');
+  if (primaryErr) {
+    if (showErrorUi) setLocationInputError(primaryErr, primaryEl);
+    return { err: primaryErr, targetEl: primaryEl };
+  }
+  const extras = Array.from(document.querySelectorAll('#extraLocationsContainer .extra-location-input'));
+  for (let i = 0; i < extras.length; i += 1) {
+    const val = extras[i].value.trim();
+    if (!val) continue;
+    const extraErr = validateLocationSyntax(val, `Location ${i + 2}`);
+    if (extraErr) {
+      if (showErrorUi) setLocationInputError(extraErr, extras[i]);
+      return { err: extraErr, targetEl: extras[i] };
+    }
+  }
+  if (showErrorUi) setLocationInputError('');
+  return { err: '', targetEl: null };
+}
+
 export function applyUserToSearchForm(user) {
   if (!user) return;
   let targetMode = state.currentMode || 'walk';
@@ -1677,7 +1745,7 @@ async function executeSearchRequest(basePayload, {
       }
 
       renderResults(state.lastMatches, state.lastAlternatives);
-      return;
+      return true;
     }
 
     if (data.message && rawMatches.length === 0 && rawAlternatives.length === 0) {
@@ -1698,7 +1766,7 @@ async function executeSearchRequest(basePayload, {
       state.lastAlternatives = [];
       renderResults([], []);
       if (notifyChat) chatCallbacks.postSearchOutcome({ emptyMessage: data.message, fromChat });
-      return;
+      return true;
     }
 
     const modelUsed = data.model_used || activeModelLabel;
@@ -1753,12 +1821,15 @@ async function executeSearchRequest(basePayload, {
         fromChat,
       });
     }
+    return true;
   } catch (error) {
     stopModelPolling();
     if (!isRefresh) {
       clearRefreshTracking();
       if (/special requests?/i.test(error.message || '')) {
         setSpecialInputError(error.message);
+      } else if (/location|postal code|coordinates within singapore/i.test(error.message || '')) {
+        setLocationInputError(error.message);
       }
     } else {
       document.getElementById('mapSection')?.classList.add('hidden');
@@ -1776,6 +1847,7 @@ async function executeSearchRequest(basePayload, {
     if (notifyChat && !isRefresh) {
       chatCallbacks.postSearchOutcome({ errorMessage: error.message, fromChat });
     }
+    return false;
   } finally {
     stopModelPolling();
     isSearchInFlight = false;
@@ -1845,6 +1917,17 @@ export function initFiltersControls() {
 
   document.getElementById('addLocationRowBtn')?.addEventListener('click', () => addExtraLocationInput(''));
 
+  const primaryLocationInput = document.getElementById('locationInput');
+  if (primaryLocationInput) {
+    attachLocationAutocomplete({ inputEl: primaryLocationInput });
+    primaryLocationInput.addEventListener('input', () => {
+      const errEl = document.getElementById('locationInputError');
+      if (errEl && !errEl.classList.contains('hidden')) {
+        validateSearchLocationsInput(true);
+      }
+    });
+  }
+
   const useGpsBtn = document.getElementById('useGpsBtn');
   useGpsBtn?.addEventListener('click', () => {
     if (!navigator.geolocation) {
@@ -1859,6 +1942,7 @@ export function initFiltersControls() {
         const lat = pos.coords.latitude.toFixed(5);
         const lng = pos.coords.longitude.toFixed(5);
         document.getElementById('locationInput').value = `${lat}, ${lng}`;
+        setLocationInputError('');
         useGpsBtn.disabled = false;
         useGpsBtn.innerHTML = origHtml;
         showToast('Updated starting location from GPS.', 'success');
@@ -1876,6 +1960,7 @@ export function initFiltersControls() {
   document.querySelectorAll('.preset-pill').forEach((pill) => {
     pill.addEventListener('click', () => {
       document.getElementById('locationInput').value = pill.dataset.loc;
+      setLocationInputError('');
       chatCallbacks.renderSummary();
     });
   });
@@ -2105,6 +2190,12 @@ export function initFiltersControls() {
       return;
     }
 
+    const locCheck = validateSearchLocationsInput(true);
+    if (locCheck.err) {
+      failValidation(locCheck.err, locCheck.targetEl);
+      return;
+    }
+
     const payload = collectCurrentFormPayload(false);
     if (!payload.location) {
       failValidation('Please enter a starting location before searching.', document.getElementById('locationInput'));
@@ -2114,13 +2205,15 @@ export function initFiltersControls() {
     const allLocations = payload.locations || [];
     const budgetIsPlus = isBudgetPlusDisplay(payload.budget_per_person ?? null, state.isBudgetSet);
     chatCallbacks.renderSummary();
-    saveLocalRecent(allLocations.length > 1 ? allLocations.join(' + ') : payload.location);
 
-    await executeSearchRequest(payload, {
+    const searchOk = await executeSearchRequest(payload, {
       isRefresh: false,
       notifyChat: true,
       fromChat,
       budgetIsPlus,
     });
+    if (searchOk) {
+      saveLocalRecent(allLocations.length > 1 ? allLocations.join(' + ') : payload.location);
+    }
   });
 }

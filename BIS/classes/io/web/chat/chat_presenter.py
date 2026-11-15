@@ -566,6 +566,23 @@ class ChatPresenter:
             )
         return None
 
+    def reject_invalid_location(self, current, err, target_field=None):
+        field = (
+            target_field
+            if target_field in ("location", "add_location")
+            else "location"
+        )
+        return self.clarify_response(
+            current,
+            field,
+            (
+                f"{err} Please enter a real Singapore area, MRT station, "
+                "landmark, or 6-digit postal code (e.g. Bugis, Compass One, "
+                "545078)."
+            ),
+            ["Bugis", "Orchard", "Tampines", "Jurong East"],
+        )
+
     def reject_invalid_wishes(self, current, err):
         return self.clarify_response(
             current,

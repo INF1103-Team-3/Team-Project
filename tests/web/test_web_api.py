@@ -476,6 +476,52 @@ class WebIntegrationTests(unittest.TestCase):
             [],
         )
 
+        # Clear all saved favorites for `first` without affecting `second`.
+        second_place = dict(
+            restaurant, google_place_id="second-user-only", name="Keep Cafe"
+        )
+        first_two = dict(restaurant, google_place_id="first-2", name="Cafe 2")
+        self.assertEqual(
+            self.client.post(
+                "/api/favorites",
+                json={"restaurant": restaurant},
+                headers=first,
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/favorites",
+                json={"restaurant": first_two},
+                headers=first,
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/favorites",
+                json={"restaurant": second_place},
+                headers=second,
+            ).status_code,
+            200,
+        )
+        clear_res = self.client.delete("/api/favorites", headers=first)
+        self.assertEqual(clear_res.status_code, 200, clear_res.text)
+        self.assertEqual(
+            self.client.get("/api/favorites", headers=first).json()[
+                "favorites"
+            ],
+            [],
+        )
+        self.assertEqual(
+            len(
+                self.client.get("/api/favorites", headers=second).json()[
+                    "favorites"
+                ]
+            ),
+            1,
+        )
+
     def test_health_schema_validation_and_route_contract(self):
         self.assertTrue(self.client.get("/api/health").json()["mongodb"])
         self.assertIn(
@@ -3426,6 +3472,194 @@ class WebIntegrationTests(unittest.TestCase):
                     self.assertNotIn("exhausted_previous", response.json())
         finally:
             self.application._brns = original
+
+    def test_real_singapore_location_enforcement_and_suggest_endpoint(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from BIS.classes.io.gateways.location_gateway import LocationGateway
+
+        headers, user = self.account("loc.guard@example.com")
+
+        # 1. Profile rejects gibberish, invalid postals, and broad 'Singapore'.
+        for bad_loc in (
+            ["asdfghjkl"],
+            ["qwrty"],
+            ["12345"],
+            ["999999"],
+            ["Singapore"],
+        ):
+            res = self.client.post(
+                "/api/profile",
+                json={
+                    "user_id": user["user_id"],
+                    "username": user["username"],
+                    "email": user["email"],
+                    "location": bad_loc,
+                    "max_distance_km": 2.0,
+                    "max_travel_time_minutes": None,
+                    "budget_per_person": 25.0,
+                    "dietary_requirements": [],
+                    "liked_cuisines": [],
+                    "disliked_cuisines": [],
+                    "other_preferences": [],
+                },
+                headers=headers,
+            )
+            self.assertEqual(
+                res.status_code, 400, f"Expected 400 for {bad_loc}: {res.text}"
+            )
+
+        # 2. Search rejects gibberish in primary OR friend location rows.
+        for payload in (
+            dict(self.search_payload(), location="asdfghjkl", locations=[]),
+            dict(
+                self.search_payload(),
+                location="Bugis",
+                locations=["Bugis", "999999"],
+            ),
+        ):
+            res = self.client.post(
+                "/api/search", json=payload, headers=headers
+            )
+            self.assertEqual(res.status_code, 400, res.text)
+
+        # 3. Chatbot rejects gibberish in onboarding, freeform updates,
+        # Meet-in-the-Middle friend add, search confirmation, and save_profile.
+        onb = self.client.post(
+            "/api/chat",
+            json={
+                "message": "asdfghjkl",
+                "onboarding": True,
+                "awaiting_field": "location",
+                "current_filters": {},
+            },
+            headers=headers,
+        )
+        self.assertEqual(onb.status_code, 200, onb.text)
+        onb_body = onb.json()
+        self.assertEqual(onb_body["action"], "onboarding")
+        self.assertEqual(onb_body["awaiting_field"], "location")
+        self.assertEqual(onb_body["onboarding_step"], 1)
+        self.assertIn("Singapore location", onb_body["reply"])
+        me_after_onb = self.client.get("/api/auth/me", headers=headers).json()
+        self.assertEqual(me_after_onb["user"]["location"], [])
+
+        chat_gibberish = self.client.post(
+            "/api/chat",
+            json={
+                "message": "find halal food near asdfghjkl",
+                "current_filters": {"locations": ["Bugis"], "mode": "walk"},
+            },
+            headers=headers,
+        )
+        self.assertEqual(chat_gibberish.status_code, 200, chat_gibberish.text)
+        cg_body = chat_gibberish.json()
+        self.assertEqual(cg_body["action"], "clarify")
+        self.assertEqual(cg_body["filters"]["locations"], ["Bugis"])
+
+        chat_friend_bad = self.client.post(
+            "/api/chat",
+            json={
+                "message": "add second location, qwrty",
+                "current_filters": {"locations": ["Bugis"], "mode": "walk"},
+            },
+            headers=headers,
+        )
+        self.assertEqual(chat_friend_bad.status_code, 200)
+        self.assertEqual(chat_friend_bad.json()["action"], "clarify")
+        self.assertEqual(
+            chat_friend_bad.json()["filters"]["locations"], ["Bugis"]
+        )
+
+        chat_confirm_bad = self.client.post(
+            "/api/chat",
+            json={
+                "message": "yes, search now",
+                "awaiting_field": "confirm",
+                "current_filters": {
+                    "locations": ["asdfghjkl"],
+                    "mode": "walk",
+                    "max_travel_minutes": 15,
+                    "budget_per_person": 20,
+                },
+            },
+            headers=headers,
+        )
+        self.assertEqual(chat_confirm_bad.status_code, 200)
+        self.assertEqual(chat_confirm_bad.json()["action"], "clarify")
+        self.assertEqual(chat_confirm_bad.json()["awaiting_field"], "location")
+
+        # 4. LocationGateway rejects Google country fallback without caching,
+        # while accepting real establishment/POI matches even on partial_match.
+        remembered = []
+        cache = SimpleNamespace(
+            lookup=lambda _q: None,
+            remember=lambda queries, lat, lng: remembered.append(
+                (list(queries), lat, lng)
+            ),
+        )
+        real_gw = LocationGateway(
+            self.application._logic, cache, "https://example.invalid/geocode"
+        )
+        with patch(
+            "BIS.classes.io.gateways.location_gateway.requests.get",
+            return_value=SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda: {
+                    "results": [
+                        {
+                            "formatted_address": "Singapore",
+                            "types": ["country", "political"],
+                            "partial_match": True,
+                            "geometry": {
+                                "location": {
+                                    "lat": 1.352083,
+                                    "lng": 103.819836,
+                                }
+                            },
+                        }
+                    ]
+                },
+            ),
+        ):
+            with self.assertRaises(ValueError):
+                real_gw.resolve("hogwarts", "fake-key")
+        self.assertEqual(remembered, [])
+
+        with patch(
+            "BIS.classes.io.gateways.location_gateway.requests.get",
+            return_value=SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda: {
+                    "results": [
+                        {
+                            "formatted_address": (
+                                "1 Sengkang Sq, Singapore 545078"
+                            ),
+                            "types": [
+                                "establishment",
+                                "point_of_interest",
+                                "shopping_mall",
+                            ],
+                            "partial_match": True,
+                            "geometry": {
+                                "location": {"lat": 1.3924, "lng": 103.8954}
+                            },
+                        }
+                    ]
+                },
+            ),
+        ):
+            ok_geo = real_gw.resolve("Compass One Mall", "fake-key")
+        self.assertAlmostEqual(ok_geo["latitude"], 1.3924, places=3)
+        self.assertEqual(len(remembered), 1)
+
+        # 5. Suggest endpoint returns relevant Singapore locations.
+        sug = self.client.get("/api/locations/suggest?q=Comp&limit=5")
+        self.assertEqual(sug.status_code, 200, sug.text)
+        labels = [item["label"] for item in sug.json().get("suggestions", [])]
+        self.assertIn("Compass One", labels)
+        self.assertNotIn("Singapore", labels)
 
 
 if __name__ == "__main__":

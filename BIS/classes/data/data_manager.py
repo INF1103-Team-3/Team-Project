@@ -113,6 +113,9 @@ class DataManager(BISDataManagerInterface):
     def delete_favorite(self, user_id, key):
         return self._favorites.delete(user_id, key)
 
+    def clear_favorites(self, user_id):
+        return self._favorites.clear(user_id)
+
     def create_search_proposal(self, owner, request):
         return self._proposals.create(owner, request)
 

@@ -171,11 +171,11 @@ export function buildPolylineOptions(gmaps, styleKind, path) {
       icons: [{
         icon: {
           path: gmaps.SymbolPath.CIRCLE,
-          fillColor: '#0284c7',
+          fillColor: '#E74D3C',
           fillOpacity: 1,
           strokeColor: '#ffffff',
           strokeWeight: 1,
-          scale: 3.4,
+          scale: 3.6,
         },
         offset: '0',
         repeat: '12px',
@@ -185,8 +185,8 @@ export function buildPolylineOptions(gmaps, styleKind, path) {
   if (styleKind === 'transit') {
     return {
       ...base,
-      strokeColor: '#7c3aed',
-      strokeOpacity: 0.92,
+      strokeColor: '#E74D3C',
+      strokeOpacity: 0.95,
       strokeWeight: 5,
       zIndex: 52,
     };
@@ -194,8 +194,8 @@ export function buildPolylineOptions(gmaps, styleKind, path) {
   if (styleKind === 'drive') {
     return {
       ...base,
-      strokeColor: '#2563eb',
-      strokeOpacity: 0.92,
+      strokeColor: '#E74D3C',
+      strokeOpacity: 0.95,
       strokeWeight: 5,
       zIndex: 50,
     };
@@ -225,9 +225,9 @@ export function buildPolylineOptions(gmaps, styleKind, path) {
     icons: [{
       icon: {
         path: 'M 0,-1 0,1',
-        strokeColor: '#ea580c',
-        strokeOpacity: 0.9,
-        strokeWeight: 3,
+        strokeColor: '#E74D3C',
+        strokeOpacity: 0.95,
+        strokeWeight: 3.5,
         scale: 3,
       },
       offset: '0',

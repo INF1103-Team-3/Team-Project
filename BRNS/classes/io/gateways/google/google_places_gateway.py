@@ -4,6 +4,11 @@ import math
 from contextvars import ContextVar
 import requests
 
+from common.singapore_locations import (
+    is_acceptable_singapore_geocode,
+    validate_location_syntax,
+)
+
 
 class GooglePlacesGateway:
     "Execute planned searches without deciding the discovery fallback policy."
@@ -55,6 +60,10 @@ class GooglePlacesGateway:
         key = (address_text or "").strip()
         if not key:
             return None
+        try:
+            validate_location_syntax(key, label="Location")
+        except ValueError:
+            return None
         cached = self._cache.lookup(key)
         if cached:
             self._log.debug_log(
@@ -72,23 +81,24 @@ class GooglePlacesGateway:
             resp = requests.get(
                 self._config.GEOCODE_URL,
                 params={
-                    "address": address_text,
+                    "address": key,
                     "key": self._config.GOOGLE_MAPS_API_KEY,
                 },
                 timeout=10,
             )
             resp.raise_for_status()
             results = resp.json().get("results", [])
-            if not results:
-                return None
-            loc = results[0]["geometry"]["location"]
-            self._cache.remember((key,), loc["lat"], loc["lng"])
-            self._log.debug_log(
-                "Geocoding result cached.",
-                "INFO",
-                "BRNS.io_manager.geocode_location",
-            )
-            return (loc["lat"], loc["lng"])
+            for candidate in results:
+                if is_acceptable_singapore_geocode(candidate, key):
+                    loc = candidate["geometry"]["location"]
+                    self._cache.remember((key,), loc["lat"], loc["lng"])
+                    self._log.debug_log(
+                        "Geocoding result cached.",
+                        "INFO",
+                        "BRNS.io_manager.geocode_location",
+                    )
+                    return (loc["lat"], loc["lng"])
+            return None
         except (
             requests.RequestException,
             KeyError,

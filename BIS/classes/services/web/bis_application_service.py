@@ -4,6 +4,10 @@
 
 from copy import deepcopy
 
+from common.singapore_locations import (
+    suggest_seed_locations,
+    validate_location_syntax,
+)
 from BIS.classes.services.web.bis_chatbot_service import (
     BISChatbotService,
     validate_special_preferences,
@@ -51,6 +55,7 @@ class BISApplicationService:
             config,
             model_reader=self._model,
             profile_saver=self.save_profile,
+            location_gateway=self._locations,
         )
 
     def __read_last_used_model(self):
@@ -79,6 +84,22 @@ class BISApplicationService:
             "provider": "google" if active_key else "leaflet",
             "google_maps_api_key": active_key,
         }
+
+    def suggest_locations(self, query="", limit=6):
+        """Return validated Singapore location suggestions."""
+        bounded = max(1, min(int(limit or 6), 12))
+        suggest_fn = getattr(self._locations, "suggest", None)
+        if callable(suggest_fn):
+            use_live = self._config.get("use_live_google", True) is not False
+            api_key = (
+                self._config.get("google_maps_api_key") or ""
+                if use_live
+                else ""
+            )
+            items = suggest_fn(query, api_key=api_key, limit=bounded)
+        else:
+            items = suggest_seed_locations(query, limit=bounded)
+        return {"suggestions": list(items or [])}
 
     def chat(self, user, payload):
         return self._chatbot.respond(user, payload)
@@ -116,9 +137,10 @@ class BISApplicationService:
         api_key = self._config.get("google_maps_api_key")
         if self._locations is None:
             raise RuntimeError("Location lookup is not configured.")
-        resolved = [
-            self._locations.resolve(loc, api_key) for loc in raw_locations
-        ]
+        resolved = []
+        for raw in raw_locations:
+            clean = validate_location_syntax(raw, label="Starting location")
+            resolved.append(self._locations.resolve(clean, api_key))
         return self._logic.compute_midpoint_origin(resolved), resolved
 
     def __build_validated_request(self, payload, origin, cuisine_target):

@@ -3,6 +3,7 @@
 import math
 import re
 from copy import deepcopy
+from common.singapore_locations import validate_location_syntax
 from BIS.classes.logic.chat.chat_filter_policy import ChatFilterPolicy
 from BIS.classes.logic.security.profile_access_policy import (
     ProfileAccessPolicy,
@@ -212,7 +213,7 @@ class LogicManager(BISLogicManagerInterface):
 
     def is_direct_location_input(self, text):
         return self.parse_coordinates(text) is not None or bool(
-            re.fullmatch(r"\d{5,6}", text)
+            re.fullmatch(r"\d{6}", str(text or "").strip())
         )
 
     @staticmethod
@@ -226,7 +227,7 @@ class LogicManager(BISLogicManagerInterface):
             )
             if not clean:
                 continue
-            if is_location and clean.isdigit():
+            if is_location and re.fullmatch(r"\d{6}", clean):
                 clean = f"Singapore {clean}"
             normalized.append(clean)
         return normalized
@@ -269,12 +270,21 @@ class LogicManager(BISLogicManagerInterface):
         "Extract unique non-empty starting locations, keeping primary first."
         raw_locations = []
         for item in payload.get("locations") or []:
-            clean_loc = str(item or "").strip()
-            if clean_loc and clean_loc not in raw_locations:
+            raw = str(item or "").strip()
+            if not raw:
+                continue
+            clean_loc = validate_location_syntax(
+                raw, label="Starting location"
+            )
+            if clean_loc not in raw_locations:
                 raw_locations.append(clean_loc)
-        primary = str(payload.get("location") or "").strip()
-        if primary and primary not in raw_locations:
-            raw_locations.insert(0, primary)
+        primary_raw = str(payload.get("location") or "").strip()
+        if primary_raw:
+            primary = validate_location_syntax(
+                primary_raw, label="Starting location"
+            )
+            if primary not in raw_locations:
+                raw_locations.insert(0, primary)
         if not raw_locations:
             raise ValueError("Please enter at least one starting location.")
         return raw_locations

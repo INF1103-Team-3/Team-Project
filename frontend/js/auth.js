@@ -4,16 +4,19 @@ import {
   getAuthToken,
   isUserProfileIncomplete,
   normalizeWishText,
+  parseProfileLocationsInput,
   RECENT_KEY,
   refreshIcons,
   setAuthToken,
   state,
   validateEnglishWishesInput,
-} from './state.js?v=20261116-1';
-export { validateEnglishWishesInput };
-import { apiJson } from './api.js?v=20261116-1';
-import { openModal, closeModal } from './modals.js?v=20261116-1';
-import { showToast } from './toast.js?v=20261116-1';
+  validateLocationSyntax,
+} from './state.js?v=20261116-4';
+export { validateEnglishWishesInput, validateLocationSyntax };
+import { apiJson } from './api.js?v=20261116-4';
+import { openModal, closeModal } from './modals.js?v=20261116-4';
+import { showToast } from './toast.js?v=20261116-4';
+import { attachLocationAutocomplete } from './location_autocomplete.js?v=20261116-4';
 import {
   applyFiltersToSearchForm,
   applyUserToSearchForm,
@@ -21,8 +24,8 @@ import {
   getUserRecentKey,
   initRecentSearches,
   renderRecentSearches,
-} from './filters.js?v=20261116-1';
-import { formatHours, renderResults } from './results.js?v=20261116-1';
+} from './filters.js?v=20261116-4';
+import { formatHours, renderResults } from './results.js?v=20261116-4';
 
 const EMAIL_REGEX = /^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
 const PASSWORD_ALLOWED_REGEX = /^[A-Za-z0-9.,?!$]+$/;
@@ -225,9 +228,11 @@ async function removeFavoriteByKey(placeKey) {
 
 function renderFavoritesModalList() {
   const container = document.getElementById('favoritesListContainer');
+  const clearBtn = document.getElementById('clearFavoritesBtn');
   if (!container) return;
 
   if (!state.currentUser) {
+    clearBtn?.classList.add('hidden');
     container.innerHTML = `
       <div class="p-8 text-center text-slate-500 dark:text-slate-400">
         <i data-lucide="lock" class="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
@@ -238,6 +243,8 @@ function renderFavoritesModalList() {
     refreshIcons(container);
     return;
   }
+
+  clearBtn?.classList.remove('hidden');
 
   if (!state.favoritesList || state.favoritesList.length === 0) {
     container.innerHTML = `
@@ -763,6 +770,7 @@ export function initAuthAndModals() {
   document.getElementById('profileBtn')?.addEventListener('click', async () => {
     if (!state.currentUser) return;
     profileAlert?.classList.add('hidden');
+    setProfLocationError('');
     try {
       const meData = await apiJson('/api/auth/me');
       if (meData.user) {
@@ -784,8 +792,42 @@ export function initAuthAndModals() {
     document.getElementById('profDislikedInput').value = (state.currentUser.disliked_cuisines || []).join(', ');
     document.getElementById('profOtherInput').value = (state.currentUser.other_preferences || []).join(', ');
     profRatingControl?.syncFromWishes();
+    setProfLocationError('');
     openModal(profileModal, '#profUsernameInput');
   });
+
+  const profLocationInputEl = document.getElementById('profLocationInput');
+  function setProfLocationError(message = '') {
+    const errEl = document.getElementById('profLocationError');
+    if (profLocationInputEl) {
+      profLocationInputEl.classList.remove('border-rose-400', 'dark:border-rose-500', 'focus:ring-rose-500');
+      profLocationInputEl.classList.add('border-slate-300', 'dark:border-slate-700', 'focus:ring-brand-500');
+    }
+    if (!errEl) return;
+    const msg = String(message || '').trim();
+    if (msg) {
+      errEl.textContent = msg;
+      errEl.classList.remove('hidden');
+      if (profLocationInputEl) {
+        profLocationInputEl.classList.remove('border-slate-300', 'dark:border-slate-700', 'focus:ring-brand-500');
+        profLocationInputEl.classList.add('border-rose-400', 'dark:border-rose-500', 'focus:ring-rose-500');
+      }
+    } else {
+      errEl.textContent = '';
+      errEl.classList.add('hidden');
+    }
+  }
+  if (profLocationInputEl) {
+    attachLocationAutocomplete({ inputEl: profLocationInputEl, multiComma: true });
+    profLocationInputEl.addEventListener('input', () => {
+      const errEl = document.getElementById('profLocationError');
+      if (errEl && !errEl.classList.contains('hidden')) {
+        const locs = parseProfileLocationsInput(profLocationInputEl.value);
+        const firstErr = locs.map((loc) => validateLocationSyntax(loc, 'Default location')).find(Boolean) || '';
+        setProfLocationError(firstErr);
+      }
+    });
+  }
 
   const profRatingControl = createRatingSliderController({
     wrapId: 'profRatingDisplayWrap',
@@ -804,6 +846,7 @@ export function initAuthAndModals() {
     e.preventDefault();
     if (!state.currentUser) return;
     profileAlert?.classList.add('hidden');
+    setProfLocationError('');
     const diet = [];
     if (document.getElementById('profHalalCheck')?.checked) diet.push('halal');
     if (document.getElementById('profVegCheck')?.checked) diet.push('vegetarian');
@@ -863,11 +906,14 @@ export function initAuthAndModals() {
       return;
     }
 
-    let locations = [];
-    if (locVal) {
-      locations = COORD_PAIR_REGEX.test(locVal)
-        ? [locVal]
-        : locVal.split(',').map((s) => s.trim()).filter(Boolean);
+    const locations = parseProfileLocationsInput(locVal);
+    for (const loc of locations) {
+      const locErr = validateLocationSyntax(loc, 'Default location');
+      if (locErr) {
+        setProfLocationError(locErr);
+        showProfileError(locErr);
+        return;
+      }
     }
 
     const body = {
@@ -901,6 +947,9 @@ export function initAuthAndModals() {
       showToast('Profile preferences saved.', 'success');
       setTimeout(() => closeModal(profileModal), 750);
     } catch (err) {
+      if (/location|postal code|coordinates within singapore/i.test(err.message || '')) {
+        setProfLocationError(err.message);
+      }
       showProfileError(err.message);
     }
   });
@@ -913,6 +962,17 @@ export function initAuthAndModals() {
   });
   document.getElementById('closeFavoritesModalBtn')?.addEventListener('click', () => closeModal(favoritesModal));
   document.getElementById('closeFavoritesFooterBtn')?.addEventListener('click', () => closeModal(favoritesModal));
+  document.getElementById('clearFavoritesBtn')?.addEventListener('click', async () => {
+    if (!state.currentUser) return;
+    try {
+      await apiJson('/api/favorites', { method: 'DELETE' });
+      await loadFavorites();
+      renderFavoritesModalList();
+      showToast('Saved restaurants cleared.', 'info');
+    } catch (err) {
+      showToast(`Could not clear saved restaurants: ${err.message}`, 'error');
+    }
+  });
 
   document.getElementById('historyOpenBtn')?.addEventListener('click', () => {
     loadAndRenderHistory();

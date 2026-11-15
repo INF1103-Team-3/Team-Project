@@ -90,6 +90,12 @@ class WebIOManager(BISWebIOInterface):
             return reader()
         return {"provider": "leaflet", "google_maps_api_key": ""}
 
+    def suggest_locations(self, query="", limit=6):
+        reader = getattr(self._application, "suggest_locations", None)
+        if callable(reader):
+            return reader(query=query, limit=limit)
+        return {"suggestions": []}
+
     def register(self, payload):
         return self._auth.register(
             payload["email"], payload["username"], payload["password"]
@@ -153,6 +159,9 @@ class WebIOManager(BISWebIOInterface):
 
     def delete_favorite(self, authorization, key):
         return self._favorites.delete(self.user(authorization), key)
+
+    def clear_favorites(self, authorization):
+        return self._favorites.clear(self.user(authorization))
 
     @staticmethod
     def format_history(rows):

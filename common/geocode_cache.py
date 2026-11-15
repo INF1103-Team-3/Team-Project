@@ -3,12 +3,17 @@
 import json
 import math
 import os
+import re
 import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
 
 from common.debug_log import debug_log
+from common.singapore_locations import (
+    is_in_singapore,
+    validate_location_syntax,
+)
 
 CACHE_FILE = (
     Path(__file__).resolve().parent.parent / "data" / "geocode_cache.json"
@@ -187,3 +192,83 @@ def remember(queries, latitude, longitude):
         "common.geocode_cache.remember",
     )
     return False
+
+
+_CACHE_ABBRS = {
+    "mrt", "lrt", "cbd", "mbs", "nus", "ntu", "smu", "sutd",
+    "plq", "amk", "cck", "tpy", "yck", "hdb", "nex", "jem",
+}
+
+
+def _format_cached_label(key):
+    words = []
+    for tok in str(key or "").strip().split():
+        lower = tok.lower()
+        if lower in _CACHE_ABBRS:
+            words.append(lower.upper())
+        else:
+            words.append(tok.capitalize())
+    return " ".join(words)
+
+
+def _is_valid_cached_sg_entry(key, raw_point):
+    point = _point(raw_point)
+    if point is None or not is_in_singapore(point[0], point[1]):
+        return False
+    try:
+        validate_location_syntax(key)
+    except ValueError:
+        return False
+    return True
+
+
+def search(query, limit=6):
+    """Return validated cached Singapore suggestions matching query."""
+    clean = _key(query)
+    if limit <= 0:
+        return []
+    entries = []
+    if _use_mongo():
+        try:
+            conn = _mongo_collection()
+            filter_doc = (
+                {"_id": {"$regex": re.escape(clean), "$options": "i"}}
+                if clean
+                else {}
+            )
+            docs = conn.execute(
+                lambda db: list(
+                    db.geocode_cache.find(filter_doc).limit(max(limit * 6, 24))
+                )
+            )
+            for doc in docs or []:
+                if isinstance(doc, dict):
+                    entries.append((doc.get("_id"), doc.get("point")))
+        except (RuntimeError, OSError):
+            return []
+    else:
+        data = _read()
+        for key, raw_point in data.items():
+            if not clean or clean in _key(key):
+                entries.append((key, raw_point))
+
+    prefix_hits = []
+    substring_hits = []
+    seen = set()
+    for raw_key, raw_point in entries:
+        key = _key(raw_key)
+        if not key or key in seen:
+            continue
+        if not _is_valid_cached_sg_entry(key, raw_point):
+            continue
+        seen.add(key)
+        item = {
+            "label": _format_cached_label(key),
+            "secondary": "Recent Singapore location",
+            "source": "cache",
+        }
+        if not clean or key.startswith(clean):
+            prefix_hits.append(item)
+        elif clean in key:
+            substring_hits.append(item)
+    return (prefix_hits + substring_hits)[:limit]

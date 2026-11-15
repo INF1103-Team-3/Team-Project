@@ -1,6 +1,6 @@
-import { escapeHtml, getPlaceKey, refreshIcons, state } from './state.js?v=20261116-1';
-import { openModal, closeModal } from './modals.js?v=20261116-1';
-import { showToast } from './toast.js?v=20261116-1';
+import { escapeHtml, getPlaceKey, refreshIcons, state } from './state.js?v=20261116-4';
+import { openModal, closeModal } from './modals.js?v=20261116-4';
+import { showToast } from './toast.js?v=20261116-4';
 
 let onCompareChangeCallback = null;
 let helpers = {

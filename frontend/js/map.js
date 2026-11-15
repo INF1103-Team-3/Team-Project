@@ -1,12 +1,12 @@
-import { escapeHtml, getPlaceKey, refreshIcons, state } from './state.js?v=20261116-1';
-import { openModal, closeModal } from './modals.js?v=20261116-1';
-import { apiJson } from './api.js?v=20261116-1';
+import { escapeHtml, getPlaceKey, refreshIcons, state } from './state.js?v=20261116-4';
+import { openModal, closeModal } from './modals.js?v=20261116-4';
+import { apiJson } from './api.js?v=20261116-4';
 import {
   buildPinMarkerIcon,
   buildPolylineOptions,
   GOOGLE_MAP_DARK_STYLES,
   GOOGLE_MAP_LIGHT_STYLES,
-} from './map_styles.js?v=20261116-1';
+} from './map_styles.js?v=20261116-4';
 
 let activeEngine = null; // 'google' | 'leaflet' | null
 let mapConfigPromise = null;
@@ -288,7 +288,7 @@ function drawStraightLine(origin, restaurant) {
   if (activeEngine === 'leaflet' && leafletMap && window.L) {
     const poly = window.L.polyline(
       [[origin.latitude, origin.longitude], [restaurant.lat, restaurant.lng]],
-      { color: '#ea580c', weight: 4, dashArray: '8, 8', opacity: 0.9 },
+      { color: '#E74D3C', weight: 4.5, dashArray: '8, 8', opacity: 0.95 },
     ).addTo(leafletMap);
     activeRouteLayers.push(poly);
   }

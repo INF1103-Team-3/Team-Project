@@ -3,6 +3,11 @@
 import math
 import re
 
+from common.singapore_locations import (
+    extract_postal_digits,
+    validate_location_syntax,
+)
+
 OTHER_PREFERENCES = "other_preferences"
 PREFERENCE_FIELDS = (
     "location",
@@ -227,10 +232,14 @@ def normalize_list(
             normalize_wish_text(item) if allow_ratings else item, 100
         ).lower()
         has_rating = bool(allow_ratings and extract_rating_wishes(item))
+        has_sg_postal = bool(
+            allow_coordinates and extract_postal_digits(item) is not None
+        )
         if (
             not any(c.isalpha() for c in item)
             and not (allow_coordinates and _COORDINATE_TEXT.fullmatch(item))
             and not has_rating
+            and not has_sg_postal
         ):
             raise ValueError("List entries must contain letters.")
         if choices is not None and item not in choices:
@@ -327,9 +336,12 @@ def validate_value(
             )
         return round(value, 2)
     if field == "location":
-        return normalize_list(
+        locs = normalize_list(
             value, required=not allow_empty_location, allow_coordinates=True
         )
+        for loc in locs:
+            validate_location_syntax(loc, label="Default location")
+        return locs
     if field == "dietary_requirements":
         return normalize_list(value, DIETARY_CHOICES)
     if field == OTHER_PREFERENCES:

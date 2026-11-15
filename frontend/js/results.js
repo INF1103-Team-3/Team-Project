@@ -5,7 +5,7 @@ import {
   getSingaporeDate,
   refreshIcons,
   state,
-} from './state.js?v=20261116-1';
+} from './state.js?v=20261116-4';
 import {
   drawOriginToRestaurantLine,
   flyToMarkerForItem,
@@ -14,8 +14,8 @@ import {
   openRouteDrawer,
   setMapFormatters,
   updateInteractiveMap,
-} from './map.js?v=20261116-1';
-import { renderCompareTray, setCompareHelpers, toggleCompareItem } from './compare.js?v=20261116-1';
+} from './map.js?v=20261116-4';
+import { renderCompareTray, setCompareHelpers, toggleCompareItem } from './compare.js?v=20261116-4';
 
 let favoriteToggleHandler = async () => { };
 let refreshResultsHandler = async () => { };

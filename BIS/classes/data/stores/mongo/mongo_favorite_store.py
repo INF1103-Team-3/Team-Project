@@ -34,3 +34,8 @@ class MongoFavoriteStore:
                 {"user_id": user_id, "place_key": key}
             )
         ).deleted_count
+
+    def clear(self, user_id):
+        return self._connection.execute(
+            lambda db: db.favorites.delete_many({"user_id": user_id})
+        ).deleted_count

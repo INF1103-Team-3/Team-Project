@@ -27,6 +27,10 @@ class BISWebIOInterface(ABC):
         """Return map provider settings for the web UI."""
 
     @abstractmethod
+    def suggest_locations(self, query="", limit=6):
+        """Return Singapore location suggestions for autocomplete UI."""
+
+    @abstractmethod
     def register(self, payload):
         """Register a new BIS web user account."""
 
@@ -85,6 +89,10 @@ class BISWebIOInterface(ABC):
     @abstractmethod
     def delete_favorite(self, authorization, key):
         """Delete one saved favorite restaurant by key."""
+
+    @abstractmethod
+    def clear_favorites(self, authorization):
+        """Clear all saved favorite restaurants for the authenticated user."""
 
     @abstractmethod
     def history(self, authorization):

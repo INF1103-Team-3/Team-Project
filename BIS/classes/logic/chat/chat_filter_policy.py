@@ -73,7 +73,7 @@ class ChatFilterPolicy:
         text = re.sub(r"\s+", " ", str(raw or "").strip()).strip(".,;!?")
         if not text:
             return ""
-        if text.isdigit():
+        if re.fullmatch(r"\d{6}", text):
             return f"Singapore {text}"
         if text.islower() and any(ch.isalpha() for ch in text):
             text = re.sub(r"\bmrt\b", "MRT", text.title(), flags=re.IGNORECASE)

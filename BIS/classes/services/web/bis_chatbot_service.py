@@ -14,6 +14,8 @@ from BIS.classes.io.web.chat.chat_presenter import (
 from copy import deepcopy
 import re
 
+from common.singapore_locations import validate_location_syntax
+
 from BIS.sources.profile_schema import (
     CUISINES,
     DIETARY_CHOICES,
@@ -75,13 +77,20 @@ class BISChatbotService:
     """
 
     def __init__(
-        self, ai, logic, config, model_reader=lambda: None, profile_saver=None
+        self,
+        ai,
+        logic,
+        config,
+        model_reader=lambda: None,
+        profile_saver=None,
+        location_gateway=None,
     ):
         self._ai = ai
         self._logic = logic
         self._config = config
         self._model = model_reader
         self._save_profile = profile_saver
+        self._locations = location_gateway
         self._filters = (
             getattr(logic, "chat_filters", None) or ChatFilterPolicy()
         )
@@ -89,6 +98,33 @@ class BISChatbotService:
         self._parser = DeterministicChatParser(
             self._presenter.format_profile_summary
         )
+
+    def _validate_locations(self, raw_locations, label="Starting location"):
+        validated = []
+        api_key = (self._config or {}).get("google_maps_api_key")
+        for raw in raw_locations or ():
+            text = re.sub(r"\s+", " ", str(raw or "").strip())
+            if not text:
+                continue
+            clean = validate_location_syntax(text, label=label)
+            if re.fullmatch(r"\d{6}", clean):
+                clean = f"Singapore {clean}"
+            if self._locations is not None:
+                try:
+                    self._locations.resolve(clean, api_key)
+                except ValueError as err:
+                    raise ValueError(
+                        f"'{text}' is not a valid Singapore location ({err})"
+                    ) from err
+                except RuntimeError as err:
+                    if "unavailable" not in str(err).lower():
+                        raise ValueError(
+                            f"'{text}' could not be verified as a Singapore "
+                            "location."
+                        ) from err
+            if clean not in validated:
+                validated.append(clean)
+        return validated
 
     def __handle_onboarding(self, user, message, awaiting_field, current):
         prefs = deepcopy((user or {}).get("preferences") or {})
@@ -208,6 +244,19 @@ class BISChatbotService:
                 self._logic.estimate_travel_limits,
             )
             onboarding_err = ""
+            if (
+                target_field == "location"
+                and accepted
+                and prefs.get("location")
+            ):
+                try:
+                    prefs["location"] = self._validate_locations(
+                        prefs["location"], label="Default location"
+                    )
+                except ValueError as err:
+                    accepted = False
+                    prefs.pop("location", None)
+                    onboarding_err = str(err)
             if target_field == "other_preferences":
                 if merged_updates.get("other_action") == "clear":
                     prefs["other_preferences"] = []
@@ -350,6 +399,14 @@ class BISChatbotService:
                     "saved_to_profile": False,
                 }
             try:
+                self._validate_locations(
+                    current.get("locations") or [], label="Starting location"
+                )
+            except ValueError as err:
+                return self._presenter.reject_invalid_location(
+                    current, err, target_field="location"
+                )
+            try:
                 validate_special_preferences(
                     current.get("other_preferences") or [],
                     ai=self._ai,
@@ -453,6 +510,29 @@ class BISChatbotService:
             }
 
         updates_dict = dict(parsed.get("updates") or {})
+        if updates_dict.get("locations_action") not in ("remove", "clear"):
+            if updates_dict.get("locations"):
+                try:
+                    updates_dict["locations"] = self._validate_locations(
+                        updates_dict["locations"],
+                        label="Starting location",
+                    )
+                except ValueError as err:
+                    return self._presenter.reject_invalid_location(
+                        current, err, target_field=awaiting_field
+                    )
+            elif (
+                awaiting_field in ("location", "add_location")
+                and not updates_dict
+                and intent in ("clarify", "update_filters", "search")
+            ):
+                return self._presenter.reject_invalid_location(
+                    current,
+                    ValueError(
+                        f"'{message}' is not a valid Singapore location."
+                    ),
+                    target_field=awaiting_field,
+                )
         if updates_dict.get("other_action") not in (
             "clear",
             "clear_rating",
@@ -496,6 +576,10 @@ class BISChatbotService:
             try:
                 self._save_profile(user, profile_payload)
             except ValueError as err:
+                if "location" in str(err).lower():
+                    return self._presenter.reject_invalid_location(
+                        current, err, target_field="location"
+                    )
                 return self._presenter.reject_invalid_wishes(current, err)
             saved_to_profile = True
             reply = (

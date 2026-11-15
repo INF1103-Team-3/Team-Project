@@ -246,3 +246,110 @@ export function validateEnglishWishesInput(items, fieldLabel = 'Special requests
   }
   return '';
 }
+
+const LOCATION_COORD_PAIR_REGEX = /^\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)\s*$/;
+const LOCATION_NUMERIC_REGEX = /^-?\d+(?:\.\d+)?$/;
+const LOCATION_KEYBOARD_MASH = [
+  'asdf', 'sdfg', 'dfgh', 'fghj', 'ghjk', 'hjkl', 'jklm',
+  'qwer', 'wert', 'qwrt', 'tyui', 'uiop',
+  'zxcv', 'xcvb', 'cvbn', 'vbnm',
+  'qazw', 'wsxc', 'edcr', 'rfvt',
+];
+const KNOWN_SG_LOCATION_ABBRS = new Set([
+  'amk', 'bb', 'bldg', 'blk', 'bm', 'bp', 'bt', 'cbd', 'cck', 'chij', 'ctrl',
+  'gl', 'hdb', 'imm', 'jem', 'jln', 'lrg', 'mbs', 'mrt', 'nex', 'np', 'ntu',
+  'nus', 'nyp', 'plq', 'qt', 'rp', 'sim', 'sit', 'smu', 'sp', 'sutd',
+  't1', 't2', 't3', 't4', 'tg', 'tp', 'tpy', 'yck', 'iii',
+]);
+
+export function parseProfileLocationsInput(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return [];
+  if (LOCATION_COORD_PAIR_REGEX.test(trimmed)) return [trimmed];
+  const parts = trimmed.split(',').map((s) => s.trim()).filter(Boolean);
+  const parsed = [];
+  for (let i = 0; i < parts.length; i += 1) {
+    if (
+      i + 1 < parts.length
+      && LOCATION_NUMERIC_REGEX.test(parts[i])
+      && LOCATION_NUMERIC_REGEX.test(parts[i + 1])
+    ) {
+      parsed.push(`${parts[i]}, ${parts[i + 1]}`);
+      i += 1;
+    } else {
+      parsed.push(parts[i]);
+    }
+  }
+  return parsed;
+}
+
+export function validateLocationSyntax(raw, label = 'Location') {
+  const clean = String(raw || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return `${label} cannot be empty.`;
+  if (/[\x00-\x1f]/.test(String(raw || ''))) return `${label} contains invalid characters.`;
+  if (clean.length > 160) return `${label} is too long (maximum 160 characters).`;
+
+  const coordMatch = clean.match(LOCATION_COORD_PAIR_REGEX);
+  if (coordMatch) {
+    const lat = parseFloat(coordMatch[1]);
+    const lng = parseFloat(coordMatch[2]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < 1.15 || lat > 1.48 || lng < 103.6 || lng > 104.1) {
+      return 'Enter coordinates within Singapore.';
+    }
+    return '';
+  }
+
+  const normalizedPostal = clean.replace(/[.,;]+$/, '');
+  let postalDigits = null;
+  const bareDigits = normalizedPostal.match(/^\s*(\d+)\s*$/);
+  const prefixedDigits = normalizedPostal.match(/^(?:singapore|sg|s\s*\(?)\s*(\d+)\)?$/i);
+  if (bareDigits) postalDigits = bareDigits[1];
+  else if (prefixedDigits) postalDigits = prefixedDigits[1];
+
+  if (postalDigits !== null) {
+    if (postalDigits.length !== 6) {
+      return `${label} postal code must be 6 Singapore digits (e.g. 545078).`;
+    }
+    const sector = parseInt(postalDigits.slice(0, 2), 10);
+    if (sector < 1 || sector > 83) {
+      return `${label} '${postalDigits}' is not a valid Singapore postal code (e.g. 545078).`;
+    }
+    return '';
+  }
+
+  if (/^(?:singapore|s'?pore|sg)$/i.test(clean.replace(/[.,;!? ]+$/g, ''))) {
+    return `${label} 'Singapore' is too broad. Please enter a specific Singapore area, MRT, landmark, or 6-digit postal code.`;
+  }
+
+  if (/[?!<>{};]/.test(clean)) {
+    return `Please enter a valid Singapore location, area, MRT, or 6-digit postal code for ${label.toLowerCase()}.`;
+  }
+
+  const lowered = clean.toLowerCase();
+  if (LOCATION_KEYBOARD_MASH.some((seq) => lowered.includes(seq))) {
+    return `'${clean}' does not look like a real Singapore location (e.g. Bugis, Compass One, 545078).`;
+  }
+  if (/(?!iii\b)([a-z])\1\1/.test(lowered)) {
+    return `'${clean}' does not look like a real Singapore location (e.g. Bugis, Compass One, 545078).`;
+  }
+
+  const tokens = lowered.match(/[a-z0-9]+/g) || [];
+  const alphaCount = (lowered.match(/[a-z]/g) || []).length;
+  const digitCount = (lowered.match(/[0-9]/g) || []).length;
+  if ((!tokens.length || alphaCount + digitCount < 3) && !KNOWN_SG_LOCATION_ABBRS.has(lowered)) {
+    return 'Please enter a specific Singapore location, MRT station, or 6-digit postal code (e.g. Bugis, Compass One, 545078).';
+  }
+
+  for (const tok of tokens) {
+    const letters = tok.replace(/[^a-z]/g, '');
+    if (!letters || KNOWN_SG_LOCATION_ABBRS.has(letters)) continue;
+    const vowels = (letters.match(/[aeiouy]/g) || []).length;
+    if (letters.length >= 4 && vowels === 0) {
+      return `'${clean}' does not look like a real Singapore location (e.g. Bugis, Compass One, 545078).`;
+    }
+    if (letters.length >= 6 && vowels / letters.length < 0.18) {
+      return `'${clean}' does not look like a real Singapore location (e.g. Bugis, Compass One, 545078).`;
+    }
+  }
+  return '';
+}

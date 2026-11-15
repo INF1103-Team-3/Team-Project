@@ -1,9 +1,13 @@
 /** Offline ES-module contracts. Run with Node 22+; see tests/README.md. */
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
-import * as filters from '../../frontend/js/filters.js?v=20261116-1';
-import * as results from '../../frontend/js/results.js?v=20261116-1';
-import { state } from '../../frontend/js/state.js?v=20261116-1';
+import * as filters from '../../frontend/js/filters.js?v=20261116-4';
+import * as results from '../../frontend/js/results.js?v=20261116-4';
+import {
+  parseProfileLocationsInput,
+  state,
+  validateLocationSyntax,
+} from '../../frontend/js/state.js?v=20261116-4';
 
 const elements = new Map();
 const requests = [];
@@ -111,4 +115,15 @@ test('reset clears shared UI refresh state without an HTTP request', () => {
   assert.deepEqual(state.refreshSeenRestaurants, []);
   assert.equal(state.refreshSeenKeys.size, 0);
   assert.deepEqual(requests, []);
+});
+
+test('location syntax validator and profile parser allow valid SG locations and block gibberish', () => {
+  for (const good of ['Bugis', 'Compass One', '545078', 'Singapore 828761', '1.352, 103.944', 'Liberty St', 'NUS', 'T2']) {
+    assert.equal(validateLocationSyntax(good), '', `expected '${good}' to pass`);
+  }
+  for (const bad of ['', '   ', 'asdfghjkl', 'qwrty', '12345', '999999', '000000', 'Singapore', 'xx', 'zzzzzz', '1.90, 103.80']) {
+    assert.notEqual(validateLocationSyntax(bad), '', `expected '${bad}' to fail`);
+  }
+  assert.deepEqual(parseProfileLocationsInput('1.352, 103.944, Bugis'), ['1.352, 103.944', 'Bugis']);
+  assert.deepEqual(parseProfileLocationsInput('Compass One, Tampines'), ['Compass One', 'Tampines']);
 });
