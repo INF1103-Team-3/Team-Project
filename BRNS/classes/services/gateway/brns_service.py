@@ -41,12 +41,15 @@ class BRNSService(BRNSGatewayInterface):
         user_id=None,
         max_matches=None,
         max_alternatives=None,
+        strict_exclude=False,
     ):
         kwargs = {}
         if max_matches is not None:
             kwargs["max_matches"] = max_matches
         if max_alternatives is not None:
             kwargs["max_alternatives"] = max_alternatives
+        if strict_exclude:
+            kwargs["strict_exclude"] = True
         with self._history_scope.for_user(user_id):
             if previous_restaurants:
                 return self._workflow.search(

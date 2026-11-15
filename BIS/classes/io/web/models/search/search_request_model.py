@@ -1,6 +1,10 @@
 """HTTP input schema; domain validation remains in the managers."""
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from BIS.classes.io.web.models.search.previous_restaurant_model import (
+    PreviousRestaurantModel,
+)
 
 
 class SearchRequestModel(BaseModel):
@@ -19,3 +23,7 @@ class SearchRequestModel(BaseModel):
     traffic_aware: bool = False
     confirmation_token: str | None = None
     confirm_only: bool = False
+    previous_restaurants: list[PreviousRestaurantModel] = Field(
+        default_factory=list, max_length=200
+    )
+    strict_exclude: bool = False

@@ -26,8 +26,20 @@ class WebIOManager(
     def accept_bis_json(self, payload):
         return self._core.accept_bis_json(payload)
 
-    def find_candidates(self, request):
+    def find_candidates(
+        self, request, previous_restaurants=(), strict_exclude=False
+    ):
+        if strict_exclude and previous_restaurants:
+            return self._core.find_candidates(
+                request,
+                previous_restaurants=previous_restaurants,
+                strict_exclude=True,
+            )
         return self._core.find_candidates(request)
+
+    def last_discovery_failed(self):
+        checker = getattr(self._core, "last_discovery_failed", None)
+        return bool(checker()) if callable(checker) else False
 
     def get_route(self, *args, **kwargs):
         return self._core.get_route(*args, **kwargs)

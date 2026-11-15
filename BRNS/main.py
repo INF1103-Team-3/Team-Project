@@ -42,7 +42,11 @@ def verify_halal_candidates(candidates, request, recommendations):
     )
 
 
-def search(bis_json, previous_restaurants=()):
+def search(bis_json, previous_restaurants=(), strict_exclude=False):
+    if strict_exclude:
+        return _APPLICATION.search(
+            bis_json, previous_restaurants, strict_exclude=True
+        )
     return _APPLICATION.search(bis_json, previous_restaurants)
 
 
