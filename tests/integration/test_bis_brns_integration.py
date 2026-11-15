@@ -1158,6 +1158,54 @@ def test_no_cuisine_choice_crosses_boundary_without_cuisine_penalty():
     assert actual == expected
 
 
+def test_updated_mode_travel_caps_and_transit_distance_contract():
+    """Walk, drive, and transit limits allow 50km drive/transit and 150m transit."""
+
+    cases = {
+        "walk_15km_ok": (search_request(mode="walk", max_distance_km=15.0, max_travel_minutes=None), "accepted"),
+        "walk_90m_ok": (search_request(mode="walk", max_distance_km=None, max_travel_minutes=90), "accepted"),
+        "walk_15_1km_bad": (search_request(mode="walk", max_distance_km=15.1, max_travel_minutes=None), "rejected"),
+        "walk_91m_bad": (search_request(mode="walk", max_distance_km=None, max_travel_minutes=91), "rejected"),
+        "drive_50km_ok": (search_request(mode="drive", max_distance_km=50.0, max_travel_minutes=None), "accepted"),
+        "drive_120m_ok": (search_request(mode="drive", max_distance_km=None, max_travel_minutes=120), "accepted"),
+        "drive_50_1km_bad": (search_request(mode="drive", max_distance_km=50.1, max_travel_minutes=None), "rejected"),
+        "drive_121m_bad": (search_request(mode="drive", max_distance_km=None, max_travel_minutes=121), "rejected"),
+        "transit_50km_ok": (search_request(mode="transit", max_distance_km=50.0, max_travel_minutes=None), "accepted"),
+        "transit_150m_ok": (search_request(mode="transit", max_distance_km=None, max_travel_minutes=150), "accepted"),
+        "transit_50_1km_bad": (search_request(mode="transit", max_distance_km=50.1, max_travel_minutes=None), "rejected"),
+        "transit_151m_bad": (search_request(mode="transit", max_distance_km=None, max_travel_minutes=151), "rejected"),
+    }
+
+    expected = {}
+    actual = {}
+
+    for label, (req, expect) in cases.items():
+        expected[f"{label}_BIS"] = expect
+        expected[f"{label}_BRNS"] = expect
+
+        for sys_name, fn in (
+            ("BIS", bis_logic.validate_search_request),
+            ("BRNS", brns_io.accept_bis_json),
+        ):
+            try:
+                fn(deepcopy(req))
+                actual[f"{label}_{sys_name}"] = "accepted"
+            except ValueError:
+                actual[f"{label}_{sys_name}"] = "rejected"
+
+    show_case(
+        "INT-11: Updated mode travel caps & transit distance",
+        "BIS.validate_search_request() + BRNS.accept_bis_json()",
+        "Verifies per-mode ceilings (walk 15km/90m, drive 50km/120m, "
+        "transit 50km/150m) and transit distance across both boundaries.",
+        {k: {"mode": v[0]["mode"], "km": v[0]["max_distance_km"], "min": v[0]["max_travel_minutes"]} for k, v in cases.items()},
+        expected,
+        actual,
+    )
+
+    assert actual == expected
+
+
 TESTS = (
     test_valid_bis_request_crosses_brns_boundary_unchanged,
     test_serialized_bis_json_is_accepted_by_brns,
@@ -1169,6 +1217,7 @@ TESTS = (
     test_halal_requirement_survives_bis_to_brns_boundary,
     test_repeat_search_prefers_unseen_match_without_changing_request,
     test_no_cuisine_choice_crosses_boundary_without_cuisine_penalty,
+    test_updated_mode_travel_caps_and_transit_distance_contract,
 )
 
 

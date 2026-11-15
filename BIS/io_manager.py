@@ -1,5 +1,6 @@
 """All terminal input/output for BiteFinder profiles and search setup."""
 
+import os
 import re
 import sys
 import time
@@ -9,19 +10,46 @@ from sources.prompts import (
     QUESTIONS,
 )
 
-import data_manager
-import ai_manager
-from support.email_verification import challenge as email_challenge
-from support.email_verification import service as email_service
-import logic_manager
-from shared import terminal_ui as ui
+from BIS import ai_manager, data_manager, logic_manager
+from BIS.classes.io.cli.io_manager import IOManager
+from BIS.classes.logic.security.password_hasher import PasswordHasher
+from BIS.support.config import is_smtp_bypass
+from BIS.support.email_verification import challenge as email_challenge
+from BIS.support.email_verification import service as email_service
+from common import recommendation_ui
+from common import terminal_ui as ui
+from common import geocode_cache
+from BIS.classes.io.gateways.location_gateway import LocationGateway
 from sources.profile_schema import (
     CUISINES, CUISINE_FIELDS, OTHER_PREFERENCES, PREFERENCE_FIELDS,
-    clean_text, normalize_email, normalize_username, validate_updates,
-    validate_value, validate_travel_minutes,
+    SEARCH_MODE_LIMITS, clean_text, normalize_email, normalize_username,
+    validate_search_distance, validate_travel_minutes, validate_updates,
+    validate_value,
 )
 
+_PASSWORD_HASHER = PasswordHasher()
 _color_handler = None
+_MANAGER = None
+_LOCATION_GATEWAY = LocationGateway(
+    logic_manager,
+    geocode_cache,
+    os.getenv(
+        "BITEFINDER_GEOCODE_URL",
+        "https://maps.googleapis.com/maps/api/geocode/json",
+    ),
+)
+
+
+def manager():
+    """Return the configured BIS IO Manager."""
+    global _MANAGER
+    if _MANAGER is None:
+        _MANAGER = IOManager(
+            sys.modules[__name__],
+            ai_manager.review_prompt_text,
+            logic_manager.manager(),
+        )
+    return _MANAGER
 
 
 def set_color_handler(handler):
@@ -106,6 +134,66 @@ def prompt_username():
             display_message(error)
 
 
+def read_secret_input(prompt="Password: "):
+    try:
+        return ui.read_secret(prompt)
+    except EOFError:
+        return None
+
+
+def prompt_new_password(confirm=True, *, cancel_raises=False):
+    while True:
+        value = read_secret_input(
+            f"Password ({PasswordHasher.MIN_LENGTH}-{PasswordHasher.MAX_LENGTH} characters, or /cancel): "
+        )
+        if value is None or value.strip().lower() in {"/quit", "/exit"}:
+            return None
+        if value.strip().lower() == "/cancel":
+            if cancel_raises:
+                raise ValueError("Password setup cancelled.")
+            return None
+        try:
+            credential = _PASSWORD_HASHER.create(value)
+        except ValueError as error:
+            display_message(error)
+            continue
+        if not confirm:
+            return credential
+        repeated = read_secret_input("Confirm password (or /cancel): ")
+        if repeated is None or repeated.strip().lower() in {"/quit", "/exit"}:
+            return None
+        if repeated.strip().lower() == "/cancel":
+            if cancel_raises:
+                raise ValueError("Password setup cancelled.")
+            return None
+        if repeated != value:
+            display_message("Passwords do not match. Please try again.")
+            continue
+        return credential
+
+
+def verify_user_password(user_id, *, max_attempts=5, cancel_raises=True):
+    credential = data_manager.get_credentials(user_id)
+    if credential is None:
+        return "enroll"
+    for _ in range(max_attempts):
+        password = read_secret_input("Password (or /cancel): ")
+        if password is None or password.strip().lower() in {"/quit", "/exit"}:
+            return None
+        if password.strip().lower() == "/cancel":
+            if cancel_raises:
+                raise ValueError("Sign-in cancelled.")
+            return False
+        if _PASSWORD_HASHER.verify(password, credential):
+            return True
+        display_message("Incorrect password.", role="error")
+    message = "Too many incorrect password attempts."
+    if cancel_raises:
+        raise ValueError(message)
+    display_message(message, role="error")
+    return False
+
+
 def format_preference_value(field, value):
     if value is None:
         return "Not answered"
@@ -170,7 +258,7 @@ def display_welcome(user):
 
 
 def verify_email_interactively(user, config):
-    if config.get("smtp_bypass"):
+    if is_smtp_bypass(config):
         if not user["email_verified"]:
             display_message("SMTP verification bypass is enabled for testing.",
                             role="bypass")
@@ -213,12 +301,16 @@ def find_or_register_user(choice, email):
     if choice == "2":
         return data_manager.find_user(email)
     if data_manager.email_exists(email):
-        raise ValueError("This email is already registered. Choose resume.")
+        raise ValueError("This email is already registered. Choose sign in.")
     username = prompt_username()
     if username is None:
         return None
+    credential = prompt_new_password(confirm=True, cancel_raises=True)
+    if credential is None:
+        return None
     user = data_manager.register_user(email, username)
-    display_message("Signed up. Resume this account using your email.")
+    data_manager.save_credentials(user["userID"], credential)
+    display_message("Signed up. Sign in using your email and password.")
     return user
 
 
@@ -236,11 +328,32 @@ def complete_account(user, config):
     return data_manager.save(dict(user, username=username))
 
 
+def _signin_with_password(user, config):
+    password_status = verify_user_password(user["userID"], cancel_raises=True)
+    if password_status is None:
+        return None
+    if password_status == "enroll":
+        verified_user = complete_account(user, config)
+        if verified_user is None:
+            return None
+        display_message(
+            "No password is set for this account yet. "
+            "Create a password to secure your account."
+        )
+        credential = prompt_new_password(confirm=True, cancel_raises=True)
+        if credential is None:
+            return None
+        data_manager.save_credentials(verified_user["userID"], credential)
+        display_message("Password saved.")
+        return verified_user
+    return complete_account(user, config)
+
+
 def select_user(config):
     while True:
         ui.section("Welcome to BiteFinder")
         ui.item(1, "Sign up")
-        ui.item(2, "Resume by email")
+        ui.item(2, "Sign in")
         ui.item(3, "Quit")
         choice = read_input("Choose 1, 2, or 3: ")
         if choice is None or choice.lower() in {
@@ -255,6 +368,10 @@ def select_user(config):
             return None
         try:
             user = find_or_register_user(choice, email)
+            if user is None:
+                return None
+            if choice == "2":
+                return _signin_with_password(user, config)
             return complete_account(user, config)
         except (ValueError, RuntimeError) as error:
             display_message(error)
@@ -277,7 +394,7 @@ def ask_search_location(config):
             continue
         try:
             raw = clean_text(raw, 200)
-            cached = data_manager.lookup_cached_location(raw)
+            cached = _LOCATION_GATEWAY.lookup_cached(raw)
             query = raw
             if not cached and not logic_manager.is_direct_location_input(raw):
                 try:
@@ -285,9 +402,9 @@ def ask_search_location(config):
                 except RuntimeError:
                     # Google can geocode the original landmark when the AI is unavailable.
                     query = raw
-            location = data_manager.resolve_location(
+            location = _LOCATION_GATEWAY.resolve(
                 query, config.get("google_maps_api_key", ""))
-            data_manager.remember_location((raw, query), location)
+            _LOCATION_GATEWAY.remember((raw, query), location)
         except (ValueError, RuntimeError, OSError) as error:
             display_message(error)
             continue
@@ -331,7 +448,7 @@ def ask_search_mode(config=None):
 
 def ask_search_distance(profile, mode, config=None, default_source="profile"):
     try:
-        default = validate_value("max_distance_km", profile.get("max_distance_km"))
+        default = validate_search_distance(profile.get("max_distance_km"), mode=mode)
     except ValueError:
         default = None
     while True:
@@ -345,7 +462,7 @@ def ask_search_distance(profile, mode, config=None, default_source="profile"):
         match = re.fullmatch(r"(\d+(?:\.\d{1,2})?)\s*(?:km)?", value.lower())
         if match:
             try:
-                return validate_value("max_distance_km", float(match[1]))
+                return validate_search_distance(float(match[1]), mode=mode)
             except ValueError as error:
                 display_message(error)
                 continue
@@ -354,7 +471,7 @@ def ask_search_distance(profile, mode, config=None, default_source="profile"):
                 suggested = ai_manager.interpret_search_number(
                     value, "max_distance_km", config)
                 if suggested is not None:
-                    suggested = validate_value("max_distance_km", suggested)
+                    suggested = validate_search_distance(suggested, mode=mode)
                     confirmed = ask_yes_no(
                         f"Use {suggested:g} km as your maximum {mode} distance?",
                         config)
@@ -372,6 +489,7 @@ def ask_search_distance(profile, mode, config=None, default_source="profile"):
 def ask_search_travel_minutes(mode, config=None, default=None,
                               default_source=None):
     """Ask for a verified route duration limit for the chosen mode."""
+    low, high = SEARCH_MODE_LIMITS.get(mode, {}).get("max_travel_minutes", (1, 150))
     while True:
         source = f" from {default_source}" if default_source else ""
         hint = (f" [Enter = {default:g} min{source}]"
@@ -386,7 +504,7 @@ def ask_search_travel_minutes(mode, config=None, default=None,
             r"(\d+(?:\.\d{1,2})?)\s*(?:minutes?|mins?)?", value.lower())
         if match:
             try:
-                return validate_travel_minutes(float(match[1]))
+                return validate_travel_minutes(float(match[1]), mode=mode)
             except ValueError as error:
                 display_message(error)
                 continue
@@ -395,7 +513,7 @@ def ask_search_travel_minutes(mode, config=None, default=None,
                 suggested = ai_manager.interpret_search_number(
                     value, "max_travel_minutes", config)
                 if suggested is not None:
-                    suggested = validate_travel_minutes(suggested)
+                    suggested = validate_travel_minutes(suggested, mode=mode)
                     confirmed = ask_yes_no(
                         f"Use {suggested:g} minutes as your maximum "
                         f"{mode} journey time?", config)
@@ -407,14 +525,15 @@ def ask_search_travel_minutes(mode, config=None, default=None,
             except (RuntimeError, ValueError) as error:
                 display_message(error)
                 continue
-        display_message("Enter a travel time from 1 to 240 minutes.")
+        display_message(
+            f"Enter a travel time from {low:g} to {high:g} minutes.")
 
 
 def ask_search_limit(profile, mode, config=None, current=None):
     """Return one selected distance or duration for the chosen travel mode."""
     try:
         profile_minutes = validate_travel_minutes(
-            profile.get("max_travel_time_minutes"))
+            profile.get("max_travel_time_minutes"), mode=mode)
     except ValueError:
         profile_minutes = None
     if mode == "transit":
@@ -546,140 +665,9 @@ def ask_search_budget(profile, config=None, default_source="profile"):
 
 
 def ask_search_wishes(profile, config):
-    """Select earlier wishes or collect one new request for today's search."""
-    saved = profile[OTHER_PREFERENCES] or []
-    if saved:
-        ui.section("Previous special requests")
-        for number, item in enumerate(saved, 1):
-            ui.item(number, item)
-    while True:
-        value = read_input(
-            "What are you looking for today?\n"
-            "Describe any extra wishes, such as 'spicy', 'minimum 4.5 "
-            "stars', or 'only Korean'.\n"
-            "Use 'minimum', 'at least', or 'only' for a hard requirement "
-            "(this may give no matches).\n"
-            "[Press Enter = none; all = every saved request; saved numbers; "
-            "or new text] (/cancel): "
-        )
-        if _cancelled(value):
-            return None
-        if not value or value.lower() == "none":
-            return {"selected": [], "text": ""}
-        if value.lower() == "all":
-            return {"selected": list(saved), "text": ""}
-        if re.fullmatch(r"\d+(?:\s*,\s*\d+)*", value):
-            numbers = [int(part.strip()) for part in value.split(",")]
-            if saved and all(1 <= number <= len(saved) for number in numbers):
-                selected = list(dict.fromkeys(
-                    saved[number - 1] for number in numbers))
-                return {"selected": selected, "text": ""}
-            display_message("Choose numbers shown in the previous requests list.")
-            continue
-        try:
-            text = logic_manager.validate_special_request_text(value)
-            if not config.get("ai_bypass"):
-                try:
-                    reviewed = ai_manager.review_special_request(text, config)
-                except RuntimeError:
-                    display_message(
-                        "Could not check the wording. Please try again, "
-                        "or press Enter for none.")
-                    continue
-                if reviewed is None:
-                    display_message(
-                        "I could not understand that request. Please rephrase it.")
-                    continue
-                logic_manager.validate_special_request_text(reviewed)
-                if reviewed != text:
-                    confirmed = ask_yes_no(
-                        f"Use '{reviewed}' instead?", config)
-                    if confirmed is None:
-                        return None
-                    if not confirmed:
-                        continue
-                    text = reviewed
-                if saved:
-                    try:
-                        equivalent = ai_manager.equivalent_saved_request(
-                            text, saved, config)
-                    except RuntimeError:
-                        display_message(
-                            "Could not compare this with your saved requests. "
-                            "Please try again.")
-                        continue
-                    if equivalent is not None:
-                        display_message(
-                            f"This matches your saved request '{equivalent}'. "
-                            "Using the first saved version.")
-                        return {"selected": [equivalent], "text": ""}
-                if re.search(
-                        r"\b(?:only|must|required|minimum|at least|"
-                        r"no less than|exclusively|[1-5](?:\.\d+)?\s*"
-                        r"(?:stars?|/\s*5))\b", text, re.IGNORECASE):
-                    try:
-                        constraints = ai_manager.classify_search_constraints(
-                            text, config)
-                    except RuntimeError:
-                        display_message(
-                            "Could not check whether this is a hard "
-                            "requirement. Please try again.")
-                        continue
-                    hard_confirmed = False
-                    rating = constraints["rating"]
-                    if rating is not None and not constraints[
-                            "rating_is_minimum"]:
-                        hard_confirmed = ask_yes_no(
-                            f"Make {rating:g} stars a hard minimum? "
-                            "This may return no matching restaurants.", config)
-                        if hard_confirmed is None:
-                            return None
-                        if hard_confirmed:
-                            constraints["hard_requirement"] = True
-                            constraints["rating_is_minimum"] = True
-                    if constraints["hard_requirement"] and not hard_confirmed:
-                        confirmed = ask_yes_no(
-                            "Treat this as a hard requirement? Budget and "
-                            "travel limits will become secondary, and there "
-                            "may be no matching restaurants.", config)
-                        if confirmed is None:
-                            return None
-                        if not confirmed:
-                            continue
-                    if constraints["hard_requirement"]:
-                        additions = []
-                        cuisine = constraints["hard_cuisine"]
-                        if cuisine and not (
-                                re.search(
-                                    rf"\bonly\s+{re.escape(cuisine)}\b",
-                                    text, re.IGNORECASE)
-                                or re.search(
-                                    rf"\b{re.escape(cuisine)}\s+only\b",
-                                    text, re.IGNORECASE)
-                                or re.search(
-                                    rf"\b(?:must be|exclusively)\s+"
-                                    rf"{re.escape(cuisine)}\b",
-                                    text, re.IGNORECASE)):
-                            additions.append(f"only {cuisine} cuisine")
-                        if (constraints["rating_is_minimum"]
-                                and not re.search(
-                                    r"\b(?:minimum|at least|no less than)\b",
-                                    text, re.IGNORECASE)):
-                            additions.append(f"at least {rating:g} stars")
-                        if (not additions and not cuisine
-                                and not constraints["rating_is_minimum"]
-                                and not re.search(
-                                    r"\b(?:only|must|required|minimum|"
-                                    r"at least|no less than|exclusively)\b",
-                                    text, re.IGNORECASE)):
-                            additions.append("hard requirement")
-                        for addition in additions:
-                            if (addition not in text.casefold()
-                                    and len(text) + len(addition) + 2 <= 100):
-                                text += ", " + addition
-            return {"selected": [], "text": text}
-        except ValueError as error:
-            display_message(error)
+    """Preserve the CLI helper API through the IO-owned wish collector."""
+    return manager().ask_search_wishes(profile, config)
+
 
 
 def ask_search_clarification(config):
@@ -719,52 +707,7 @@ def ask_search_clarification(config):
 
 def collect_search(user, config):
     """Collect one search request without changing the saved user profile."""
-    profile = user["preferences"]
-    location = ask_search_location(config)
-    if location is None:
-        return None
-    mode = ask_search_mode(config)
-    if mode is None:
-        return None
-    distance, minutes = ask_search_limit(profile, mode, config)
-    if distance is None and minutes is None:
-        return None
-    traffic_aware = ask_drive_traffic(config) if mode == "drive" and minutes is not None else False
-    if traffic_aware is None:
-        return None
-    cuisine = ask_search_cuisine(profile, config)
-    if cuisine is None:
-        return None
-    save_cuisine = False
-    if cuisine != "none" and cuisine not in (profile["liked_cuisines"] or []):
-        disliked = cuisine in (profile["disliked_cuisines"] or [])
-        question = (f"Add {cuisine.title()} to your saved liked cuisines"
-                    + (" and remove it from disliked cuisines?" if disliked
-                       else "?"))
-        save_cuisine = ask_yes_no(question, config)
-        if save_cuisine is None:
-            return None
-    budget = ask_search_budget(profile, config)
-    if budget is None:
-        return None
-    wishes = ask_search_wishes(profile, config)
-    if wishes is None:
-        return None
-    other = wishes["selected"]
-    if config.get("ai_bypass") and wishes["text"]:
-        other = validate_value(OTHER_PREFERENCES, other + [wishes["text"]])
-    request = {
-        "origin": location, "mode": mode, "max_distance_km": distance,
-        "max_travel_minutes": minutes, "traffic_aware": traffic_aware,
-        "cuisine": cuisine, "budget_per_person": budget,
-        OTHER_PREFERENCES: other,
-        "dietary_requirements": list(profile["dietary_requirements"] or []),
-        "disliked_cuisines": [item for item in
-                              (profile["disliked_cuisines"] or [])
-                              if item != cuisine],
-    }
-    return {"request": request, "today_request": wishes["text"],
-            "save_cuisine": cuisine if save_cuisine else None}
+    return manager().collect_search(user, config)
 
 
 def choose_results_action(result_count, alternatives_hidden=False):
@@ -977,6 +920,28 @@ def confirm_search_request(request, config=None):
     return ask_yes_no("Search with these choices?", config, default=True)
 
 
+def display_results(results, announce_no_matches=True):
+    """Display ranked restaurants without collecting any input."""
+    recommendation_ui.show_results(
+        results, announce_no_matches=announce_no_matches)
+
+
+def display_result_list(results):
+    """Show a compact numbered list before optional details or routing."""
+    recommendation_ui.show_result_list(results)
+
+
+def display_no_matches(results):
+    """Explain why the leading alternative is not a verified match."""
+    recommendation_ui.show_no_matches(results)
+
+
+def display_route(name, route, link, mode, traffic_aware=False):
+    """Print step-by-step route guidance and Maps link."""
+    recommendation_ui.show_route(
+        name, route, link, mode, traffic_aware=traffic_aware)
+
+
 def resolve_cuisine_token(token, field, config=None):
     """Return a confirmed cuisine or explicitly accepted extra preference."""
     if token in CUISINES:
@@ -1102,13 +1067,16 @@ def command_action(text):
     if lowered.startswith("/edit "):
         target = lowered[6:].strip()
         target = EDIT_ALIASES.get(target, target)
-        if target not in PREFERENCE_FIELDS + ("username",):
+        if target not in PREFERENCE_FIELDS + ("username", "password"):
             raise ValueError(
                 "Unknown field. Try /edit budget, "
                 "or /help edit for all options."
             )
-        return {"action": "rename" if target == "username" else "edit",
-                "field": target, "location_action": "replace"}
+        if target == "username":
+            return {"action": "rename", "field": target, "location_action": "replace"}
+        if target == "password":
+            return {"action": "change_password"}
+        return {"action": "edit", "field": target, "location_action": "replace"}
     if text.startswith("/"):
         raise ValueError("Unknown command. Use /help.")
     return None
@@ -1126,6 +1094,8 @@ def _interpreted_command_action(command, field=None):
         return {"action": "reset_profile"}
     if command == "logout":
         return {"action": "logout"}
+    if command == "change_password":
+        return {"action": "change_password"}
     if command == "quit":
         return {"action": "exit"}
     if command in {"color_on", "color_off"}:
@@ -1139,6 +1109,8 @@ def _interpreted_command_action(command, field=None):
             return {"action": "edit_menu"}
         if field == "username":
             return {"action": "rename"}
+        if field == "password":
+            return {"action": "change_password"}
         return {"action": "edit", "field": field,
                 "location_action": "replace"}
     return None
@@ -1179,6 +1151,9 @@ def natural_command_action(text, config, *, allow_ai=False):
         local = ("help", None)
     elif lowered in {"logout", "log out", "sign out"}:
         local = ("logout", None)
+    elif re.fullmatch(
+            r"(?:change|update|edit) (?:my )?password", lowered):
+        local = ("change_password", None)
     elif lowered in {"quit", "exit", "close bitefinder", "goodbye"}:
         local = ("quit", None)
     elif re.fullmatch(
@@ -1228,6 +1203,7 @@ def choose_profile_edit():
         ("liked_cuisines", "Liked cuisines"),
         ("disliked_cuisines", "Disliked cuisines"),
         (OTHER_PREFERENCES, "Other preferences"),
+        ("password", "Password"),
     )
     while True:
         ui.section("Edit profile")
@@ -1243,6 +1219,8 @@ def choose_profile_edit():
             field = choices[int(answer) - 1][0]
             if field == "username":
                 return {"action": "rename"}
+            if field == "password":
+                return {"action": "change_password"}
             return {"action": "edit", "field": field,
                     "location_action": "replace"}
         display_message("Choose one of the numbers shown, or press Enter.")
@@ -1316,55 +1294,5 @@ def _profile_travel_action(text, field, config, location_action):
 
 def collect_action(user, config, field=None, location_action="add"):
     """Collect and review a typed action without persisting it."""
-    preferences = user["preferences"]
-    field = field or logic_manager.next_field(preferences)
-    if field is not None:
-        display_message(QUESTIONS[field])
-    text = read_input()
-    if text is None:
-        return {"action": "exit"}
-    command = command_action(text)
-    if command is not None:
-        return command
-    natural_command = natural_command_action(
-        text, config, allow_ai=field is None)
-    if natural_command is not None:
-        return natural_command
-    if field == OTHER_PREFERENCES and not text.strip():
-        return {"action": "profile_update",
-                "updates": {OTHER_PREFERENCES: []},
-                "location_action": location_action}
-    text = clean_text(text, 1000)
-    if field in {"max_distance_km", "max_travel_time_minutes"}:
-        return _profile_travel_action(text, field, config, location_action)
-    if (field is not None and field not in {
-            "max_distance_km", "max_travel_time_minutes", "budget_per_person"}
-            and text.lower() not in {"none", "both"}
-            and not config.get("ai_bypass")):
-        reviewed = ai_manager.review_prompt_text(
-            text, config, QUESTIONS[field], 1000)
-        if reviewed is None:
-            raise ValueError("Please rephrase your answer in English.")
-        if reviewed != text:
-            if ask_yes_no(f"Use '{reviewed}' instead?", config) is not True:
-                raise ValueError("No changes saved. Please re-enter your answer.")
-            text = reviewed
-    if field in CUISINE_FIELDS:
-        if not config.get("ai_bypass") and text.lower() not in {
-            "none", "no preference", "no preferences",
-        }:
-            return interpretation_action(preferences, field, text)
-        updates = resolve_cuisines(text, field, preferences, config)
-        return {"action": "profile_update", "updates": updates,
-                "location_action": location_action}
-    if field == OTHER_PREFERENCES:
-        updates = logic_manager.parse_local_answer(text, field)
-        return {"action": "profile_update", "updates": updates,
-                "location_action": location_action}
-    if not config.get("ai_bypass"):
-        return interpretation_action(preferences, field, text)
-    if field is None:
-        raise ValueError("Use /edit to change a completed profile.")
-    updates = logic_manager.parse_local_answer(text, field)
-    return {"action": "profile_update", "updates": updates,
-            "location_action": location_action}
+    return manager().collect_action(
+        user, config, field, location_action)

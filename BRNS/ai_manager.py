@@ -1,6 +1,7 @@
 """AI layer — prompt building, API call, JSON parsing, schema validation.
 Multi-provider chain (OpenRouter + direct Gemini) with automatic fallback.
 Zero domain logic here. Never crashes: returns (ok, result_or_error, model_used_or_None)."""
+from contextvars import ContextVar
 import json
 import re
 import signal
@@ -10,7 +11,14 @@ from contextlib import contextmanager
 
 import requests
 from BRNS import config, logic_manager
-from shared import debug_log as log
+from BRNS.classes.ai.ai_manager import AIManager
+from BRNS.classes.ai.fallback.ai_provider_router import AIProviderRouter
+from BRNS.classes.ai.fallback.ai_provider_factory_registry import AIProviderFactoryRegistry
+from BRNS.classes.ai.providers.clients.gemini_ai_provider import GeminiAIProvider
+from BRNS.classes.ai.providers.clients.groq_ai_provider import GroqAIProvider
+from BRNS.classes.ai.providers.clients.openrouter_ai_provider import OpenRouterAIProvider
+from BRNS.classes.ai.providers.clients.unsupported_ai_provider import UnsupportedAIProvider
+from common import debug_log as log
 
 SYSTEM_PROMPT = """You convert a user's food request into strict JSON.
 
@@ -48,7 +56,32 @@ REQUIRED_KEYS = ["cuisine", "dietary", "budget_band",
                  "budget_min", "budget_max", "min_rating",
                  "max_walk_minutes", "max_drive_km", "eat_time", "free_text_notes"]
 VALID_BANDS = ("any", "inexpensive", "moderate", "expensive", "very_expensive")
-_ACTIVE_CHAIN_DEADLINE = None
+_ACTIVE_CHAIN_DEADLINE = ContextVar("brns_ai_deadline", default=None)
+_LAST_USED_MODEL = ContextVar("brns_ai_model", default=None)
+_CURRENT_ACTIVE_MODEL = None
+_MANAGER = None
+
+
+@contextmanager
+def _recommendation_deadline(seconds):
+    global _CURRENT_ACTIVE_MODEL
+    token = _ACTIVE_CHAIN_DEADLINE.set(time.monotonic() + seconds)
+    _LAST_USED_MODEL.set(None)
+    _CURRENT_ACTIVE_MODEL = None
+    try:
+        yield
+    finally:
+        _CURRENT_ACTIVE_MODEL = None
+        _ACTIVE_CHAIN_DEADLINE.reset(token)
+
+
+def manager():
+    """Return the configured BRNS AI Manager."""
+    global _MANAGER
+    if _MANAGER is None:
+        _MANAGER = AIManager(
+            config, _recommend_candidates, _recommendation_deadline, _recommend_prepared)
+    return _MANAGER
 
 
 def validate_chain():
@@ -68,6 +101,8 @@ def build_prompt(user_record):
 def parse_json_reply(content):
     """Extract the JSON object from an AI reply, tolerating markdown fences,
     reasoning preamble, or trailing commentary around it."""
+    if not isinstance(content, str):
+        raise ValueError("no JSON object found in AI reply")
     text = content.strip()
     start = text.find("{")
     end = text.rfind("}")
@@ -113,6 +148,12 @@ def _safe_failure(detail):
 
 
 def _log_ai_event(context, detail, level="WARNING"):
+    global _CURRENT_ACTIVE_MODEL
+    if isinstance(detail, str):
+        if detail.startswith("Trying ") and detail.endswith("."):
+            _CURRENT_ACTIVE_MODEL = detail[len("Trying "):-1].strip()
+        elif detail.startswith("Accepted ") and detail.endswith(" response."):
+            _CURRENT_ACTIVE_MODEL = detail[len("Accepted "):-len(" response.")].strip()
     log.debug_log(detail, level, f"BRNS.ai_manager.{context}")
 
 
@@ -156,14 +197,64 @@ def _hard_request_deadline(seconds):
             )
 
 
+def _close_response_safely(resp):
+    """Force-close an in-flight streaming socket on deadline expiry."""
+    try:
+        raw = getattr(resp, "raw", None)
+        if raw is not None:
+            fp = getattr(raw, "_fp", None)
+            sock = getattr(getattr(fp, "fp", None), "raw", None)
+            if hasattr(sock, "_sock") and sock._sock is not None:
+                try:
+                    sock._sock.close()
+                except OSError:
+                    pass
+    except Exception:
+        pass
+
+
 def _post(url, **kwargs):
-    """Post with both socket inactivity and total wall-clock limits."""
+    """Post with socket inactivity and wall-clock limits across all threads."""
     seconds = config.AI_REQUEST_TIMEOUT_SECONDS
-    if _ACTIVE_CHAIN_DEADLINE is not None:
-        seconds = min(seconds, max(0.05, _ACTIVE_CHAIN_DEADLINE - time.monotonic()))
+    deadline = _ACTIVE_CHAIN_DEADLINE.get()
+    if deadline is not None:
+        seconds = min(seconds, max(0.05, deadline - time.monotonic()))
+    wall_deadline = time.monotonic() + seconds
     kwargs["timeout"] = (min(3, seconds), seconds)
+    kwargs.setdefault("stream", True)
     with _hard_request_deadline(seconds):
-        return requests.post(url, **kwargs)
+        resp = requests.post(url, **kwargs)
+        if not hasattr(resp, "iter_content"):
+            return resp
+        timed_out = threading.Event()
+
+        def _expire():
+            timed_out.set()
+            _close_response_safely(resp)
+
+        remaining = max(0.05, wall_deadline - time.monotonic())
+        timer = threading.Timer(remaining, _expire)
+        timer.daemon = True
+        timer.start()
+        try:
+            chunks = []
+            for chunk in resp.iter_content(chunk_size=16384):
+                if chunk:
+                    chunks.append(chunk)
+                if timed_out.is_set() or time.monotonic() >= wall_deadline:
+                    raise requests.Timeout("AI provider exceeded its total deadline")
+            if timed_out.is_set() or time.monotonic() >= wall_deadline:
+                raise requests.Timeout("AI provider exceeded its total deadline")
+            resp._content = b"".join(chunks)
+            resp._content_consumed = True
+            return resp
+        except (requests.RequestException, AttributeError, OSError, ValueError):
+            if timed_out.is_set():
+                raise requests.Timeout("AI provider exceeded its total deadline")
+            raise
+        finally:
+            timer.cancel()
+            resp.close()
 
 
 def _call_openrouter(model_id, system_prompt, user_text):
@@ -264,38 +355,81 @@ def _call_groq(model_id, system_prompt, user_text):
     return False, "request rejected"
 
 
+def _track_provider_call(provider, model, fn):
+    global _CURRENT_ACTIVE_MODEL
+    _CURRENT_ACTIVE_MODEL = f"{provider}/{model}"
+    return fn()
+
+
+def _provider_registry():
+    """Build provider objects around the existing transport functions."""
+    registry = AIProviderFactoryRegistry()
+    registry.register(
+        "openrouter",
+        lambda model: OpenRouterAIProvider(
+            model,
+            lambda system_prompt, text, selected=model:
+            _track_provider_call(
+                "openrouter", selected,
+                lambda: _call_openrouter(selected, system_prompt, text)),
+        ),
+    )
+    registry.register(
+        "gemini",
+        lambda model: GeminiAIProvider(
+            model,
+            lambda system_prompt, text, selected=model:
+            _track_provider_call(
+                "gemini", selected,
+                lambda: _call_gemini(selected, system_prompt, text)),
+        ),
+    )
+    registry.register(
+        "groq",
+        lambda model: GroqAIProvider(
+            model,
+            lambda system_prompt, text, selected=model:
+            _track_provider_call(
+                "groq", selected,
+                lambda: _call_groq(selected, system_prompt, text)),
+        ),
+    )
+    return registry
+
+
+def _provider_is_configured(provider):
+    return (
+        provider == "openrouter" and bool(config.OPENROUTER_API_KEY)
+        or provider == "gemini" and bool(config.GEMINI_API_KEY)
+        or provider == "groq" and bool(config.GROQ_API_KEY)
+    )
+
+
+def _provider_objects(configured_only=False):
+    registry = _provider_registry()
+    providers = []
+    for entry in config.MODEL_CHAIN:
+        provider, model = entry["provider"], entry["model"]
+        if configured_only and not _provider_is_configured(provider):
+            continue
+        configured = registry.create(provider, model)
+        providers.append(
+            configured or UnsupportedAIProvider(provider, model))
+    return providers
+
+
 def call_ai(user_record):
     """Walk MODEL_CHAIN across providers until one returns schema-valid JSON.
     Returns (True, parsed_dict, model_used) or (False, error_summary, None)."""
     user_text = build_prompt(user_record)
-    errors = []
-    for entry in config.MODEL_CHAIN:
-        provider, model = entry["provider"], entry["model"]
-        if provider == "openrouter":
-            ok, content = _call_openrouter(model, SYSTEM_PROMPT, user_text)
-        elif provider == "gemini":
-            ok, content = _call_gemini(model, SYSTEM_PROMPT, user_text)
-        elif provider == "groq":
-            ok, content = _call_groq(model, SYSTEM_PROMPT, user_text)
-        else:
-            ok, content = False, f"unknown provider '{provider}'"
-        if ok:
-            try:
-                parsed = parse_json_reply(content)
-            except ValueError as err:
-                errors.append(f"{provider}/{model}: unparseable")
-                _log_ai_event("fallback", f"{provider}/{model}: invalid JSON")
-                continue
-            is_valid, result = validate_ai_output(parsed)
-            if is_valid:
-                return True, result, f"{provider}/{model}"
-            errors.append(f"{provider}/{model}: schema invalid ({result})")
-            _log_ai_event("fallback", f"{provider}/{model} schema: {result}")
-            continue
-        errors.append(f"{provider}/{model}: {_safe_failure(content)}")
-        _log_ai_event("fallback", f"{provider}/{model}: {_safe_failure(content)}")
-        time.sleep(1)
-    return False, "; ".join(errors), None
+    return AIProviderRouter(
+        _provider_objects(),
+        parse_json_reply,
+        validate_ai_output,
+        _safe_failure,
+        _log_ai_event,
+        time.sleep,
+    ).route(SYSTEM_PROMPT, user_text)
 
 
 def call_api(prompt):
@@ -319,7 +453,8 @@ REASON_CODES = {
 }
 
 RECOMMEND_SYSTEM_PROMPT = """Rank every supplied restaurant candidate for the
-validated search request. Return only JSON in this exact shape:
+validated search request using Pure Best-Fit Within Limit ranking. Return only
+JSON in this exact shape:
 {"recommendations":[{"id":0,"reason_codes":["cuisine_match"]}]}.
 Include every candidate ID exactly once, most suitable first. Use only these
 reason codes when supported by the supplied facts: cuisine_match,
@@ -336,16 +471,26 @@ and travel because those two limits are relaxed by Logic.
 minimum_rating is a hard minimum Google star rating extracted from the user's
 other preferences. Put candidates below it or without a rating after those
 that meet it. The next layer will enforce the minimum.
-For candidates that satisfy the hard requirements, weigh Google review count
-alongside the star rating. Use confidence_adjusted_rating to compare rating
-quality: it shrinks ratings with few reviews toward 4/5 using 100 prior
-reviews. For example, 4.3 stars from 1,920 reviews is stronger evidence than
-4.5 stars from 75 reviews. Prefer the former when their other facts are similar
-and no minimum excludes it. A missing review count provides weak evidence.
+For candidates that satisfy hard requirements and the travel limit (anywhere
+inside 0..max limit regardless of 5 mins vs 25 mins), jointly optimize budget
+fit (`budget_fit_score`, `estimated_price`, `price_end`, `price_level`) AND
+rating quality (`confidence_adjusted_rating`):
+- budget_fit_score (0.0-1.0) measures how well estimated_price fits the user's
+  exact budget intent: e.g. for SGD 50 (Casual Dining), favor ~SGD 30-50 sit-down
+  spots over SGD 8 hawker stalls; for SGD >100 ($100+ Fine Dine), strongly favor
+  expensive/very_expensive ($80+) venues over cheap cafes; for <= SGD 15, favor
+  inexpensive budget spots.
+- Weigh review count alongside star rating via confidence_adjusted_rating (e.g.,
+  4.3 stars from 1,920 reviews beats 4.5 stars from 75 reviews). A missing
+  review count provides weak evidence.
+- Use shorter travel time/distance ONLY as a gentle tie-breaker when budget fit
+  and confidence_adjusted_rating are nearly tied.
 When previous_restaurants is supplied, prefer suitable candidates not named
 there over similarly suitable candidates already returned. Include every ID.
-Use within_budget only when avg_price is a number no greater than the user's
-budget. price_start alone does not prove a meal fits the budget.
+Use within_budget when avg_price <= budget_per_person, price_end <= budget,
+or estimated_price (from price range midpoint or price_level tier) aligns with
+budget_per_person (including SGD >100 fine-dining tier). price_start alone
+without price_end or price_level does not prove a meal fits the budget.
 Use vegetarian_options only when vegetarian is requested and listed in the
 candidate dietary_requirements. Use halal_hint_unofficial only when halal is
 requested and the candidate has halal_hint_unofficial true.
@@ -359,140 +504,98 @@ The next layer will verify every reason and enforce hard requirements."""
 
 def has_configured_provider():
     """Check credentials before BRNS spends a Places request."""
-    return any(
-        (entry.get("provider") == "openrouter" and config.OPENROUTER_API_KEY
-         or entry.get("provider") == "gemini" and config.GEMINI_API_KEY
-         or entry.get("provider") == "groq" and config.GROQ_API_KEY)
-        and entry.get("model") and not any(
-            char in entry["model"] for char in "<> ")
-        for entry in config.MODEL_CHAIN
+    return manager().has_configured_provider()
+
+
+def _validate_recommendation_output(reply, candidate_count):
+    """Validate recommendation JSON for the provider router."""
+    if not isinstance(reply, dict) or set(reply) != {"recommendations"}:
+        return False, "wrong keys"
+    recommendations = reply["recommendations"]
+    valid = (
+        isinstance(recommendations, list)
+        and len(recommendations) == candidate_count
+        and all(
+            isinstance(item, dict)
+            and set(item) == {"id", "reason_codes"}
+            and type(item["id"]) is int
+            and 0 <= item["id"] < candidate_count
+            and isinstance(item["reason_codes"], list)
+            and all(
+                isinstance(code, str) and code in REASON_CODES
+                for code in item["reason_codes"])
+            and len(item["reason_codes"]) == len(set(item["reason_codes"]))
+            for item in recommendations)
+        and len({item["id"] for item in recommendations}) == candidate_count
     )
+    return (
+        (True, recommendations)
+        if valid else (False, "invalid schema"))
 
 
 def _recommend_candidates(request, candidates, previous_restaurants=()):
-    """Return a complete AI recommendation, or None if every model fails."""
+    """Legacy request API; prepare domain facts outside the AI implementation."""
     if not candidates:
         return None
+    context = logic_manager.manager().recommendation_context(
+        request, candidates, previous_restaurants)
+    return _recommend_prepared(context, len(candidates))
+
+
+def _recommend_prepared(context, candidate_count):
+    """Send prepared facts and validate model output without evaluating rules."""
     _log_ai_event("recommend_candidates",
-                  f"Preparing {len(candidates)} candidate summaries.", "INFO")
-    mode = request["mode"]
-    rating_floor = logic_manager.minimum_rating(request["other_preferences"])
-    rating_preference = logic_manager.preferred_rating(
-        request["other_preferences"])
-    hard_cuisines = logic_manager.hard_required_cuisines(
-        request["other_preferences"])
-    hard_preferences = logic_manager.has_hard_preferences(
-        request["other_preferences"])
-    facts = []
-    for index, candidate in enumerate(candidates):
-        facts.append({
-            "id": index,
-            "name": candidate.get("name"),
-            "cuisines": candidate.get("cuisines"),
-            "dietary_requirements": candidate.get("dietary_requirements"),
-            "halal_hint_unofficial": bool(candidate.get("halal_hint")),
-            "avg_price": candidate.get("avg_price"),
-            "price_start": candidate.get("price_start"),
-            "rating": candidate.get("rating"),
-            "review_count": candidate.get("rating_count"),
-            "confidence_adjusted_rating": logic_manager.confidence_adjusted_rating(
-                candidate.get("rating"), candidate.get("rating_count")),
-            "google_search_rank": candidate.get("google_search_rank"),
-            "spicy_options": candidate.get("spicy_options"),
-            "travel_meters": candidate.get(f"{mode}_meters"),
-            "travel_minutes": candidate.get(f"{mode}_minutes"),
-            "travel_source": candidate.get(f"{mode}_source"),
-        })
-    _log_ai_event(
-        "recommend_candidates",
-        "Candidate facts sent to model: "
-        + json.dumps(facts, ensure_ascii=False, separators=(",", ":")),
-        "DEBUG")
-    prior_names = list(dict.fromkeys(
-        restaurant.get("name") for restaurant in previous_restaurants
-        if isinstance(restaurant, dict)
-        and isinstance(restaurant.get("name"), str)))
-    user_text = json.dumps({"request": request, "minimum_rating": rating_floor,
-                            "preferred_rating": rating_preference,
-                            "hard_cuisines": hard_cuisines,
-                            "hard_preferences": hard_preferences,
-                            "candidates": facts,
-                            "previous_restaurants": prior_names},
-                           separators=(",", ":"))
-    chain_started = time.monotonic()
-    for entry in config.MODEL_CHAIN:
-        if time.monotonic() - chain_started >= config.AI_CHAIN_TIMEOUT_SECONDS:
-            _log_ai_event(
-                "recommend_candidates",
-                f"AI fallback chain reached its "
-                f"{config.AI_CHAIN_TIMEOUT_SECONDS:g}s deadline.")
-            break
-        provider, model = entry["provider"], entry["model"]
-        if provider == "openrouter" and config.OPENROUTER_API_KEY:
-            _log_ai_event("recommend_candidates",
-                          f"Trying {provider}/{model}.", "INFO")
-            ok, content = _call_openrouter(
-                model, RECOMMEND_SYSTEM_PROMPT, user_text)
-        elif provider == "gemini" and config.GEMINI_API_KEY:
-            _log_ai_event("recommend_candidates",
-                          f"Trying {provider}/{model}.", "INFO")
-            ok, content = _call_gemini(
-                model, RECOMMEND_SYSTEM_PROMPT, user_text)
-        elif provider == "groq" and config.GROQ_API_KEY:
-            _log_ai_event("recommend_candidates",
-                          f"Trying {provider}/{model}.", "INFO")
-            ok, content = _call_groq(
-                model, RECOMMEND_SYSTEM_PROMPT, user_text)
-        else:
-            continue
-        if not ok:
-            _log_ai_event("recommendation",
-                          f"{provider}/{model}: {_safe_failure(content)}")
-            continue
-        try:
-            reply = parse_json_reply(content)
-        except (ValueError, TypeError, AttributeError):
-            _log_ai_event("recommendation", f"{provider}/{model}: invalid JSON")
-            continue
-        if not isinstance(reply, dict) or set(reply) != {"recommendations"}:
-            _log_ai_event("recommendation", f"{provider}/{model}: wrong keys")
-            continue
-        recommendations = reply["recommendations"]
-        if (not isinstance(recommendations, list)
-                or len(recommendations) != len(candidates)
-                or any(not isinstance(item, dict)
-                       or set(item) != {"id", "reason_codes"}
-                       or type(item["id"]) is not int
-                       or item["id"] < 0 or item["id"] >= len(candidates)
-                       or not isinstance(item["reason_codes"], list)
-                       or any(not isinstance(code, str)
-                              or code not in REASON_CODES
-                              for code in item["reason_codes"])
-                       or len(item["reason_codes"]) != len(
-                           set(item["reason_codes"]))
-                       for item in recommendations)
-                or len({item["id"] for item in recommendations})
-                != len(candidates)):
-            _log_ai_event("recommendation", f"{provider}/{model}: invalid schema")
-            continue
-        _log_ai_event("recommend_candidates",
-                      f"Accepted {provider}/{model} response.", "INFO")
+                  f"Preparing {candidate_count} candidate summaries.", "INFO")
+    _log_ai_event("recommend_candidates", "Candidate facts sent to model: "
+                  + json.dumps(context["candidates"], ensure_ascii=False,
+                               separators=(",", ":")), "DEBUG")
+    user_text = json.dumps(context, separators=(",", ":"))
+    router = AIProviderRouter(
+        _provider_objects(configured_only=True),
+        parse_json_reply,
+        lambda reply: _validate_recommendation_output(
+            reply, candidate_count),
+        _safe_failure,
+        _log_ai_event,
+        time.sleep,
+    )
+    ok, result, model_used = router.route(
+        RECOMMEND_SYSTEM_PROMPT, user_text)
+    if ok:
+        _LAST_USED_MODEL.set(model_used)
+        _log_ai_event(
+            "recommend_candidates",
+            f"Accepted {model_used} response.", "INFO")
         _log_ai_event(
             "recommend_candidates",
             "AI recommendation: " + json.dumps(
-                recommendations, separators=(",", ":")), "DEBUG")
-        return recommendations
+                result, separators=(",", ":")), "DEBUG")
+        return result
     _log_ai_event("recommend_candidates", "No model returned a valid order.")
     return None
 
 
 def recommend_candidates(request, candidates, previous_restaurants=()):
     """Rank candidates while enforcing one deadline across all providers."""
-    global _ACTIVE_CHAIN_DEADLINE
-    previous_deadline = _ACTIVE_CHAIN_DEADLINE
-    _ACTIVE_CHAIN_DEADLINE = (
-        time.monotonic() + config.AI_CHAIN_TIMEOUT_SECONDS)
-    try:
-        return _recommend_candidates(request, candidates, previous_restaurants)
-    finally:
-        _ACTIVE_CHAIN_DEADLINE = previous_deadline
+    return manager().recommend_candidates(
+        request, candidates, previous_restaurants)
+
+
+def last_used_model():
+    return _LAST_USED_MODEL.get()
+
+
+def current_active_model():
+    """Return the active/most-recent configured AI provider label."""
+    if _CURRENT_ACTIVE_MODEL:
+        return _CURRENT_ACTIVE_MODEL
+    for entry in getattr(config, "MODEL_CHAIN", []):
+        provider = entry.get("provider", "")
+        model = entry.get("model", "")
+        if provider == "gemini" and getattr(config, "GEMINI_API_KEY", ""):
+            return f"{provider}/{model}"
+        if provider == "openrouter" and getattr(config, "OPENROUTER_API_KEY", ""):
+            return f"{provider}/{model}"
+        if provider == "groq" and getattr(config, "GROQ_API_KEY", ""):
+            return f"{provider}/{model}"
+    return "Gemini AI"
