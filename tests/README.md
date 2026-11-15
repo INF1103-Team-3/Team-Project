@@ -120,10 +120,18 @@ stack and verifies HTTP boundaries rather than paid AI/Maps behavior.
 
 ## CI, live checks and shutdown
 
-`.github/workflows/tests.yml` runs the CLI/container suite;
-`.github/workflows/web-tests.yml` builds the web stack, runs web tests with an
-isolated real Mongo database, and checks HTTP smoke paths. A workflow definition
-is not evidence that the current commit's CI run succeeded; inspect GitHub's run.
+`.github/workflows/ci.yml` runs PEP 8 linting, `tests/frontend/test_refresh.mjs`,
+secret/Dockerfile hygiene checks, the CLI/container `all` suite, and the web +
+isolated real-MongoDB smoke suite on pushes and pull requests.
+
+The optional `live-api-smoke` job runs on a nightly schedule (`staging`) or via
+manual `workflow_dispatch` (`staging` or `production`). Store all API
+(`OPENROUTER_API_KEY`, `OPENROUTER_API_KEYS`, `GEMINI_API_KEY`, `GROQ_API_KEY`,
+`GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_JS_API_KEY`), mail (`SMTP_*`), and Mongo
+(`MONGO_URI`, `MONGO_DATABASE`, `MONGO_TEST_URI`) credentials in **GitHub
+Environment Secrets** (`staging` / `production`), never in repo files or
+`Dockerfile` build args. A workflow definition is not evidence that the current
+commit's CI run succeeded; inspect GitHub's run.
 
 Live `api` checks are opt-in, retain service credentials and can consume quota
 or write cache entries. Read [API/README.md](API/README.md) and use an appropriate
@@ -161,7 +169,7 @@ The GitHub Actions lint job checks this policy separately from Docker tests.
 With Node.js 22 or later, run from the repository root:
 
 ```bash
-node --experimental-default-type=module --test tests/frontend/test_refresh.mjs
+node --test tests/frontend/test_refresh.mjs
 ```
 
 These tests import the real frontend ES modules, use a minimal DOM fixture and

@@ -1,0 +1,366 @@
+name: BiteFinder CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target GitHub Environment for live API/mail/Mongo smoke
+        type: choice
+        default: staging
+        options:
+          - staging
+          - production
+      run_live_api:
+        description: Run live-api-smoke (uses Environment Secrets & API quota)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  lint-and-frontend:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install style checker
+        run: python -m pip install 'pycodestyle>=2.11,<3'
+
+      - name: Check Python style (PEP 8)
+        run: >-
+          python -m pycodestyle BIS BRNS BRC common http_gateway
+          main.py tests project_overview
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Run frontend refresh contract tests
+        run: node --test tests/frontend/test_refresh.mjs
+
+      - name: Validate Docker Compose manifests
+        run: |
+          docker compose config -q
+          docker compose --profile test config -q
+
+      - name: Enforce secret hygiene in repo and Dockerfile
+        run: |
+          python - <<'PY'
+          import re
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          tracked_env = subprocess.check_output(
+              ["git", "ls-files", ".env", ".env.*"], text=True
+          ).splitlines()
+          bad_env = [p for p in tracked_env if p and p != ".env.example"]
+          if bad_env:
+              print(
+                  f"Forbidden tracked env files: {bad_env}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+          for lineno, raw in enumerate(dockerfile.splitlines(), 1):
+              line = raw.strip()
+              if line.upper().startswith("ARG "):
+                  arg_name = line[4:].split("=", 1)[0].strip()
+                  if re.search(
+                      r"(KEY|SECRET|PASS|TOKEN|MONGO|SMTP)", arg_name, re.I
+                  ):
+                      print(
+                          f"Forbidden credential ARG in Dockerfile:"
+                          f"{lineno}: {arg_name}",
+                          file=sys.stderr,
+                      )
+                      sys.exit(1)
+          print("PASS: no tracked .env secrets or Dockerfile credential ARGs")
+          PY
+
+  container-cli-tests:
+    if: github.event_name != 'schedule'
+    needs: lint-and-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build BRC and CLI images with GHA cache
+        uses: docker/bake-action@v7
+        with:
+          files: docker-compose.yml
+          targets: brc,bis-brns
+          load: true
+          set: |
+            *.cache-from=type=gha,scope=ci-cli
+            *.cache-to=type=gha,scope=ci-cli,mode=max,ignore-error=true
+            brc.tags=bitefinder-web-oop-brc
+            bis-brns.tags=bitefinder-web-oop-bis-brns
+
+      - name: Ensure ephemeral empty .env file for Compose mount
+        run: touch .env
+
+      - name: Start BiteFinder CLI stack
+        run: docker compose up -d --no-build --wait bis-brns
+
+      - name: Run full container test suite inside Docker
+        run: >-
+          docker compose exec -T -e BITEFINDER_TEST_COLOR=never bis-brns
+          python tests/run_tests.py all
+
+      - name: Show container logs after failure
+        if: failure()
+        run: docker compose logs --tail=200
+
+      - name: Stop disposable BiteFinder stack
+        if: always()
+        run: |
+          docker compose down -v
+          rm -f .env
+
+  container-web-tests:
+    if: github.event_name != 'schedule'
+    needs: lint-and-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build web, API, BRC, and web-test images with GHA cache
+        uses: docker/bake-action@v7
+        with:
+          files: docker-compose.yml
+          targets: brc,api,web,web-test
+          load: true
+          set: |
+            *.cache-from=type=gha,scope=ci-web
+            *.cache-to=type=gha,scope=ci-web,mode=max,ignore-error=true
+            brc.tags=bitefinder-web-oop-brc
+            api.tags=bitefinder-web-oop-api
+            web.tags=bitefinder-web-oop-web
+            web-test.tags=bitefinder-web-oop-web-test
+
+      - name: Ensure ephemeral empty .env file for Compose mount
+        run: touch .env
+
+      - name: Start BiteFinder OOP web stack
+        run: docker compose up -d --no-build --wait web
+
+      - name: Run web contracts and isolated real MongoDB suite
+        run: >-
+          docker compose --profile test run --rm -T
+          -e BITEFINDER_TEST_COLOR=never
+          -e MONGO_TEST_URI=mongodb://mongodb:27017/
+          web-test
+
+      - name: Verify nginx, API, Mongo, BRC, and auth boundaries
+        run: docker compose exec -T api python tests/web/smoke_stack.py
+
+      - name: Show container logs after failure
+        if: failure()
+        run: docker compose logs --tail=200
+
+      - name: Stop disposable CI stack
+        if: always()
+        run: |
+          docker compose --profile test down -v
+          rm -f .env
+
+  live-api-smoke:
+    needs: lint-and-frontend
+    if: >-
+      always() && (
+        github.event_name == 'schedule' ||
+        (
+          github.event_name == 'workflow_dispatch' &&
+          inputs.run_live_api &&
+          needs.lint-and-frontend.result == 'success'
+        )
+      )
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+    env:
+      BITEFINDER_TEST_COLOR: never
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENROUTER_API_KEYS: ${{ secrets.OPENROUTER_API_KEYS }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+      GOOGLE_MAPS_JS_API_KEY: ${{ secrets.GOOGLE_MAPS_JS_API_KEY }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      SMTP_SECURITY: ${{ secrets.SMTP_SECURITY }}
+      SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      SMTP_FROM_EMAIL: ${{ secrets.SMTP_FROM_EMAIL }}
+      SMTP_BYPASS: ${{ secrets.SMTP_BYPASS }}
+      MONGO_URI: ${{ secrets.MONGO_URI }}
+      MONGO_DATABASE: ${{ secrets.MONGO_DATABASE }}
+      MONGO_TEST_URI: ${{ secrets.MONGO_TEST_URI }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install Python test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Validate GitHub Environment Secrets presence
+        env:
+          DEPLOY_ENV_LABEL: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+
+          ai_keys = [
+              k for k in (
+                  "GEMINI_API_KEY",
+                  "GROQ_API_KEY",
+                  "OPENROUTER_API_KEY",
+                  "OPENROUTER_API_KEYS",
+              )
+              if os.getenv(k, "").strip()
+          ]
+          maps_key = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
+          env_name = os.getenv("DEPLOY_ENV_LABEL", "staging")
+          if not ai_keys or not maps_key:
+              print(
+                  f"Missing required secrets in GitHub Environment "
+                  f"'{env_name}'. Configure GOOGLE_MAPS_API_KEY and AI keys "
+                  "(GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY) under "
+                  "Settings -> Environments -> staging / production.",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          if not os.getenv("GROQ_API_KEY", "").strip():
+              print(
+                  "::warning::GROQ_API_KEY is not set; multi-tier fallback "
+                  "test API-AI-06 requires a tertiary provider."
+              )
+          print(f"Environment '{env_name}' AI keys configured: {len(ai_keys)}")
+          PY
+
+      - name: Prepare ephemeral JSON fixture for offline fallback check
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          target = Path("BRNS/data/restaurants.json")
+          target.parent.mkdir(parents=True, exist_ok=True)
+          if not target.exists():
+              target.write_text(
+                  json.dumps([
+                      {
+                          "name": "CI Sample Hawker",
+                          "address": "1 Marina Blvd, Singapore 018989",
+                          "latitude": 1.281,
+                          "longitude": 103.854,
+                          "cuisine": "chinese",
+                      }
+                  ]),
+                  encoding="utf-8",
+              )
+          PY
+
+      - name: Run live AI & Google Maps API smoke suite (isolated JSON store)
+        env:
+          BITEFINDER_STORAGE: json
+        run: python tests/run_tests.py api
+
+      - name: Verify live MongoDB secret against isolated test database
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          import sys
+
+          uri = (
+              os.getenv("MONGO_TEST_URI") or os.getenv("MONGO_URI") or ""
+          ).strip()
+          if not uri:
+              print(
+                  "SKIPPED: MONGO_TEST_URI / MONGO_URI not configured in "
+                  "this GitHub Environment."
+              )
+              sys.exit(0)
+          env = os.environ.copy()
+          env["MONGO_TEST_URI"] = uri
+          raise SystemExit(
+              subprocess.call(
+                  [sys.executable, "tests/web/test_mongo_live.py"],
+                  env=env,
+              )
+          )
+          PY
+
+      - name: Verify SMTP mail credentials handshake (no email sent)
+        run: |
+          python - <<'PY'
+          import os
+          import smtplib
+          import ssl
+          import sys
+          from pathlib import Path
+
+          host = os.getenv("SMTP_HOST", "").strip()
+          bypass = os.getenv("SMTP_BYPASS", "").strip().lower() == "true"
+          if not host or bypass:
+              print(
+                  "SKIPPED: SMTP_HOST not configured or SMTP_BYPASS=true in "
+                  "this GitHub Environment."
+              )
+              sys.exit(0)
+
+          sys.path[:0] = [str(Path(".").resolve()), str(Path("BIS").resolve())]
+          from BIS.support.config import load_config
+          from BIS.support.email_verification.classes.delivery.smtp_email_delivery import (  # noqa: E501
+              SMTPEmailDelivery,
+          )
+
+          cfg = load_config()
+          SMTPEmailDelivery().validate_config(cfg)
+          ctx = ssl.create_default_context()
+          port = cfg["smtp_port"]
+          if cfg["smtp_security"] == "ssl":
+              with smtplib.SMTP_SSL(host, port, timeout=15, context=ctx) as s:
+                  if cfg["smtp_username"]:
+                      s.login(cfg["smtp_username"], cfg["smtp_password"])
+                  s.noop()
+          else:
+              with smtplib.SMTP(host, port, timeout=15) as s:
+                  s.starttls(context=ctx)
+                  if cfg["smtp_username"]:
+                      s.login(cfg["smtp_username"], cfg["smtp_password"])
+                  s.noop()
+          print("PASS: SMTP TLS/auth handshake verified")
+          PY
+
+      - name: Clean up ephemeral API smoke artifacts
+        if: always()
+        run: rm -rf BRNS/data data
