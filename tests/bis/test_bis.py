@@ -15,7 +15,7 @@ sys.path.insert(0, str(TEST_DIR))
 
 
 from BIS import logic_manager as bis_logic  # noqa: E402
-from sources.profile_schema import empty_preferences  # noqa: E402
+from BIS.sources.profile_schema import empty_preferences  # noqa: E402
 from reporting import show_case, show_summary  # noqa: E402
 
 from sample_inputs import (  # noqa: E402

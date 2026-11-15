@@ -769,6 +769,18 @@ html:not(.dark) *::-webkit-scrollbar-thumb:active {
   background-image: linear-gradient(90deg, rgba(215, 240, 255, 0.72) 0%, rgba(250, 247, 255, 0.88) 48%, rgba(255, 228, 241, 0.68) 85%, rgba(255, 241, 216, 0.72) 100%);
 }
 
+html:not(.dark) .bf-brand-logo {
+  background-image: linear-gradient(135deg, #2563eb 0%, #7c3aed 52%, #db2777 100%);
+  box-shadow: 0 4px 12px -2px rgba(124, 58, 237, 0.28), 0 2px 6px -1px rgba(37, 99, 235, 0.22);
+}
+
+html:not(.dark) .bf-brand-wordmark {
+  background-image: linear-gradient(90deg, #2563eb 0%, #7c3aed 52%, #db2777 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
 :where(html:not(.dark)) body .bg-slate-50 {
   background-color: rgba(234, 223, 255, 0.36);
   background-image: linear-gradient(135deg, rgba(234, 223, 255, 0.36) 0%, rgba(215, 240, 255, 0.36) 100%);

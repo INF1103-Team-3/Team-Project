@@ -20,7 +20,7 @@ from BIS import logic_manager as bis_logic  # noqa: E402
 from BRNS import io_manager as brns_io  # noqa: E402
 from BRNS import logic_manager as brns_logic  # noqa: E402
 from reporting import show_case, show_summary  # noqa: E402
-from sources.profile_schema import empty_preferences  # noqa: E402
+from BIS.sources.profile_schema import empty_preferences  # noqa: E402
 
 
 def search_request(**changes):
