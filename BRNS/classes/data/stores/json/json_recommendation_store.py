@@ -20,6 +20,15 @@ class JsonRecommendationStore(BaseJsonStore, RecordStoreInterface):
         data = self._load_json(path or self._restaurant_path)
         return data if isinstance(data, list) else []
 
+    def _load_for_update(self, path):
+        data = self._load_json(path, for_update=True)
+        if (data is not None or Path(path).exists()) and not isinstance(data, list):
+            raise RuntimeError(
+                "Saved BRNS data must be a JSON list; the existing file "
+                "was retained. Restore it before saving."
+            )
+        return data if data is not None else []
+
     def load_candidate_records(self, path=None):
         """Read raw candidate records with the legacy silent empty fallback."""
         try:
@@ -33,7 +42,7 @@ class JsonRecommendationStore(BaseJsonStore, RecordStoreInterface):
         return RecommendationRecordMapper.restaurant_record(candidate)
     def save_restaurants(self, candidates, path=None):
         path = path or self._restaurant_path
-        restaurants = self.load_restaurants(path)
+        restaurants = self._load_for_update(path)
         by_id = {
             row.get("google_place_id"): index
             for index, row in enumerate(restaurants)
@@ -74,7 +83,7 @@ class JsonRecommendationStore(BaseJsonStore, RecordStoreInterface):
 
     def save_history(self, entry, path=None):
         path = path or self._records_path
-        history = self.load_history(path)
+        history = self._load_for_update(path)
         history.append(entry)
         return self._save_json(path, history)
 
