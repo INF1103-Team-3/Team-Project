@@ -9,11 +9,11 @@ import {
   setAuthToken,
   state,
   validateEnglishWishesInput,
-} from './state.js?v=20261114-12';
+} from './state.js?v=20261116-1';
 export { validateEnglishWishesInput };
-import { apiJson } from './api.js?v=20261114-12';
-import { openModal, closeModal } from './modals.js?v=20261114-12';
-import { showToast } from './toast.js?v=20261114-12';
+import { apiJson } from './api.js?v=20261116-1';
+import { openModal, closeModal } from './modals.js?v=20261116-1';
+import { showToast } from './toast.js?v=20261116-1';
 import {
   applyFiltersToSearchForm,
   applyUserToSearchForm,
@@ -21,8 +21,8 @@ import {
   getUserRecentKey,
   initRecentSearches,
   renderRecentSearches,
-} from './filters.js?v=20261114-12';
-import { formatHours, renderResults } from './results.js?v=20261114-12';
+} from './filters.js?v=20261116-1';
+import { formatHours, renderResults } from './results.js?v=20261116-1';
 
 const EMAIL_REGEX = /^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
 const PASSWORD_ALLOWED_REGEX = /^[A-Za-z0-9.,?!$]+$/;

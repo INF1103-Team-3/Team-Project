@@ -565,7 +565,7 @@
             </div>
 
             <button type="submit" id="searchBtn"
-              class="w-full py-3 px-4 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-brand-600 to-amber-600 hover:from-brand-700 hover:to-amber-700 shadow-md shadow-brand-500/25 flex items-center justify-center gap-2 transition active:scale-[0.99]">
+              class="w-full py-3 px-4 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-brand-600 to-amber-600 hover:from-brand-700 hover:to-amber-700 shadow-md shadow-brand-500/25 flex items-center justify-center gap-2 transition active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed">
               <i data-lucide="search" class="w-4 h-4"></i>
               Find Matching Restaurants
             </button>
@@ -596,9 +596,16 @@
           <div class="flex flex-wrap items-center gap-2.5">
             <button type="button" id="surpriseMeBtn"
               title="Can't decide? Let BiteFinder pick a random winner from your matches!"
-              class="px-3 py-1.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-brand-600 to-amber-500 hover:from-brand-700 hover:to-amber-600 text-white shadow-sm transition flex items-center gap-1.5">
+              class="px-3 py-1.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-brand-600 to-amber-500 hover:from-brand-700 hover:to-amber-600 text-white shadow-sm transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
               <span>🎲</span>
               <span>Pick One For Us!</span>
+            </button>
+
+            <button type="button" id="refreshResultsBtn"
+              title="Fetch different non-duplicate restaurants matching your current search"
+              class="px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-500/25 border border-brand-200 dark:border-brand-500/30 shadow-sm transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+              <span>Different Results</span>
             </button>
 
             <label for="matchesFirstCheck"
@@ -1230,7 +1237,7 @@
   </div>
 
   <!-- Modular Application Entrypoint -->
-  <script type="module" src="/js/main.js?v=20261114-12"></script>
+  <script type="module" src="/js/main.js?v=20261116-1"></script>
 </body>
 
 </html>

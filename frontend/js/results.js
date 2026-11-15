@@ -5,7 +5,7 @@ import {
   getSingaporeDate,
   refreshIcons,
   state,
-} from './state.js?v=20261114-12';
+} from './state.js?v=20261116-1';
 import {
   drawOriginToRestaurantLine,
   flyToMarkerForItem,
@@ -14,13 +14,18 @@ import {
   openRouteDrawer,
   setMapFormatters,
   updateInteractiveMap,
-} from './map.js?v=20261114-12';
-import { renderCompareTray, setCompareHelpers, toggleCompareItem } from './compare.js?v=20261114-12';
+} from './map.js?v=20261116-1';
+import { renderCompareTray, setCompareHelpers, toggleCompareItem } from './compare.js?v=20261116-1';
 
 let favoriteToggleHandler = async () => { };
+let refreshResultsHandler = async () => { };
 
 export function setFavoriteToggleHandler(fn) {
   if (typeof fn === 'function') favoriteToggleHandler = fn;
+}
+
+export function setRefreshResultsHandler(fn) {
+  if (typeof fn === 'function') refreshResultsHandler = fn;
 }
 
 export function to12Hour(timeStr) {
@@ -302,6 +307,10 @@ export function resetResultsDisplay() {
   state.lastMatches = [];
   state.lastAlternatives = [];
   state.displayedItems = [];
+  state.lastSearchPayload = null;
+  state.lastSearchBudgetIsPlus = false;
+  state.refreshSeenRestaurants = [];
+  state.refreshSeenKeys.clear();
   state.activeBudgetLimit = null;
   state.activeBudgetIsPlus = false;
   state.compareKeys.clear();
@@ -615,6 +624,54 @@ export function renderResults(matches, alternatives) {
   refreshIcons(container);
 }
 
+export function renderExhaustedRefreshState({ seenCount = 0, onResetSearch = null } = {}) {
+  state.lastMatches = [];
+  state.lastAlternatives = [];
+  state.displayedItems = [];
+  state.compareKeys.clear();
+  renderCompareTray();
+
+  document.getElementById('mapSection')?.classList.add('hidden');
+  const resultsHeader = document.getElementById('resultsHeader');
+  resultsHeader?.classList.remove('hidden');
+  const resultsCount = document.getElementById('resultsCount');
+  if (resultsCount) resultsCount.textContent = '0 New Recommendations';
+  const resultsSubtext = document.getElementById('resultsSubtext');
+  if (resultsSubtext) {
+    resultsSubtext.textContent = 'All matching nearby restaurants have already been shown.';
+  }
+  if (resultsHeader) refreshIcons(resultsHeader);
+
+  const container = document.getElementById('resultsList');
+  if (!container) return;
+
+  const detailText = seenCount > 0
+    ? `All ${seenCount} matching nearby restaurant${seenCount === 1 ? '' : 's'} for your current search have already been shown. Return to the original recommendations or adjust your filters to discover more.`
+    : 'All matching nearby restaurants for your current search have already been shown. Return to the original recommendations or adjust your filters to discover more.';
+
+  container.innerHTML = `
+    <div class="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 text-center space-y-3">
+      <div class="w-12 h-12 mx-auto rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 flex items-center justify-center shadow-sm">
+        <i data-lucide="compass" class="w-6 h-6"></i>
+      </div>
+      <h3 class="text-base font-bold text-slate-900 dark:text-white">All Matching Restaurants Already Shown</h3>
+      <p class="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">${escapeHtml(detailText)}</p>
+      <div class="pt-2">
+        <button type="button" id="resetRefreshSeenBtn"
+          class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-brand-600 to-amber-600 hover:from-brand-700 hover:to-amber-700 shadow-sm transition">
+          <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+          <span>Show Original Results / Search Again</span>
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('resetRefreshSeenBtn')?.addEventListener('click', () => {
+    if (typeof onResetSearch === 'function') onResetSearch();
+  });
+  refreshIcons(container);
+}
+
 export function initResultsControls() {
   setMapFormatters({ formatHours, getTravelMinutes });
   setCompareHelpers({
@@ -669,5 +726,9 @@ export function initResultsControls() {
       winnerCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     flyToMarkerForItem(chosen.idx, true);
+  });
+
+  document.getElementById('refreshResultsBtn')?.addEventListener('click', () => {
+    refreshResultsHandler();
   });
 }
