@@ -23,6 +23,9 @@ from BRC.classes.ai.providers.fallback.ai_provider_router import (
 from BRC.classes.ai.errors.ai_response_error import AIResponseError
 from BRC.classes.ai.errors.ai_service_error import AIServiceError
 from BRC.classes.ai.providers.clients.gemini_client import GeminiClient
+from BRC.classes.ai.providers.fallback.fallback_ai_client import (
+    FallbackAIClient,
+)
 
 
 AIClient = AIClientInterface
@@ -95,6 +98,11 @@ def create_manager(api_key, model):
         "last_request_at": None,
         "report": None,
     }
+
+
+def create_client(settings):
+    """Wire fallback behavior to the configured provider transports."""
+    return FallbackAIClient(settings, _call_gemini, _call_chat_completions)
 
 
 def _pace_request(manager):

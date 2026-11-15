@@ -25,7 +25,7 @@ class RestaurantEnricher:
     def enrich(self, place, saved_restaurants):
         """Merge saved fields into a Places result. Missing data stays
         None/'unknown' — never invented (business rule)."""
-        entry = self._match_saved_restaurant(place, saved_restaurants)
+        entry = self.__match_saved_restaurant(place, saved_restaurants)
         live_fields = {
             "google_place_id": place.get("google_place_id"),
             "postal_code": place.get("postal_code"),
@@ -57,7 +57,7 @@ class RestaurantEnricher:
                 if avg_price is not None
                 else (
                     place.get("price_level")
-                    or self._band_from_range(
+                    or self.__band_from_range(
                         place.get("price_start"), place.get("price_end")
                     )
                 )
@@ -78,7 +78,7 @@ class RestaurantEnricher:
                 "lat": place["lat"],
                 "lng": place["lng"],
                 "cuisines": saved_cuisines
-                or [self._cuisine_from_types(place["types"])],
+                or [self.__cuisine_from_types(place["types"])],
                 "dietary_requirements": sorted(
                     set(
                         saved_dietary
@@ -108,7 +108,7 @@ class RestaurantEnricher:
                 "transit_meters": None,
                 "source": "saved + google places",
             }
-        live_band = place.get("price_level") or self._band_from_range(
+        live_band = place.get("price_level") or self.__band_from_range(
             place.get("price_start"), place.get("price_end")
         )
         live_est_price, _ = BudgetFitPolicy.estimate_price(
@@ -125,7 +125,7 @@ class RestaurantEnricher:
             "address": place["address"],
             "lat": place["lat"],
             "lng": place["lng"],
-            "cuisines": [self._cuisine_from_types(place["types"])],
+            "cuisines": [self.__cuisine_from_types(place["types"])],
             "dietary_requirements": (
                 ["vegetarian"] if place.get("serves_vegetarian_food") else []
             ),
@@ -149,19 +149,21 @@ class RestaurantEnricher:
             "source": "google places",
         }
 
-    def _match_saved_restaurant(self, place, saved_restaurants):
-        p = self._norm(place["name"])
+    def __match_saved_restaurant(self, place, saved_restaurants):
+        p = self.normalize_name(place["name"])
         for entry in saved_restaurants:
-            e = self._norm(entry.get("name", ""))
+            e = self.normalize_name(entry.get("name", ""))
             if e != p:
                 continue
-            address = self._norm(entry.get("address", ""))
-            if not address or address != self._norm(place.get("address", "")):
+            address = self.normalize_name(entry.get("address", ""))
+            if not address or address != self.normalize_name(
+                place.get("address", "")
+            ):
                 continue
             return entry
         return None
 
-    def _norm(self, name):
+    def normalize_name(self, name):
         return re.sub(r"[^a-z0-9 ]", " ", (name or "").lower()).strip()
 
     def price_to_band(self, avg_price):
@@ -172,7 +174,7 @@ class RestaurantEnricher:
                 return band
         return "very_expensive"
 
-    def _band_from_range(self, start, end):
+    def __band_from_range(self, start, end):
         """Derive a budget band from a price range (midpoint). None if no
         numbers.
         """
@@ -181,7 +183,7 @@ class RestaurantEnricher:
             return None
         return self.price_to_band(sum(vals) / len(vals))
 
-    def _cuisine_from_types(self, types):
+    def __cuisine_from_types(self, types):
         for t in types or []:
             if t in (
                 "halal_restaurant",

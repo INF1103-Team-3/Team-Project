@@ -61,8 +61,9 @@ from http_gateway.main import create_app  # noqa: E402
 
 class WebIntegrationTests(unittest.TestCase):
     def setUp(self):
+        self.mongo_client = mongomock.MongoClient()
         self.conn = MongoConnection(
-            client=mongomock.MongoClient(), database="isolated_tests"
+            client=self.mongo_client, database="isolated_tests"
         )
         self.users = MongoUserStore(self.conn)
         self.sessions = MongoSessionStore(self.conn)
@@ -500,7 +501,7 @@ class WebIntegrationTests(unittest.TestCase):
     ):
         from pymongo.errors import ServerSelectionTimeoutError
 
-        self.conn._client.admin.command = Mock(
+        self.mongo_client.admin.command = Mock(
             side_effect=ServerSelectionTimeoutError("private URI")
         )
         response = self.client.get("/api/health")
@@ -581,7 +582,10 @@ class WebIntegrationTests(unittest.TestCase):
         self.assertEqual(sessions.resolve(token), "fixture")
         now[0] += 3
         self.assertIsNone(sessions.resolve(token))
-        self.assertNotIn(token, str(list(self.conn.db.sessions.find({}))))
+        self.assertNotIn(
+            token,
+            str(list(self.conn.execute(lambda db: db.sessions.find({})))),
+        )
 
     def test_smtp_bypass_claims_legacy_cli_user_and_syncs_with_users_json(
         self,
@@ -1645,7 +1649,12 @@ class WebIntegrationTests(unittest.TestCase):
             bad = self.client.get("/api/places/bad%20place/photo")
             self.assertEqual(bad.status_code, 400)
 
-            self.assertEqual(self.conn.db.place_photos.count_documents({}), 0)
+            self.assertEqual(
+                self.conn.execute(
+                    lambda db: db.place_photos.count_documents({})
+                ),
+                0,
+            )
             with patch(
                 (
                     "BRNS.classes.io.gateways.google.google_place_photo_gatewa"
@@ -1663,10 +1672,13 @@ class WebIntegrationTests(unittest.TestCase):
                 # Stored in dedicated `place_photos` collection without
                 # touching `restaurants`.
                 self.assertEqual(
-                    self.conn.db.restaurants.count_documents({}), 0
+                    self.conn.execute(
+                        lambda db: db.restaurants.count_documents({})
+                    ),
+                    0,
                 )
-                doc = self.conn.db.place_photos.find_one(
-                    {"_id": "ChIJWebPin1"}
+                doc = self.conn.execute(
+                    lambda db: db.place_photos.find_one({"_id": "ChIJWebPin1"})
                 )
                 self.assertIsNotNone(doc)
                 self.assertEqual(bytes(doc["data"]), b"RIFFWEBPTESTBLOB")
@@ -2387,15 +2399,17 @@ class WebIntegrationTests(unittest.TestCase):
 
         # Simulate pre-existing MongoDB user saved under old wider numeric
         # limits.
-        self.conn.db.users.update_one(
-            {"_id": legacy_user["user_id"]},
-            {
-                "$set": {
-                    "preferences.max_distance_km": 200.0,
-                    "preferences.max_travel_time_minutes": 300.0,
-                    "preferences.budget_per_person": 2000.0,
-                }
-            },
+        self.conn.execute(
+            lambda db: db.users.update_one(
+                {"_id": legacy_user["user_id"]},
+                {
+                    "$set": {
+                        "preferences.max_distance_km": 200.0,
+                        "preferences.max_travel_time_minutes": 300.0,
+                        "preferences.budget_per_person": 2000.0,
+                    }
+                },
+            )
         )
 
         # Valid account sign-in works despite another user having legacy
@@ -2469,8 +2483,10 @@ class WebIntegrationTests(unittest.TestCase):
 
         # Unrelated malformed document in Mongo users collection does not break
         # targeted login.
-        self.conn.db.users.insert_one(
-            {"_id": "corrupt-doc", "email": "broken@example.com"}
+        self.conn.execute(
+            lambda db: db.users.insert_one(
+                {"_id": "corrupt-doc", "email": "broken@example.com"}
+            )
         )
         isolated_login = self.client.post(
             "/api/auth/login",
@@ -2872,8 +2888,7 @@ class WebIntegrationTests(unittest.TestCase):
 
         # Enforce max_length bounds on list (200) and string fields.
         too_many = [
-            {"google_place_id": f"p-{i}", "name": f"R{i}"}
-            for i in range(201)
+            {"google_place_id": f"p-{i}", "name": f"R{i}"} for i in range(201)
         ]
         self.assertEqual(
             self.client.post(
@@ -3373,6 +3388,41 @@ class WebIntegrationTests(unittest.TestCase):
             self.assertEqual(len(alt_body["alternatives"]), 1)
         finally:
             self.application._brns = orig_brns
+
+    def test_refresh_does_not_translate_provider_outage_into_exhaustion(self):
+        headers, _ = self.account("refresh.outage@example.com")
+        error_message = (
+            "No restaurants found, or restaurant search is unavailable."
+        )
+
+        def unavailable(*_args, **_kwargs):
+            raise RuntimeError(error_message)
+
+        original = self.application._brns
+        self.application._brns = self._make_brns_gateway(unavailable)
+        try:
+            for strict in (False, True):
+                with self.subTest(strict_exclude=strict):
+                    payload = self.search_payload()
+                    if strict:
+                        payload.update(
+                            strict_exclude=True,
+                            previous_restaurants=[
+                                {
+                                    "google_place_id": "seen-1",
+                                    "name": "Seen Cafe",
+                                    "address": "1 Road",
+                                }
+                            ],
+                        )
+                    response = self.client.post(
+                        "/api/search", json=payload, headers=headers
+                    )
+                    self.assertEqual(response.status_code, 503, response.text)
+                    self.assertIn(error_message, response.text)
+                    self.assertNotIn("exhausted_previous", response.json())
+        finally:
+            self.application._brns = original
 
 
 if __name__ == "__main__":

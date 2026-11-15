@@ -1,4 +1,5 @@
 """HTTP input schema for seen restaurants excluded on refresh."""
+
 from pydantic import BaseModel, ConfigDict, Field
 
 

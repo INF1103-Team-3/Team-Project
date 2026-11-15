@@ -2,6 +2,7 @@
 
 import json
 import threading
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler
 
 from BRC import main as brc_main
@@ -16,9 +17,16 @@ class BRCRequestHandler(BaseHTTPRequestHandler):
     """Expose BRC health, status, and check operations over HTTP."""
 
     protocol_version = "HTTP/1.1"
-    _run_lock = threading.Lock()
+    __run_lock = threading.Lock()
     application_run = staticmethod(brc_main.run)
     database_path = CLEAN_DATABASE_PATH
+
+    @classmethod
+    @contextmanager
+    def serialized_checks(cls):
+        """Serialize checks and warm-up without exposing the shared lock."""
+        with cls.__run_lock:
+            yield
 
     def do_GET(self):
         if self.path == "/health":
@@ -45,7 +53,7 @@ class BRCRequestHandler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeError) as error:
             self._send_json(400, {"error": f"Invalid request: {error}"})
             return
-        with self._run_lock:
+        with self.serialized_checks():
             token = debug_log.adopt_trace(
                 self.headers.get("X-BiteFinder-Trace-ID")
             )

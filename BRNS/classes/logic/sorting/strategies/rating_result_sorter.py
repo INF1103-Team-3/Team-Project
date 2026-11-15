@@ -15,7 +15,7 @@ class RatingResultSorter(BaseResultSorter, ResultSorterInterface):
     def name(self):
         return "rating"
 
-    def key(self, item, mode):
+    def _key(self, item, mode):
         rating, reviews, distance, name = self._facts(item, mode)
         return (
             rating is None,
