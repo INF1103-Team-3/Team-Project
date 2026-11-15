@@ -10,7 +10,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / "BIS")]
 
-from BIS.classes.services.web.bis_chatbot_service import BISChatbotService
+from BIS.classes.logic.chat.chat_filter_policy import ChatFilterPolicy
 from BRNS import io_manager
 from BRNS.classes.data.stores.json.json_recommendation_store import (
     JsonRecommendationStore,
@@ -51,7 +51,7 @@ class CleanupContractTests(unittest.TestCase):
             self.assertEqual(list(path.parent.glob("*.tmp")), [])
 
     def test_chat_filters_keep_time_precedence_and_normalize_lists(self):
-        result = BISChatbotService.normalize_filters({
+        result = ChatFilterPolicy.normalize_filters({
             "locations": ["bugis", "bugis"],
             "mode": "walk",
             "max_travel_minutes": 20,
@@ -80,7 +80,7 @@ class CleanupContractTests(unittest.TestCase):
                 "disliked_cuisines": ["halal", "chinese"],
             },
         }
-        result = BISChatbotService._reconcile_ai_updates(
+        result = ChatFilterPolicy.reconcile_ai_updates(
             deterministic, ai, {})
         self.assertEqual(result["updates"]["dietary_action"], "remove")
         self.assertEqual(result["updates"]["disliked_cuisines"], ["chinese"])

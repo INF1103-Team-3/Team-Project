@@ -3,6 +3,7 @@
 import math
 import re
 from copy import deepcopy
+from BIS.classes.logic.chat.chat_filter_policy import ChatFilterPolicy
 
 from BIS.classes.logic.contracts.bis_logic_manager_interface import BISLogicManagerInterface
 from BIS.classes.logic.validators.search_request_validator import (
@@ -29,7 +30,8 @@ COORDINATES = re.compile(
 class LogicManager(BISLogicManagerInterface):
     """Own BIS profile updates and validated search-request decisions."""
 
-    def __init__(self, search_validator=None):
+    def __init__(self, search_validator=None, chat_filters=None):
+        self.chat_filters = chat_filters or ChatFilterPolicy()
         self._search_validator = (
             search_validator or create_search_request_validator())
 
