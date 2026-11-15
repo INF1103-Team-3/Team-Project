@@ -1,327 +1,237 @@
 # BiteFinder Project Flow
 
-This document shows the complete BiteFinder workflow and its major decision
-branches. BiteFinder consists of three procedural applications:
+This is the current application workflow on `WEB-OOP`. BiteFinder has two BIS
+user interfaces over the same recommendation subsystem: an interactive Python
+CLI and a browser interface served by nginx and FastAPI. BRC remains an
+independent HTTP microservice in Compose.
 
-- **BIS** collects accounts, profiles, and today's search request.
-- **BRNS** finds, ranks, filters, and routes to restaurants.
-- **BRC** builds a cleaned MUIS dataset and verifies halal candidates.
+For setup and shutdown commands, see [README.md](README.md). For record shapes,
+storage, and trust boundaries, see [DataFlowDiagram.md](DataFlowDiagram.md).
 
-## Complete application flow
-
-```mermaid
-flowchart TD
-    A[Start BiteFinder CLI] --> B[BIS I/O: sign up, resume, or quit]
-    B -->|Sign up| C[Validate email and username]
-    B -->|Resume| D[Load account by email]
-    B -->|Quit| Z[Goodbye]
-    C --> E[Send and verify six-digit email code]
-    D --> E
-    E -->|Verification fails| B
-    E -->|Verified or SMTP test bypass| F{Profile complete?}
-
-    F -->|No| G[BIS I/O: collect the next preference]
-    G --> H[BIS AI: interpret or correct free text]
-    H --> I[BIS Logic: validate typed update]
-    I -->|Invalid or declined| G
-    I -->|Accepted| J[BIS Data: save account and preferences]
-    J --> F
-
-    F -->|Yes| K[BIS command loop]
-    K -->|Profile and help| L[BIS I/O: display information]
-    L --> K
-    K -->|Edit, add, remove, reset, or color| M[BIS managers: validate and save change]
-    M --> K
-    K -->|Logout| B
-    K -->|Quit| Z
-    K -->|Search or natural-language search command| N[BIS I/O: collect today's choices]
-
-    N --> O[BIS AI: interpret confirmed choices and special request]
-    O -->|Provider or schema failure| X[BIS I/O: show error with trace ID]
-    O --> P[BIS Logic: protect confirmed values and validate JSON]
-    P -->|Needs clarification| N
-    P -->|User declines| K
-    P -->|Confirmed| Q[BIS Data: serialize validated search JSON]
-
-    Q --> R[BRNS I/O: validate BIS JSON and gather candidates]
-    R -->|No candidates or external failure| X
-    R --> S[BRNS AI: rank candidate IDs and reason codes]
-    S -->|All AI providers fail or output is invalid| X
-    S --> T{Halal required?}
-    T -->|No| U[BRNS Logic: classify matches, alternatives, and exclusions]
-    T -->|Yes| V[BRC: check candidates against cleaned MUIS data]
-    V -->|Official match| W[Mark candidate officially halal]
-    V -->|Not verified| Y{Google indicates halal?}
-    V -->|BRC unavailable| Y
-    Y -->|Yes| AA[Keep as clearly labelled unofficial fallback]
-    Y -->|No| AB[Exclude from halal results]
-    W --> U
-    AA --> U
-    AB --> U
-
-    U --> AC[BRNS Data: save restaurant facts and search summary]
-    AC --> AD[BIS and BRNS I/O: display matches or no-match explanation]
-    AD --> AE{Results action}
-    AE -->|Details| AF[Show full restaurant facts]
-    AE -->|Sort| AG[Sort existing results by rating or distance]
-    AE -->|Route| AH[Google route or Maps link]
-    AE -->|Email| AI[SMTP: send selected Google Maps link]
-    AE -->|Alternatives| AJ[Show non-matching alternatives and cautions]
-    AE -->|Change choices| N
-    AE -->|Repeat same search| R
-    AE -->|Finish| K
-    AF --> AE
-    AG --> AE
-    AH --> AE
-    AI --> AE
-    AJ --> AE
-    X --> K
-```
-
-## BIS account and profile branches
+## Entry points and subsystem boundaries
 
 ```mermaid
-flowchart LR
-    A[Account menu] --> B{Choice}
-    B -->|Sign up| C[Validate email and username]
-    B -->|Resume| D[Find saved account]
-    B -->|Quit| E[Exit]
-    C --> F[Create verification challenge]
-    D --> F
-    F --> G{Code accepted?}
-    G -->|No, attempts remain| H[Retry or resend after cooldown]
-    H --> G
-    G -->|Attempt window reached| I[Wait for configured reset window]
-    I --> F
-    G -->|Yes| J[Load profile session]
-    J --> K{Missing preference?}
-    K -->|Yes| L[I/O collects one answer]
-    L --> M{Simple typed answer?}
-    M -->|Yes| N[Logic validates locally]
-    M -->|Free text or correction needed| O[AI returns structured interpretation]
-    O --> P[I/O asks user to confirm correction]
-    P -->|Decline| L
-    P -->|Accept| N
-    N -->|Invalid| L
-    N -->|Valid| Q[Data saves profile]
-    Q --> K
-    K -->|No| R[Enter command loop and optional first search]
+flowchart TB
+  launch["main.py or BIS/main.py"]
+  choice["BISLauncher&#58; CLI, Web, or Exit"]
+  cli["BIS CLI&#58; accounts, profiles, search"]
+  browser["Browser&#58; filters, chat, results"]
+  nginx["nginx web container"]
+  http["http_gateway&#58; HTTP routes and lifespan"]
+  bis["BIS runtime and web IO"]
+  brns["BRNSService gateway"]
+  brc["Independent BRC HTTP service"]
+  exit_app["Exit launcher"]
+  launch --> choice
+  choice -->|CLI or --cli| cli
+  choice -->|Web or --web| browser
+  choice -->|Exit| exit_app
+  browser -->|HTTP on localhost&#58;8080| nginx
+  nginx -->|Proxy /api/| http
+  http -->|BIS only| bis
+  bis -->|Search, route, history| brns
+  cli -->|Confirmed search JSON| brns
+  brns -->|Halal verification| brc
 ```
 
-Saved profile fields are locations, distance and time estimates, budget,
-dietary requirements, liked cuisines, disliked cuisines, and reusable special
-requests.
+- `python main.py` and `python BIS/main.py` offer CLI, Web, or Exit. Enter
+  selects CLI; `--cli` and `--web` select a mode without the menu.
+- The host web launcher checks readiness, starts/reuses Compose when needed,
+  and attempts to open the browser. Inside a container it checks the web service
+  and displays the host URL; it does not launch Docker or a host browser.
+- Browser calls enter `http_gateway/routes.py`, which delegates to BIS web IO.
+  `http_gateway/dependencies.py` delegates construction to `BIS/runtime.py`.
+- BIS uses `BRNSGatewayInterface` through `BRNSService`, built by
+  `BRNS/runtime.py`. HTTP route handlers do not directly invoke BRNS or BRC.
+- BRNS uses the BRC adapter for halal verification. Compose supplies
+  `BRC_SERVICE_URL=http://brc:8000`; the host CLI can use in-process BRC when
+  that variable is absent.
+- Direct BRNS/BRC command-line entry points are maintenance/test paths gated
+  by `--internal` or `BITEFINDER_INTERNAL_CLI=1`.
 
-## BIS command branches
+## Accounts and saved profiles
+
+1. Signup collects a normalized email, username, and a password of 8–128
+   characters. Resume/login verifies the stored password. CLI password changes
+   are available through `/password`.
+2. CLI and web share MongoDB `users` and `web_credentials` in normal operation.
+   Existing accounts without credentials follow password enrollment.
+3. With `SMTP_BYPASS=false`, authentication sends a six-digit email challenge.
+   The challenge tracks expiry, resend cooldown, and failed attempts; successful
+   verification consumes it. Web login returns an expiring bearer session.
+4. `SMTP_BYPASS=true` skips email/OTP verification in **both CLI and web**.
+   The web bypass can enroll legacy credentials and mark an account verified;
+   that flag is a testing shortcut, not evidence of inbox ownership.
+5. CLI resumes incomplete profiles field by field, interprets free text when
+   needed, and validates updates before saving. A complete profile opens the
+   command loop and may trigger the first guided search.
+6. Web supports a profile form and chatbot onboarding. Chat replies update
+   filters, ask for missing values, and can save preferences for a signed-in
+   user. Ordinary filter edits are not automatically a saved profile update.
+
+## Search and recommendation
 
 ```mermaid
-flowchart TD
-    A[User message] --> B{Slash command or natural text?}
-    B -->|Recognized slash command| C[Dispatch command]
-    B -->|Natural text| D[BIS AI interprets an allowed command]
-    D -->|No supported command| E[Ask user to clarify]
-    D -->|Supported command| C
-    C -->|help| F[Show commands and return]
-    C -->|profile| G[Show saved profile and return]
-    C -->|edit, add-location, remove-location| H[Collect and save selected field]
-    C -->|reset| I[Clear preferences but retain account]
-    C -->|color on or off| J[Save display preference]
-    C -->|search| K[Start today's search flow]
-    C -->|logout| L[Return to account menu]
-    C -->|quit or exit| M[Save and close]
-    F --> A
-    G --> A
-    H --> A
-    I --> A
-    J --> A
+flowchart TB
+  input["BIS IO&#58; CLI choices or web filters"]
+  bisai["BIS AI&#58; interpret search request"]
+  bislogic["BIS Logic&#58; validate confirmed choices"]
+  bridge["BRNSService gateway"]
+  facts["BRNS IO&#58; Places, saved facts, Routes"]
+  rank["BRNS AI&#58; candidate IDs and reason codes"]
+  brc["BRC&#58; official evidence if halal requested"]
+  rules["BRNS Logic&#58; grounded reasons and outcome policy"]
+  save["BRNS Data&#58; facts and history"]
+  results["BIS IO&#58; CLI results or web response"]
+  error["Show error or request clarification"]
+  input -->|Resolved Singapore origins| bisai
+  bisai -->|Structured proposal| bislogic
+  bislogic -->|Direct web search or confirmed proposal| bridge
+  bislogic -->|Conflict or invalid response| error
+  bridge -->|One call per web cuisine| facts
+  facts -->|Usable candidates| rank
+  rank -->|Valid ranking| brc
+  rank -->|Provider or schema failure| error
+  brc -->|Verified or explicitly unofficial evidence| rules
+  rules -->|Evaluated results| save
+  save -->|Merged web results or CLI result set| results
 ```
 
-`/help` and color commands are available while other questions are active and
-return the user to the same prompt.
+### CLI collection
 
-## Search collection and BIS handoff
+BIS collects one Singapore origin, walk/drive/transit mode, one active distance
+or time limit, traffic awareness for driving-time searches, one cuisine or
+`none`, budget, dietary requirements, dislikes, and special wishes. It can
+review spelling and hard-constraint wording with AI and ask for clarification.
+The interpreted request is confirmed before the BRNS handoff. `AI_BYPASS=true`
+is a CLI test path that displays the validated request and skips BRNS.
 
-```mermaid
-flowchart TD
-    A[Start search] --> B[Choose current location]
-    B --> C{Location form}
-    C -->|Latitude and longitude| D[Validate Singapore coordinates]
-    C -->|Postal code, address, or landmark| E{Shared geocode cache hit?}
-    E -->|Yes| F[Use cached coordinates]
-    E -->|No| G[Google geocode, validate, and cache]
-    D --> H[Confirm location]
-    F --> H
-    G --> H
-    H -->|No| B
-    H -->|Yes| I[Choose walk, drive, or transit]
-    I -->|Walk or drive| J[Choose distance or journey time]
-    I -->|Transit| K[Choose journey time]
-    J --> L[Use entered value or compatible profile default]
-    K --> L
-    L --> M{Drive with time limit?}
-    M -->|Yes| N[Choose normal or traffic-aware duration]
-    M -->|No| O[Continue]
-    N --> O
-    O --> P[Choose specific cuisine or none]
-    P --> Q[Choose budget]
-    Q --> R[Choose saved requests or enter new text]
-    R --> S[BIS AI reviews wording and meaning]
-    S --> T{Hard language such as only or at least?}
-    T -->|Yes| U[Explain reduced-result risk and confirm hard constraint]
-    T -->|No| V[Keep as soft preference]
-    U --> W[Show complete search summary]
-    V --> W
-    W -->|No or cancel| X[Return without BRNS search]
-    W -->|Yes or Enter| Y[BIS AI produces structured search proposal]
-    Y --> Z[BIS Logic validates and preserves confirmed choices]
-    Z -->|Conflict| R
-    Z -->|Valid and confirmed| AA[BIS Data serializes JSON for BRNS]
-```
+### Browser search and chat
 
-## BRNS recommendation branches
+The web form supports multiple starting locations and selected/custom cuisine
+terms. BIS Logic computes a midpoint search origin from resolved locations.
+For multiple cuisines, BIS runs separate BRNS searches, merges/deduplicates
+results through Logic, and saves a combined user history summary. The web path
+requests up to 20 matches and 20 alternatives per BRNS call; multi-cuisine
+merging uses a total cap of 20.
 
-```mermaid
-flowchart TD
-    A[BRNS I/O receives BIS JSON] --> B[Validate keys, types, ranges, and coordinates]
-    B -->|Invalid| C[Stop without saving search history]
-    B -->|Valid| D{USE_LIVE_GOOGLE}
-    D -->|True| E[Google Places search and Routes matrix]
-    D -->|False| F[Load saved BRNS restaurant JSON]
-    E --> G[Normalize candidates and current opening status]
-    F --> G
-    G -->|No usable candidates| C
-    G --> H[BRNS AI ranks every current candidate ID]
-    H -->|Malformed or unsupported output| C
-    H --> I{Halal requested?}
-    I -->|No| J[BRNS Logic applies business rules]
-    I -->|Yes| K[BRC verification flow]
-    K --> J
-    J --> L{Classification}
-    L -->|Meets requirements| M[Match]
-    L -->|Useful but misses soft or relaxed limits| N[Alternative]
-    L -->|Closed, disliked, hard mismatch, or unsupported| O[Excluded]
-    M --> P[Order results using AI order and validated facts]
-    N --> P
-    O --> P
-    P --> Q[Data upserts restaurant facts]
-    Q --> R[Data saves validated search summary]
-    R --> S[Return results to BIS]
-```
+`POST /api/search` runs directly by default. Sending `confirm_only=true`
+creates a stored proposal and returns `confirmation_required=true` with a
+one-use `confirmation_token`; a later token submission uses the stored request.
+The regular form currently submits direct searches. Chat uses `/api/chat` to
+clarify filters and asks for confirmation before triggering the form search;
+that conversational confirmation is separate from the proposal-token API.
 
-BRNS grounds every displayed AI reason in candidate facts. Unsupported reason
-codes are removed and written to the shared log rather than shown as facts.
-Ratings use both the Google score and review count. Live candidates must have
-usable current opening information before they can be recommended.
+### BRNS decisions
 
-## BRC workflow branches
+BRNS validates the exact ten-field BIS request, gathers live Google Places and
+Routes facts or configured saved records, and asks its AI pipeline to rank the
+candidate IDs. Logic verifies IDs/reasons against candidate facts, applies
+cuisine, dietary, price, travel, opening, and rating rules, and separates
+matches, alternatives, and exclusions. Restaurant facts and history are saved
+through Data before the result returns to BIS.
 
-```mermaid
-flowchart TD
-    A[BRC main receives no input, one object, or an array] --> B[BRC I/O selects scenario]
-    B -->|No restaurant input| C{Fresh raw MUIS snapshot exists?}
-    C -->|No| D[Scraper downloads all MUIS eating-establishment records]
-    C -->|Yes| E[Load raw snapshot]
-    D --> E
-    E --> F[Load cuisine tag cache]
-    F --> G[BRC AI tags uncached cuisines in batches]
-    G --> H[BRC Logic removes expired, duplicate, and non-eating records]
-    H --> I[BRC Data saves cleaned halal restaurant database]
+Read/validation work and external fact gathering occur before AI; the diagram
+shows the main recommendation flow, not a rule that every manager call must
+occur exactly once. Cached/local BRC paths and chatbot fallbacks also exist;
+this document does not assert that every operation invokes an AI API.
 
-    B -->|One object or array| J{Cleaned database exists?}
-    J -->|No| C
-    J -->|Yes| K[I/O validates restaurants and finds possible MUIS candidates]
-    K --> L{One exact deterministic outlet match?}
-    L -->|Yes| M[Reuse exact certificate candidate]
-    L -->|No candidates| N[Return not verified]
-    L -->|Ambiguous candidates| O[BRC AI proposes exact outlet or null]
-    M --> P[BRC Logic verifies postal code, name, address, unit, and validity]
-    O --> P
-    N --> Q[BRC Data saves checked result and cache]
-    P -->|Verified| R[Set official certification and MUIS evidence]
-    P -->|Not verified| N
-    R --> Q
-    Q --> S[Return one object or shape-preserving array]
-```
+## BRC verification and database preparation
 
-BRC can run interactively, accept `--input`, read `--stdin`, or be called by
-BRNS. In Docker Compose, BRNS calls the dedicated BRC container through its
-private HTTP service.
+BRC's HTTP service exposes `/health`, `/status`, and `/check`. A check accepts
+one restaurant object or an array and preserves that response shape.
 
-## Result-action branches
+- Missing cleaned data triggers a build from a usable raw MUIS snapshot or a
+  scrape. The server also starts a background warm-up when data is missing,
+  unless `BRC_AUTO_WARM=0`. Healthy HTTP does not mean the dataset is ready.
+- Build logic reuses cuisine caches and keyword tags. Compose explicitly sets
+  `BRC_BUILD_CUISINES_WITH_AI=0`; optional AI batch tagging is therefore skipped
+  in its normal build configuration. Ambiguous outlet checks can still use AI.
+- Exact matches/no-candidate cases can skip AI. AI proposals never establish
+  official certification by themselves: Logic checks outlet identity and MUIS
+  certificate evidence.
+- BRNS can batch candidate checks through its adapter. Verified results become
+  `official`; Google halal indications remain explicitly `unofficial` when
+  official checking is unavailable or inconclusive. Missing evidence is not
+  converted into official verification.
+- BRC persists raw/cleaned JSON, cuisine and check caches in its own volume.
 
-```mermaid
-flowchart LR
-    A[Results menu] --> B{Action}
-    B -->|Details| C[Show ratings, reviews, hours, prices, dietary status, and reasons]
-    B -->|Sort| D[Sort current matches and alternatives by rating or distance]
-    B -->|Route| E[Request directions and show Google Maps link]
-    B -->|Email| F{Verified account and coordinates?}
-    F -->|Yes| G[Send Maps link through SMTP]
-    F -->|No| H[Explain why email is unavailable]
-    B -->|Alternatives| I[Show alternatives and cautions]
-    B -->|Change| J[Return to selected search fields]
-    B -->|Repeat| K[Run BRNS again and prefer unseen candidates]
-    B -->|Enter or finish| L[Return to command loop]
-    C --> A
-    D --> A
-    E --> A
-    G --> A
-    H --> A
-    I --> A
-```
+## Result actions
 
-## Failure and fallback paths
-
-| Failure | Behavior |
+| Interface | Available interaction |
 | --- | --- |
-| Invalid user answer | BIS I/O explains the accepted form and repeats the same prompt. |
-| AI wording correction declined | The original value is not changed or saved. |
-| All BIS AI providers fail | Search interpretation stops; BRNS is not called. |
-| Invalid BIS search JSON | BRNS rejects the request before Places, AI ranking, or history saving. |
-| Google live search disabled | BRNS loads `BRNS/data/restaurants.json`, while BRNS AI ranking remains required. |
-| Google or route request fails | The search stops or reports unavailable route facts; route values are not invented. |
-| BRNS AI fails or returns invalid IDs | Recommendation stops and no completed search summary is saved. |
-| BRC database missing | BRC tries to build it from the raw MUIS snapshot or scraper before checking. |
-| BRC unavailable during halal search | Google-indicated halal candidates may continue only as unofficial fallback results. |
-| Missing or corrupt saved JSON | The responsible data boundary logs or reports the error and protects existing data. |
-| SMTP delivery fails | The account or search session remains usable and the user receives an error. |
+| CLI | Details, rating/distance sorting, route, Maps-link email, alternatives, refine choices, repeat with previous results, finish/logout |
+| Browser | Filters/chat, result cards and sorting, map and route drawer, up to three restaurants in comparison, authenticated favorites, profile and search history |
 
-## Docker deployment flow
+Navigation returns available route details and a Google Maps link. Sorting and
+browser comparison use existing result facts; they do not establish new
+certification or replace domain eligibility decisions.
+
+## Deployment and lifecycle
 
 ```mermaid
 flowchart LR
-    A[User terminal] -->|docker compose exec| B[bis-brns container]
-    B --> C[BIS CLI]
-    C --> D[BRNS search]
-    D -->|Private HTTP check| E[brc container]
-    E --> F[BRC service and MUIS database]
-    B --> G[(bis-brns-data volume)]
-    E --> H[(brc-data volume)]
-    B --> J[(bitefinder-logs volume)]
-    E --> J
-    C --> I[AI, Maps, and SMTP services]
-    D --> I
-    E --> I
+  browser["Host browser"]
+  web["web&#58; nginx on localhost&#58;8080"]
+  api["api&#58; FastAPI, BIS, and BRNS"]
+  cli["bis-brns&#58; BIS CLI and BRNS"]
+  db["mongodb on localhost&#58;27017"]
+  admin["mongo-express on localhost&#58;8081&#59; dev profile"]
+  brc["brc&#58; independent HTTP service"]
+  mongo["mongo-data volume"]
+  app["application-data volume"]
+  brcdata["brc-data volume"]
+  browser -->|Website| web
+  web -->|Internal port 8000| api
+  browser -->|Optional admin UI| admin
+  admin -->|Mongo connection| db
+  api -->|Accounts and recommendation stores| db
+  cli -->|Same database| db
+  api -->|Internal HTTP| brc
+  cli -->|Internal HTTP| brc
+  db -->|Durable database| mongo
+  api -->|Scratch files and logs| app
+  cli -->|Shared application volume| app
+  brc -->|MUIS files and separate logs| brcdata
 ```
 
-The two containers share the private `bitefinder-net` network. The `brc`
-container exposes its health and checking service only inside that network.
-Named volumes retain application JSON and caches across container replacement.
-Both containers mount `bitefinder-logs`, so all manager events are written to
-one traceable log file.
+All Compose services use `bitefinder-web`. Only nginx (`8080`), optional
+mongo-express (`8081`), and MongoDB (`27017`) publish loopback host ports.
+API and BRC each use internal port `8000` in separate containers.
 
-## Main persisted data
+```powershell
+# Start the runtime stack.
+docker compose up -d --build
+# Optionally enable MongoDB administration.
+docker compose --profile dev up -d mongo-express
+# Open the CLI.
+docker compose exec bis-brns python main.py --cli
+# Stop every profile and preserve saved data.
+docker compose --profile "*" down
+```
 
-| Path or volume area | Purpose |
+Closing the browser or leaving the CLI does not stop shared services. Plain
+`docker compose down` can leave mongo-express running because its `dev` profile
+is inactive, keeping the network in use. Adding `-v` intentionally deletes
+saved named volumes; it is not part of normal shutdown.
+
+`api` and `bis-brns` share `application-data`; BRC uses `brc-data`, including
+its own log file. Trace IDs connect operations across HTTP, but there is no
+single log volume shared by all containers.
+
+## Failure paths
+
+| Failure | Current outcome |
 | --- | --- |
-| `BIS/data/users.json` | Accounts and saved profile preferences |
-| `BIS/data/profile_state.json` | Search, verification, and display state |
-| `BRNS/data/restaurants.json` | Saved Google restaurant facts and offline fallback |
-| `BRNS/data/search_history.json` | Validated search summaries |
-| `BRC/data/muis_establishments.json` | Raw MUIS scrape snapshot |
-| `BRC/data/halal_restaurants.json` | Cleaned official halal database |
-| `BRC/data/cuisine_tags_cache.json` | Resumable cuisine tags |
-| `BRC/data/checked_restaurants_cache.json` | Previous outlet checks |
-| `data/geocode_cache.json` | Shared successful geocoding results |
-| `logs/bitefinder.log` | Shared traceable operational log |
+| Bad CLI input or declined correction | Explain/re-prompt or cancel without applying that update |
+| Provider/schema failure in required recommendation processing | Return an error rather than fabricate ranked results |
+| Chat AI unavailable | Recognized deterministic chat parsing can still update filters or ask clarification |
+| No open restaurants in the web search path | Empty results with an explanatory message for recognized no-open errors |
+| Invalid/expired/used search token | Reject and require a new proposal |
+| BRC unavailable | Summarize failure; retain only clearly labelled available evidence |
+| MongoDB unavailable | Explicit unavailable error, without automatic switch to JSON |
+| Missing/corrupt JSON | Store-specific handling; BIS protects invalid account files, BRNS can return empty collections |
+| SMTP unavailable with bypass disabled | Report delivery failure; no successful email proof is invented |
 
+See subsystem READMEs for implementation paths and the [test guide](tests/README.md)
+for deterministic fixtures covering these boundaries.

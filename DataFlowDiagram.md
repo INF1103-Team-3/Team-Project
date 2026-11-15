@@ -1,323 +1,228 @@
-# BiteFinder Data Flow Diagram
+# BiteFinder Data Flow
 
-This document shows how BiteFinder data changes shape and trust state as it
-moves from user input through BIS, AI providers, BRNS, BRC, external fact
-providers, and JSON storage.
+This document maps the current CLI/web application to its record formats,
+stores, and trust boundaries. See [ProjectFlow.md](ProjectFlow.md) for control
+flow and [README.md](README.md) for operation commands.
 
-For control flow and decision branches, see [ProjectFlow.md](ProjectFlow.md).
-The diagrams below focus on **what data enters a process, how it is transformed,
-and where the validated result is stored**.
+## Context and subsystem boundaries
 
-## Diagram notation
+```mermaid
+flowchart LR
+  user["CLI or browser user"]
+  http["HTTP gateway for browser requests"]
+  bis["BIS&#58; accounts, profiles, chat, search"]
+  brns["BRNS&#58; recommendations, routes, history"]
+  brc["BRC&#58; independent MUIS verifier"]
+  ai["Configured AI providers"]
+  google["Google Maps Platform"]
+  smtp["SMTP service"]
+  muis["MUIS directory and OneMap"]
+  mongo["MongoDB domain collections"]
+  json["BRC raw, cleaned, and checked JSON"]
+  user -->|CLI input| bis
+  user -->|Browser HTTP| http
+  http -->|Transport payload| bis
+  bis -->|Validated request JSON| brns
+  brns -->|Restaurant object or batch| brc
+  bis -->|Interpretation tasks| ai
+  brns -->|Candidate ranking| ai
+  brc -->|Optional tagging or ambiguous match| ai
+  google -->|Origin coordinates| bis
+  google -->|Place and route facts| brns
+  bis -->|OTP or CLI Maps link| smtp
+  muis -->|Official listings and geocodes| brc
+  bis -->|Identity and user state| mongo
+  brns -->|Restaurant facts and history| mongo
+  brc -->|Official evidence and check results| json
+  brc -->|Checked records| brns
+  brns -->|Results and routes| bis
+  bis -->|Formatted output| user
+```
 
-| Shape or label | Meaning |
+Browser transport is `frontend/` → nginx → `http_gateway/` → BIS web IO.
+BIS calls the headless `BRNSService` contract; BRNS owns BRC integration.
+CLI uses BIS directly and can operate without the HTTP gateway or nginx.
+Compose configures both CLI and API to share MongoDB. BRC's independent store
+continues to use JSON files.
+
+## Identity and profile records
+
+The persisted BIS user schema is:
+
+```text
+userID: string
+email: normalized string
+email_verified: boolean
+username: string or null
+preferences:
+  location: list of strings or null
+  max_distance_km: number or null
+  max_travel_time_minutes: number or null
+  budget_per_person: number or null
+  dietary_requirements: list or null
+  liked_cuisines: list or null
+  disliked_cuisines: list or null
+  other_preferences: list or null
+```
+
+`users` uses `_id=userID` in MongoDB. Stores remove backend metadata before
+returning a domain user. Web IO formats public responses as `user_id`, account
+fields, and flattened preference fields. Passwords are not public profile fields.
+
+New passwords are 8–128 characters. `PasswordHasher` uses a random salt and
+PBKDF2-SHA256; MongoDB `web_credentials` or JSON `credentials.json` stores the
+salt/hash separately. CLI and web consult the same Mongo credential collection.
+
+With SMTP bypass disabled, a verification challenge contains a salt, code hash,
+sent/expiry timestamps, attempts, and attempt-window start. Pending web
+enrollment is stored separately in `profile_state`. After email proof, pending
+credentials can be saved and a session issued. `SMTP_BYPASS=true` also enables
+the web bypass and must not be represented as email ownership proof.
+
+Web sessions return a random bearer token while persisting its SHA-256 digest.
+Explicit expiry checks enforce session validity; a TTL index provides cleanup.
+Favorites and history are scoped to the authenticated user's ID. Requests with
+another user's profile ID are rejected.
+
+## Search request contract
+
+BIS serializes this exact ten-field contract for each BRNS search:
+
+```json
+{
+  "origin": {
+    "query": "Tampines",
+    "label": "Tampines, Singapore",
+    "latitude": 1.35,
+    "longitude": 103.94
+  },
+  "mode": "walk",
+  "max_distance_km": null,
+  "max_travel_minutes": 20,
+  "traffic_aware": false,
+  "cuisine": "japanese",
+  "budget_per_person": 20,
+  "other_preferences": [],
+  "dietary_requirements": [],
+  "disliked_cuisines": []
+}
+```
+
+The coordinates above are illustrative input, not a geocoding result. Exactly
+one travel limit is active; transit requires time, and traffic awareness is
+limited to driving-time requests. BRNS revalidates the schema at its IO boundary.
+
+The web HTTP schema adds `location`, `locations`, `liked_cuisines`,
+`confirm_only`, and `confirmation_token`; these transport fields are not extra
+BRNS fields. BIS resolves multiple origins to a midpoint and converts multiple
+cuisines/custom terms into individual validated requests and merge policy.
+Results retain `input_origins`, selected cuisines, and a cuisine breakdown.
+
+Direct web search is the default. `confirm_only=true` persists a proposal with
+a ten-minute expiry and owner-bound token digest; consuming the token selects
+the saved request. Tokens are one-use. Guests use an opaque token with a null
+owner. Chat confirmation updates browser state before a direct form search;
+it does not imply that every search uses a stored proposal token.
+
+## AI and restaurant trust states
+
+```mermaid
+flowchart TB
+  raw["Raw Places record or saved restaurant"]
+  normalized["Candidate with route and opening facts"]
+  context["Logic-prepared prompt with numeric IDs"]
+  reply["Untrusted AI JSON"]
+  schema["AI Manager&#58; schema and ID validation"]
+  verify["BRC evidence when halal requested"]
+  logic["Logic&#58; grounded reasons and domain rules"]
+  data["Data&#58; normalized facts and history summary"]
+  output["BIS IO&#58; result representation"]
+  error["Stop without completed search summary"]
+  raw --> normalized
+  normalized --> context
+  context -->|AI provider| reply
+  reply --> schema
+  schema -->|Valid| verify
+  schema -->|Invalid or unavailable| error
+  verify --> logic
+  logic -->|Evaluated results| data
+  logic -->|Matches, alternatives, exclusions| output
+```
+
+BRNS AI receives Logic-prepared candidate facts, numeric IDs, request limits,
+rating context, and previous result names. Its structured response is:
+
+```json
+{"recommendations": [{"id": 0, "reason_codes": ["within_budget", "within_route"]}]}
+```
+
+Every candidate ID must occur exactly once. Logic grounds reason codes against
+facts; unsupported claims are not displayed as facts. The domain outcome
+policy classifies each candidate, independently of a model's preference.
+
+BRC receives a restaurant object or batch, finds MUIS candidates, and validates
+outlet/certificate identity after an exact match or AI proposal. Official MUIS
+evidence remains separate from Google halal hints. Cached, keyword-derived,
+and exact-match BRC records can skip AI; Compose also disables AI cuisine
+batch building. Chat can use deterministic fallback parsing. No diagram here
+claims that all records or all account operations make live AI calls.
+
+## Persistence ownership
+
+| Store | Data and owner |
 | --- | --- |
-| Rectangle | Person, external provider, or another BiteFinder subsystem |
-| Rounded process | A manager that transforms or validates data |
-| Cylinder | Durable JSON file, cache, or log |
-| `raw` | Untrusted text or provider response |
-| `proposed` | Parsed structure that still requires validation |
-| `validated` | Structure accepted by deterministic application rules |
-| `persisted` | Validated structure written to durable storage |
+| MongoDB `users` | BIS identity and nested preferences |
+| `web_credentials` | BIS salted password hashes shared by CLI/web |
+| `profile_state` | BIS verification, pending authentication, display and search state |
+| `sessions` | Expiring web session digests |
+| `search_proposals` | One-use interpreted-search proposals and token digests |
+| `favorites` | User ID, place key, and bookmarked restaurant payload |
+| `restaurants` | BRNS normalized restaurant facts, keyed by Google place ID |
+| `search_history` | BRNS user-scoped request/result counts and summary metadata |
+| `geocode_cache` | Common normalized query aliases and validated coordinates |
+| `BRC/data/muis_establishments.json` | BRC raw official snapshot |
+| `BRC/data/halal_restaurants.json` | BRC cleaned active outlet database |
+| `BRC/data/cuisine_tags_cache.json` | BRC resumable cuisine tags |
+| `BRC/data/checked_restaurants_cache.json` | BRC accumulated checked outlet records |
+| `BRC/data/checked_restaurant.json`, `checked_restaurants.json` | BRC latest single/batch output |
+| BRC scrape progress and OneMap cache | BRC collection checkpoints and geocodes |
 
-## Level 0: complete project data flow
+Restaurant documents include `google_place_id`, name/address/contact fields,
+Google rating/review count, cuisine/dietary data, price range, weekly hours,
+accessibility, halal status, and coordinates. Later missing values do not
+necessarily erase earlier known values. Current route facts are recomputed for
+the search origin rather than treating saved durations as live routes.
 
-```mermaid
-flowchart LR
-    USER["User"]
-    BIS(["BIS<br/>account, profile, and search input"])
-    BRNS(["BRNS<br/>recommendation and navigation"])
-    BRC(["BRC<br/>official halal checker"])
-    AI["AI providers"]
-    GOOGLE["Google Geocoding, Places, and Routes"]
-    MUIS["MUIS halal directory"]
-    SMTP["SMTP server"]
+### JSON mode, synchronization, and migration
 
-    USERS[("BIS user and state JSON")]
-    GEO[("Shared geocode cache")]
-    RESTAURANTS[("BRNS restaurants JSON")]
-    HISTORY[("BRNS search history JSON")]
-    HALAL[("BRC raw and cleaned halal JSON")]
-    CHECKS[("BRC check caches and outputs")]
-    LOG[("Shared BiteFinder log")]
+The interactive CLI sets Mongo mode by default unless `BITEFINDER_STORAGE` is
+already set. Selecting `json` explicitly uses `BIS/data/users.json`,
+`profile_state.json`, `credentials.json`, configured BRNS restaurant/history
+JSON paths, and `data/geocode_cache.json`. The web runtime requires MongoDB;
+JSON mode is not an automatic outage fallback.
 
-    USER -->|"raw account, preference, command, and search text"| BIS
-    BIS -->|"prompt plus bounded interpretation task"| AI
-    AI -->|"untrusted structured proposal"| BIS
-    BIS -->|"validated account and confirmed preferences"| USERS
-    BIS <-->|"location query and validated coordinates"| GEO
-    BIS -->|"validated in-memory search JSON"| BRNS
+`CliUserFileSync` exists as an optional Data Manager collaborator. Current CLI
+and web composition roots do not inject it, so normal operation does not imply
+automatic two-way JSON/Mongo synchronization. `BRNS/runtime.py` can seed an empty
+restaurant collection if an optional JSON catalog exists and
+`BITEFINDER_AUTO_SEED` is not disabled; the repository does not ship that catalog.
 
-    BRNS -->|"search query, origin, and route constraints"| GOOGLE
-    GOOGLE -->|"untrusted place and route facts"| BRNS
-    BRNS -->|"candidate IDs and normalized facts"| AI
-    AI -->|"untrusted ranking and reason codes"| BRNS
-    BRNS -->|"candidate restaurant objects when halal is required"| BRC
+`common/migrate_to_mongo.py` explicitly validates selected JSON exports. It
+prints counts without connecting by default; writes require `--apply` and an
+exact `--confirm-database` match. It preserves IDs and refuses conflicting
+existing records. It does not migrate arbitrary old web database schemas,
+BRC's authoritative files, or credentials into public user records.
 
-    MUIS -->|"raw official establishment listings"| BRC
-    BRC -->|"uncached establishment names and addresses"| AI
-    AI -->|"untrusted cuisine tags or match proposal"| BRC
-    BRC -->|"raw snapshot and validated official database"| HALAL
-    BRC -->|"validated check result and MUIS evidence"| CHECKS
-    BRC -->|"shape-preserving checked restaurant objects"| BRNS
+## Docker volumes and logs
 
-    BRNS -->|"normalized restaurant facts"| RESTAURANTS
-    BRNS -->|"small validated search summary"| HISTORY
-    BRNS -->|"matches, alternatives, exclusions, and routes"| BIS
-    BIS -->|"formatted results and actions"| USER
-    BIS -->|"verification code or selected Maps link"| SMTP
+- `mongo-data` stores the Mongo database under `/data/db`.
+- `api` and `bis-brns` share `application-data`; Dockerfile symlinks map their
+  BIS/BRNS scratch files and `/app/logs` into `/data`.
+- `brc-data` maps BRC `/data`, including MUIS data and BRC's own logs.
+- `logs/bitefinder.log` is a common relative path, not one file shared across
+  every container. Trace IDs propagated over HTTP correlate separate logs.
+- Frontend assets are copied into the nginx image; source edits need a rebuild.
 
-    BIS -->|"stage, count, outcome, and trace ID"| LOG
-    BRNS -->|"stage, count, outcome, and trace ID"| LOG
-    BRC -->|"stage, count, outcome, and trace ID"| LOG
-```
-
-The AI providers never receive authority to write files directly. Their output
-returns to the calling AI manager, then passes through schema checks, business
-logic, and sometimes user confirmation before a data manager can persist it.
-
-## Level 1: BIS account and profile data
-
-```mermaid
-flowchart TD
-    U1["Raw signup input<br/>email and username"] --> IO1(["BIS IO Manager<br/>collect input"])
-    IO1 --> L1(["BIS Logic and schema<br/>normalize and validate"])
-    L1 -->|"invalid"| IO1
-    L1 -->|"normalized account candidate"| D1(["BIS Data Manager<br/>assign userID"])
-    D1 --> USERS[("BIS/data/users.json")]
-
-    D1 --> CHALLENGE(["Email verification service<br/>create salted code hash"])
-    CHALLENGE --> SMTP["SMTP provider<br/>six-digit code"]
-    SMTP --> U2["User inbox"]
-    U2 -->|"raw six-digit answer"| CHALLENGE
-    CHALLENGE -->|"attempt, resend, expiry, and verification state"| STATE[("BIS/data/profile_state.json")]
-    CHALLENGE -->|"verified account flag"| D1
-
-    U3["Raw profile answer"] --> IO2(["BIS IO Manager<br/>identify profile field"])
-    IO2 --> DECIDE{"Free text interpretation needed?"}
-    DECIDE -->|"No"| L2(["BIS Logic<br/>validate typed value"])
-    DECIDE -->|"Yes"| PROMPT["AI payload<br/>task, allowed schema, raw answer, current profile"]
-    PROMPT --> AIP["BIS AI provider"]
-    AIP -->|"untrusted JSON text"| PARSE(["BIS AI Manager<br/>parse and validate envelope"])
-    PARSE -->|"invalid"| IO2
-    PARSE -->|"proposed correction or structured value"| CONFIRM{"User confirms proposal?"}
-    CONFIRM -->|"No"| IO2
-    CONFIRM -->|"Yes"| L2
-    L2 -->|"invalid or conflicting"| IO2
-    L2 -->|"validated profile update"| D2(["BIS Data Manager<br/>merge with account"])
-    D2 --> USERS
-```
-
-### Profile state transformation
-
-| Stage | Example | State |
-| --- | --- | --- |
-| User input | `wesaten italian` | Raw text; not saved |
-| AI request | Task, supported cuisine list, current values, and raw text | Bounded interpretation payload |
-| AI response | `{"cuisines":["Western","Italian"]}` | Proposed and untrusted |
-| User confirmation | User accepts corrected cuisines | Confirmed proposal |
-| Logic result | Unique supported cuisines with liked/disliked conflicts removed | Validated profile value |
-| Data write | Value merged into the account keyed by `userID` | Persisted in `BIS/data/users.json` |
-
-Simple values still pass through validation even when no AI call is needed.
-Declined corrections and invalid provider responses are not persisted.
-
-## Level 1: search request and AI payloads
-
-```mermaid
-flowchart TD
-    RAW["Raw search answers<br/>location, mode, limit, cuisine, budget, special request"]
-    RAW --> SIO(["BIS IO Manager<br/>collect and confirm choices"])
-
-    SIO -->|"address, postal code, or landmark"| CACHE{"Shared geocode cache hit?"}
-    CACHE -->|"Yes"| POINT["Validated Singapore origin<br/>label, latitude, longitude"]
-    CACHE -->|"No"| GEOCODE["Google Geocoding response"]
-    GEOCODE --> GVALID(["BIS validation<br/>parse and require Singapore coordinates"])
-    GVALID --> POINT
-    GVALID -->|"successful aliases and point"| GEO[("data/geocode_cache.json")]
-
-    SIO --> TEXT["Special request text"]
-    TEXT --> WPAYLOAD["BIS AI wording payload<br/>raw text plus saved requests"]
-    WPAYLOAD --> WAI["BIS AI provider"]
-    WAI -->|"untrusted corrected text and equivalence proposal"| WVALID(["BIS AI parser and Logic validation"])
-    WVALID --> WCONFIRM{"User confirms wording and hard constraints?"}
-    WCONFIRM -->|"No"| SIO
-    WCONFIRM -->|"Yes"| CONFIRMED["Confirmed search choices"]
-    POINT --> CONFIRMED
-
-    CONFIRMED --> IPAYLOAD["BIS AI search payload<br/>confirmed fields plus required output schema"]
-    IPAYLOAD --> IAI["BIS AI provider"]
-    IAI -->|"untrusted search proposal JSON"| IPARSE(["BIS AI Manager<br/>parse, type-check, and validate schema"])
-    IPARSE --> ILOGIC(["BIS Logic Manager<br/>protect every confirmed value"])
-    ILOGIC -->|"conflict or missing value"| SIO
-    ILOGIC -->|"validated request dictionary"| SERIALIZE(["BIS Data Manager<br/>serialize compact JSON"])
-    SERIALIZE --> REQUEST["In-memory BIS to BRNS request"]
-```
-
-The BIS-to-BRNS request is a transient JSON message rather than a BIS profile
-file. It contains the confirmed origin, travel mode and limit, traffic setting,
-cuisine, budget, dietary requirements, disliked cuisines, and other
-preferences. BRNS validates the complete message again at its IO boundary.
-
-## Level 2: BRNS recommendation data
-
-```mermaid
-flowchart TD
-    REQ["Validated BIS search JSON"] --> RIO(["BRNS IO Manager<br/>validate exact keys, types, and ranges"])
-    RIO --> SOURCE{"Restaurant source"}
-
-    SOURCE -->|"Live"| QUERY["Google Places query<br/>origin, radius, cuisine, and request text"]
-    QUERY --> GOOGLE["Raw Google place records"]
-    GOOGLE --> NORMAL(["BRNS IO Manager<br/>normalize candidate facts"])
-    NORMAL --> ROUTE["Google Routes matrix<br/>origin, candidate points, and travel mode"]
-    ROUTE --> CANDIDATES["Normalized in-memory candidates<br/>facts plus current route values"]
-
-    SOURCE -->|"Offline fallback"| RFILE[("BRNS/data/restaurants.json")]
-    RFILE --> NORMAL_OFFLINE(["BRNS IO Manager<br/>validate saved fact records"])
-    NORMAL_OFFLINE --> CANDIDATES
-
-    CANDIDATES --> RPAYLOAD["BRNS AI payload<br/>request, candidate IDs, normalized facts, prior result names"]
-    RPAYLOAD --> RAI["BRNS AI provider"]
-    RAI -->|"untrusted ordered IDs and reason codes"| RPARSE(["BRNS AI Manager<br/>parse and validate envelope"])
-    RPARSE -->|"every ID exactly once"| JOIN(["Join ranking back to original candidate facts"])
-    RPARSE -->|"missing, duplicate, or unknown ID"| STOP["Stop without completed search storage"]
-
-    JOIN --> HALAL{"Halal requested?"}
-    HALAL -->|"Yes"| BRC["BRC checked restaurant objects"]
-    HALAL -->|"No"| RULES(["BRNS Logic Manager"])
-    BRC --> RULES
-
-    RULES -->|"facts satisfy requirements"| MATCH["Validated matches"]
-    RULES -->|"useful but misses or relaxes a condition"| ALT["Validated alternatives and cautions"]
-    RULES -->|"closed, disliked, unsupported, or hard mismatch"| EXCLUDED["Exclusion counts and reasons"]
-
-    MATCH --> RESULT["Validated result dictionary"]
-    ALT --> RESULT
-    EXCLUDED --> RESULT
-    CANDIDATES --> SAVE_FACTS(["BRNS Data Manager<br/>upsert normalized facts by Google place ID"])
-    SAVE_FACTS --> RFILE
-    RESULT --> SAVE_HISTORY(["BRNS Data Manager<br/>retain small approved summary"])
-    SAVE_HISTORY --> HISTORY[("BRNS/data/search_history.json")]
-    RESULT --> BIS["BIS result menu and user display"]
-```
-
-BRNS sends candidate facts to the model with small numeric identifiers. The
-model returns ordering and controlled reason codes, not replacement restaurant
-facts. BRNS joins the IDs back to the original candidates and checks each reason
-against the factual record before displaying it.
-
-### Restaurant fact transformation
-
-| Stage | Data form | Storage effect |
-| --- | --- | --- |
-| Google response | Provider-specific place, rating, review, price, hours, and accessibility fields | None; untrusted |
-| Normalized candidate | Stable internal keys, parsed numbers, coordinates, cuisines, dietary hints, and routes | In memory |
-| AI ranking | Candidate IDs in order plus controlled reason codes | In memory; untrusted until validated |
-| Logic result | Match, alternative, or exclusion with grounded reasons | In memory; validated |
-| Restaurant upsert | Public fact fields keyed by `google_place_id`; earlier known values retained when a later response omits them | `BRNS/data/restaurants.json` |
-| Search summary | Source, origin coordinates, travel mode, cuisine, and top IDs or names | `BRNS/data/search_history.json` |
-
-Raw Google responses, raw prompts, and raw AI responses are not copied into the
-restaurant or search-history files.
-
-## Level 2: BRC database and verification data
-
-```mermaid
-flowchart TD
-    MUIS["MUIS directory API<br/>raw establishment pages"] --> SCRAPE(["BRC scraper<br/>normalize listings and prove prefix coverage"])
-    SCRAPE --> RAW[("BRC/data/muis_establishments.json<br/>raw snapshot plus completeness metadata")]
-    SCRAPE --> PROGRESS[("BRC/data/scrape_progress.json")]
-    SCRAPE --> ONEMAP["OneMap geocoding"]
-    ONEMAP --> OCACHE[("BRC/data/onemap_cache.json")]
-
-    RAW --> BIO(["BRC IO Manager<br/>validate complete raw snapshot"])
-    BIO --> CCACHE[("BRC/data/cuisine_tags_cache.json")]
-    BIO --> CPAYLOAD["BRC AI payload<br/>only uncached names and addresses"]
-    CPAYLOAD --> CAI["Gemini cuisine tagging"]
-    CAI -->|"untrusted cuisine JSON"| CVALID(["BRC AI validation"])
-    CVALID -->|"validated completed batches"| CCACHE
-    CVALID --> CLEAN(["BRC Logic Manager<br/>remove invalid, expired, duplicate, and non-eating records"])
-    CLEAN --> HALALDB[("BRC/data/halal_restaurants.json<br/>clean official halal database")]
-
-    INPUT["One restaurant object or shape-preserving array from BRNS"] --> CHECKIO(["BRC IO Manager<br/>validate records and query likely MUIS candidates"])
-    HALALDB --> CHECKIO
-    CHECKIO --> EXACT{"One deterministic outlet match?"}
-    EXACT -->|"Yes"| VERIFY(["BRC Logic<br/>verify postal, name, address, unit, and certificate validity"])
-    EXACT -->|"Ambiguous"| MPAYLOAD["BRC AI match payload<br/>restaurant and bounded MUIS candidates"]
-    MPAYLOAD --> MAI["Gemini outlet proposal"]
-    MAI -->|"untrusted candidate ID or null"| MVALID(["BRC AI schema validation"])
-    MVALID --> VERIFY
-    EXACT -->|"No candidate"| NOTVERIFIED["Validated not_verified result"]
-    VERIFY -->|"all deterministic checks pass"| VERIFIED["Official certification plus MUIS evidence"]
-    VERIFY -->|"check fails"| NOTVERIFIED
-    VERIFIED --> OUTPUT["Shape-preserving checked restaurant JSON"]
-    NOTVERIFIED --> OUTPUT
-    OUTPUT --> CHECKCACHE[("BRC/data/checked_restaurants_cache.json")]
-    OUTPUT --> LAST[("BRC/data/checked_restaurant.json<br/>or checked_restaurants.json")]
-    OUTPUT --> BRNS["Return checked object or array to BRNS"]
-```
-
-Cuisine AI work is checkpointed after completed batches. If a provider quota
-is exhausted, the next database build loads the saved tags and submits only
-remaining records. An AI outlet match is only a proposal; deterministic BRC
-Logic must verify the exact outlet before certification becomes `official`.
-
-## Durable data stores
-
-| Store | Writer | Stored state | Primary reader |
-| --- | --- | --- | --- |
-| `BIS/data/users.json` | BIS Data | Accounts, verification flag, and saved profile preferences | BIS |
-| `BIS/data/profile_state.json` | BIS Data and email verification service | Verification challenge, display preference, and other per-user session state | BIS |
-| `data/geocode_cache.json` | Shared geocode cache | Normalized query aliases mapped to validated coordinates | BIS and BRNS |
-| `BRNS/data/restaurants.json` | BRNS Data | Normalized restaurant facts and offline fallback records | BRNS |
-| `BRNS/data/search_history.json` | BRNS Data | Approved compact search summaries | BRNS repeat/history logic |
-| `BRC/data/muis_establishments.json` | BRC scraper/Data | Raw normalized MUIS snapshot and completeness proof | BRC database build |
-| `BRC/data/halal_restaurants.json` | BRC Data | Clean deduplicated official halal establishments | BRC checker |
-| `BRC/data/cuisine_tags_cache.json` | BRC Data | Completed cuisine tags keyed by stable establishment identity | BRC AI/database build |
-| `BRC/data/checked_restaurants_cache.json` | BRC Data | Reusable outlet verification outcomes | BRC checker |
-| `BRC/data/checked_restaurant.json` | BRC Data | Most recent single checked object | Developer or integration consumer |
-| `BRC/data/checked_restaurants.json` | BRC Data | Most recent checked array | Developer or integration consumer |
-| `BRC/data/scrape_progress.json` | BRC scraper/Data | Completed and pending postal-prefix work | BRC scraper resume |
-| `BRC/data/onemap_cache.json` | BRC scraper/Data | MUIS outlet geocoding results | BRC scraper |
-| `logs/bitefinder.log` | Shared logger | Timestamp, severity, trace ID, event, and concise outcome | Developers and operators |
-
-Application JSON writes use their owning data boundary. Critical account, BRC,
-and shared-cache writes use temporary files and atomic replacement so a failed
-write retains the previous valid file where supported.
-
-## Data that remains transient
-
-The following data is used in memory and is not intentionally stored as a
-complete durable record:
-
-- plaintext SMTP verification codes;
-- raw AI prompts and raw provider response bodies;
-- API keys and SMTP passwords;
-- the complete serialized BIS-to-BRNS request;
-- complete Google Places and Routes response bodies;
-- rejected AI proposals;
-- full user conversations; and
-- route results that have not been selected for display.
-
-The shared log stores operational stages, counts, error types, and trace IDs.
-It must not contain credentials, verification codes, complete provider bodies,
-email addresses, or full private user input.
-
-## Failure-state data flow
-
-```mermaid
-flowchart LR
-    INPUT["Raw input or provider response"] --> VALIDATE(["Schema and deterministic validation"])
-    VALIDATE -->|"valid"| NEXT["Next manager or approved storage"]
-    VALIDATE -->|"invalid"| ERROR["Concise user-facing error"]
-    VALIDATE -->|"invalid"| EVENT["Sanitized event, error type, and trace ID"]
-    EVENT --> LOG[("logs/bitefinder.log")]
-    ERROR --> RETRY["Retry the current prompt or return to command loop"]
-```
-
-Invalid or incomplete data does not advance to the next trust state. A failed
-BIS AI proposal does not call BRNS. Invalid BRNS ranking does not create a
-completed search summary. An unverified BRC proposal does not grant official
-halal status. Existing valid files remain the fallback when an atomic update
-cannot be completed.
-
+Normal `docker compose --profile "*" down` preserves named volumes. Adding
+`-v` deletes their saved records. Browser local storage holds the bearer token,
+recent-query state, and UI preferences; it is not the authoritative Mongo store.

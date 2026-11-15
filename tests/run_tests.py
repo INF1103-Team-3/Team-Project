@@ -20,6 +20,11 @@ BLACKBOX_TESTS = (
     TESTS_DIR / "blackbox" / "test_blackbox_bis_to_brns.py",
 )
 INTEGRATION_TEST = TESTS_DIR / "integration" / "test_bis_brns_integration.py"
+OOP_TEST = TESTS_DIR / "oop" / "test_oop_refactor.py"
+LAUNCHER_TEST = TESTS_DIR / "launcher" / "test_launcher.py"
+WEB_TEST = TESTS_DIR / "web" / "test_web_api.py"
+STORAGE_TEST = TESTS_DIR / "web" / "test_storage_contracts.py"
+LIVE_MONGO_TEST = TESTS_DIR / "web" / "test_mongo_live.py"
 DEPLOYMENT_TEST = TESTS_DIR / "deployment" / "smoke.py"
 API_AI_TEST = TESTS_DIR / "API" / "test_ai_keys_and_fallback.py"
 API_GOOGLE_TEST = TESTS_DIR / "API" / "test_google_api.py"
@@ -37,7 +42,13 @@ TEST_GROUPS = {
         BIS_TEST,
         BRNS_TEST,
         BRC_TEST,
+        OOP_TEST,
+        LAUNCHER_TEST,
     ),
+
+    "oop": (OOP_TEST,),
+    "launcher": (LAUNCHER_TEST,),
+    "web": (WEB_TEST, STORAGE_TEST, LIVE_MONGO_TEST),
 
     "blackbox": BLACKBOX_TESTS,
 
@@ -53,11 +64,15 @@ TEST_GROUPS = {
         BRC_TEST,
         *BLACKBOX_TESTS,
         INTEGRATION_TEST,
+        OOP_TEST,
+        LAUNCHER_TEST,
         DEPLOYMENT_TEST,
     ),
 }
 
 GROUP_DESCRIPTIONS = {
+    "web": "Offline web/Mongo contracts; optional isolated live-Mongo checks when MONGO_TEST_URI is set.",
+    "launcher": "Menu and startup tests without launching Docker or a browser.",
     "bis": (
         "Tests BIS input validation, preference handling, search preparation "
         "and hardcoded AI interpretation."
@@ -81,6 +96,10 @@ GROUP_DESCRIPTIONS = {
         "Verifies the structured BIS to BRNS request boundary and shared "
         "business rules."
     ),
+    "oop": (
+        "Tests live BIS/BRNS classes, contracts, AI provider fallback, "
+        "inheritance, polymorphic sorting and temporary JSON persistence."
+    ),
     "deployment": (
         "Checks that BiteFinder and its automated tests work inside the "
         "submitted Docker environment."
@@ -102,6 +121,7 @@ def safe_test_environment(use_brc_service=False, is_api_test=False):
     environment["PYTHONPATH"] = os.pathsep.join(paths)
 
     if not is_api_test:
+        environment["BITEFINDER_STORAGE"] = "json"
         for key in (
             "GEMINI_API_KEY",
             "GROQ_API_KEY",
@@ -109,6 +129,7 @@ def safe_test_environment(use_brc_service=False, is_api_test=False):
             "OPENROUTER_API_KEYS",
             "OPENROUTER_API_KEYS_FILE",
             "GOOGLE_MAPS_API_KEY",
+            "GOOGLE_MAPS_JS_API_KEY",
         ):
             environment.pop(key, None)
     if not use_brc_service:
@@ -196,7 +217,7 @@ def show_usage():
     print(style("BiteFinder automated test runner", "heading"))
     print("\nUsage:")
     for group in ("bis", "brns", "core", "blackbox", "integration",
-                  "deployment", "all"):
+                  "deployment", "web", "launcher", "all"):
         print(style(f"  python tests/run_tests.py {group}", "command"))
     print("\nWith no group, the runner uses core.")
     print("Set BITEFINDER_TEST_COLOR=always or never to override color detection.")

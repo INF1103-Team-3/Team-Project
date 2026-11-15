@@ -11,9 +11,16 @@ from pathlib import Path
 
 import requests
 
+from BIS.classes.ai.fallback.ai_provider_router import AIProviderRouter
+from BIS.classes.ai.fallback.ai_provider_factory_registry import AIProviderFactoryRegistry
+from BIS.classes.ai.ai_manager import AIManager
+from BIS.classes.ai.providers.clients.gemini_ai_provider import GeminiAIProvider
+from BIS.classes.ai.providers.clients.groq_ai_provider import GroqAIProvider
+from BIS.classes.ai.providers.clients.openrouter_ai_provider import OpenRouterAIProvider
+
 from sources.prompts import INTENTS, SYSTEM_PROMPT
 
-from shared.debug_log import debug_log
+from common.debug_log import debug_log
 from sources.profile_schema import PREFERENCE_FIELDS, validate_updates
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -27,23 +34,41 @@ GROQ_URL = os.getenv(
 )
 
 # BIS owns this fallback order. Keep it independent of BRNS's model chain.
+# Groq responds in ~1-2s; place discovered Groq models ahead of slower/broken
+# secondary providers just like BRNS/BRC while keeping Gemini Flash Lite first.
 MODEL_CHAIN = [
     {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
-    {"provider": "gemini", "model": "gemini-3.6-flash"},
-    {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
 ]
+_MANAGER = None
+
+
+def manager():
+    """Return the configured BIS AI Manager."""
+    global _MANAGER
+    if _MANAGER is None:
+        from BIS import logic_manager
+        _MANAGER = AIManager(
+            _call_json_with_fallback,
+            build_prompt,
+            validate_response,
+            logic_manager.validate_search_request,
+        )
+    return _MANAGER
 
 
 def _extend_bis_chain_with_groq():
-    """Fetch Groq chat models at startup and append them to MODEL_CHAIN."""
+    """Fetch Groq chat models at startup and register them ahead of slow fallbacks."""
     from dotenv import load_dotenv
     load_dotenv(BASE_DIR.parent / ".env")
     api_key = os.getenv("GROQ_API_KEY", "").strip()
-    if not api_key:
-        return
-    from shared.groq_models import fetch_chat_models
-    for model_id in fetch_chat_models(api_key):
-        MODEL_CHAIN.append({"provider": "groq", "model": model_id})
+    if api_key:
+        from common.groq_models import fetch_chat_models
+        for model_id in fetch_chat_models(api_key):
+            MODEL_CHAIN.append({"provider": "groq", "model": model_id})
+    MODEL_CHAIN.extend([
+        {"provider": "gemini", "model": "gemini-3.6-flash"},
+        {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
+    ])
 
 
 _extend_bis_chain_with_groq()
@@ -258,60 +283,61 @@ def _parse_json_response(content):
     return parsed
 
 
-def _call_json_with_fallback(payload, config, validator=None):
+def _call_json_with_fallback(payload, config, validator=None, skip_primary=False):
     """Try the BIS primary model, then BIS's own fallback chain for JSON."""
-    errors = []
-    if config.get("openrouter_model"):
-        try:
-            parsed = _parse_json_response(_call_openrouter(payload, config))
-            return validator(parsed) if validator else parsed
-        except (RuntimeError, ValueError, TypeError, AttributeError) as error:
-            errors.append(type(error).__name__)
-            debug_log("Primary BIS model failed; trying model chain.",
-                      "WARNING", "BIS.ai.fallback")
+    providers = []
+    primary_model = config.get("openrouter_model")
+    has_openrouter_key = bool(
+        config.get("openrouter_api_keys")
+        or config.get("openrouter_api_key")
+    )
+    if primary_model and not skip_primary:
+        providers.append(OpenRouterAIProvider(
+            primary_model,
+            lambda request, settings: _call_openrouter(request, settings),
+            primary=True,
+            include_model=False,
+        ))
+    registry = AIProviderFactoryRegistry()
+    registry.register(
+        "gemini",
+        lambda model: GeminiAIProvider(
+            model,
+            lambda request, settings, selected=model: _call_gemini(
+                request, selected, settings),
+        ),
+        enabled=lambda settings: bool(settings.get("gemini_api_key")),
+    )
+    registry.register(
+        "openrouter",
+        lambda model: OpenRouterAIProvider(
+            model,
+            lambda request, settings: _call_openrouter(request, settings),
+        ),
+        enabled=lambda _settings: has_openrouter_key,
+    )
+    registry.register(
+        "groq",
+        lambda model: GroqAIProvider(
+            model,
+            lambda request, settings, selected=model: _call_groq(
+                request, selected, settings),
+        ),
+        enabled=lambda settings: bool(settings.get("groq_api_key")),
+    )
     for entry in MODEL_CHAIN:
         provider, model = entry.get("provider"), entry.get("model")
         if not model or any(char in model for char in "<> "):
             continue
         if (provider == "openrouter"
-                and model == config.get("openrouter_model")
-                and (config.get("openrouter_api_keys")
-                     or config.get("openrouter_api_key"))):
+                and model == primary_model and has_openrouter_key):
             continue
-        if provider == "groq" and not config.get("groq_api_key"):
-            continue
-        if provider == "gemini" and not config.get("gemini_api_key"):
-            continue
-        if provider == "openrouter" and not (
-                config.get("openrouter_api_keys")
-                or config.get("openrouter_api_key")):
-            continue
-        try:
-            if provider == "gemini":
-                content = _call_gemini(payload, model, config)
-            elif provider == "openrouter":
-                content = _call_openrouter(dict(payload, model=model), config)
-            elif provider == "groq":
-                content = _call_groq(payload, model, config)
-            else:
-                continue
-        except RuntimeError:
-            errors.append(f"{provider}/{model}")
-            debug_log(f"Fallback model {provider}/{model} failed.",
-                      "WARNING", "BIS.ai.fallback")
-            continue
-        try:
-            parsed = _parse_json_response(content)
-            parsed = validator(parsed) if validator else parsed
-        except (RuntimeError, ValueError, TypeError, AttributeError):
-            errors.append(f"{provider}/{model} invalid response")
-            continue
-        debug_log(f"Fallback model {provider}/{model} responded.",
-                  "INFO", "BIS.ai.fallback")
-        return parsed
-    raise RuntimeError(
-        "BIS AI models are unavailable. Please retry."
-        if errors else "Configure a BIS AI model before continuing.")
+        configured = registry.create(provider, model, config)
+        if configured is not None:
+            providers.append(configured)
+    return AIProviderRouter(
+        providers, _parse_json_response, debug_log,
+    ).route(payload, config, validator)
 
 
 def has_fallback_provider(config):
@@ -384,22 +410,7 @@ def parse_response(raw):
 
 def process(record, config):
     """Stable temporary interface for the forthcoming team AI Manager."""
-    if config.get("ai_bypass"):
-        raise RuntimeError("AI is disabled for local testing.")
-    from sources.profile_schema import clean_text, validate_preferences
-
-    context = {
-        "current_profile": validate_preferences(record["preferences"]),
-        "current_field": record["field"],
-        "user_message": clean_text(record["text"], 1000),
-    }
-    if context["current_field"] not in PREFERENCE_FIELDS + (None,):
-        raise ValueError("Invalid question field.")
-    payload = {
-        "model": config["openrouter_model"], "messages": build_prompt(context),
-        "temperature": 0, "max_tokens": 700,
-    }
-    return _call_json_with_fallback(payload, config, validate_response)
+    return manager().process(record, config)
 
 
 def interpret_command(text, config):
@@ -792,46 +803,148 @@ def classify_search_constraints(text, config):
 
 def interpret_search_request(request, today_request, config):
     """Propose a structured search from today's natural-language request."""
+    return manager().interpret_search_request(
+        request, today_request, config)
+
+
+def interpret_chat_turn(message, current_filters, history, saved_profile, config):
+    """Interpret one web chatbot turn into structured intent and filter deltas."""
     if config.get("ai_bypass"):
         raise RuntimeError("AI is disabled for local testing.")
+    from sources.profile_schema import CUISINES, clean_text
+
+    supported_cuisines = list(CUISINES)
+    system_prompt = (
+        "You are BiteFinder's Singapore restaurant search chatbot assistant. "
+        "Understand the user's message in context of current_filters, recent_history, "
+        "and saved_profile, and return ONLY JSON with these exact top-level keys: "
+        "intent, reply, updates, quick_replies. "
+        "intent must be one of: search, clarify, update_filters, save_profile, "
+        "show_profile, reset, help. "
+        "Use intent='search' whenever the user describes food cravings, locations, "
+        "or refines/removes filters (budget, cuisine, dietary, travel mode/time, rating) AND "
+        "either specifies a location now or current_filters/saved_profile already has one. "
+        "Use intent='clarify' when search needs a starting location and neither "
+        "the message, current_filters, nor saved_profile provides one, OR when the user asks "
+        "to edit/change a specific category without giving a new value (e.g. 'change dietary', "
+        "'edit budget', 'change location'), OR when the message is ambiguous chitchat. "
+        "CRITICAL NEGATION RULES: "
+        "If the user says 'i dont want halal', 'remove halal', 'no halal', 'non-halal', 'without halal', "
+        "or 'cancel halal', you MUST set dietary_requirements=['halal'] and dietary_action='remove' (NEVER 'add'). "
+        "Same for vegetarian ('remove vegetarian' -> dietary_requirements=['vegetarian'], dietary_action='remove'). "
+        "If they say 'no dietary', 'no dietary limits', 'clear dietary', set dietary_action='clear'. "
+        "If they say 'remove X' where X is already in current_filters.liked_cuisines, set liked_cuisines=[X] and liked_action='remove'. "
+        "If they say 'avoid X', 'dislike X', 'no X cuisine', 'don't like X', set disliked_cuisines=[X] and disliked_action='add'. "
+        "If they say 'clear dislikes', 'allow all cuisines', set disliked_action='clear'. "
+        "Use intent='save_profile' when the user asks to save current preferences as defaults. "
+        "Use intent='show_profile' when the user asks to view their saved profile/settings. "
+        "Use intent='reset' when the user asks to reset/clear chat filters or restart. "
+        "Use intent='help' when the user asks how the bot works or types /help. "
+        "reply must be a concise, friendly 1-2 sentence response in plain text. "
+        "updates is an object using ONLY these keys (omit or set null if unchanged): "
+        "locations (list of Singapore place strings or 6-digit postal codes; "
+        "if 'meet in the middle between X and Y', list ['X', 'Y']; "
+        "if 'add another location, marina bay', 'add second location, marina bay', or 'add locations, marina bay, sentosa', "
+        "strip helper words like 'another location'/'second location'/'locations'/'etc' and return ONLY the place names e.g. ['marina bay'] or ['marina bay', 'sentosa'] with locations_action='add'), "
+        "locations_action ('replace', 'add', 'remove', 'clear'), "
+        "mode ('walk', 'drive', 'transit' — map MRT/bus/train/public transport to 'transit'), "
+        "traffic_aware (boolean), "
+        "max_travel_minutes (number: 1-90 walk, 1-120 drive, 1-150 transit), "
+        "max_distance_km (number: 0.1-15 walk, 0.1-50 drive/transit), "
+        "budget_per_person (number 1-1000 SGD; use 1000 for '$100+', '100+', 'over $100', 'above $100', or 'fine dining'; use 50 for 'casual dining'), "
+        "dietary_requirements (subset of ['halal', 'vegetarian']), "
+        "dietary_action ('replace', 'add', 'remove', 'clear'), "
+        "liked_cuisines (list of lowercase cuisines; prefer values from "
+        + json.dumps(supported_cuisines)
+        + ", or short custom cuisine names like 'mexican'/'ramen'/'dim sum'/'seafood'), "
+        "liked_action ('replace', 'add', 'remove', 'clear'), "
+        "disliked_cuisines (list of lowercase cuisines from "
+        + json.dumps(supported_cuisines)
+        + " or custom cuisine names like 'seafood'/'fast food'/'mexican'), "
+        "disliked_action ('replace', 'add', 'remove', 'clear'), "
+        "other_preferences (list of short constraint/preference strings like "
+        "'at least 4.5 stars', 'spicy food', 'quiet', 'open 24 hours', 'only japanese cuisine'; "
+        "MUST be proper meaningful English words plus common Singapore food terms — NEVER translate "
+        "non-English wishes or accept gibberish/random letters/numbers-only/symbols-only into "
+        "other_preferences; if the user enters non-English text or gibberish for special wishes, "
+        "set intent='clarify', omit other_preferences, and politely ask for proper English wishes), "
+        "other_action ('replace', 'add', 'remove', 'clear'). "
+        "Preserve unmentioned filters (only specify keys the user wants to set, add, remove, or change). "
+        "quick_replies is a list of 2-4 short clickable follow-up prompts (max 40 chars each)."
+    )
+    user_payload = {
+        "message": clean_text(str(message or ""), 1000),
+        "current_filters": current_filters or {},
+        "recent_history": (history or [])[-6:],
+        "saved_profile": saved_profile or {},
+    }
     payload = {
-        "model": config["openrouter_model"],
+        "model": config.get("openrouter_model", ""),
         "messages": [
-            {"role": "system", "content": (
-                "Interpret today's restaurant wish into one JSON search "
-                "request with exactly these keys: origin, mode, "
-                "max_distance_km, max_travel_minutes, traffic_aware, cuisine, "
-                "budget_per_person, "
-                "other_preferences, dietary_requirements, "
-                "disliked_cuisines. Copy origin, mode, distance, journey "
-                "time, traffic_aware, budget, "
-                "dietary requirements, disliked cuisines, and selected cuisine "
-                "exactly from confirmed_choices. Preserve every selected "
-                "other preference. Do not duplicate a selected preference "
-                "with equivalent wording. Add to other_preferences only "
-                "wishes explicitly stated in today_request; use short strings. "
-                "Preserve any stated minimum Google star rating exactly as a "
-                "numeric star threshold (for example, 'minimum 4.5 stars'). "
-                "Other preferences are the strongest part of the search. "
-                "Preserve words such as only, must, minimum, and at least "
-                "because they mark hard constraints. A bare star rating "
-                "without minimum wording remains a soft preference. "
-                "If today_request conflicts with a confirmed choice, reflect "
-                "the conflicting choice so the next layer can ask the user. "
-                "Do not invent locations, restrictions, or restaurant facts. "
-                "Return JSON only."
-            )},
-            {"role": "user", "content": json.dumps(
-                {"confirmed_choices": request,
-                 "today_request": today_request},
-                ensure_ascii=False)},
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
         ],
         "temperature": 0,
-        "max_tokens": 700,
+        "max_tokens": 550,
     }
-    def check_search_schema(parsed):
-        import logic_manager
-        logic_manager.validate_search_request(parsed)
+    allowed_intents = {
+        "search", "clarify", "update_filters", "save_profile",
+        "show_profile", "reset", "help",
+    }
+
+    def check(parsed):
+        required = {"intent", "reply", "updates", "quick_replies"}
+        if not isinstance(parsed, dict) or not required.issubset(parsed):
+            raise ValueError("Missing chatbot response fields.")
+        if parsed["intent"] not in allowed_intents:
+            raise ValueError("Unsupported chatbot intent.")
+        if not isinstance(parsed["reply"], str) or not parsed["reply"].strip():
+            raise ValueError("Empty chatbot reply.")
+        if not isinstance(parsed["updates"], dict):
+            raise ValueError("Chatbot updates must be an object.")
+        if not isinstance(parsed["quick_replies"], list):
+            parsed["quick_replies"] = []
         return parsed
 
-    return _call_json_with_fallback(payload, config, check_search_schema)
+    has_fast = bool(config.get("groq_api_key") or config.get("gemini_api_key"))
+    return _call_json_with_fallback(payload, config, check, skip_primary=has_fast)
+
+
+def review_profile_wishes(wishes, config):
+    """Verify saved default special wishes are proper, meaningful English phrases."""
+    items = [str(w or "").strip() for w in (wishes or []) if str(w or "").strip()]
+    if not items or config.get("ai_bypass"):
+        return items
+    payload = {
+        "model": config.get("openrouter_model", ""),
+        "messages": [
+            {"role": "system", "content": (
+                "Validate each item in a user's saved default restaurant special wishes. "
+                "Every item must be a meaningful restaurant, dining, or Google rating preference written in English "
+                "(standard English words, rating filters such as 'minimum 4.5 stars', 'at least 4 stars', "
+                "'4.5+ stars', or '4.5/5', plus common Singapore dish terms like chicken rice, laksa, "
+                "dim sum, mala, halal, wifi). Reject gibberish, random letters, nonsense, or "
+                "non-English sentences/phrases (such as Malay, Chinese, French, Spanish). "
+                "Return JSON only with keys: valid (boolean), reason (string explaining what "
+                "to fix when valid is false, empty string when true)."
+            )},
+            {"role": "user", "content": json.dumps({"wishes": items}, ensure_ascii=False)},
+        ],
+        "temperature": 0,
+        "max_tokens": 120,
+    }
+
+    def check(parsed):
+        if not isinstance(parsed, dict) or not isinstance(parsed.get("valid"), bool):
+            raise ValueError("Invalid special wishes validation response.")
+        reason = str(parsed.get("reason") or "").strip()
+        return {"valid": parsed["valid"], "reason": reason}
+
+    has_fast = bool(config.get("groq_api_key") or config.get("gemini_api_key"))
+    result = _call_json_with_fallback(payload, config, check, skip_primary=has_fast)
+    if not result["valid"]:
+        raise ValueError(
+            result["reason"]
+            or "Default special wishes must be proper, meaningful English preferences."
+        )
+    return items

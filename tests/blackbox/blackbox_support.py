@@ -26,6 +26,8 @@ PLACE_NAMES = (
     "Far Cafe",
 )
 
+TEST_PASSWORD = "password123"
+
 
 def search_request(**changes):
     """Return one valid BIS-to-BRNS request."""
@@ -935,21 +937,29 @@ def create_blackbox_context():
         "BIS",
         "BRNS",
         "BRC",
-        "shared",
+        "common",
     ):
+        source_dir = ROOT / folder
+
+        def _ignore_copy_entries(
+            src,
+            names,
+            _top=source_dir,
+        ):
+            ignored = {
+                name
+                for name in names
+                if name in {"__pycache__", ".gitignore"}
+                or name.endswith(".pyc")
+            }
+            if Path(src) == _top:
+                ignored.update({"data", "docs"} & set(names))
+            return ignored
 
         shutil.copytree(
-            ROOT / folder,
+            source_dir,
             root / folder,
-
-            ignore=
-                shutil.ignore_patterns(
-                    "__pycache__",
-                    "*.pyc",
-                    "data",
-                    "docs",
-                    ".gitignore",
-                ),
+            ignore=_ignore_copy_entries,
         )
 
     (
@@ -1004,6 +1014,7 @@ def create_blackbox_context():
                     "GROQ_",
                     "SMTP_",
                     "BITEFINDER_",
+                    "MONGO_",
                 )
             )
 
@@ -1025,6 +1036,9 @@ def create_blackbox_context():
         {
             "NO_COLOR":
                 "1",
+
+            "BITEFINDER_STORAGE":
+                "json",
 
             "AI_BYPASS":
                 "false",
@@ -1162,6 +1176,7 @@ def run_cli(
                         / application
                         / "main.py"
                     ),
+                    *(["--cli"] if application == "BIS" else ["--internal"] if application == "BRNS" else []),
                 ],
 
                 input=
@@ -1295,6 +1310,7 @@ def assert_shows(
 
 def seed_complete_user(
     context,
+    password=TEST_PASSWORD,
 ):
     """Create one complete verified BIS user for black-box testing."""
 
@@ -1379,6 +1395,26 @@ def seed_complete_user(
         encoding=
             "utf-8",
     )
+
+    credentials_path = (
+        context["root"]
+        / "BIS/data/credentials.json"
+    )
+
+    if password is not None:
+        from BIS.classes.logic.security.password_hasher import PasswordHasher
+
+        credentials_path.write_text(
+            json.dumps(
+                {
+                    user_id:
+                        PasswordHasher().create(password),
+                }
+            ),
+            encoding="utf-8",
+        )
+    elif credentials_path.exists():
+        credentials_path.unlink()
 
     return user
 
