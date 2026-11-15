@@ -41,12 +41,13 @@ CLI/testing, but is not an automatic database-outage fallback.
 | `runtime.py` | Web composition root, Mongo repositories, BIS web services, and BRNS gateway wiring |
 | `io_manager.py`, `classes/io/cli/io_manager.py` | Terminal collection, validation, confirmation and presentation |
 | `classes/io/web/web_io_manager.py` | HTTP payload/result formatting and authentication delegation |
+| `classes/io/web/chat/` | Chat summaries, clarification prompts and quick-reply presentation |
 | `classes/io/web/models/` | Pydantic auth, preference and search request schemas |
 | `classes/io/contracts/` | Focused session, search and web IO capabilities |
 | `ai_manager.py`, `classes/ai/` | Prompt/response handling, provider contracts, clients and fallback routing |
-| `logic_manager.py`, `classes/logic/` | Profile/search decisions, midpoint and cuisine-merge policy, validation and password hashing |
+| `logic_manager.py`, `classes/logic/` | Profile authorization, chat filter/reconciliation policy, fallback parsing, midpoint/cuisine merging and validation |
 | `data_manager.py`, `classes/data/` | Account, credential and state stores, JSON/Mongo implementations, serialization and optional sync/import tools |
-| `classes/services/cli/` | `InteractionSession`, `BISSearchWorkflow` and result interaction |
+| `classes/services/cli/` | `InteractionSession`, `BISSearchWorkflow`, confirmed-preference recording and result interaction |
 | `classes/services/web/` | `BISApplicationService`, `BISChatbotService`, authentication, favorites and runtime lifecycle |
 | `classes/services/launcher/` | Mode selection and web-stack startup |
 | `sources/` | Canonical profile vocabulary, value validation, questions and prompt text |

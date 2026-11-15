@@ -135,3 +135,22 @@ docker compose --profile "*" down
 
 This stops all profiles and retains named data volumes. CI teardown uses `-v`
 for its disposable stack; do not copy that flag into normal saved-data shutdown.
+
+## Refactor and style regression checks
+
+`refactor/test_cleanup.py` runs in the `oop`, `core` and `all` groups. It protects
+chat filter/negation behavior, discovery query order and zone quotas, corrupt JSON
+retention, failed atomic writes, shared profile authorization, injected AI/provider
+capabilities, official halal evidence rules and BRC handler warm-up injection.
+`web/test_storage_contracts.py` also checks JSON/Mongo read-failure parity.
+
+```bash
+python -m pycodestyle BIS BRNS BRC common http_gateway main.py tests project_overview
+```
+
+`setup.cfg` sets the 79-character code-line limit. Local helper scripts and
+ignored environment/documentation folders are excluded. Inline `noqa` exceptions
+are limited to imports after required script path setup, unbreakable qualified
+import paths and descriptive test identifiers. Prompt/output string values are
+preserved through implicit concatenation; there is no global E501 exemption.
+The GitHub Actions lint job checks this policy separately from Docker tests.

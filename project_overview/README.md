@@ -178,3 +178,15 @@ Visualization scripts can write ignored output and live tracing executes the
 real application. Use controlled data/providers for demonstrations; static UML
 analysis itself does not import application modules or call paid services.
 The generators are development tools excluded from the Docker build context.
+
+## SOLID cleanup migration
+
+See [SOLID_REFACTOR.md](SOLID_REFACTOR.md) for the current ownership map,
+intentional persistence/error corrections, test evidence and remaining limits.
+The full generator resolves the new chat, discovery, AI transport and BRC workflow
+locations without hand-maintained class lists. Unresolved dynamic relationships
+remain explicitly reported in `uml/analysis.json`.
+
+A manually reviewed subset is available locally in `uml/cleanup_reviewed.json`,
+`.txt`, `.mmd` and `.md`. It complements the full diagnostic diagrams; it does not
+claim complete runtime inference. Generated UML artifacts remain Git-ignored.
