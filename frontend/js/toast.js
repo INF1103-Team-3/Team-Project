@@ -1,4 +1,4 @@
-import { refreshIcons } from './state.js?v=20261114-12';
+import { refreshIcons } from './state.js?v=20261116-1';
 
 const TYPE_STYLES = {
   info: {

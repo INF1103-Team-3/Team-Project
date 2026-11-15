@@ -18,6 +18,10 @@ export const state = {
   lastMatches: [],
   lastAlternatives: [],
   displayedItems: [],
+  lastSearchPayload: null,
+  lastSearchBudgetIsPlus: false,
+  refreshSeenRestaurants: [],
+  refreshSeenKeys: new Set(),
   quickFilters: {
     openNow: false,
     muisHalal: false,

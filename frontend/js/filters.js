@@ -2,15 +2,29 @@ import {
   applyRatingFilterToWishesRaw,
   formatCuisineLabel,
   getActiveRatingFilterValue,
+  getPlaceKey,
   normalizeWishText,
   RECENT_KEY,
   refreshIcons,
   state,
   validateEnglishWishesInput,
-} from './state.js?v=20261114-12';
-import { apiJson } from './api.js?v=20261114-12';
-import { showToast } from './toast.js?v=20261114-12';
-import { renderResults, renderResultsSkeleton, updateResultsSkeletonModel } from './results.js?v=20261114-12';
+} from './state.js?v=20261116-1';
+import { apiJson } from './api.js?v=20261116-1';
+import { showToast } from './toast.js?v=20261116-1';
+import {
+  renderExhaustedRefreshState,
+  renderResults,
+  renderResultsSkeleton,
+  updateResultsSkeletonModel,
+} from './results.js?v=20261116-1';
+
+let isSearchInFlight = false;
+
+const SEARCH_BTN_HTML = '<i data-lucide="search" class="w-4 h-4"></i> Find Matching Restaurants';
+const REFRESH_BTN_HTML = '<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span>Different Results</span>';
+const SPINNER_WHITE_SVG = '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+const SPINNER_BRAND_SVG = '<svg class="animate-spin w-3.5 h-3.5 text-brand-600 dark:text-brand-400 shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+const SPINNER_AMBER_SVG = '<svg class="animate-spin w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
 
 let chatCallbacks = {
   renderSummary: () => {},
@@ -1413,6 +1427,408 @@ function bindEditableSliderField({
   });
 }
 
+function cloneSearchPayload(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const {
+    confirmation_token: _ct,
+    confirm_only: _co,
+    previous_restaurants: _prev,
+    strict_exclude: _se,
+    ...rest
+  } = payload;
+  return {
+    ...rest,
+    locations: Array.isArray(rest.locations) ? [...rest.locations] : [],
+    dietary_requirements: Array.isArray(rest.dietary_requirements) ? [...rest.dietary_requirements] : [],
+    liked_cuisines: Array.isArray(rest.liked_cuisines) ? [...rest.liked_cuisines] : [],
+    disliked_cuisines: Array.isArray(rest.disliked_cuisines) ? [...rest.disliked_cuisines] : [],
+    other_preferences: Array.isArray(rest.other_preferences) ? [...rest.other_preferences] : [],
+  };
+}
+
+function toSeenRestaurantEntry(item) {
+  const r = item?.restaurant || item;
+  if (!r || typeof r !== 'object') return null;
+  const pid = String(r.google_place_id || '').trim();
+  const name = String(r.name || '').trim();
+  const address = String(r.address || '').trim();
+  if (!pid && !name) return null;
+  return {
+    google_place_id: pid ? pid.slice(0, 256) : null,
+    name: name.slice(0, 300),
+    address: address.slice(0, 500),
+  };
+}
+
+function clearRefreshTracking() {
+  state.lastSearchPayload = null;
+  state.lastSearchBudgetIsPlus = false;
+  state.refreshSeenRestaurants = [];
+  state.refreshSeenKeys.clear();
+}
+
+function appendRefreshSeen(items) {
+  for (const item of (items || [])) {
+    const r = item?.restaurant || item;
+    if (!r || typeof r !== 'object') continue;
+    const key = getPlaceKey(r);
+    if (!key || state.refreshSeenKeys.has(key)) continue;
+    const entry = toSeenRestaurantEntry(r);
+    if (!entry) continue;
+    state.refreshSeenKeys.add(key);
+    state.refreshSeenRestaurants.push(entry);
+  }
+}
+
+function filterUnseenItems(items, seenKeys, batchKeys) {
+  return (Array.isArray(items) ? items : []).filter((item) => {
+    const r = item?.restaurant;
+    if (!r || typeof r !== 'object') return false;
+    const key = getPlaceKey(r);
+    if (!key || seenKeys.has(key) || batchKeys.has(key)) return false;
+    batchKeys.add(key);
+    return true;
+  });
+}
+
+function buildCuisineBreakdownText(breakdown) {
+  const keys = Object.keys(breakdown || {});
+  if (keys.length > 1) {
+    const parts = keys.map((k) => `${formatCuisineLabel(k)}: ${breakdown[k]}`);
+    return ` • Divided across ${keys.length} cuisines (${parts.join(', ')})`;
+  }
+  if (keys.length === 1) {
+    return ` • Cuisine: ${formatCuisineLabel(keys[0])}`;
+  }
+  return '';
+}
+
+async function executeSearchRequest(basePayload, {
+  isRefresh = false,
+  notifyChat = !isRefresh,
+  fromChat = false,
+  budgetIsPlus = false,
+} = {}) {
+  const cleanBase = cloneSearchPayload(basePayload);
+  if (!cleanBase || !cleanBase.location || isSearchInFlight) return;
+
+  const searchBtn = document.getElementById('searchBtn');
+  const refreshBtn = document.getElementById('refreshResultsBtn');
+  const surpriseBtn = document.getElementById('surpriseMeBtn');
+  const emptyState = document.getElementById('emptyState');
+  const statusBanner = document.getElementById('statusBanner');
+  const statusText = document.getElementById('statusText');
+  const statusIcon = document.getElementById('statusIcon');
+  const resultsHeader = document.getElementById('resultsHeader');
+  const resultsCount = document.getElementById('resultsCount');
+  const subtextEl = document.getElementById('resultsSubtext');
+
+  const allLocations = cleanBase.locations?.length ? cleanBase.locations : [cleanBase.location];
+  state.activeSearchMode = cleanBase.mode || 'walk';
+  state.activeBudgetLimit = cleanBase.budget_per_person ?? null;
+  state.activeBudgetIsPlus = Boolean(budgetIsPlus || Number(state.activeBudgetLimit) > BUDGET_UI_CONFIG.baseMax);
+  state.compareKeys.clear();
+  state.displayedItems = [];
+
+  if (!isRefresh) {
+    clearRefreshTracking();
+  }
+
+  const requestBody = isRefresh
+    ? {
+        ...cleanBase,
+        previous_restaurants: state.refreshSeenRestaurants.slice(-200),
+        strict_exclude: true,
+      }
+    : cleanBase;
+
+  isSearchInFlight = true;
+  if (searchBtn) {
+    searchBtn.disabled = true;
+    if (!isRefresh) {
+      searchBtn.innerHTML = `${SPINNER_WHITE_SVG} Analyzing & Ranking...`;
+    }
+  }
+  if (refreshBtn) {
+    refreshBtn.disabled = true;
+    if (isRefresh) {
+      refreshBtn.innerHTML = `${SPINNER_BRAND_SVG}<span>Refreshing...</span>`;
+    }
+  }
+  if (surpriseBtn) {
+    surpriseBtn.disabled = true;
+  }
+
+  let activeModelLabel = 'Gemini AI';
+  try {
+    const mData = await apiJson('/api/active-model');
+    if (mData.active_model) activeModelLabel = mData.active_model;
+  } catch { }
+
+  if (emptyState) emptyState.classList.add('hidden');
+  document.getElementById('mapSection')?.classList.add('hidden');
+  if (isRefresh) {
+    resultsHeader?.classList.remove('hidden');
+  } else {
+    resultsHeader?.classList.add('hidden');
+  }
+
+  const loadingVerb = isRefresh ? 'Finding different restaurants near' : 'Searching near';
+  if (statusBanner && statusIcon && statusText) {
+    statusBanner.className = 'p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200';
+    statusIcon.innerHTML = SPINNER_AMBER_SVG;
+    statusText.textContent = `${loadingVerb} ${allLocations.join(' & ')} (${activeModelLabel})...`;
+    statusBanner.classList.remove('hidden');
+  }
+
+  renderResultsSkeleton(activeModelLabel);
+
+  let pollingActive = true;
+  const pollAbort = new AbortController();
+  let pollInFlight = false;
+  const modelPollTimer = setInterval(async () => {
+    if (!pollingActive || pollInFlight) return;
+    pollInFlight = true;
+    try {
+      const pData = await apiJson('/api/active-model', { signal: pollAbort.signal });
+      if (pollingActive && pData.active_model && pData.active_model !== activeModelLabel) {
+        activeModelLabel = pData.active_model;
+        if (statusText) {
+          statusText.textContent = `${loadingVerb} ${allLocations.join(' & ')} (${activeModelLabel})...`;
+        }
+        updateResultsSkeletonModel(activeModelLabel);
+      }
+    } catch {
+      // Ignore transient or aborted status polls while a search request is active.
+    } finally {
+      pollInFlight = false;
+    }
+  }, 500);
+
+  const stopModelPolling = () => {
+    if (!pollingActive) return;
+    pollingActive = false;
+    clearInterval(modelPollTimer);
+    pollAbort.abort();
+  };
+
+  try {
+    const data = await apiJson('/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+    stopModelPolling();
+
+    const rawMatches = Array.isArray(data.matches) ? data.matches : [];
+    const rawAlternatives = Array.isArray(data.alternatives) ? data.alternatives : [];
+
+    if (isRefresh) {
+      const seenBefore = new Set(state.refreshSeenKeys);
+      const batchKeys = new Set();
+      const matches = filterUnseenItems(rawMatches, seenBefore, batchKeys);
+      const alternatives = filterUnseenItems(rawAlternatives, seenBefore, batchKeys);
+      const isExhausted = Boolean(data.exhausted_previous) || (matches.length === 0 && alternatives.length === 0);
+
+      if (isExhausted) {
+        if (statusBanner && statusIcon && statusText) {
+          statusBanner.className = 'p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200';
+          statusIcon.innerHTML = '<i data-lucide="info" class="w-4 h-4 text-amber-600 dark:text-amber-400"></i>';
+          statusText.textContent = data.message || 'All matching nearby restaurants for this search have already been shown.';
+          refreshIcons(statusBanner);
+        }
+        renderExhaustedRefreshState({
+          seenCount: state.refreshSeenRestaurants.length,
+          onResetSearch: resetRefreshAndSearch,
+        });
+        return;
+      }
+
+      appendRefreshSeen([...matches, ...alternatives]);
+      const modelUsed = data.model_used || activeModelLabel;
+      const breakdownStr = buildCuisineBreakdownText(data.cuisines_breakdown);
+
+      state.lastOrigin = data.origin || state.lastOrigin;
+      state.lastInputOrigins = data.input_origins || data.origins || state.lastInputOrigins;
+      state.lastMatches = matches;
+      state.lastAlternatives = alternatives;
+
+      const totalFound = matches.length + alternatives.length;
+      const midpointNote = state.lastInputOrigins.length > 1
+        ? ` • 🎯 In-between ${state.lastInputOrigins.map((o) => o.query).join(' & ')}`
+        : '';
+
+      if (statusBanner && statusIcon && statusText) {
+        statusBanner.className = 'p-4 rounded-2xl border text-sm flex items-center gap-3 bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200';
+        statusIcon.innerHTML = '<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>';
+        statusText.textContent = `Found ${matches.length} new direct match${matches.length === 1 ? '' : 'es'} and ${alternatives.length} new alternative${alternatives.length === 1 ? '' : 's'}${midpointNote}${breakdownStr} • Ranked by ${modelUsed}`;
+        refreshIcons(statusBanner);
+      }
+
+      if (resultsHeader) {
+        resultsHeader.classList.remove('hidden');
+        refreshIcons(resultsHeader);
+      }
+      if (resultsCount) {
+        resultsCount.textContent = `${totalFound} Restaurant Recommendation${totalFound === 1 ? '' : 's'}`;
+      }
+      if (subtextEl) {
+        subtextEl.textContent = `New non-duplicate picks • Verified with Google Places & official MUIS records • Ranked by ${modelUsed}`;
+      }
+
+      renderResults(state.lastMatches, state.lastAlternatives);
+      return;
+    }
+
+    if (data.message && rawMatches.length === 0 && rawAlternatives.length === 0) {
+      clearRefreshTracking();
+      if (statusBanner && statusIcon && statusText) {
+        statusBanner.className = 'p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200';
+        statusIcon.innerHTML = '<i data-lucide="info" class="w-4 h-4 text-amber-600 dark:text-amber-400"></i>';
+        statusText.textContent = data.message;
+        refreshIcons(statusBanner);
+      }
+      if (resultsHeader) {
+        resultsHeader.classList.remove('hidden');
+        refreshIcons(resultsHeader);
+      }
+      if (resultsCount) resultsCount.textContent = '0 Recommendations';
+      if (subtextEl) subtextEl.textContent = 'Verified with Google Places and official MUIS records.';
+      state.lastMatches = [];
+      state.lastAlternatives = [];
+      renderResults([], []);
+      if (notifyChat) chatCallbacks.postSearchOutcome({ emptyMessage: data.message, fromChat });
+      return;
+    }
+
+    const modelUsed = data.model_used || activeModelLabel;
+    const breakdownStr = buildCuisineBreakdownText(data.cuisines_breakdown);
+
+    state.lastOrigin = data.origin || null;
+    state.lastInputOrigins = data.input_origins || data.origins || [];
+    state.lastMatches = rawMatches;
+    state.lastAlternatives = rawAlternatives;
+
+    const totalFound = rawMatches.length + rawAlternatives.length;
+    if (totalFound > 0) {
+      state.lastSearchPayload = cloneSearchPayload(cleanBase);
+      state.lastSearchBudgetIsPlus = Boolean(
+        budgetIsPlus || Number(cleanBase.budget_per_person) > BUDGET_UI_CONFIG.baseMax,
+      );
+      state.refreshSeenRestaurants = [];
+      state.refreshSeenKeys.clear();
+      appendRefreshSeen([...rawMatches, ...rawAlternatives]);
+    } else {
+      clearRefreshTracking();
+    }
+
+    const midpointNote = state.lastInputOrigins.length > 1
+      ? ` • 🎯 In-between ${state.lastInputOrigins.map((o) => o.query).join(' & ')}`
+      : '';
+
+    if (statusBanner && statusIcon && statusText) {
+      statusBanner.className = 'p-4 rounded-2xl border text-sm flex items-center gap-3 bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200';
+      statusIcon.innerHTML = '<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>';
+      statusText.textContent = `Found ${rawMatches.length} direct match${rawMatches.length === 1 ? '' : 'es'} and ${rawAlternatives.length} alternative${rawAlternatives.length === 1 ? '' : 's'}${midpointNote}${breakdownStr} • Ranked by ${modelUsed}`;
+      refreshIcons(statusBanner);
+    }
+
+    if (resultsHeader) {
+      resultsHeader.classList.remove('hidden');
+      refreshIcons(resultsHeader);
+    }
+    if (resultsCount) {
+      resultsCount.textContent = `${totalFound} Restaurant Recommendation${totalFound === 1 ? '' : 's'}`;
+    }
+    if (subtextEl) {
+      subtextEl.textContent = `Verified with Google Places & official MUIS records • Ranked by ${modelUsed}`;
+    }
+
+    renderResults(state.lastMatches, state.lastAlternatives);
+    if (notifyChat) {
+      chatCallbacks.postSearchOutcome({
+        matches: rawMatches,
+        alternatives: rawAlternatives,
+        modelUsed,
+        fromChat,
+      });
+    }
+  } catch (error) {
+    stopModelPolling();
+    if (!isRefresh) {
+      clearRefreshTracking();
+      if (/special requests?/i.test(error.message || '')) {
+        setSpecialInputError(error.message);
+      }
+    } else {
+      document.getElementById('mapSection')?.classList.add('hidden');
+    }
+    state.lastMatches = [];
+    state.lastAlternatives = [];
+    if (statusBanner && statusIcon && statusText) {
+      statusBanner.className = 'p-4 rounded-2xl border text-sm flex items-center gap-3 bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200';
+      statusIcon.innerHTML = '<i data-lucide="alert-circle" class="w-4 h-4 text-rose-600 dark:text-rose-400"></i>';
+      statusText.textContent = error.message;
+      refreshIcons(statusBanner);
+    }
+    const resultsList = document.getElementById('resultsList');
+    if (resultsList) resultsList.innerHTML = '';
+    if (notifyChat && !isRefresh) {
+      chatCallbacks.postSearchOutcome({ errorMessage: error.message, fromChat });
+    }
+  } finally {
+    stopModelPolling();
+    isSearchInFlight = false;
+    if (searchBtn) {
+      searchBtn.disabled = false;
+      searchBtn.innerHTML = SEARCH_BTN_HTML;
+      refreshIcons(searchBtn);
+    }
+    if (refreshBtn) {
+      refreshBtn.disabled = false;
+      refreshBtn.innerHTML = REFRESH_BTN_HTML;
+      refreshIcons(refreshBtn);
+    }
+    if (surpriseBtn) {
+      surpriseBtn.disabled = false;
+    }
+  }
+}
+
+export async function refreshSearchResults() {
+  if (isSearchInFlight) return;
+  if (!state.lastSearchPayload || !state.lastSearchPayload.location) {
+    showToast('Please run a search first to get initial results before refreshing.', 'info');
+    return;
+  }
+  await executeSearchRequest(state.lastSearchPayload, {
+    isRefresh: true,
+    notifyChat: false,
+    fromChat: false,
+    budgetIsPlus: state.lastSearchBudgetIsPlus,
+  });
+}
+
+export async function resetRefreshAndSearch() {
+  if (isSearchInFlight) return;
+  const savedPayload = cloneSearchPayload(state.lastSearchPayload);
+  const savedBudgetIsPlus = state.lastSearchBudgetIsPlus;
+  state.refreshSeenRestaurants = [];
+  state.refreshSeenKeys.clear();
+
+  if (!savedPayload || !savedPayload.location) {
+    document.getElementById('searchForm')?.requestSubmit();
+    return;
+  }
+
+  await executeSearchRequest(savedPayload, {
+    isRefresh: false,
+    notifyChat: false,
+    fromChat: false,
+    budgetIsPlus: savedBudgetIsPlus,
+  });
+}
+
 export function initFiltersControls() {
   const customInput = document.getElementById('customCuisineInput');
   selectTravelMode(state.currentMode || 'walk');
@@ -1637,13 +2053,15 @@ export function initFiltersControls() {
     const fromChat = state.searchTriggeredFromChat;
     state.searchTriggeredFromChat = false;
 
-    const searchBtn = document.getElementById('searchBtn');
-    const emptyState = document.getElementById('emptyState');
-    const statusBanner = document.getElementById('statusBanner');
-    const statusText = document.getElementById('statusText');
-    const statusIcon = document.getElementById('statusIcon');
-    const resultsHeader = document.getElementById('resultsHeader');
-    const resultsCount = document.getElementById('resultsCount');
+    if (isSearchInFlight) {
+      if (fromChat) {
+        chatCallbacks.postSearchOutcome({
+          errorMessage: 'A search is already in progress. Please wait for it to finish.',
+          fromChat,
+        });
+      }
+      return;
+    }
 
     const failValidation = (msg, focusEl = null) => {
       showToast(msg, 'warning');
@@ -1694,135 +2112,15 @@ export function initFiltersControls() {
     }
 
     const allLocations = payload.locations || [];
-    state.activeSearchMode = payload.mode;
-    state.activeBudgetLimit = payload.budget_per_person ?? null;
-    state.activeBudgetIsPlus = isBudgetPlusDisplay(state.activeBudgetLimit, state.isBudgetSet);
-    state.compareKeys.clear();
+    const budgetIsPlus = isBudgetPlusDisplay(payload.budget_per_person ?? null, state.isBudgetSet);
     chatCallbacks.renderSummary();
     saveLocalRecent(allLocations.length > 1 ? allLocations.join(' + ') : payload.location);
 
-    searchBtn.disabled = true;
-    searchBtn.innerHTML = '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Analyzing & Ranking...';
-
-    let activeModelLabel = 'Gemini AI';
-    try {
-      const mData = await apiJson('/api/active-model');
-      if (mData.active_model) activeModelLabel = mData.active_model;
-    } catch { }
-
-    if (emptyState) emptyState.classList.add('hidden');
-    document.getElementById('mapSection')?.classList.add('hidden');
-    resultsHeader?.classList.add('hidden');
-
-    statusBanner.className = 'p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200';
-    statusIcon.innerHTML = '<svg class="animate-spin w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
-    statusText.textContent = `Searching near ${allLocations.join(' & ')} (${activeModelLabel})...`;
-    statusBanner.classList.remove('hidden');
-
-    renderResultsSkeleton(activeModelLabel);
-
-    let pollingActive = true;
-    const pollAbort = new AbortController();
-    let pollInFlight = false;
-    const modelPollTimer = setInterval(async () => {
-      if (!pollingActive || pollInFlight) return;
-      pollInFlight = true;
-      try {
-        const pData = await apiJson('/api/active-model', { signal: pollAbort.signal });
-        if (pollingActive && pData.active_model && pData.active_model !== activeModelLabel) {
-          activeModelLabel = pData.active_model;
-          statusText.textContent = `Searching near ${allLocations.join(' & ')} (${activeModelLabel})...`;
-          updateResultsSkeletonModel(activeModelLabel);
-        }
-      } catch {
-        // Ignore transient or aborted status polls while a search request is active.
-      } finally {
-        pollInFlight = false;
-      }
-    }, 500);
-
-    const stopModelPolling = () => {
-      if (!pollingActive) return;
-      pollingActive = false;
-      clearInterval(modelPollTimer);
-      pollAbort.abort();
-    };
-
-    try {
-      const data = await apiJson('/api/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      stopModelPolling();
-
-      if (data.message && (!data.matches || data.matches.length === 0)) {
-        statusBanner.className = 'p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200';
-        statusIcon.innerHTML = '<i data-lucide="info" class="w-4 h-4 text-amber-600 dark:text-amber-400"></i>';
-        statusText.textContent = data.message;
-        refreshIcons(statusBanner);
-        resultsHeader.classList.remove('hidden');
-        resultsCount.textContent = '0 Recommendations';
-        state.lastMatches = [];
-        state.lastAlternatives = [];
-        renderResults([], []);
-        chatCallbacks.postSearchOutcome({ emptyMessage: data.message, fromChat });
-        return;
-      }
-
-      const matches = data.matches || [];
-      const alternatives = data.alternatives || [];
-      const modelUsed = data.model_used || activeModelLabel;
-      const breakdown = data.cuisines_breakdown || {};
-      const breakdownKeys = Object.keys(breakdown);
-      let breakdownStr = '';
-      if (breakdownKeys.length > 1) {
-        const parts = breakdownKeys.map((k) => `${formatCuisineLabel(k)}: ${breakdown[k]}`);
-        breakdownStr = ` • Divided across ${breakdownKeys.length} cuisines (${parts.join(', ')})`;
-      } else if (breakdownKeys.length === 1) {
-        breakdownStr = ` • Cuisine: ${formatCuisineLabel(breakdownKeys[0])}`;
-      }
-
-      state.lastOrigin = data.origin || null;
-      state.lastInputOrigins = data.input_origins || data.origins || [];
-      state.lastMatches = matches;
-      state.lastAlternatives = alternatives;
-
-      const totalFound = matches.length + alternatives.length;
-      const midpointNote = state.lastInputOrigins.length > 1
-        ? ` • 🎯 In-between ${state.lastInputOrigins.map((o) => o.query).join(' & ')}`
-        : '';
-
-      statusBanner.className = 'p-4 rounded-2xl border text-sm flex items-center gap-3 bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200';
-      statusIcon.innerHTML = '<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>';
-      statusText.textContent = `Found ${matches.length} direct match${matches.length === 1 ? '' : 'es'} and ${alternatives.length} alternative${alternatives.length === 1 ? '' : 's'}${midpointNote}${breakdownStr} • Ranked by ${modelUsed}`;
-      refreshIcons(statusBanner);
-
-      resultsHeader.classList.remove('hidden');
-      resultsCount.textContent = `${totalFound} Restaurant Recommendation${totalFound === 1 ? '' : 's'}`;
-      const subtextEl = document.getElementById('resultsSubtext');
-      if (subtextEl) {
-        subtextEl.textContent = `Verified with Google Places & official MUIS records • Ranked by ${modelUsed}`;
-      }
-
-      renderResults(state.lastMatches, state.lastAlternatives);
-      chatCallbacks.postSearchOutcome({ matches, alternatives, modelUsed, fromChat });
-    } catch (error) {
-      stopModelPolling();
-      if (/special requests?/i.test(error.message || '')) {
-        setSpecialInputError(error.message);
-      }
-      statusBanner.className = 'p-4 rounded-2xl border text-sm flex items-center gap-3 bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200';
-      statusIcon.innerHTML = '<i data-lucide="alert-circle" class="w-4 h-4 text-rose-600 dark:text-rose-400"></i>';
-      statusText.textContent = error.message;
-      refreshIcons(statusBanner);
-      document.getElementById('resultsList').innerHTML = '';
-      chatCallbacks.postSearchOutcome({ errorMessage: error.message, fromChat });
-    } finally {
-      stopModelPolling();
-      searchBtn.disabled = false;
-      searchBtn.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i> Find Matching Restaurants';
-      refreshIcons(searchBtn);
-    }
+    await executeSearchRequest(payload, {
+      isRefresh: false,
+      notifyChat: true,
+      fromChat,
+      budgetIsPlus,
+    });
   });
 }
