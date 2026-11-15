@@ -132,7 +132,7 @@ def test_openrouter_api_key_connectivity():
         return
 
     model = os.getenv(
-        "OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free"
+        "OPENROUTER_MODEL", "nvidia/nemotron-3.5-super-vl:free"
     )
     url = (
         f"{os.getenv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')}"
@@ -149,20 +149,18 @@ def test_openrouter_api_key_connectivity():
             {"role": "user", "content": "Return the single word OK."}
         ],
         "temperature": 0,
-        "max_tokens": 15,
+        "max_tokens": 200,
     }
 
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=20)
         is_ok = resp.status_code == 200
-        content = (
-            resp.json()
-            .get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "")
+        msg = (
+            (resp.json().get("choices") or [{}])[0].get("message") or {}
             if is_ok
-            else resp.text
+            else {}
         )
+        content = (msg.get("content") or "") if is_ok else resp.text
         actual = {
             "status_code": resp.status_code,
             "has_content": bool(content.strip()),

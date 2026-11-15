@@ -87,7 +87,7 @@ MODEL_CHAIN.extend(
         },  # separate daily pool
         {
             "provider": "openrouter",
-            "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+            "model": "nvidia/nemotron-3.5-super-vl:free",
         },
     ]
 )

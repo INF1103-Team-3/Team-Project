@@ -34,11 +34,19 @@ class ProviderTransport:
             "Content-Type": "application/json",
             "X-Title": config["app_name"],
         }
+        request_payload = dict(payload)
+        try:
+            max_tokens = int(request_payload.get("max_tokens") or 0)
+        except (TypeError, ValueError):
+            max_tokens = 0
+        # Reasoning models spend tokens thinking before emitting JSON content.
+        if max_tokens < 500:
+            request_payload["max_tokens"] = 500
         try:
             response = self._http.post(
                 url,
                 headers=headers,
-                json=payload,
+                json=request_payload,
                 timeout=config["openrouter_timeout_seconds"],
             )
             response.raise_for_status()

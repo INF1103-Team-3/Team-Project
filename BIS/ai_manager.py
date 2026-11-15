@@ -118,7 +118,7 @@ def _extend_bis_chain_with_dynamic_models():
             {"provider": "gemini", "model": "gemini-3.6-flash"},
             {
                 "provider": "openrouter",
-                "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+                "model": "nvidia/nemotron-3.5-super-vl:free",
             },
         ]
     )

@@ -112,7 +112,7 @@ def create_manager(api_key, model):
                 "provider": "openrouter",
                 "model": os.getenv(
                     "BRC_OPENROUTER_MODEL",
-                    "nvidia/nemotron-3-ultra-550b-a55b:free",
+                    "nvidia/nemotron-3.5-super-vl:free",
                 ).strip(),
             }
         )
