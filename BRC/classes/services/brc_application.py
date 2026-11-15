@@ -17,9 +17,6 @@ from BRC.classes.data.data_manager import (
 from BRC.classes.data.storage.data_unavailable_error import (
     DataUnavailableError,
 )
-from BRC.classes.ai.providers.fallback.fallback_ai_client import (
-    FallbackAIClient,
-)
 from BRC.classes.io.console.io_manager import NO_INPUT, IOManager
 from BRC.classes.logic.logic_manager import LogicManager
 from BRC.models import RestaurantRecord
@@ -123,11 +120,7 @@ class BRCApplication:
             settings["chain_timeout_seconds"],
         )
         if cls._shared_ai is None or fingerprint != cls._shared_settings:
-            client = FallbackAIClient(
-                settings,
-                ai_facade._call_gemini,
-                ai_facade._call_chat_completions,
-            )
+            client = ai_facade.create_client(settings)
             cls._shared_ai = AIManager(client)
             cls._shared_settings = fingerprint
         return cls._shared_ai

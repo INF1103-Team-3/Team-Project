@@ -26,7 +26,7 @@ class CleanupContractTests(unittest.TestCase):
         calls = []
         handler = SimpleNamespace(
             database_path=SimpleNamespace(exists=lambda: False),
-            _run_lock=Lock(),
+            serialized_checks=Lock,
             application_run=lambda: calls.append("selected handler"),
         )
         server = BRCHTTPServer(

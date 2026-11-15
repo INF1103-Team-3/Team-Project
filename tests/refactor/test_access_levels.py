@@ -62,6 +62,56 @@ class AccessLevelTests(unittest.TestCase):
         )
         self.assertEqual(row, {"_id": "fixture"})
 
+    def test_brc_serialization_releases_lock_after_failure(self):
+        from threading import Event, Thread
+        from BRC.classes.io.http.server.brc_http_handler import (
+            BRCRequestHandler,
+        )
+
+        with self.assertRaisesRegex(ValueError, "check failed"):
+            with BRCRequestHandler.serialized_checks():
+                raise ValueError("check failed")
+        acquired = Event()
+
+        def check_again():
+            with BRCRequestHandler.serialized_checks():
+                acquired.set()
+
+        worker = Thread(target=check_again, daemon=True)
+        worker.start()
+        self.assertTrue(acquired.wait(timeout=2))
+        worker.join(timeout=2)
+        self.assertFalse(hasattr(BRCRequestHandler, "_run_lock"))
+
+    def test_brc_client_factory_preserves_provider_fallback(self):
+        from unittest.mock import patch
+        from BRC import ai_manager
+
+        settings = {
+            "providers": [
+                {"provider": "gemini", "model": "first"},
+                {"provider": "groq", "model": "second"},
+            ],
+            "timeout_seconds": 12,
+            "chain_timeout_seconds": 45,
+        }
+        with (
+            patch.object(
+                ai_manager, "_call_gemini", side_effect=RuntimeError("offline")
+            ) as gemini,
+            patch.object(
+                ai_manager,
+                "_call_chat_completions",
+                return_value='{"ok":true}',
+            ) as chat,
+        ):
+            client = ai_manager.create_client(settings)
+            self.assertEqual(client.call_api("sample"), '{"ok":true}')
+            gemini.assert_called_once_with("sample", settings, "first")
+            self.assertEqual(
+                chat.call_args.args[:4], ("sample", settings, "groq", "second")
+            )
+
     def test_sorter_public_api_dispatches_protected_hook(self):
         class NameSorter(BaseResultSorter):
             def _key(self, item, mode):
