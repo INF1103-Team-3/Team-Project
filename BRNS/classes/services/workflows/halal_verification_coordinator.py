@@ -1,6 +1,9 @@
 """Coordinate BRNS halal evidence with the external BRC boundary."""
 
 
+from BRNS.classes.logic.evaluation.halal_evidence_policy import HalalEvidencePolicy
+
+
 class HalalVerificationCoordinator:
     """Apply BRC evidence without owning ranking or persistence."""
 
@@ -12,18 +15,7 @@ class HalalVerificationCoordinator:
 
     @staticmethod
     def brc_restaurant(candidate):
-        record = dict(candidate)
-        dietary = [
-            item for item in candidate.get("dietary_requirements") or []
-            if item in ("halal", "vegetarian")
-        ]
-        record["dietary"] = dietary
-        record["halal_certification"] = (
-            "unofficial"
-            if candidate.get("halal_hint") or "halal" in dietary
-            else "none"
-        )
-        return record
+        return HalalEvidencePolicy.brc_record(candidate)
 
     def verify(self, candidates, request, recommendations):
         if "halal" not in request["dietary_requirements"]:
@@ -36,25 +28,9 @@ class HalalVerificationCoordinator:
             "database_missing": database_missing, "google_fallback": 0,
             "excluded": 0,
         }
-        checked_candidates = []
-        for original in candidates:
-            candidate = dict(original)
-            google_halal = (
-                original.get("halal_hint") is True
-                or "halal" in (
-                    original.get("dietary_requirements") or []))
-            candidate["muis_check"] = {"status": "not_verified"}
-            candidate["halal_certification"] = (
-                "unofficial" if google_halal else "none")
-            candidate["halal_hint"] = google_halal
-            candidate["dietary_requirements"] = [
-                item
-                for item in candidate.get("dietary_requirements") or []
-                if item != "halal"
-            ]
-            if google_halal:
-                candidate["dietary_requirements"].append("halal")
-            checked_candidates.append(candidate)
+        checked_candidates = [
+            self._logic.prepare_halal_candidate(original)
+            for original in candidates]
         self._io.show_halal_verification_start(
             len(order), database_missing)
         supports_batch = (
@@ -119,38 +95,8 @@ class HalalVerificationCoordinator:
 
     def _apply_checked(self, candidate, index, checked, summary):
         summary["checked"] += 1
-        muis_check = checked.get("muis_check")
-        verified = (
-            checked.get("halal_certification") == "official"
-            and isinstance(muis_check, dict)
-            and muis_check.get("status") == "verified"
-        )
-        candidate["muis_check"] = (
-            muis_check if isinstance(muis_check, dict)
-            else {"status": "not_verified"}
-        )
-        candidate["halal_certification"] = (
-            "official" if verified
-            else candidate["halal_certification"]
-        )
-        candidate["halal_hint"] = (
-            False if verified else candidate["halal_hint"])
-        dietary = [
-            item
-            for item in candidate.get("dietary_requirements") or []
-            if item != "halal"
-        ]
-        if verified:
-            summary["verified"] += 1
-            dietary.append("halal")
-            cuisines = checked.get("cuisines")
-            if isinstance(cuisines, list):
-                candidate["cuisines"] = cuisines
-        else:
-            summary["not_verified"] += 1
-            if candidate["halal_hint"]:
-                dietary.append("halal")
-        candidate["dietary_requirements"] = list(dict.fromkeys(dietary))
+        verified = self._logic.apply_halal_evidence(candidate, checked)
+        summary["verified" if verified else "not_verified"] += 1
         self._log.debug_log(
             f"BRC {'verified' if verified else 'did not verify'} "
             f"candidate {index}.",

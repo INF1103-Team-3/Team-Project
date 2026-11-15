@@ -7,6 +7,14 @@ class BRNSLogicManagerInterface(ABC):
     """Can apply deterministic recommendation business rules."""
 
     @abstractmethod
+    def prepare_halal_candidate(self, candidate):
+        """Initialize unofficial evidence without claiming certification."""
+
+    @abstractmethod
+    def apply_halal_evidence(self, candidate, checked):
+        """Apply checked evidence and return whether it is official."""
+
+    @abstractmethod
     def minimum_rating(self, preferences):
         """Return the required minimum rating or None."""
 

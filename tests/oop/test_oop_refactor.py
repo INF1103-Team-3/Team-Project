@@ -201,7 +201,7 @@ class OOPRefactorTests(unittest.TestCase):
                          logic_manager.confidence_adjusted_rating(4.6, 100))
 
     def test_brc_cuisine_job_preserves_skips_checkpoints_and_partial_failure(self):
-        from BRC.classes.ai.workflows.cuisine_tagging_workflow import CuisineTaggingWorkflow
+        from BRC.classes.services.workflows.cuisine_tagging_workflow import CuisineTaggingWorkflow
         from BRC.classes.logic.logic_manager import LogicManager
         from BRC.classes.ai.errors.ai_response_error import AIResponseError
         rows = [SimpleNamespace(name=name, category="")
@@ -226,7 +226,7 @@ class OOPRefactorTests(unittest.TestCase):
         self.assertNotIn("Unknown One", values)
 
     def test_brc_outlet_job_preserves_exact_and_service_failure_policy(self):
-        from BRC.classes.ai.workflows.outlet_matching_workflow import OutletMatchingWorkflow
+        from BRC.classes.services.workflows.outlet_matching_workflow import OutletMatchingWorkflow
         from BRC.classes.ai.errors.ai_service_error import AIServiceError
         rows = [SimpleNamespace(to_dict=lambda: {"name": "Cafe"}) for _ in range(3)]
         calls = []

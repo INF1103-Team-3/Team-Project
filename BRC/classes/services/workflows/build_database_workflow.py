@@ -1,7 +1,7 @@
 """BRC workflow for building the cleaned MUIS database."""
 
 from BRC.classes.services.workflows.contracts.base_brc_workflow import BaseBRCWorkflow
-from BRC.classes.ai.workflows.cuisine_tagging_workflow import CuisineTaggingWorkflow
+from BRC.classes.services.workflows.cuisine_tagging_workflow import CuisineTaggingWorkflow
 
 
 class BuildDatabaseWorkflow(BaseBRCWorkflow):

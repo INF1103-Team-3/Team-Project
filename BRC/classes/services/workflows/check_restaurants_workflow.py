@@ -1,7 +1,7 @@
 """BRC workflow for independently verifying restaurant records."""
 
 from BRC.classes.services.workflows.contracts.base_brc_workflow import BaseBRCWorkflow
-from BRC.classes.ai.workflows.outlet_matching_workflow import OutletMatchingWorkflow
+from BRC.classes.services.workflows.outlet_matching_workflow import OutletMatchingWorkflow
 
 
 class CheckRestaurantsWorkflow(BaseBRCWorkflow):

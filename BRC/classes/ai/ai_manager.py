@@ -36,12 +36,6 @@ class AIManager:
         self._report = report
         self._client.set_reporter(report)
 
-    def tag_cuisines(self, listings, cache, save_cache=None):
-        """Legacy entry point; production jobs use CuisineTaggingWorkflow."""
-        from BRC.classes.ai.workflows.cuisine_tagging_workflow import CuisineTaggingWorkflow
-        from BRC.classes.logic.logic_manager import LogicManager
-        return CuisineTaggingWorkflow(self._report).run(
-            listings, cache, self, LogicManager(), save_cache)
 
     def tag_batch(self, batch):
         """Return validated cuisine proposals for one indexed batch."""
@@ -84,11 +78,6 @@ class AIManager:
             answers[row["index"]] = allowed
         return answers
 
-    def match_outlets(self, records, candidate_groups, exact_matches):
-        """Legacy entry point; delegate whole-job orchestration."""
-        from BRC.classes.ai.workflows.outlet_matching_workflow import OutletMatchingWorkflow
-        return OutletMatchingWorkflow(self._report).run(
-            records, candidate_groups, exact_matches, self)
 
     def propose_match(self, number, record, candidates):
         """Return one schema-validated outlet proposal."""

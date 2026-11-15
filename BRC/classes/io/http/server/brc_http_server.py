@@ -18,6 +18,7 @@ class BRCHTTPServer:
         selected_port = int(
             os.getenv("BRC_PORT", "8000") if port is None else port)
         self._server = server_factory((host, selected_port), handler)
+        self._handler = handler
         self._server.daemon_threads = True
         self._port = selected_port
 
@@ -36,18 +37,18 @@ class BRCHTTPServer:
     def _start_background_warm(self):
         if os.getenv("BRC_AUTO_WARM", "1") == "0":
             return
-        if BRCRequestHandler.database_path.exists():
+        if self._handler.database_path.exists():
             return
 
         def warm():
-            with BRCRequestHandler._run_lock:
-                if BRCRequestHandler.database_path.exists():
+            with self._handler._run_lock:
+                if self._handler.database_path.exists():
                     return
                 try:
                     debug_log.debug_log(
                         "BRC background database build started.",
                         "INFO", "BRC.service")
-                    BRCRequestHandler.application_run()
+                    self._handler.application_run()
                     debug_log.debug_log(
                         "BRC background database build finished.",
                         "INFO", "BRC.service")
