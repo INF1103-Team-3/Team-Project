@@ -105,12 +105,7 @@ class CandidateSearch:
 
     def __fetch_nearby_filtered(self, origin, req, matcher):
         raw = self._places.fetch_nearby_restaurants(origin, req)
-        if raw:
-            self.__record_discovery_status(True)
-        else:
-            checker = getattr(self._places, "last_call_failed", None)
-            if callable(checker) and checker():
-                self.__record_discovery_status(False)
+        self.__record_discovery_status(not self._places.last_call_failed())
         return self.__filter_excluded_places(raw, matcher)
 
     def find(self, request, previous_restaurants=(), strict_exclude=False):
@@ -303,7 +298,7 @@ class CandidateSearch:
             "INFO",
             "BRNS.io_manager.fetch_by_profile_text",
         )
-        plan = self._helpers.discovery_policy().profile_searches(request)
+        plan = self._policy.profile_searches(request)
         response = None
         while True:
             try:

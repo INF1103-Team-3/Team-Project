@@ -1809,7 +1809,7 @@ export async function refreshSearchResults() {
   });
 }
 
-export async function resetRefreshAndSearch() {
+async function resetRefreshAndSearch() {
   if (isSearchInFlight) return;
   const savedPayload = cloneSearchPayload(state.lastSearchPayload);
   const savedBudgetIsPlus = state.lastSearchBudgetIsPlus;

@@ -139,6 +139,8 @@ class BISApplicationService:
     @staticmethod
     def __is_no_open_error(exc):
         msg = str(exc).lower()
+        if "unavailable" in msg:
+            return False
         return "no restaurants found" in msg or "no confirmed open" in msg
 
     @staticmethod

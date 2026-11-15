@@ -2888,8 +2888,7 @@ class WebIntegrationTests(unittest.TestCase):
 
         # Enforce max_length bounds on list (200) and string fields.
         too_many = [
-            {"google_place_id": f"p-{i}", "name": f"R{i}"}
-            for i in range(201)
+            {"google_place_id": f"p-{i}", "name": f"R{i}"} for i in range(201)
         ]
         self.assertEqual(
             self.client.post(
@@ -3389,6 +3388,41 @@ class WebIntegrationTests(unittest.TestCase):
             self.assertEqual(len(alt_body["alternatives"]), 1)
         finally:
             self.application._brns = orig_brns
+
+    def test_refresh_does_not_translate_provider_outage_into_exhaustion(self):
+        headers, _ = self.account("refresh.outage@example.com")
+        error_message = (
+            "No restaurants found, or restaurant search is unavailable."
+        )
+
+        def unavailable(*_args, **_kwargs):
+            raise RuntimeError(error_message)
+
+        original = self.application._brns
+        self.application._brns = self._make_brns_gateway(unavailable)
+        try:
+            for strict in (False, True):
+                with self.subTest(strict_exclude=strict):
+                    payload = self.search_payload()
+                    if strict:
+                        payload.update(
+                            strict_exclude=True,
+                            previous_restaurants=[
+                                {
+                                    "google_place_id": "seen-1",
+                                    "name": "Seen Cafe",
+                                    "address": "1 Road",
+                                }
+                            ],
+                        )
+                    response = self.client.post(
+                        "/api/search", json=payload, headers=headers
+                    )
+                    self.assertEqual(response.status_code, 503, response.text)
+                    self.assertIn(error_message, response.text)
+                    self.assertNotIn("exhausted_previous", response.json())
+        finally:
+            self.application._brns = original
 
 
 if __name__ == "__main__":
