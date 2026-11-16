@@ -44,18 +44,18 @@ class LiveMongoTests(unittest.TestCase):
             )
             cli.ensure_indexes()
             user = cli.register_user("fixture@example.com", "CLI user")
-            cli_creds.save(user["userID"], hasher.create("cli-secret-1"))
+            cli_creds.save(user["userID"], hasher.create("cli.secret.1"))
             self.assertEqual(web.get_user(user["userID"]), user)
             self.assertTrue(
-                hasher.verify("cli-secret-1", web_creds.get(user["userID"]))
+                hasher.verify("cli.secret.1", web_creds.get(user["userID"]))
             )
             web.save(dict(user, username="Web user"))
-            web_creds.save(user["userID"], hasher.create("web-secret-2"))
+            web_creds.save(user["userID"], hasher.create("web.secret.2"))
             self.assertEqual(
                 cli.get_user(user["userID"])["username"], "Web user"
             )
             self.assertTrue(
-                hasher.verify("web-secret-2", cli_creds.get(user["userID"]))
+                hasher.verify("web.secret.2", cli_creds.get(user["userID"]))
             )
         finally:
             if name.startswith("bitefinder_test_"):

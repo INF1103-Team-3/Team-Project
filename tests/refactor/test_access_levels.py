@@ -43,14 +43,37 @@ class AccessLevelTests(unittest.TestCase):
         self.assertEqual(closed, [True])
 
     def test_mongo_operations_do_not_require_a_public_database_handle(self):
-        import mongomock
+        from types import SimpleNamespace
+
+        try:
+            import mongomock
+
+            client = mongomock.MongoClient()
+        except ImportError:
+            docs = {}
+
+            class _FakeCollection:
+                def insert_one(self, doc):
+                    docs[doc["_id"]] = dict(doc)
+
+                def find_one(self, query):
+                    doc = docs.get(query.get("_id"))
+                    return dict(doc) if isinstance(doc, dict) else None
+
+            class _FakeClient:
+                def __getitem__(self, _name):
+                    return SimpleNamespace(records=_FakeCollection())
+
+                def close(self):
+                    return None
+
+            client = _FakeClient()
+
         from BIS.classes.data.stores.mongo.mongo_connection import (
             MongoConnection,
         )
 
-        connection = MongoConnection(
-            client=mongomock.MongoClient(), database="visibility_test"
-        )
+        connection = MongoConnection(client=client, database="visibility_test")
         self.addCleanup(connection.close)
         with self.assertRaises(AttributeError):
             getattr(connection, "db")
