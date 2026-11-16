@@ -338,7 +338,7 @@ async function loadAndRenderHistory() {
       <div class="p-8 text-center text-slate-500 dark:text-slate-400">
         <i data-lucide="lock" class="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2"></i>
         <p class="font-bold text-slate-700 dark:text-slate-200">Sign in to view your search history</p>
-        <p class="mt-1">Search history is privately tied to your BiteFinder account so each user only sees their own past searches.</p>
+        <p class="mt-1">Search history is private and tied to your personal BiteFinder account.</p>
       </div>
     `;
     refreshIcons(container);

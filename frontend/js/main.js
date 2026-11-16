@@ -27,7 +27,7 @@ import {
   openAuthModalWithNotice,
   setAuthChatCallbacks,
   toggleFavoriteByIndex,
-} from './auth.js?v=20261116-5';
+} from './auth.js?v=20261117-1';
 
 function initThemeToggle() {
   updateThemeUI();
