@@ -7,7 +7,7 @@ import time
 from common import debug_log
 
 _CHAT_COMPLETION_PROVIDERS = frozenset(
-    {"openrouter", "groq", "nvidia", "siliconflow"}
+    {"openrouter", "groq", "nvidia"}
 )
 
 

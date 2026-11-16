@@ -14,7 +14,7 @@ connection wiring, nginx configuration, and optional JSON-to-Mongo import.
 | `debug_log.py` | Per-process file logging and trace identifiers propagated across a search. | BIS, BRNS, BRC |
 | `geocode_cache.py` | One durable location query to coordinate cache backed by MongoDB (`geocode_cache`) or JSON. | BIS, BRNS, BRC |
 | `groq_models.py` | Compatibility wrapper delegating Groq model discovery to `ai_models.py`. | BIS, BRNS, and BRC AI managers |
-| `ai_models.py` | Discovers active chat models for Groq, NVIDIA NIM, and SiliconFlow. | BIS, BRNS, and BRC AI managers |
+| `ai_models.py` | Discovers active chat models for Groq and NVIDIA NIM. | BIS, BRNS, and BRC AI managers |
 | `storage_dependencies.py` | Lazy process-level `mongo_connection()` factory shared by Mongo-backed stores and geocode cache. | `BIS/data_manager.py`, `BRNS/data_manager.py`, `geocode_cache.py` |
 | `nginx.conf` | nginx server and `/api/` reverse-proxy configuration for the web container. | Docker `web` service |
 | `migrate_to_mongo.py` | Optional CLI tool to import external JSON exports into MongoDB. | Operators |
@@ -108,10 +108,6 @@ chat models at startup for configured providers:
   non-chat/embedding/rerank/guard/vision/code entries, prioritizes fast NIM
   models (`bolt`, `lightning`, `flash`/`ultra`) and newer versions, and caps
   additions so fallback stays within the 45s chain deadline.
-- **SiliconFlow** (`fetch_siliconflow_models`): requests `/v1/models?sub_type=chat`
-  (deriving `.com` vs `.cn` from `BITEFINDER_SILICONFLOW_URL`), excludes `Pro/`,
-  vision, coder, and `-Thinking`/`-R1` entries, prioritizes small/fast models,
-  and caps additions cleanly.
 Missing credentials, network errors, non-success HTTP responses, or no eligible
 models return an empty list and write a concise log event. The BIS or BRNS AI
 manager owns the final configured fallback list and provider request policy.

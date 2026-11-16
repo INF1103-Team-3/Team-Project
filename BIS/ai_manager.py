@@ -27,9 +27,6 @@ from BIS.classes.ai.providers.clients.nvidia_ai_provider import (
 from BIS.classes.ai.providers.clients.openrouter_ai_provider import (
     OpenRouterAIProvider,
 )
-from BIS.classes.ai.providers.clients.siliconflow_ai_provider import (
-    SiliconFlowAIProvider,
-)
 
 from sources.prompts import INTENTS, SYSTEM_PROMPT
 
@@ -48,10 +45,6 @@ GROQ_URL = os.getenv(
 NVIDIA_URL = os.getenv(
     "BITEFINDER_NVIDIA_URL",
     "https://integrate.api.nvidia.com/v1/chat/completions",
-)
-SILICONFLOW_URL = os.getenv(
-    "BITEFINDER_SILICONFLOW_URL",
-    "https://api.siliconflow.com/v1/chat/completions",
 )
 
 # BIS owns this fallback order. Keep it independent of BRNS's model chain.
@@ -84,11 +77,11 @@ def manager():
 
 
 def _extend_bis_chain_with_dynamic_models():
-    """Fetch available Groq, NVIDIA NIM, and SiliconFlow chat models at
+    """Fetch available Groq and NVIDIA NIM chat models at
     startup and register them ahead of slow fallbacks.
     """
     from dotenv import load_dotenv
-    from common.ai_models import fetch_nvidia_models, fetch_siliconflow_models
+    from common.ai_models import fetch_nvidia_models
     from common.groq_models import fetch_chat_models
 
     load_dotenv(BASE_DIR.parent / ".env")
@@ -98,14 +91,6 @@ def _extend_bis_chain_with_dynamic_models():
             "nvidia",
             os.getenv("NVIDIA_API_KEY", "").strip(),
             fetch_nvidia_models,
-        ),
-        (
-            "siliconflow",
-            (
-                os.getenv("SILICON_FLOW_API_KEY", "").strip()
-                or os.getenv("SILICONFLOW_API_KEY", "").strip()
-            ),
-            fetch_siliconflow_models,
         ),
     )
     for provider_name, api_key, fetcher in discoverers:
@@ -209,10 +194,6 @@ def _call_nvidia(payload, model, config):
     return _transport().call_nvidia(payload, model, config)
 
 
-def _call_siliconflow(payload, model, config):
-    return _transport().call_siliconflow(payload, model, config)
-
-
 def _parse_json_response(content):
     """Parse a JSON object from the model response."""
     cleaned = content.strip()
@@ -295,16 +276,6 @@ def _call_json_with_fallback(
         ),
         enabled=lambda settings: bool(settings.get("nvidia_api_key")),
     )
-    registry.register(
-        "siliconflow",
-        lambda model: SiliconFlowAIProvider(
-            model,
-            lambda request, settings, selected=model: _call_siliconflow(
-                request, selected, settings
-            ),
-        ),
-        enabled=lambda settings: bool(settings.get("siliconflow_api_key")),
-    )
     for entry in MODEL_CHAIN:
         provider, model = entry.get("provider"), entry.get("model")
         if not model or any(char in model for char in "<> "):
@@ -335,7 +306,6 @@ def has_fallback_provider(config):
         ),
         "groq": bool(config.get("groq_api_key")),
         "nvidia": bool(config.get("nvidia_api_key")),
-        "siliconflow": bool(config.get("siliconflow_api_key")),
     }
     return any(
         entry.get("model")
@@ -475,5 +445,4 @@ def _transport():
         lambda: GEMINI_URL,
         lambda: GROQ_URL,
         nvidia_url=lambda: NVIDIA_URL,
-        siliconflow_url=lambda: SILICONFLOW_URL,
     )

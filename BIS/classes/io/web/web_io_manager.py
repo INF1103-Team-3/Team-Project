@@ -67,7 +67,6 @@ class WebIOManager(BISWebIOInterface):
             "gemini": "Gemini AI",
             "groq": "Groq AI",
             "nvidia": "NVIDIA NIM",
-            "siliconflow": "SiliconFlow AI",
             "openrouter": "OpenRouter AI",
         }
         if "/" in clean:

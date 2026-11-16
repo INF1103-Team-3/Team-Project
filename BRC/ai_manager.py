@@ -49,7 +49,7 @@ def _append_discovered_provider(
 
 def create_manager(api_key, model):
     """Build BRC's independent configured provider-chain state."""
-    from common.ai_models import fetch_nvidia_models, fetch_siliconflow_models
+    from common.ai_models import fetch_nvidia_models
     from common.groq_models import fetch_chat_models
 
     try:
@@ -67,10 +67,6 @@ def create_manager(api_key, model):
     openrouter_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     groq_key = os.getenv("GROQ_API_KEY", "").strip()
     nvidia_key = os.getenv("NVIDIA_API_KEY", "").strip()
-    siliconflow_key = (
-        os.getenv("SILICON_FLOW_API_KEY", "").strip()
-        or os.getenv("SILICONFLOW_API_KEY", "").strip()
-    )
     providers = []
     if api_key:
         providers.append({"provider": "gemini", "model": model})
@@ -92,14 +88,6 @@ def create_manager(api_key, model):
         "BRC_NVIDIA_MODEL",
         "nvidia/nemotron-3.5-bolt-e4b",
     )
-    _append_discovered_provider(
-        providers,
-        "siliconflow",
-        siliconflow_key,
-        fetch_siliconflow_models,
-        "BRC_SILICONFLOW_MODEL",
-        "Qwen/Qwen2.5-7B-Instruct",
-    )
     if api_key:
         fallback = os.getenv(
             "BRC_GEMINI_FALLBACK_MODEL", "gemini-3.6-flash"
@@ -120,7 +108,7 @@ def create_manager(api_key, model):
     if not providers:
         raise ValueError(
             "Set GEMINI_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, "
-            "NVIDIA_API_KEY, or SILICON_FLOW_API_KEY before running BRC."
+            "or NVIDIA_API_KEY before running BRC."
         )
     return {
         "api_key": api_key,
@@ -128,7 +116,6 @@ def create_manager(api_key, model):
         "openrouter_api_key": openrouter_key,
         "groq_api_key": groq_key,
         "nvidia_api_key": nvidia_key,
-        "siliconflow_api_key": siliconflow_key,
         "providers": providers,
         "client": None,
         "request_interval": min(max(interval, 0.0), 60.0),
@@ -225,11 +212,6 @@ _CHAT_PROVIDER_ENDPOINTS = {
         "BITEFINDER_NVIDIA_URL",
         "https://integrate.api.nvidia.com/v1/chat/completions",
         "nvidia_api_key",
-    ),
-    "siliconflow": (
-        "BITEFINDER_SILICONFLOW_URL",
-        "https://api.siliconflow.com/v1/chat/completions",
-        "siliconflow_api_key",
     ),
 }
 

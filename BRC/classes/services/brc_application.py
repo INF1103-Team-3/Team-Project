@@ -117,7 +117,6 @@ class BRCApplication:
             settings["openrouter_api_key"],
             settings["groq_api_key"],
             settings.get("nvidia_api_key"),
-            settings.get("siliconflow_api_key"),
             settings["timeout_seconds"],
             settings["chain_timeout_seconds"],
         )

@@ -15,7 +15,6 @@ def _has_fast_provider(config):
             "groq_api_key",
             "gemini_api_key",
             "nvidia_api_key",
-            "siliconflow_api_key",
         )
     )
 

@@ -30,9 +30,6 @@ from BRNS.classes.ai.providers.clients.nvidia_ai_provider import (
 from BRNS.classes.ai.providers.clients.openrouter_ai_provider import (
     OpenRouterAIProvider,
 )
-from BRNS.classes.ai.providers.clients.siliconflow_ai_provider import (
-    SiliconFlowAIProvider,
-)
 from BRNS.classes.ai.providers.clients.unsupported_ai_provider import (
     UnsupportedAIProvider,
 )
@@ -341,10 +338,6 @@ def _call_nvidia(model_id, system_prompt, user_text):
     return _transport().call_nvidia(model_id, system_prompt, user_text)
 
 
-def _call_siliconflow(model_id, system_prompt, user_text):
-    return _transport().call_siliconflow(model_id, system_prompt, user_text)
-
-
 def _track_provider_call(provider, model, fn):
     global _CURRENT_ACTIVE_MODEL
     _CURRENT_ACTIVE_MODEL = f"{provider}/{model}"
@@ -401,20 +394,6 @@ def _provider_registry():
             ),
         ),
         enabled=lambda settings: bool(getattr(settings, "NVIDIA_API_KEY", "")),
-    )
-    registry.register(
-        "siliconflow",
-        lambda model: SiliconFlowAIProvider(
-            model,
-            lambda system_prompt, text, selected=model: _track_provider_call(
-                "siliconflow",
-                selected,
-                lambda: _call_siliconflow(selected, system_prompt, text),
-            ),
-        ),
-        enabled=lambda settings: bool(
-            getattr(settings, "SILICON_FLOW_API_KEY", "")
-        ),
     )
     return registry
 
@@ -654,7 +633,6 @@ def current_active_model():
         "openrouter": "OPENROUTER_API_KEY",
         "groq": "GROQ_API_KEY",
         "nvidia": "NVIDIA_API_KEY",
-        "siliconflow": "SILICON_FLOW_API_KEY",
     }
     for entry in getattr(config, "MODEL_CHAIN", []):
         provider = entry.get("provider", "")

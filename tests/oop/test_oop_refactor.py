@@ -2453,27 +2453,15 @@ class OOPRefactorTests(unittest.TestCase):
             {"id": "nvidia/nemotron-3-ultra-550b-a55b"},
             {"id": "google/gemma-3-12b-it"},
         ]
-        sf_catalog = [
-            {"id": "Pro/deepseek-ai/DeepSeek-R1"},
-            {"id": "Qwen/Qwen3-VL-8B-Instruct"},
-            {"id": "Qwen/Qwen3-Coder-30B-A3B-Instruct"},
-            {"id": "deepseek-ai/DeepSeek-V4.1-Flash"},
-            {"id": "Qwen/Qwen2.5-7B-Instruct"},
-            {"id": "zai-org/GLM-5.3"},
-        ]
 
-        def fake_get(url, headers=None, timeout=None):
-            if "integrate.api.nvidia.com" in url:
-                return SimpleNamespace(
-                    status_code=200, json=lambda: {"data": nvidia_catalog}
-                )
-            return SimpleNamespace(
-                status_code=200, json=lambda: {"data": sf_catalog}
-            )
-
-        with patch.object(ai_models.requests, "get", side_effect=fake_get):
+        with patch.object(
+            ai_models.requests,
+            "get",
+            return_value=SimpleNamespace(
+                status_code=200, json=lambda: {"data": nvidia_catalog}
+            ),
+        ):
             nv = ai_models.fetch_nvidia_models("nv-key", limit=2)
-            sf = ai_models.fetch_siliconflow_models("sf-key", limit=2)
         self.assertEqual(
             nv,
             [
@@ -2481,64 +2469,50 @@ class OOPRefactorTests(unittest.TestCase):
                 "nvidia/nemotron-3.5-lightning-30b-a3b",
             ],
         )
-        self.assertEqual(
-            sf,
-            [
-                "Qwen/Qwen2.5-7B-Instruct",
-                "deepseek-ai/DeepSeek-V4.1-Flash",
-            ],
-        )
-        cn_chat = "https://api.siliconflow.cn/v1/chat/completions"
-        with patch.dict(os.environ, {"BITEFINDER_SILICONFLOW_URL": cn_chat}):
+        custom_nv = "https://example.nvidia.invalid/v1/chat/completions"
+        with patch.dict(os.environ, {"BITEFINDER_NVIDIA_URL": custom_nv}):
             self.assertEqual(
                 ai_models.derive_models_url(
-                    "BITEFINDER_SILICONFLOW_URL",
-                    ai_models.SILICONFLOW_MODELS_URL,
-                    query="sub_type=chat",
+                    "BITEFINDER_NVIDIA_URL",
+                    ai_models.NVIDIA_MODELS_URL,
                 ),
-                "https://api.siliconflow.cn/v1/models?sub_type=chat",
+                "https://example.nvidia.invalid/v1/models",
             )
 
-    def test_bis_brns_and_brc_support_nvidia_and_siliconflow_providers(self):
+    def test_bis_brns_and_brc_support_nvidia_providers(self):
         from unittest.mock import patch
         from BIS import ai_manager as bis_ai
         from BIS.classes.io.web.web_io_manager import WebIOManager
         from BRNS import ai_manager as brns_ai
 
-        sf_model = "Qwen/Qwen2.5-7B-Instruct"
+        nv_model = "nvidia/nemotron-3.5-bolt-e4b"
         self.assertEqual(
-            WebIOManager._format_model_display(
-                "nvidia/nvidia/nemotron-3.5-bolt-e4b"
-            ),
-            "NVIDIA NIM (nvidia/nemotron-3.5-bolt-e4b)",
-        )
-        self.assertEqual(
-            WebIOManager._format_model_display(f"siliconflow/{sf_model}"),
-            f"SiliconFlow AI ({sf_model})",
+            WebIOManager._format_model_display(f"nvidia/{nv_model}"),
+            f"NVIDIA NIM ({nv_model})",
         )
 
         nv_cfg = {
             "openrouter_model": "",
+            "gemini_api_key": "gem-key",
             "nvidia_api_key": "nv-key",
-            "siliconflow_api_key": "sf-key",
         }
         with (
             patch.object(
                 bis_ai,
                 "MODEL_CHAIN",
                 [
-                    {"provider": "nvidia", "model": "nvidia/bolt"},
-                    {"provider": "siliconflow", "model": sf_model},
+                    {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
+                    {"provider": "nvidia", "model": nv_model},
                 ],
             ),
             patch.object(
                 bis_ai,
-                "_call_nvidia",
-                side_effect=RuntimeError("nv unavailable"),
+                "_call_gemini",
+                side_effect=RuntimeError("gem unavailable"),
             ),
             patch.object(
                 bis_ai,
-                "_call_siliconflow",
+                "_call_nvidia",
                 return_value='{"intent":"help","profile_updates":{}}',
             ),
         ):
@@ -2553,22 +2527,21 @@ class OOPRefactorTests(unittest.TestCase):
                 brns_ai.config,
                 "MODEL_CHAIN",
                 [
-                    {"provider": "nvidia", "model": "nvidia/bolt"},
-                    {"provider": "siliconflow", "model": sf_model},
+                    {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
+                    {"provider": "nvidia", "model": nv_model},
                 ],
             ),
-            patch.object(brns_ai.config, "GEMINI_API_KEY", ""),
+            patch.object(brns_ai.config, "GEMINI_API_KEY", "gem-key"),
             patch.object(brns_ai.config, "GROQ_API_KEY", ""),
             patch.object(brns_ai.config, "OPENROUTER_API_KEY", ""),
             patch.object(brns_ai.config, "NVIDIA_API_KEY", "nv-key"),
-            patch.object(brns_ai.config, "SILICON_FLOW_API_KEY", "sf-key"),
             patch.object(brns_ai.time, "sleep", lambda _s: None),
             patch.object(
-                brns_ai, "_call_nvidia", return_value=(False, "HTTP 503")
+                brns_ai, "_call_gemini", return_value=(False, "HTTP 503")
             ),
             patch.object(
                 brns_ai,
-                "_call_siliconflow",
+                "_call_nvidia",
                 return_value=(
                     True,
                     '{"recommendations":[{"id":0,"reason_codes":[]}]}',
@@ -2576,7 +2549,7 @@ class OOPRefactorTests(unittest.TestCase):
             ),
         ):
             self.assertEqual(
-                brns_ai.current_active_model(), "nvidia/nvidia/bolt"
+                brns_ai.current_active_model(), "gemini/gemini-3.5-flash-lite"
             )
             ranked = brns_ai.manager().recommend_prepared(
                 {"candidates": [{"id": 0}]}, 1
@@ -2584,26 +2557,28 @@ class OOPRefactorTests(unittest.TestCase):
             self.assertEqual(ranked, [{"id": 0, "reason_codes": []}])
             self.assertEqual(
                 brns_ai.last_used_model(),
-                f"siliconflow/{sf_model}",
+                f"nvidia/{nv_model}",
             )
 
         brc_settings = {
             "providers": [
-                {"provider": "nvidia", "model": "nvidia/bolt"},
-                {"provider": "siliconflow", "model": sf_model},
+                {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
+                {"provider": "nvidia", "model": nv_model},
             ],
             "timeout_seconds": 5,
             "chain_timeout_seconds": 15,
         }
         calls = []
 
+        def fake_gemini(*_args):
+            calls.append(("gemini", "gemini-3.5-flash-lite"))
+            raise RuntimeError("gem timeout")
+
         def fake_chat(_prompt, _mgr, provider, model, _timeout):
             calls.append((provider, model))
-            if provider == "nvidia":
-                raise RuntimeError("nv timeout")
             return '{"certificate_number": null}'
 
-        brc_client = FallbackAIClient(brc_settings, lambda *_: "", fake_chat)
+        brc_client = FallbackAIClient(brc_settings, fake_gemini, fake_chat)
         self.assertEqual(
             brc_client.request_validated("match", json.loads),
             {"certificate_number": None},
@@ -2611,8 +2586,8 @@ class OOPRefactorTests(unittest.TestCase):
         self.assertEqual(
             calls,
             [
-                ("nvidia", "nvidia/bolt"),
-                ("siliconflow", sf_model),
+                ("gemini", "gemini-3.5-flash-lite"),
+                ("nvidia", nv_model),
             ],
         )
 
@@ -2624,7 +2599,6 @@ class OOPRefactorTests(unittest.TestCase):
                 os.environ,
                 {
                     "NVIDIA_API_KEY": "nv-key",
-                    "SILICON_FLOW_API_KEY": "sf-key",
                     "GROQ_API_KEY": "",
                     "OPENROUTER_API_KEY": "",
                 },
@@ -2632,21 +2606,13 @@ class OOPRefactorTests(unittest.TestCase):
             patch.object(
                 ai_models,
                 "fetch_nvidia_models",
-                return_value=["nvidia/bolt"],
-            ),
-            patch.object(
-                ai_models,
-                "fetch_siliconflow_models",
-                return_value=[sf_model],
+                return_value=[nv_model],
             ),
         ):
             mgr = brc_ai.create_manager("", "gemini-3.5-flash-lite")
         self.assertEqual(
             mgr["providers"],
-            [
-                {"provider": "nvidia", "model": "nvidia/bolt"},
-                {"provider": "siliconflow", "model": sf_model},
-            ],
+            [{"provider": "nvidia", "model": nv_model}],
         )
 
 

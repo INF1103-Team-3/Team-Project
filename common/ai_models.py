@@ -10,24 +10,12 @@ import requests
 from common import debug_log as log
 
 GROQ_MODELS_URL = "https://api.groq.com/openai/v1/models"
-SILICONFLOW_MODELS_URL = (
-    "https://api.siliconflow.com/v1/models?sub_type=chat"
-)
 NVIDIA_MODELS_URL = "https://integrate.api.nvidia.com/v1/models"
 
 # Groq models must have at least this context window to be useful for the
 # structured JSON prompts the application sends.
 _MIN_GROQ_CONTEXT_WINDOW = 4096
 _DEFAULT_CAP = 5
-
-_SILICONFLOW_EXCLUDE_TOKENS = (
-    "vision",
-    "-vl-",
-    "-vl/",
-    "-thinking",
-    "coder",
-    "-r1",
-)
 
 _NVIDIA_EXCLUDE_TOKENS = (
     "embed",
@@ -107,15 +95,6 @@ def _fetch_model_entries(url, api_key, provider_label, timeout=(3, 10)):
     return data if isinstance(data, list) else []
 
 
-def _extract_param_size_billions(model_id):
-    """Return numeric model size in billions if encoded in *model_id*."""
-    match = re.search(r"(\d+(?:\.\d+)?)\s*([bt])\b", model_id.lower())
-    if not match:
-        return None
-    size = float(match.group(1))
-    return size * 1000.0 if match.group(2) == "t" else size
-
-
 def _extract_version_score(model_id):
     """Return the highest semantic version number encoded in *model_id*."""
     matches = re.findall(
@@ -158,58 +137,6 @@ def fetch_groq_models(api_key, models_url=None, timeout=(3, 10)):
     ids = [model_id for model_id, _ in eligible]
     log.debug_log(
         f"Groq: discovered {len(ids)} chat model(s): {ids}",
-        "INFO",
-        "common.ai_models",
-    )
-    return ids
-
-
-def _rank_siliconflow_model(index_and_id):
-    idx, model_id = index_and_id
-    lower = model_id.lower()
-    is_pro = 1 if "-pro" in lower else 0
-    size = _extract_param_size_billions(lower)
-    if size is None:
-        size_bucket = 12.0 if ("flash" in lower or "air" in lower) else 150.0
-    else:
-        size_bucket = size
-    # Prefer smaller/fast non-Pro chat models first (more likely free/fast).
-    size_tier = 0 if size_bucket <= 15.0 else (1 if size_bucket <= 40.0 else 2)
-    instruct_bonus = 0 if ("instruct" in lower or "flash" in lower) else 1
-    return (is_pro, size_tier, instruct_bonus, size_bucket, idx)
-
-
-def fetch_siliconflow_models(
-    api_key, models_url=None, timeout=(3, 5), limit=_DEFAULT_CAP
-):
-    """Return prioritized SiliconFlow chat model IDs."""
-    url = models_url or derive_models_url(
-        "BITEFINDER_SILICONFLOW_URL",
-        SILICONFLOW_MODELS_URL,
-        query="sub_type=chat",
-    )
-    data = _fetch_model_entries(url, api_key, "SiliconFlow", timeout=timeout)
-    if not data:
-        return []
-
-    eligible = []
-    for entry in data:
-        model_id = (entry.get("id") or "").strip()
-        if not model_id:
-            continue
-        lower = model_id.lower()
-        if lower.startswith("pro/"):
-            continue
-        if any(token in lower for token in _SILICONFLOW_EXCLUDE_TOKENS):
-            continue
-        eligible.append(model_id)
-
-    ranked = sorted(enumerate(eligible), key=_rank_siliconflow_model)
-    ids = [model_id for _, model_id in ranked]
-    if limit and limit > 0:
-        ids = ids[:limit]
-    log.debug_log(
-        f"SiliconFlow: selected {len(ids)} chat model(s): {ids}",
         "INFO",
         "common.ai_models",
     )

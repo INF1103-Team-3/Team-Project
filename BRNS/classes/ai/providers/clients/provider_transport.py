@@ -125,15 +125,3 @@ class ProviderTransport:
             system_prompt,
             user_text,
         )
-
-    def call_siliconflow(self, model_id, system_prompt, user_text):
-        """One SiliconFlow attempt. Returns (True, reply_text) or
-        (False, error).
-        """
-        return self._call_openai_compatible(
-            self._config.SILICONFLOW_URL,
-            self._config.SILICON_FLOW_API_KEY,
-            model_id,
-            system_prompt,
-            user_text,
-        )

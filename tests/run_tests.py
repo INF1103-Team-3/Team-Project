@@ -133,8 +133,6 @@ def safe_test_environment(use_brc_service=False, is_api_test=False):
             "GEMINI_API_KEY",
             "GROQ_API_KEY",
             "NVIDIA_API_KEY",
-            "SILICON_FLOW_API_KEY",
-            "SILICONFLOW_API_KEY",
             "OPENROUTER_API_KEY",
             "OPENROUTER_API_KEYS",
             "OPENROUTER_API_KEYS_FILE",

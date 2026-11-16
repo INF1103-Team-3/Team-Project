@@ -688,8 +688,6 @@ def create_blackbox_context():
                 "GEMINI_",
                 "GROQ_",
                 "NVIDIA_",
-                "SILICONFLOW_",
-                "SILICON_FLOW_",
                 "SMTP_",
                 "BITEFINDER_",
                 "MONGO_",

@@ -46,10 +46,8 @@ import BRNS.ai_manager as brns_ai  # noqa: E402
 import BRNS.config as brns_config  # noqa: E402
 from common.ai_models import (  # noqa: E402
     NVIDIA_MODELS_URL,
-    SILICONFLOW_MODELS_URL,
     derive_models_url,
     fetch_nvidia_models,
-    fetch_siliconflow_models,
 )
 from common.groq_models import fetch_chat_models  # noqa: E402
 
@@ -505,10 +503,6 @@ def test_bis_fallback_graceful_exhaustion():
             "BIS.ai_manager._call_nvidia",
             side_effect=RuntimeError("Simulated failure"),
         ),
-        patch(
-            "BIS.ai_manager._call_siliconflow",
-            side_effect=RuntimeError("Simulated failure"),
-        ),
     ):
         try:
             bis_ai._call_json_with_fallback(payload, config)
@@ -635,10 +629,6 @@ def test_brns_fallback_exhaustion_returns_none():
         patch("BRNS.ai_manager._call_groq", return_value=(False, "HTTP 500")),
         patch(
             "BRNS.ai_manager._call_nvidia", return_value=(False, "HTTP 500")
-        ),
-        patch(
-            "BRNS.ai_manager._call_siliconflow",
-            return_value=(False, "HTTP 500"),
         ),
     ):
         recommendation = brns_ai.recommend_candidates(
@@ -771,28 +761,6 @@ def test_nvidia_api_key_connectivity():
     )
 
 
-def test_siliconflow_api_key_connectivity():
-    """Verify SILICON_FLOW_API_KEY model discovery and chat completion."""
-    _verify_discovered_provider_connectivity(
-        "API-AI-12: SiliconFlow API Key Connectivity",
-        "SiliconFlow",
-        ("SILICON_FLOW_API_KEY", "SILICONFLOW_API_KEY"),
-        os.getenv(
-            "BITEFINDER_SILICONFLOW_URL",
-            "https://api.siliconflow.com/v1/chat/completions",
-        ),
-        lambda k: fetch_siliconflow_models(
-            k,
-            models_url=derive_models_url(
-                "BITEFINDER_SILICONFLOW_URL",
-                SILICONFLOW_MODELS_URL,
-                query="sub_type=chat",
-            ),
-        ),
-        "Qwen/Qwen2.5-7B-Instruct",
-    )
-
-
 # ---------------------------------------------------------------------------
 # Test Runner
 # ---------------------------------------------------------------------------
@@ -802,7 +770,6 @@ TESTS = (
     test_gemini_api_key_connectivity,
     test_groq_api_key_connectivity,
     test_nvidia_api_key_connectivity,
-    test_siliconflow_api_key_connectivity,
     test_bis_fallback_chain_normal_execution,
     test_bis_fallback_activates_on_primary_failure,
     test_bis_fallback_cascades_multi_tier,

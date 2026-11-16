@@ -15,7 +15,6 @@ class ProviderTransport:
         gemini_url,
         groq_url,
         nvidia_url=None,
-        siliconflow_url=None,
     ):
         self._http, self._log = http, logger
         self._key_selector, self._error_formatter = (
@@ -24,7 +23,6 @@ class ProviderTransport:
         )
         self._gemini_url, self._groq_url = gemini_url, groq_url
         self._nvidia_url = nvidia_url
-        self._siliconflow_url = siliconflow_url
 
     def call_openrouter(self, payload, config):
         "Call OpenRouter's chat-completions endpoint and return model text."
@@ -195,16 +193,6 @@ class ProviderTransport:
             "NVIDIA NIM",
             self._nvidia_url,
             config.get("nvidia_api_key"),
-            payload,
-            model,
-        )
-
-    def call_siliconflow(self, payload, model, config):
-        """Call SiliconFlow's chat-completions endpoint for BIS JSON."""
-        return self._call_openai_compatible(
-            "SiliconFlow",
-            self._siliconflow_url,
-            config.get("siliconflow_api_key"),
             payload,
             model,
         )
