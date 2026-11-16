@@ -12,7 +12,7 @@ import {
   applyUserToSearchForm,
   collectCurrentFormPayload,
   isBudgetPlusDisplay,
-} from './filters.js?v=20261116-4';
+} from './filters.js?v=20261117-2';
 import { getPriceValue, getRatingValue, getTravelMinutes, resetResultsDisplay } from './results.js?v=20261116-4';
 import { flyToMarkerForItem } from './map.js?v=20261116-4';
 import { showToast } from './toast.js?v=20261116-4';
@@ -386,10 +386,28 @@ export async function startOnboardingInChat() {
   }
 }
 
-export function postChatSearchOutcome({ matches = [], alternatives = [], modelUsed = '', emptyMessage = '', errorMessage = '', fromChat = false }) {
+export function postChatSearchOutcome({
+  matches = [],
+  alternatives = [],
+  modelUsed = '',
+  emptyMessage = '',
+  errorMessage = '',
+  cancelled = false,
+  fromChat = false,
+}) {
   if (state.pendingChatSearchBubble) {
     state.pendingChatSearchBubble.remove();
     state.pendingChatSearchBubble = null;
+  }
+  if (cancelled) {
+    if (fromChat) {
+      appendChatBubble(
+        'assistant',
+        'Search cancelled. Feel free to adjust your filters or tell me what you would like to change.',
+        { quickReplies: ['Retry search', 'Help'] },
+      );
+    }
+    return;
   }
   if (errorMessage) {
     appendChatBubble('assistant', `Search hit a snag: ${errorMessage}`, {

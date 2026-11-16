@@ -87,16 +87,12 @@ class MuisSnapshot:
             ],
         }
 
-    def validate(self, current=True):
-        if (
-            not self.covers_all_postal_codes(self._postal_prefixes)
-            or not self._listings
-            or self._source_url != SOURCE_URL
-            or not isinstance(self._fetched_at, str)
-        ):
+    @classmethod
+    def validate_fetched_at(cls, value, current=True):
+        if not isinstance(value, str):
             raise ValueError("MUIS raw data is incomplete or invalid.")
         try:
-            fetched = datetime.fromisoformat(self._fetched_at)
+            fetched = datetime.fromisoformat(value)
         except ValueError as error:
             raise ValueError(
                 "MUIS raw data has an invalid retrieval time."
@@ -104,8 +100,26 @@ class MuisSnapshot:
         now = datetime.now(timezone.utc)
         if fetched.tzinfo is None or fetched > now + timedelta(minutes=5):
             raise ValueError("MUIS raw data has an invalid retrieval time.")
-        if current and now - fetched > self.MAX_AGE:
+        if current and now - fetched > cls.MAX_AGE:
             raise ValueError("MUIS raw data is older than seven days.")
+        return fetched
+
+    @classmethod
+    def is_fresh_timestamp(cls, value):
+        try:
+            cls.validate_fetched_at(value, current=True)
+        except ValueError:
+            return False
+        return True
+
+    def validate(self, current=True):
+        if (
+            not self.covers_all_postal_codes(self._postal_prefixes)
+            or not self._listings
+            or self._source_url != SOURCE_URL
+        ):
+            raise ValueError("MUIS raw data is incomplete or invalid.")
+        self.validate_fetched_at(self._fetched_at, current=current)
         return self
 
     @staticmethod

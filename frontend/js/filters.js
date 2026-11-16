@@ -21,6 +21,7 @@ import {
 } from './results.js?v=20261116-4';
 
 let isSearchInFlight = false;
+let activeSearchAbort = null;
 
 const SEARCH_BTN_HTML = '<i data-lucide="search" class="w-4 h-4"></i> Find Matching Restaurants';
 const REFRESH_BTN_HTML = '<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span>Different Results</span>';
@@ -1571,6 +1572,97 @@ function buildCuisineBreakdownText(breakdown) {
   return '';
 }
 
+function setCancelButtonsVisible(visible) {
+  ['cancelSearchBtn', 'statusCancelSearchBtn'].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.classList.toggle('hidden', !visible);
+    if (visible) refreshIcons(btn);
+  });
+}
+
+function isAbortError(err, controller) {
+  return Boolean(controller?.signal?.aborted || err?.name === 'AbortError');
+}
+
+function throwIfSearchAborted(controller) {
+  if (!controller?.signal?.aborted) return;
+  throw controller.signal.reason instanceof Error
+    ? controller.signal.reason
+    : new DOMException('Search cancelled by user.', 'AbortError');
+}
+
+export function cancelActiveSearch() {
+  if (!isSearchInFlight || !activeSearchAbort || activeSearchAbort.signal.aborted) {
+    return false;
+  }
+  activeSearchAbort.abort(new DOMException('Search cancelled by user.', 'AbortError'));
+  return true;
+}
+
+function captureSearchSnapshot(resultsHeader, resultsCount, subtextEl) {
+  return {
+    activeSearchMode: state.activeSearchMode,
+    activeBudgetLimit: state.activeBudgetLimit,
+    activeBudgetIsPlus: state.activeBudgetIsPlus,
+    compareKeys: new Set(state.compareKeys),
+    lastOrigin: state.lastOrigin,
+    lastInputOrigins: Array.isArray(state.lastInputOrigins) ? [...state.lastInputOrigins] : [],
+    lastMatches: Array.isArray(state.lastMatches) ? [...state.lastMatches] : [],
+    lastAlternatives: Array.isArray(state.lastAlternatives) ? [...state.lastAlternatives] : [],
+    lastSearchPayload: cloneSearchPayload(state.lastSearchPayload),
+    lastSearchBudgetIsPlus: state.lastSearchBudgetIsPlus,
+    refreshSeenRestaurants: Array.isArray(state.refreshSeenRestaurants) ? [...state.refreshSeenRestaurants] : [],
+    refreshSeenKeys: new Set(state.refreshSeenKeys),
+    headerWasHidden: resultsHeader ? resultsHeader.classList.contains('hidden') : true,
+    resultsCountText: resultsCount ? resultsCount.textContent : '',
+    resultsSubtextText: subtextEl ? subtextEl.textContent : '',
+  };
+}
+
+function restoreCancelledSearch(snapshot, els) {
+  const { statusBanner, statusIcon, statusText, resultsHeader, resultsCount, subtextEl, emptyState } = els;
+  state.activeSearchMode = snapshot.activeSearchMode;
+  state.activeBudgetLimit = snapshot.activeBudgetLimit;
+  state.activeBudgetIsPlus = snapshot.activeBudgetIsPlus;
+  state.compareKeys = snapshot.compareKeys;
+  state.lastOrigin = snapshot.lastOrigin;
+  state.lastInputOrigins = snapshot.lastInputOrigins;
+  state.lastMatches = snapshot.lastMatches;
+  state.lastAlternatives = snapshot.lastAlternatives;
+  state.lastSearchPayload = snapshot.lastSearchPayload;
+  state.lastSearchBudgetIsPlus = snapshot.lastSearchBudgetIsPlus;
+  state.refreshSeenRestaurants = snapshot.refreshSeenRestaurants;
+  state.refreshSeenKeys = snapshot.refreshSeenKeys;
+
+  const hadPreviousResults = snapshot.lastMatches.length > 0 || snapshot.lastAlternatives.length > 0;
+  if (hadPreviousResults || !snapshot.headerWasHidden) {
+    if (resultsHeader) {
+      resultsHeader.classList.remove('hidden');
+      refreshIcons(resultsHeader);
+    }
+    if (resultsCount) resultsCount.textContent = snapshot.resultsCountText;
+    if (subtextEl) subtextEl.textContent = snapshot.resultsSubtextText;
+    renderResults(state.lastMatches, state.lastAlternatives);
+  } else {
+    state.displayedItems = [];
+    const resultsList = document.getElementById('resultsList');
+    if (resultsList) resultsList.innerHTML = '';
+    resultsHeader?.classList.add('hidden');
+    document.getElementById('mapSection')?.classList.add('hidden');
+    emptyState?.classList.remove('hidden');
+  }
+
+  if (statusBanner && statusIcon && statusText) {
+    statusBanner.className = 'p-4 rounded-2xl border text-sm flex items-center gap-3 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200';
+    statusIcon.innerHTML = '<i data-lucide="info" class="w-4 h-4 text-slate-500 dark:text-slate-400"></i>';
+    statusText.textContent = hadPreviousResults
+      ? 'Search cancelled — showing your previous results. Adjust your filters and search again.'
+      : 'Search cancelled. Adjust your filters and search again.';
+    refreshIcons(statusBanner);
+  }
+}
+
 async function executeSearchRequest(basePayload, {
   isRefresh = false,
   notifyChat = !isRefresh,
@@ -1591,6 +1683,7 @@ async function executeSearchRequest(basePayload, {
   const resultsCount = document.getElementById('resultsCount');
   const subtextEl = document.getElementById('resultsSubtext');
 
+  const snapshot = captureSearchSnapshot(resultsHeader, resultsCount, subtextEl);
   const allLocations = cleanBase.locations?.length ? cleanBase.locations : [cleanBase.location];
   state.activeSearchMode = cleanBase.mode || 'walk';
   state.activeBudgetLimit = cleanBase.budget_per_person ?? null;
@@ -1610,6 +1703,8 @@ async function executeSearchRequest(basePayload, {
       }
     : cleanBase;
 
+  const searchAbort = new AbortController();
+  activeSearchAbort = searchAbort;
   isSearchInFlight = true;
   if (searchBtn) {
     searchBtn.disabled = true;
@@ -1626,12 +1721,7 @@ async function executeSearchRequest(basePayload, {
   if (surpriseBtn) {
     surpriseBtn.disabled = true;
   }
-
-  let activeModelLabel = 'Gemini AI';
-  try {
-    const mData = await apiJson('/api/active-model');
-    if (mData.active_model) activeModelLabel = mData.active_model;
-  } catch { }
+  setCancelButtonsVisible(true);
 
   if (emptyState) emptyState.classList.add('hidden');
   document.getElementById('mapSection')?.classList.add('hidden');
@@ -1642,13 +1732,13 @@ async function executeSearchRequest(basePayload, {
   }
 
   const loadingVerb = isRefresh ? 'Finding different restaurants near' : 'Searching near';
+  let activeModelLabel = 'Gemini AI';
   if (statusBanner && statusIcon && statusText) {
     statusBanner.className = 'p-4 rounded-2xl border text-sm flex items-center gap-3 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200';
     statusIcon.innerHTML = SPINNER_AMBER_SVG;
     statusText.textContent = `${loadingVerb} ${allLocations.join(' & ')} (${activeModelLabel})...`;
     statusBanner.classList.remove('hidden');
   }
-
   renderResultsSkeleton(activeModelLabel);
 
   let pollingActive = true;
@@ -1679,13 +1769,30 @@ async function executeSearchRequest(basePayload, {
     clearInterval(modelPollTimer);
     pollAbort.abort();
   };
+  searchAbort.signal.addEventListener('abort', stopModelPolling, { once: true });
 
   try {
+    try {
+      const mData = await apiJson('/api/active-model', { signal: searchAbort.signal });
+      if (mData.active_model) {
+        activeModelLabel = mData.active_model;
+        if (statusText) {
+          statusText.textContent = `${loadingVerb} ${allLocations.join(' & ')} (${activeModelLabel})...`;
+        }
+        updateResultsSkeletonModel(activeModelLabel);
+      }
+    } catch (err) {
+      if (isAbortError(err, searchAbort)) throw err;
+    }
+    throwIfSearchAborted(searchAbort);
+
     const data = await apiJson('/api/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
+      signal: searchAbort.signal,
     });
+    throwIfSearchAborted(searchAbort);
     stopModelPolling();
 
     const rawMatches = Array.isArray(data.matches) ? data.matches : [];
@@ -1824,6 +1931,22 @@ async function executeSearchRequest(basePayload, {
     return true;
   } catch (error) {
     stopModelPolling();
+    if (isAbortError(error, searchAbort)) {
+      restoreCancelledSearch(snapshot, {
+        statusBanner,
+        statusIcon,
+        statusText,
+        resultsHeader,
+        resultsCount,
+        subtextEl,
+        emptyState,
+      });
+      showToast('Search cancelled.', 'info');
+      if (notifyChat && !isRefresh) {
+        chatCallbacks.postSearchOutcome({ cancelled: true, fromChat });
+      }
+      return false;
+    }
     if (!isRefresh) {
       clearRefreshTracking();
       if (/special requests?/i.test(error.message || '')) {
@@ -1850,7 +1973,11 @@ async function executeSearchRequest(basePayload, {
     return false;
   } finally {
     stopModelPolling();
+    if (activeSearchAbort === searchAbort) {
+      activeSearchAbort = null;
+    }
     isSearchInFlight = false;
+    setCancelButtonsVisible(false);
     if (searchBtn) {
       searchBtn.disabled = false;
       searchBtn.innerHTML = SEARCH_BTN_HTML;
@@ -2132,6 +2259,12 @@ export function initFiltersControls() {
   const searchForm = document.getElementById('searchForm');
   searchForm?.addEventListener('input', () => chatCallbacks.renderSummary());
   searchForm?.addEventListener('change', () => chatCallbacks.renderSummary());
+
+  ['cancelSearchBtn', 'statusCancelSearchBtn'].forEach((id) => {
+    document.getElementById(id)?.addEventListener('click', () => {
+      cancelActiveSearch();
+    });
+  });
 
   searchForm?.addEventListener('submit', async (e) => {
     e.preventDefault();

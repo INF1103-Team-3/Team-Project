@@ -577,11 +577,18 @@
               </p>
             </div>
 
-            <button type="submit" id="searchBtn"
-              class="w-full py-3 px-4 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-brand-600 to-amber-600 hover:from-brand-700 hover:to-amber-700 shadow-md shadow-brand-500/25 flex items-center justify-center gap-2 transition active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed">
-              <i data-lucide="search" class="w-4 h-4"></i>
-              Find Matching Restaurants
-            </button>
+            <div class="flex items-center gap-2">
+              <button type="submit" id="searchBtn"
+                class="flex-1 py-3 px-4 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-brand-600 to-amber-600 hover:from-brand-700 hover:to-amber-700 shadow-md shadow-brand-500/25 flex items-center justify-center gap-2 transition active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed">
+                <i data-lucide="search" class="w-4 h-4"></i>
+                Find Matching Restaurants
+              </button>
+              <button type="button" id="cancelSearchBtn" aria-label="Cancel active search"
+                class="hidden shrink-0 py-3 px-4 rounded-xl font-bold text-sm text-rose-600 dark:text-rose-400 bg-white dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/50 border border-rose-200 dark:border-rose-800 shadow-sm flex items-center justify-center gap-1.5 transition active:scale-[0.99]">
+                <i data-lucide="x-circle" class="w-4 h-4"></i>
+                <span>Cancel</span>
+              </button>
+            </div>
           </form>
         </div>
       </div>
@@ -593,7 +600,12 @@
       <!-- Status Banner -->
       <div id="statusBanner" class="hidden p-4 rounded-2xl border text-sm flex items-center gap-3">
         <div id="statusIcon"></div>
-        <div id="statusText" class="font-medium"></div>
+        <div id="statusText" class="font-medium flex-1"></div>
+        <button type="button" id="statusCancelSearchBtn" aria-label="Cancel active search"
+          class="hidden shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 bg-white dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/50 border border-rose-200 dark:border-rose-800 shadow-sm transition flex items-center gap-1.5">
+          <i data-lucide="x-circle" class="w-3.5 h-3.5"></i>
+          <span>Cancel Search</span>
+        </button>
       </div>
 
       <!-- Results Header, Sorting & Instant Quick Filters -->
@@ -1279,7 +1291,7 @@
   </div>
 
   <!-- Modular Application Entrypoint -->
-  <script type="module" src="/js/main.js?v=20261117-1"></script>
+  <script type="module" src="/js/main.js?v=20261117-2"></script>
 </body>
 
 </html>

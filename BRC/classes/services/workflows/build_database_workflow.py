@@ -19,6 +19,10 @@ class BuildDatabaseWorkflow(BaseBRCWorkflow):
         self._cache = None
         self._save_cache = None
 
+    @property
+    def requires_ai(self):
+        return self._use_ai
+
     def _announce(self, data, logic, report):
         report(
             f"IO Manager: loaded {len(self._snapshot.listings)} "

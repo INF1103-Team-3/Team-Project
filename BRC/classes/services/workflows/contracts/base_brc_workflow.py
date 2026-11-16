@@ -7,6 +7,7 @@ class BaseBRCWorkflow(ABC):
     """Run one BRC job through IO, AI, Logic, then Data responsibilities."""
 
     name = ""
+    requires_ai = True
 
     def run(self, ai, logic, data, report, output=None):
         self._announce(data, logic, report)

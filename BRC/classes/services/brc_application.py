@@ -57,8 +57,9 @@ class BRCApplication:
             "INFO",
             "BRC.io_manager.prepare_workflow",
         )
-        ai = self._ai or self.default_ai()
-        ai.set_reporter(self.report)
+        ai = self._ai or (self.default_ai() if workflow.requires_ai else None)
+        if ai is not None:
+            ai.set_reporter(self.report)
         result = workflow.run(ai, self._logic, self._data, self.report, output)
         debug_log.debug_log(
             "BRC workflow saved its validated result.",

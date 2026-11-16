@@ -18,7 +18,7 @@ from BRC.models import (
 )
 
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 RAW_MUIS_PATH = DATA_DIR / "muis_establishments.json"
 CLEAN_DATABASE_PATH = DATA_DIR / "halal_restaurants.json"
 
@@ -107,6 +107,22 @@ class DataManager:
             with self._CLEAN_DB_LOCK:
                 self._CLEAN_DB_CACHE[stamp[0]] = (stamp, database)
         return database
+
+    def clean_database_state(self):
+        """Return 'missing', 'stale', or 'fresh' for the cleaned MUIS file."""
+        if not self._clean.exists():
+            return "missing"
+        try:
+            database = self.load_clean_database()
+        except (DataUnavailableError, OSError):
+            return "missing"
+        if MuisSnapshot.is_fresh_timestamp(database.source_fetched_at):
+            return "fresh"
+        return "stale"
+
+    def is_clean_database_stale(self):
+        """Return True when the cleaned database is missing, invalid, or older than MAX_AGE."""
+        return self.clean_database_state() != "fresh"
 
     def save_clean_database(self, database):
         if len(database) == 0:

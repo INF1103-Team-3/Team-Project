@@ -251,11 +251,183 @@ def test_brc_ai_falls_back_after_gemini_provider_error():
         brc_ai._call_chat_completions = original_chat
 
 
+def _sample_clean_db(source_fetched_at):
+    """Build one minimal valid cleaned MUIS database payload."""
+    row = official_listing()
+    return {
+        "source_url": "https://halal.muis.gov.sg/halal/establishments",
+        "source_fetched_at": source_fetched_at,
+        "built_at": source_fetched_at,
+        "restaurant_count": 1,
+        "restaurants": [row],
+    }
+
+
+def test_data_dir_and_staleness_checks():
+    """DATA_DIR should point to BRC/data and detect missing/fresh/stale clean DBs."""
+    import tempfile
+    from datetime import datetime, timedelta, timezone
+    from BRC.classes.data.data_manager import DATA_DIR, DataManager
+
+    expected_dir = (ROOT / "BRC" / "data").resolve()
+    now = datetime.now(timezone.utc)
+    fresh_ts = (now - timedelta(days=2)).isoformat(timespec="seconds")
+    stale_ts = (now - timedelta(days=8)).isoformat(timespec="seconds")
+
+    with tempfile.TemporaryDirectory() as folder:
+        clean_path = Path(folder) / "halal_restaurants.json"
+        dm = DataManager(folder=folder, clean_path=clean_path)
+        missing_state = dm.clean_database_state()
+        clean_path.write_text(
+            json.dumps(_sample_clean_db(fresh_ts)), encoding="utf-8"
+        )
+        fresh_state = dm.clean_database_state()
+        clean_path.write_text(
+            json.dumps(_sample_clean_db(stale_ts)), encoding="utf-8"
+        )
+        stale_state = dm.clean_database_state()
+
+    actual = {
+        "data_dir": DATA_DIR.resolve(),
+        "missing": missing_state,
+        "fresh": fresh_state,
+        "stale": stale_state,
+    }
+    expected = {
+        "data_dir": expected_dir,
+        "missing": "missing",
+        "fresh": "fresh",
+        "stale": "stale",
+    }
+
+    show_case(
+        "BRC-05: BRC DATA_DIR persistence path and 7-day staleness states",
+        "DataManager.clean_database_state()",
+        "Verifies DATA_DIR resolves to BRC/data (persisted in Docker) and "
+        "distinguishes missing, <=7 day fresh, and >7 day stale databases.",
+        {"expected_dir": str(expected_dir)},
+        {**expected, "data_dir": str(expected_dir)},
+        {**actual, "data_dir": str(actual["data_dir"])},
+    )
+    assert actual == expected
+
+
+def test_brc_server_refresh_is_non_blocking_when_stale():
+    """A >7 day persisted DB refreshes in background without blocking /check."""
+    import os
+    import tempfile
+    import threading
+    from contextlib import contextmanager
+    from datetime import datetime, timedelta, timezone
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from BRC.classes.io.http.server.brc_http_server import BRCHTTPServer
+
+    now = datetime.now(timezone.utc)
+    fresh_ts = (now - timedelta(days=1)).isoformat(timespec="seconds")
+    stale_ts = (now - timedelta(days=9)).isoformat(timespec="seconds")
+
+    with tempfile.TemporaryDirectory() as folder:
+        clean_path = Path(folder) / "halal_restaurants.json"
+        lock = threading.Lock()
+        check_calls = []
+
+        @contextmanager
+        def serialized_checks():
+            acquired = lock.acquire(timeout=0.5)
+            check_calls.append(acquired)
+            if not acquired:
+                raise TimeoutError("serialized_checks blocked during refresh")
+            try:
+                yield
+            finally:
+                lock.release()
+
+        refresh_started = threading.Event()
+        proceed_refresh = threading.Event()
+        refresh_done = threading.Event()
+        build_calls = []
+
+        def fake_build():
+            build_calls.append("run")
+            refresh_started.set()
+            proceed_refresh.wait(timeout=3)
+            refresh_done.set()
+
+        handler = SimpleNamespace(
+            database_path=clean_path,
+            serialized_checks=serialized_checks,
+            application_run=staticmethod(fake_build),
+        )
+        server = BRCHTTPServer(
+            port=0,
+            handler=handler,
+            server_factory=lambda _addr, _handler: SimpleNamespace(
+                shutdown=lambda: None
+            ),
+            refresh_interval=0.05,
+        )
+
+        with patch.dict(os.environ, {"BRC_AUTO_WARM": "1"}):
+            # 1) Fresh DB does not trigger background build
+            clean_path.write_text(
+                json.dumps(_sample_clean_db(fresh_ts)), encoding="utf-8"
+            )
+            server._start_background_warm()
+            assert build_calls == []
+
+            # 2) Stale DB starts background refresh WITHOUT locking serialized_checks
+            clean_path.write_text(
+                json.dumps(_sample_clean_db(stale_ts)), encoding="utf-8"
+            )
+            server._start_background_warm()
+            assert refresh_started.wait(timeout=2)
+            # Duplicate warm trigger while already refreshing must be ignored
+            server._start_background_warm()
+            with handler.serialized_checks():
+                concurrent_check_ok = True
+            proceed_refresh.set()
+            assert refresh_done.wait(timeout=2)
+
+            # 3) Periodic watcher catches staleness and stops cleanly on stop()
+            refresh_started.clear()
+            refresh_done.clear()
+            proceed_refresh.clear()
+            server._start_refresh_watcher()
+            assert refresh_started.wait(timeout=2)
+            server.stop()
+            proceed_refresh.set()
+            assert refresh_done.wait(timeout=2)
+
+    actual = {
+        "build_count": len(build_calls),
+        "check_acquired_while_refreshing": check_calls == [True]
+        and concurrent_check_ok,
+    }
+    expected = {
+        "build_count": 2,
+        "check_acquired_while_refreshing": True,
+    }
+
+    show_case(
+        "BRC-06: Non-blocking background refresh for stale MUIS DB",
+        "BRCHTTPServer._start_background_warm()",
+        "Checks that fresh DBs skip warm-up, while >7 day DBs refresh in "
+        "a single background job without blocking concurrent /check calls.",
+        {"stale_days": 9},
+        expected,
+        actual,
+    )
+    assert actual == expected
+
+
 TESTS = (
     test_correct_outlet_can_be_verified,
     test_wrong_outlet_cannot_become_official_halal,
     test_brc_ai_falls_back_to_groq_after_invalid_gemini,
     test_brc_ai_falls_back_after_gemini_provider_error,
+    test_data_dir_and_staleness_checks,
+    test_brc_server_refresh_is_non_blocking_when_stale,
 )
 
 
