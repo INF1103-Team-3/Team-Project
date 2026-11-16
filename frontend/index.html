@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BiteFinder — Singapore Smart Restaurant Discovery</title>
   <link rel="stylesheet" href="/css/tailwind.css?v=20261114-2">
-  <link rel="stylesheet" href="/css/styles.css?v=20261116-10">
+  <link rel="stylesheet" href="/css/styles.css?v=20261117-1">
   <!-- Google Fonts & Lucide Icons -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -211,7 +211,7 @@
 
         <!-- Manual Filter Controls -->
         <div id="filtersPanel" class="hidden">
-          <form id="searchForm" class="space-y-5">
+          <form id="searchForm" autocomplete="off" class="space-y-5">
             <!-- Location Input -->
             <div>
               <div class="flex flex-wrap items-center justify-between gap-2 mb-1.5">
@@ -307,7 +307,7 @@
                     </button>
                   </div>
                   <div id="timeDisplayWrap" class="bf-limit-wrap shrink-0" title="Click to type a custom travel time">
-                    <input type="text" inputmode="decimal" id="timeInput" placeholder="Not set"
+                    <input type="text" inputmode="decimal" id="timeInput" autocomplete="off" placeholder="Not set"
                       aria-label="Maximum travel time in minutes" class="bf-limit-input">
                     <span id="timeUnitLabel" class="bf-limit-unit hidden">mins</span>
                     <svg class="bf-limit-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -318,7 +318,7 @@
                   </div>
                   <div id="distanceDisplayWrap" class="bf-limit-wrap shrink-0 hidden"
                     title="Click to type a custom distance">
-                    <input type="text" inputmode="decimal" id="distanceInput" placeholder="Not set"
+                    <input type="text" inputmode="decimal" id="distanceInput" autocomplete="off" placeholder="Not set"
                       aria-label="Maximum travel distance in kilometres" class="bf-limit-input">
                     <span id="distanceUnitLabel" class="bf-limit-unit hidden">km</span>
                     <svg class="bf-limit-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -328,9 +328,9 @@
                     </svg>
                   </div>
                 </div>
-                <input type="range" id="timeSlider" min="1" max="90" step="1" value="30" draggable="false"
+                <input type="range" id="timeSlider" min="1" max="90" step="1" value="1" draggable="false"
                   class="bf-range-slider w-full mt-2">
-                <input type="range" id="distanceSlider" min="0.1" max="15.0" step="0.1" value="2.0" draggable="false"
+                <input type="range" id="distanceSlider" min="0.1" max="15.0" step="0.1" value="0.1" draggable="false"
                   class="bf-range-slider hidden w-full mt-2">
                 <div id="travelScaleLabels" class="flex justify-between text-[10px] text-slate-400 mt-1 select-none">
                   <span id="travelScaleMin">1 min</span>
@@ -368,7 +368,7 @@
                 <div id="budgetDisplayWrap" class="bf-limit-wrap bf-budget-wrap shrink-0"
                   title="Click to type a custom budget">
                   <span id="budgetPrefixLabel" class="bf-limit-unit bf-budget-prefix hidden">SGD $</span>
-                  <input type="text" inputmode="decimal" id="budgetInput" placeholder="Not set"
+                  <input type="text" inputmode="decimal" id="budgetInput" autocomplete="off" placeholder="Not set"
                     aria-label="Budget per person in SGD" class="bf-limit-input">
                   <span id="budgetPlusLabel" class="bf-limit-unit bf-budget-plus hidden">+</span>
                   <svg class="bf-limit-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -378,7 +378,7 @@
                   </svg>
                 </div>
               </div>
-              <input type="range" id="budgetSlider" min="5" max="105" step="5" value="30" draggable="false"
+              <input type="range" id="budgetSlider" min="5" max="105" step="5" value="5" draggable="false"
                 class="bf-range-slider w-full">
               <div class="flex justify-between text-[10px] text-slate-400 mt-1 select-none">
                 <span>$5 (Budget)</span>
@@ -467,7 +467,7 @@
                   data-cuisine="middle eastern">Middle Eastern</button>
               </div>
               <div class="flex items-center gap-1.5">
-                <input type="text" id="customCuisineInput"
+                <input type="text" id="customCuisineInput" autocomplete="off"
                   placeholder="Not listed? Type cuisine (e.g. Mexican, Spanish) & press +"
                   class="flex-1 px-3 py-1.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
                 <button type="button" id="addCustomCuisineBtn"
@@ -525,7 +525,7 @@
                   data-cuisine="middle eastern">Middle Eastern</button>
               </div>
               <div class="flex items-center gap-1.5">
-                <input type="text" id="customDislikedCuisineInput"
+                <input type="text" id="customDislikedCuisineInput" autocomplete="off"
                   placeholder="Not listed? Type disliked cuisine (e.g. Seafood, Fast Food) & press +"
                   class="flex-1 px-3 py-1.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition">
                 <button type="button" id="addCustomDislikedCuisineBtn"
@@ -547,7 +547,7 @@
                 </div>
                 <div id="ratingDisplayWrap" class="bf-limit-wrap shrink-0"
                   title="Click to type a minimum rating (1.0–5.0) or clear for Any">
-                  <input type="text" inputmode="decimal" id="ratingInput" placeholder="Any"
+                  <input type="text" inputmode="decimal" id="ratingInput" autocomplete="off" placeholder="Any"
                     aria-label="Minimum Google star rating" class="bf-limit-input">
                   <span id="ratingUnitLabel" class="bf-limit-unit hidden">★+</span>
                   <svg class="bf-limit-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -571,7 +571,8 @@
               <label for="specialInput"
                 class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Special
                 Requests (AI Interpreted)</label>
-              <input type="text" id="specialInput" placeholder="e.g. at least 4.5 stars, spicy food, quiet dinner"
+              <input type="text" id="specialInput" autocomplete="off"
+                placeholder="e.g. at least 4.5 stars, spicy food, quiet dinner"
                 class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
               <p id="specialInputError" class="hidden mt-1 text-[11px] font-medium text-rose-600 dark:text-rose-400">
               </p>
@@ -981,12 +982,12 @@
 
       <div id="profileAlert" class="hidden mx-6 mt-4 p-3 rounded-xl text-xs font-medium border"></div>
 
-      <form id="profileForm" novalidate class="p-6 space-y-4">
+      <form id="profileForm" autocomplete="off" novalidate class="p-6 space-y-4">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label for="profUsernameInput"
               class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Username</label>
-            <input type="text" id="profUsernameInput" required maxlength="50"
+            <input type="text" id="profUsernameInput" autocomplete="off" required maxlength="50"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div>
@@ -1008,21 +1009,24 @@
             <label for="profDistInput"
               class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max
               Distance (km)<span class="block mt-0.5 font-medium normal-case text-slate-400">(0.01–50)</span></label>
-            <input type="number" id="profDistInput" min="0.01" max="50" step="any" placeholder="No limit (e.g. 1.5)"
+            <input type="number" id="profDistInput" autocomplete="off" min="0.01" max="50" step="any"
+              placeholder="No limit (e.g. 1.5)"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div class="flex flex-col justify-between">
             <label for="profTimeInput"
               class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Max
               Time (Mins)<span class="block mt-0.5 font-medium normal-case text-slate-400">(1–150)</span></label>
-            <input type="number" id="profTimeInput" min="1" max="150" step="any" placeholder="No limit (e.g. 30)"
+            <input type="number" id="profTimeInput" autocomplete="off" min="1" max="150" step="any"
+              placeholder="No limit (e.g. 30)"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div class="flex flex-col justify-between">
             <label for="profBudgetInput"
               class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Budget
               (SGD)<span class="block mt-0.5 font-medium normal-case text-slate-400">($1–$100+)</span></label>
-            <input type="text" id="profBudgetInput" inputmode="decimal" placeholder="No limit (e.g. 20)"
+            <input type="text" id="profBudgetInput" autocomplete="off" inputmode="decimal"
+              placeholder="No limit (e.g. 20)"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
         </div>
@@ -1059,14 +1063,14 @@
             <label for="profLikedInput"
               class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
               Preferred Cuisines</label>
-            <input type="text" id="profLikedInput" placeholder="e.g. chinese, japanese"
+            <input type="text" id="profLikedInput" autocomplete="off" placeholder="e.g. chinese, japanese"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
           <div>
             <label for="profDislikedInput"
               class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
               Disliked Cuisines</label>
-            <input type="text" id="profDislikedInput" placeholder="e.g. western, italian"
+            <input type="text" id="profDislikedInput" autocomplete="off" placeholder="e.g. western, italian"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
           </div>
         </div>
@@ -1082,7 +1086,7 @@
             </div>
             <div id="profRatingDisplayWrap" class="bf-limit-wrap shrink-0"
               title="Click to type a minimum rating (1.0–5.0) or clear for Any">
-              <input type="text" inputmode="decimal" id="profRatingInput" placeholder="Any"
+              <input type="text" inputmode="decimal" id="profRatingInput" autocomplete="off" placeholder="Any"
                 aria-label="Default minimum Google star rating" class="bf-limit-input">
               <span id="profRatingUnitLabel" class="bf-limit-unit hidden">★+</span>
               <svg class="bf-limit-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
@@ -1103,7 +1107,7 @@
             class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
             Special Wishes <span class="font-normal normal-case text-slate-400">(English,
               comma-separated)</span></label>
-          <input type="text" id="profOtherInput" placeholder="e.g. at least 4 stars, cozy dinner spot"
+          <input type="text" id="profOtherInput" autocomplete="off" placeholder="e.g. at least 4 stars, cozy dinner spot"
             class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
         </div>
 
@@ -1291,7 +1295,7 @@
   </div>
 
   <!-- Modular Application Entrypoint -->
-  <script type="module" src="/js/main.js?v=20261117-2"></script>
+  <script type="module" src="/js/main.js?v=20261117-4"></script>
 </body>
 
 </html>

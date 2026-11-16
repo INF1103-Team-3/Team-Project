@@ -120,6 +120,7 @@ function syncDynamicSliderBounds(slider, rawVal, {
     slider.min = String(baseMin);
     slider.max = String(baseMax);
     slider.step = String(defaultStep);
+    slider.value = String(baseMin);
     return;
   }
 
@@ -204,7 +205,7 @@ function syncRangeTrackVisual(slider, isSet = true) {
   const max = parseFloat(slider.max);
   const val = parseFloat(slider.value);
   let pct = 0;
-  if (Number.isFinite(min) && Number.isFinite(max) && max > min && Number.isFinite(val)) {
+  if (isSet && Number.isFinite(min) && Number.isFinite(max) && max > min && Number.isFinite(val)) {
     pct = Math.min(100, Math.max(0, ((val - min) / (max - min)) * 100));
   }
   slider.style.setProperty('--bf-range-pct', `${pct}%`);
@@ -295,7 +296,10 @@ export function updateSliderDisplayStyles() {
 
     wrap.classList.toggle('hidden', state.currentLimitType !== type);
     if (!state.isTravelSet) {
-      input.value = '';
+      if (document.activeElement !== input) {
+        input.value = '';
+      }
+      adaptSliderForValue(type, NaN);
     }
     const hasVal = state.isTravelSet && input.value.trim() !== '';
     wrap.classList.toggle('is-set', hasVal);
@@ -306,7 +310,10 @@ export function updateSliderDisplayStyles() {
   });
 
   if (!state.isBudgetSet) {
-    budgetInput.value = '';
+    if (document.activeElement !== budgetInput) {
+      budgetInput.value = '';
+    }
+    adaptBudgetSliderForValue(NaN);
   }
   const budgetRaw = budgetInput.value.trim();
   const budgetVal = budgetRaw !== '' ? parseFloat(budgetRaw) : NaN;
@@ -357,8 +364,7 @@ export function setLimitType(type, { activateIfUnset = false } = {}) {
   if ((state.isTravelSet || activateIfUnset) && activeInput && activeSlider) {
     state.isTravelSet = true;
     if (activeInput.value.trim() === '') {
-      const sliderNum = parseFloat(activeSlider.value);
-      const fallback = Number.isFinite(sliderNum) && sliderNum > 0 ? sliderNum : limits[cfg.defaultKey];
+      const fallback = limits[cfg.defaultKey];
       activeInput.value = formatLimitNumber(fallback, 2);
       adaptSliderForValue(targetType, fallback, { contractToValue: true });
     } else {
@@ -670,22 +676,25 @@ export function collectCurrentFormPayload(forChat = false) {
   const special = specialInput ? specialInput.value.trim() : '';
   const otherPreferences = special ? special.split(',').map(normalizeWishText).filter(Boolean) : [];
 
-  if (customInput && customInput.value.trim()) {
-    addCustomCuisinesFromInput();
-  }
-  if (customDislikedInput && customDislikedInput.value.trim()) {
-    addCustomDislikedCuisinesFromInput();
+  if (!forChat) {
+    if (customInput && customInput.value.trim()) {
+      addCustomCuisinesFromInput();
+    }
+    if (customDislikedInput && customDislikedInput.value.trim()) {
+      addCustomDislikedCuisinesFromInput();
+    }
   }
   const selectedLiked = Array.from(state.preferredCuisines);
   const allLocations = getAllEnteredLocations();
   const primaryLoc = allLocations[0] || '';
 
+  const limits = getModeLimits();
   const timeRaw = timeInput?.value.trim() || '';
   const distRaw = distanceInput?.value.trim() || '';
   const budgetRaw = budgetInput?.value.trim() || '';
-  const parsedTime = timeRaw !== '' ? parseFloat(timeRaw) : parseFloat(timeSlider.value);
-  const parsedDist = distRaw !== '' ? parseFloat(distRaw) : parseFloat(distanceSlider.value);
-  const parsedBudget = budgetRaw !== '' ? parseFloat(budgetRaw) : parseFloat(budgetSlider.value);
+  const parsedTime = (state.isTravelSet && timeRaw !== '') ? parseFloat(timeRaw) : limits.defaultTime;
+  const parsedDist = (state.isTravelSet && distRaw !== '') ? parseFloat(distRaw) : limits.defaultDist;
+  const parsedBudget = (state.isBudgetSet && budgetRaw !== '') ? parseFloat(budgetRaw) : BUDGET_UI_CONFIG.defaultVal;
 
   let maxMins = state.currentLimitType === 'time' ? parsedTime : null;
   let maxKm = state.currentLimitType === 'distance' ? parsedDist : null;
@@ -760,7 +769,6 @@ export function selectTravelMode(mode) {
       }
     } else {
       adaptSliderForValue('time', NaN);
-      if (timeSlider) timeSlider.value = String(Math.min(limits.maxTime, limits.defaultTime));
     }
     if (distanceInput && distanceInput.value.trim() !== '') {
       const val = parseFloat(distanceInput.value);
@@ -775,13 +783,10 @@ export function selectTravelMode(mode) {
       }
     } else {
       adaptSliderForValue('distance', NaN);
-      if (distanceSlider) distanceSlider.value = String(Math.min(limits.maxDist, limits.defaultDist));
     }
   } else {
     adaptSliderForValue('time', NaN);
     adaptSliderForValue('distance', NaN);
-    if (timeSlider) timeSlider.value = String(Math.min(limits.maxTime, limits.defaultTime));
-    if (distanceSlider) distanceSlider.value = String(Math.min(limits.maxDist, limits.defaultDist));
   }
   updateSliderDisplayStyles();
 }
@@ -869,7 +874,6 @@ export function applyFiltersToSearchForm(filters, { preserveBudgetPlus = false, 
     state.isBudgetPlus = false;
     if (budgetInput) budgetInput.value = '';
     adaptBudgetSliderForValue(NaN);
-    if (budgetSlider) budgetSlider.value = String(BUDGET_UI_CONFIG.defaultVal);
   }
   updateSliderDisplayStyles();
 
@@ -1401,7 +1405,7 @@ function bindEditableSliderField({
       const { step, fallback } = getArrowStep(e.shiftKey);
       const signedDelta = e.key === 'ArrowUp' ? step : -step;
       const current = parseFloat(input.value);
-      const seed = Number.isFinite(current) ? current : (parseFloat(slider?.value || '') || fallback);
+      const seed = Number.isFinite(current) ? current : fallback;
       const minAllowed = getMinVal();
       const maxAllowed = getMaxVal();
       if (onArrowStep && onArrowStep(e.key, seed, step, minAllowed, maxAllowed)) {
@@ -1444,6 +1448,9 @@ function bindEditableSliderField({
           setIsSet(true);
           onAdapt(val, { contractToValue: true });
         }
+      } else {
+        setIsSet(false);
+        onAdapt(NaN);
       }
     }
     updateSliderDisplayStyles();
@@ -2138,8 +2145,6 @@ export function initFiltersControls() {
       adaptBudgetSliderForValue(val, opts);
       if (!Number.isFinite(val) || val <= 0) {
         state.isBudgetPlus = false;
-        const slider = document.getElementById(BUDGET_UI_CONFIG.sliderId);
-        if (slider) slider.value = String(BUDGET_UI_CONFIG.defaultVal);
       }
     },
     getArrowStep: (shiftKey) => ({

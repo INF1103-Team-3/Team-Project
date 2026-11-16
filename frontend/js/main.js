@@ -9,7 +9,7 @@ import {
   setFavoriteToggleHandler,
   setRefreshResultsHandler,
 } from './results.js?v=20261116-4';
-import { initFiltersControls, refreshSearchResults, setFilterChatCallbacks } from './filters.js?v=20261117-2';
+import { initFiltersControls, refreshSearchResults, setFilterChatCallbacks } from './filters.js?v=20261117-4';
 import {
   initChatbotControls,
   postChatSearchOutcome,
@@ -20,14 +20,14 @@ import {
   setChatbotAuthCallbacks,
   startOnboardingInChat,
   updateGuestHintBanner,
-} from './chatbot.js?v=20261117-2';
+} from './chatbot.js?v=20261117-4';
 import {
   checkSession,
   initAuthAndModals,
   openAuthModalWithNotice,
   setAuthChatCallbacks,
   toggleFavoriteByIndex,
-} from './auth.js?v=20261117-2';
+} from './auth.js?v=20261117-4';
 
 function initThemeToggle() {
   updateThemeUI();

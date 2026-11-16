@@ -24,7 +24,7 @@ import {
   getUserRecentKey,
   initRecentSearches,
   renderRecentSearches,
-} from './filters.js?v=20261117-2';
+} from './filters.js?v=20261117-4';
 import { formatHours, renderResults } from './results.js?v=20261116-4';
 
 const EMAIL_REGEX = /^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;

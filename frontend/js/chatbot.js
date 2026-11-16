@@ -12,7 +12,7 @@ import {
   applyUserToSearchForm,
   collectCurrentFormPayload,
   isBudgetPlusDisplay,
-} from './filters.js?v=20261117-2';
+} from './filters.js?v=20261117-4';
 import { getPriceValue, getRatingValue, getTravelMinutes, resetResultsDisplay } from './results.js?v=20261116-4';
 import { flyToMarkerForItem } from './map.js?v=20261116-4';
 import { showToast } from './toast.js?v=20261116-4';
