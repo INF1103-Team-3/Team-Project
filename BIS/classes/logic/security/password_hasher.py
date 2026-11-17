@@ -1,0 +1,64 @@
+"""Password hashing compatible with the reference website hashes."""
+
+import hashlib
+import re
+import secrets
+
+
+class PasswordHasher:
+    MIN_LENGTH = 8
+    MAX_LENGTH = 30
+    ALLOWED_PATTERN = re.compile(r"^[A-Za-z0-9.,?!$]+$")
+
+    @classmethod
+    def validate_password(cls, password):
+        if (
+            not isinstance(password, str)
+            or not cls.MIN_LENGTH <= len(password) <= cls.MAX_LENGTH
+        ):
+            raise ValueError(
+                (
+                    "Password must be "
+                    f"{cls.MIN_LENGTH}"
+                    "–"
+                    f"{cls.MAX_LENGTH}"
+                    " characters."
+                )
+            )
+        if not cls.ALLOWED_PATTERN.fullmatch(password):
+            raise ValueError(
+                "Password may only contain letters, numbers, and .,?!$."
+            )
+        return password
+
+    def create(self, password):
+        self.validate_password(password)
+        salt = secrets.token_hex(16)
+        return {
+            "password_salt": salt,
+            "password_hash": self.__hash(password, salt),
+        }
+
+    @staticmethod
+    def __hash(password, salt):
+        return hashlib.pbkdf2_hmac(
+            "sha256", password.encode(), salt.encode("ascii"), 100000
+        ).hex()
+
+    def verify(self, password, credential):
+        if (
+            not isinstance(credential.get("password_salt"), str)
+            or not re.fullmatch(r"[0-9a-f]{32}", credential["password_salt"])
+            or not isinstance(credential.get("password_hash"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", credential["password_hash"])
+        ):
+            raise RuntimeError(
+                (
+                    "Saved web credentials are invalid; restore the "
+                    "credential record."
+                )
+            )
+        return secrets.compare_digest(
+            self.__hash(password, credential["password_salt"]),
+            credential["password_hash"],
+        )

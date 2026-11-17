@@ -1,0 +1,285 @@
+"""One durable geocode cache shared by BIS, BRC, and BRNS."""
+
+import json
+import math
+import os
+import re
+import tempfile
+import time
+from contextlib import contextmanager
+from pathlib import Path
+
+from common.debug_log import debug_log
+from common.singapore_locations import (
+    is_generic_singapore_centroid,
+    is_in_singapore,
+    validate_location_syntax,
+)
+
+CACHE_FILE = (
+    Path(__file__).resolve().parent.parent / "data" / "geocode_cache.json"
+)
+
+
+def _key(query):
+    return query.strip().lower() if isinstance(query, str) else ""
+
+
+def _point(value):
+    if not isinstance(value, list) or len(value) != 2:
+        return None
+    if any(
+        type(number) not in (int, float) or not math.isfinite(number)
+        for number in value
+    ):
+        return None
+    latitude, longitude = value
+    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        return None
+    return latitude, longitude
+
+
+def _use_mongo():
+    return os.getenv("BITEFINDER_STORAGE", "json").strip().lower() == "mongo"
+
+
+def _mongo_collection():
+    from common.storage_dependencies import mongo_connection
+
+    return mongo_connection()
+
+
+def _read():
+    try:
+        data = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as error:
+        raise RuntimeError("Cannot read the shared geocode cache.") from error
+    if not isinstance(data, dict):
+        raise RuntimeError(
+            "The shared geocode cache must contain a JSON object."
+        )
+    return data
+
+
+def lookup(query):
+    """Return validated coordinates, or None when the query is not cached."""
+    key = _key(query)
+    if not key:
+        return None
+    raw_point = None
+    if _use_mongo():
+        try:
+            row = _mongo_collection().execute(
+                lambda db, k=key: db.geocode_cache.find_one({"_id": k})
+            )
+            raw_point = row.get("point") if isinstance(row, dict) else None
+        except (RuntimeError, OSError):
+            debug_log(
+                "Mongo geocode cache lookup unavailable.",
+                "WARNING",
+                "common.geocode_cache.lookup",
+            )
+            return None
+    else:
+        raw_point = _read().get(key)
+    point = _point(raw_point)
+    if point is None or is_generic_singapore_centroid(point[0], point[1]):
+        return None
+    return point
+
+
+@contextmanager
+def _cache_lock(path):
+    """Hold one lock file across the read-modify-write on each platform."""
+    with path.open("a+b") as lock:
+        if os.name == "nt":
+            import msvcrt
+
+            lock.seek(0, os.SEEK_END)
+            if lock.tell() == 0:
+                lock.write(b"\0")
+                lock.flush()
+            lock.seek(0)
+            msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                lock.seek(0)
+                msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def remember(queries, latitude, longitude):
+    """Best-effort atomic cache write; geocoding must survive a locked file."""
+    point = _point([latitude, longitude])
+    if point is None:
+        raise ValueError("Invalid geocode coordinates.")
+    keys = {_key(query) for query in queries}
+    keys.discard("")
+    if not keys:
+        return
+    if _use_mongo():
+        try:
+            conn = _mongo_collection()
+            pts = list(point)
+            for key in keys:
+                conn.execute(
+                    lambda db, k=key: db.geocode_cache.update_one(
+                        {"_id": k},
+                        {"$set": {"_id": k, "point": pts}},
+                        upsert=True,
+                    )
+                )
+            return True
+        except (RuntimeError, OSError):
+            debug_log(
+                (
+                    "Mongo geocode cache write unavailable; using resolved "
+                    "location."
+                ),
+                "WARNING",
+                "common.geocode_cache.remember",
+            )
+            return False
+    temporary = None
+    try:
+        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = CACHE_FILE.with_suffix(".lock")
+        with _cache_lock(lock_path):
+            data = _read()
+            for key in keys:
+                data[key] = list(point)
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=CACHE_FILE.parent,
+                prefix=".geocode-",
+                suffix=".tmp",
+                delete=False,
+            ) as file:
+                temporary = Path(file.name)
+                json.dump(
+                    data, file, indent=2, ensure_ascii=False, allow_nan=False
+                )
+                file.write("\n")
+                file.flush()
+                os.fsync(file.fileno())
+            for attempt in range(3):
+                try:
+                    os.replace(temporary, CACHE_FILE)
+                    return True
+                except PermissionError:
+                    if attempt == 2:
+                        break
+                    time.sleep(0.05 * (attempt + 1))
+    except OSError:
+        pass
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                debug_log(
+                    "Temporary geocode cache file could not be removed.",
+                    "WARNING",
+                    "common.geocode_cache.remember",
+                )
+    debug_log(
+        "Geocode cache write unavailable; using resolved location.",
+        "WARNING",
+        "common.geocode_cache.remember",
+    )
+    return False
+
+
+_CACHE_ABBRS = {
+    "mrt", "lrt", "cbd", "mbs", "nus", "ntu", "smu", "sutd",
+    "plq", "amk", "cck", "tpy", "yck", "hdb", "nex", "jem",
+}
+
+
+def _format_cached_label(key):
+    words = []
+    for tok in str(key or "").strip().split():
+        lower = tok.lower()
+        if lower in _CACHE_ABBRS:
+            words.append(lower.upper())
+        else:
+            words.append(tok.capitalize())
+    return " ".join(words)
+
+
+def _is_valid_cached_sg_entry(key, raw_point):
+    point = _point(raw_point)
+    if (
+        point is None
+        or not is_in_singapore(point[0], point[1])
+        or is_generic_singapore_centroid(point[0], point[1])
+    ):
+        return False
+    try:
+        validate_location_syntax(key)
+    except ValueError:
+        return False
+    return True
+
+
+def search(query, limit=6):
+    """Return validated cached Singapore suggestions matching query."""
+    clean = _key(query)
+    if limit <= 0:
+        return []
+    entries = []
+    if _use_mongo():
+        try:
+            conn = _mongo_collection()
+            filter_doc = (
+                {"_id": {"$regex": re.escape(clean), "$options": "i"}}
+                if clean
+                else {}
+            )
+            docs = conn.execute(
+                lambda db: list(
+                    db.geocode_cache.find(filter_doc).limit(max(limit * 6, 24))
+                )
+            )
+            for doc in docs or []:
+                if isinstance(doc, dict):
+                    entries.append((doc.get("_id"), doc.get("point")))
+        except (RuntimeError, OSError):
+            return []
+    else:
+        data = _read()
+        for key, raw_point in data.items():
+            if not clean or clean in _key(key):
+                entries.append((key, raw_point))
+
+    prefix_hits = []
+    substring_hits = []
+    seen = set()
+    for raw_key, raw_point in entries:
+        key = _key(raw_key)
+        if not key or key in seen:
+            continue
+        if not _is_valid_cached_sg_entry(key, raw_point):
+            continue
+        seen.add(key)
+        item = {
+            "label": _format_cached_label(key),
+            "secondary": "Recent Singapore location",
+            "source": "cache",
+        }
+        if not clean or key.startswith(clean):
+            prefix_hits.append(item)
+        elif clean in key:
+            substring_hits.append(item)
+    return (prefix_hits + substring_hits)[:limit]
