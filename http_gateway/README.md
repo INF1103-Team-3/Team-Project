@@ -44,6 +44,9 @@ paths through `localhost:8080`. API schema exposure is disabled by default.
 | Routes | Purpose |
 | --- | --- |
 | `GET /api/health`, `/api/cuisines`, `/api/active-model` | Mongo readiness, vocabulary and model display metadata |
+| `GET /api/map-config`, `/api/locations/suggest` | Browser map configuration and bounded Singapore suggestions |
+| `POST /api/validate-cuisines` | BIS validation of custom cuisine entries before adding them |
+| `GET /api/places/{place_id}/photo` | BIS-delegated restaurant photo response/redirect |
 | `POST /api/auth/register`, `/api/auth/login` | Account signup/login and OTP or configured bypass flow |
 | `POST /api/auth/verify-otp`, `/api/auth/resend-otp` | Verify/resend challenges |
 | `GET /api/auth/me`, `POST /api/auth/logout` | Resolve/revoke bearer session |
@@ -79,6 +82,16 @@ Permission errors map to 401, domain/input `ValueError` to 400, and unavailable
 `RuntimeError` to 503. Pydantic transport validation uses 422. Recognized no-open
 search outcomes can be returned by BIS as successful empty results with a
 message; malformed AI and database failures must not be confused with those.
+
+Cuisine validation accepts `cuisines` and optional `field_label`, splits
+comma-separated entries, and returns `success`, `valid` and normalized `cuisines`.
+The same injected preference-review service protects chat/profile/search paths.
+The gateway does not call AI providers or duplicate those domain rules.
+
+Browser abort signals are client transport controls. No cancellation endpoint
+or server rollback guarantee is implemented; a synchronous BIS/BRNS search
+may continue after the client stops waiting. `/api/map-config` deliberately
+exposes its selected browser Maps key; it does not expose AI or SMTP credentials.
 
 ## Verification and shutdown
 

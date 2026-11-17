@@ -69,7 +69,22 @@ TEST_GROUPS = {
     ),
 }
 
+# Assessor entry point for application/class regressions. Live Mongo,
+# paid API checks and deployment networking remain explicit separate groups.
+TEST_GROUPS["offline"] = (
+    *TEST_GROUPS["core"],
+    *BLACKBOX_TESTS,
+    INTEGRATION_TEST,
+    WEB_TEST,
+    STORAGE_TEST,
+)
+
 GROUP_DESCRIPTIONS = {
+    "offline": (
+        "Runs core, class, black-box, integration and mocked web/storage "
+        "tests without live AI, MongoDB or deployed services. "
+        "Frontend Node tests are run separately."
+    ),
     ("web"): (
         "Offline web/Mongo contracts; optional isolated live-Mongo checks "
         "when MONGO_TEST_URI is set."
@@ -79,16 +94,16 @@ GROUP_DESCRIPTIONS = {
     ),
     "bis": (
         "Tests BIS input validation, preference handling, search preparation "
-        "and hardcoded AI interpretation."
+        "and sample/mocked AI interpretation."
     ),
     "brns": (
         "Tests BRNS restaurant filtering, recommendation rules, dietary "
-        "checks, ranking and hardcoded AI recommendations."
+        "checks, ranking and sample/mocked AI recommendations."
     ),
     "brc": ("Tests MUIS halal verification and official outlet matching."),
     "core": (
-        "Runs the BIS and BRNS core function tests without calling a live "
-        "AI API."
+        "Runs BIS, BRNS, BRC, class contracts, refactor/access and launcher "
+        "tests without calling a live AI API."
     ),
     "blackbox": (
         "Runs the real BIS and BRNS command-line programs against controlled "
@@ -238,17 +253,7 @@ def show_usage():
     """Display the available BiteFinder test commands."""
     print(style("BiteFinder automated test runner", "heading"))
     print("\nUsage:")
-    for group in (
-        "bis",
-        "brns",
-        "core",
-        "blackbox",
-        "integration",
-        "deployment",
-        "web",
-        "launcher",
-        "all",
-    ):
+    for group in TEST_GROUPS:
         print(style(f"  python tests/run_tests.py {group}", "command"))
     print("\nWith no group, the runner uses core.")
     print(

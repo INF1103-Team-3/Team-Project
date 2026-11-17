@@ -1,5 +1,9 @@
 # BiteFinder Automated Tests
 
+For the assessor run, requirement-to-test mapping and Docker commands, start
+with [Testing_Instructions.md](Testing_Instructions.md). The `offline` group
+runs all mocked Python application/class suites without deployed services.
+
 This directory is the single current BiteFinder test suite. It contains
 teacher-facing function tests, integration tests, process-level black-box
 tests, controlled service fixtures, and Docker deployment smoke tests.
@@ -29,6 +33,7 @@ Run a smaller group by replacing `all` with one of the following names:
 | `bis` | BIS validation, preferences, travel, cuisine, and structured AI interpretation |
 | `brns` | BRNS eligibility, dietary rules, ranking, opening hours, missing-data handling, sorting, and AI fallback |
 | `brc` | BRC MUIS halal verification and official restaurant outlet matching |
+| `offline` | All core/class, black-box, integration and mocked web/storage tests; excludes live APIs, live Mongo and deployment checks |
 | `core` | `bis`, `brns`, `brc`, `oop`, and `launcher` test suites together; default group |
 | `blackbox` | Real BIS and BRNS processes with controlled HTTP fixtures |
 | `integration` | BIS-to-BRNS JSON contract and shared rules |
@@ -76,6 +81,7 @@ The standard `NO_COLOR` environment variable also disables color.
 | `blackbox/` | End-to-end CLI tests that run BIS and BRNS as real processes using controlled local HTTP services instead of live APIs |
 | `integration/` | Tests that BIS output can be passed correctly into BRNS and that shared request fields and business rules remain consistent |
 | `oop/` | Structural and behavioral OOP refactor contract tests |
+| `refactor/` | Responsibility/access contracts, AI failure policies, corrupt data and refresh lifecycle regressions |
 | `launcher/` | Tests for `BISLauncher`, `LauncherIO`, and `WebInterfaceLauncher` |
 | `web/` | FastAPI route, auth, chatbot, credential-store, and live MongoDB tests plus `smoke_stack.py` |
 | `deployment/` | Smoke tests that verify the deployed Docker environment starts correctly and that the main services can import, communicate, and run basic checks |
@@ -150,7 +156,10 @@ for its disposable stack; do not copy that flag into normal saved-data shutdown.
 `refactor/test_cleanup.py` runs in the `oop`, `core` and `all` groups. It protects
 chat filter/negation behavior, discovery query order and zone quotas, corrupt JSON
 retention, failed atomic writes, shared profile authorization, injected AI/provider
-capabilities, official halal evidence rules and BRC handler warm-up injection.
+capabilities, official halal evidence rules and BRC refresh injection. It also
+checks shared preference acceptance/rejection during AI outages, configuration
+copying, catalog/rating-only AI skips, and the HTTP server refresh lifecycle.
+The BRC suite checks seven-day timestamp freshness and non-blocking refresh.
 `web/test_storage_contracts.py` also checks JSON/Mongo read-failure parity.
 
 ```bash
@@ -176,5 +185,7 @@ node --test tests/frontend/test_refresh.mjs
 These tests import the real frontend ES modules, use a minimal DOM fixture and
 mock `fetch`. They verify the BIS-only API path, module-local refresh helpers,
 non-duplicate results, the 200-venue request limit, exhaustion/reset and recovery
-from provider failures. No browser, paid API, MongoDB or Docker is required.
+from provider failures and browser cancellation. Module imports follow the
+cache-versioned paths in `frontend/js/main.js`, avoiding a second state
+singleton after frontend releases. No browser, paid API, MongoDB or Docker is required.
 They are separate from the Python test groups; they do not test visual layout.

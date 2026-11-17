@@ -16,7 +16,7 @@ BIS. The frontend never connects to MongoDB, BRNS or BRC directly.
 | `js/state.js` | Shared UI state, token persistence, escaping and helpers |
 | `js/auth.js` | Signup/login, OTP, profile, favorites and history interaction |
 | `js/chatbot.js` | Onboarding, chat messages, clarification and form synchronization |
-| `js/filters.js` | Locations, travel limits, cuisines, budget and search requests |
+| `js/filters.js` | Locations, travel limits, cuisine validation, budget, search/refresh and AbortController cancellation |
 | `js/results.js` | Cards, sorting, alternatives, badges and bookmark controls |
 | `js/compare.js` | Comparison tray/modal for two or three existing results |
 | `js/map.js` | Leaflet markers and selected restaurant route drawer |
@@ -49,6 +49,21 @@ Signed-in favorites/profiles/history are server-backed in MongoDB; guest local
 recent queries are not the same store as authenticated history. HTML escaping
 helpers are used when inserting dynamic text.
 
+### Search cancellation and repeat searches
+
+The search/cancel controls use an `AbortController`, including model polling.
+Cancelling restores the prior displayed results and controls, preserves seen
+restaurant tracking and ignores the cancelled response. It cancels the browser's
+request; it does not roll back a backend search already running or guarantee
+that AI/Maps work and persistence stop. There is no server cancellation endpoint.
+Different Results sends up to 200 seen venues through BIS with strict exclusion;
+exhaustion offers a reset instead of inventing new matches.
+
+Custom cuisine Add actions call `/api/validate-cuisines`; ordinary keystrokes
+do not submit a new cuisine. Local syntax feedback complements BIS validation,
+which also runs for profile, chat and direct search requests. Travel/budget
+controls retain an explicit unset state until selected.
+
 ## Build, run and inspect
 
 ```powershell
@@ -65,14 +80,19 @@ from the host. Opening `index.html` as a local file does not provide the API
 proxy or a working same-origin application.
 
 Only `/api/` is proxied. FastAPI docs are disabled by default and are not
-proxied at `/docs` even if enabled on the API. Provider/Maps/SMTP credentials
-belong on the server, never in frontend files.
+proxied at `/docs` even if enabled on the API. AI/SMTP/Mongo credentials remain
+server-side. `/api/map-config` intentionally returns the configured browser Maps
+key (preferring `GOOGLE_MAPS_JS_API_KEY`, otherwise the Maps key); a supplied key
+is browser-visible. Map configuration selects Google Maps or the Leaflet path.
 
 Backend contracts use mocked services in `tests/web/`; the HTTP stack smoke
 checks static delivery and API/service readiness. Those checks do not prove
 browser rendering or every interactive UI path. Manual review should cover
 login/OTP, filters/chat, a controlled search, comparison, favorites/history and
-route rendering. See [the test guide](../tests/README.md).
+route rendering and cancellation. See [the test guide](../tests/README.md).
+The offline Node suite resolves the cache-versioned module URLs imported by
+`main.js`, so tests and modules share the same state object. It exercises both
+refresh and abort recovery; it is not a visual browser test.
 
 ```powershell
 docker compose --profile "*" down

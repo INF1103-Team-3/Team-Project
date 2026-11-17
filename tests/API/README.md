@@ -8,6 +8,13 @@ quota. The geocode-cache case writes through the configured cache backend;
 use an isolated test environment. The `all` group and normal web tests do not
 include this live group. See [the test guide](../README.md).
 
+Current supported AI integrations are OpenRouter, Gemini, Groq and NVIDIA NIM;
+SiliconFlow has been removed. Custom-cuisine and wish review use the same BIS
+provider chain. Their catalog, negative-review and outage rules are covered by
+offline web/refactor tests, not by treating a live connectivity smoke test as
+proof of domain behavior. BRC background refresh can scrape/geocode independently
+of this opt-in live API group; run it only in the intended service environment.
+
 ---
 
 ## Directory Map

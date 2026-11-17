@@ -1,6 +1,7 @@
 # BiteFinder Project Flow
 
-This is the current application workflow on `WEB-OOP`. BiteFinder has two BIS
+This is the current application workflow on `main`, including the cuisine and
+Singapore-location validation, browser cancellation and persisted MUIS refresh. BiteFinder has two BIS
 user interfaces over the same recommendation subsystem: an interactive Python
 CLI and a browser interface served by nginx and FastAPI. BRC remains an
 independent HTTP microservice in Compose.
@@ -84,7 +85,15 @@ flowchart TB
   save["BRNS Data&#58; facts and history"]
   results["BIS IO&#58; CLI results or web response"]
   error["Show error or request clarification"]
-  input -->|Resolved Singapore origins| bisai
+  review["BIS PreferenceReviewService"]
+  reviewai["AI Manager: optional cuisine / wish review"]
+  reviewlogic["Logic: PreferenceValidationPolicy"]
+  input -->|Resolved Singapore origins and prepared preferences| review
+  review -->|Uncatalogued cuisines / non-rating wishes| reviewai
+  review -->|Catalogued cuisines / rating-only wishes| reviewlogic
+  reviewai -->|Validated review or explicit failure| reviewlogic
+  reviewlogic -->|Accepted preferences| bisai
+  reviewlogic -->|Rejected input| error
   bisai -->|Structured proposal| bislogic
   bislogic -->|Direct web search or confirmed proposal| bridge
   bislogic -->|Conflict or invalid response| error
@@ -122,6 +131,31 @@ The regular form currently submits direct searches. Chat uses `/api/chat` to
 clarify filters and asks for confirmation before triggering the form search;
 that conversational confirmation is separate from the proposal-token API.
 
+### Shared review and validation ownership
+
+`BISApplicationService` and `BISChatbotService` share an injected
+`PreferenceReviewService`. The review coordinator prepares through Logic,
+invokes the AI Manager's wish/cuisine capabilities when required, and applies
+`PreferenceValidationPolicy` decisions before saving or searching. Profile,
+onboarding, direct search and `POST /api/validate-cuisines` therefore use the
+same acceptance and error policy. Known catalog terms do not require another
+semantic AI call. Uncatalogued cuisines require a successful review; ordinary
+wish review retains its existing outage fallback. No domain acceptance rules
+are moved into AI transport or the Data Manager.
+
+Location syntax and Singapore geocode quality checks are shared in
+`common/singapore_locations.py`. The injected `LocationGateway` handles cache,
+seeds, Google autocomplete and geocoding. Generic Singapore-centroid results and
+unsuitable partial matches are not accepted as verified specific origins.
+
+### Browser cancellation
+
+`cancelActiveSearch()` aborts the active fetch/model polling and restores the
+previous display, seen venues and controls. The browser ignores cancelled results.
+It does not send a rollback/cancellation command to BIS, BRNS or BRC: an already
+running server search can complete and persist facts/history. The API has no
+server cancellation endpoint.
+
 ### BRNS decisions
 
 BRNS validates the exact ten-field BIS request, gathers live Google Places and
@@ -141,9 +175,17 @@ this document does not assert that every operation invokes an AI API.
 BRC's HTTP service exposes `/health`, `/status`, and `/check`. A check accepts
 one restaurant object or an array and preserves that response shape.
 
-- Missing cleaned data triggers a build from a usable raw MUIS snapshot or a
-  scrape. The server also starts a background warm-up when data is missing,
-  unless `BRC_AUTO_WARM=0`. Healthy HTTP does not mean the dataset is ready.
+- Missing/invalid cleaned data triggers a build from a usable raw MUIS snapshot
+  or scrape; initial automatic preparation shares the check lock. Healthy HTTP
+  does not mean the dataset is ready.
+- `DatabaseRefreshService` classifies persisted data through Data Manager and
+  the MUIS source timestamp. Fresh data is reused; data older than seven days
+  is rebuilt in a background job while existing checks continue. A refresh lock
+  prevents overlapping automatic jobs within the service process.
+- `BRC_AUTO_WARM=0` disables automatic jobs. The periodic interval is controlled
+  by `BRC_REFRESH_CHECK_INTERVAL_SECONDS` (default 3600); a nonpositive interval
+  disables polling, while initial warm-up still runs. `BRCHTTPServer` starts and
+  stops this injected collaborator and retains HTTP/signal handling.
 - Build logic reuses cuisine caches and keyword tags. Compose explicitly sets
   `BRC_BUILD_CUISINES_WITH_AI=0`; optional AI batch tagging is therefore skipped
   in its normal build configuration. Ambiguous outlet checks can still use AI.

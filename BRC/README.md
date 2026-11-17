@@ -40,6 +40,10 @@ required before an official classification.
 
 ## Build and check behavior
 
+`DataManager` persists cleaned snapshots across process restarts and caches parsed
+reads by resolved path, nanosecond modification time and file size. A replacement
+file invalidates that read cache; the cache is not the freshness decision.
+
 The server starts background preparation when its cleaned database is absent,
 unless `BRC_AUTO_WARM=0`. A check can also build missing data from a usable raw
 snapshot or scrape. The first check may wait for that work even if `/health`
@@ -55,6 +59,25 @@ Exact matches and records without candidate outlets can skip AI. Final Logic
 validates name/address/postal/unit and certificate evidence; an AI match alone
 cannot grant official status. Missing or unavailable verification is not
 reported as official.
+
+## Dataset freshness and refresh ownership
+
+`DatabaseRefreshService` owns warm-up, the refresh lock and periodic scheduling;
+`BRCHTTPServer` owns the HTTP lifecycle and starts/stops that collaborator.
+Data Manager reads the cleaned JSON and reports `missing`, `fresh` or `stale`
+using the source snapshot timestamp validated by `MuisSnapshot`. The freshness
+window is seven days; malformed or excessively future-dated timestamps are
+not fresh. The file's modification time and `built_at` do not reset source age.
+
+A missing/invalid database is built under the handler's serialized-check lock.
+A stale but usable database stays available while one background job refreshes
+it, without acquiring that check lock. Failed refreshes are logged and retain
+the previous database. Fresh data skips the rebuild. `BRC_AUTO_WARM=0` disables
+automatic warm-up and periodic refresh. `BRC_REFRESH_CHECK_INTERVAL_SECONDS`
+defaults to 3600; a nonpositive interval disables the watcher but not initial
+warm-up. The daemon watcher stops when the service stops; an already-running
+refresh is not a cancellable job API. Explicit maintenance builds remain
+available. `/health` is liveness; `/status` reports file existence, not freshness.
 
 ## Files and maintenance commands
 

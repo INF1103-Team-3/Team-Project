@@ -19,6 +19,7 @@ flowchart LR
   muis["MUIS directory and OneMap"]
   mongo["MongoDB domain collections"]
   json["BRC raw, cleaned, and checked JSON"]
+  refresh["BRC DatabaseRefreshService"]
   user -->|CLI input| bis
   user -->|Browser HTTP| http
   http -->|Transport payload| bis
@@ -34,6 +35,8 @@ flowchart LR
   bis -->|Identity and user state| mongo
   brns -->|Restaurant facts and history| mongo
   brc -->|Official evidence and check results| json
+  json -->|Persisted source timestamp and records| refresh
+  refresh -->|Missing build or stale background refresh| brc
   brc -->|Checked records| brns
   brns -->|Results and routes| bis
   bis -->|Formatted output| user
@@ -123,6 +126,37 @@ a ten-minute expiry and owner-bound token digest; consuming the token selects
 the saved request. Tokens are one-use. Guests use an opaque token with a null
 owner. Chat confirmation updates browser state before a direct form search;
 it does not imply that every search uses a stored proposal token.
+
+## Preference review and browser request state
+
+```mermaid
+flowchart LR
+  input["Profile / chat / search / validate-cuisines payload"]
+  service["BIS PreferenceReviewService"]
+  prepare["Logic policy: syntax, catalog and wish normalization"]
+  ai["AI Manager: optional semantic review"]
+  decision["Logic policy: accept or reject review outcome"]
+  accepted["Validated preferences for profile save or search"]
+  rejected["Field-labelled validation error"]
+  input --> service
+  service --> prepare
+  prepare -->|Unknown cuisine or non-rating wish| ai
+  prepare -->|Known cuisine or rating-only wish| decision
+  ai -->|Schema-checked reply or provider error| decision
+  decision -->|Accepted| accepted
+  decision -->|Rejected| rejected
+```
+
+This is a coordinator and policy inside BIS, not another manager chain.
+Uncatalogued cuisine names need a successful optional review to be accepted;
+ordinary special wishes preserve deterministic acceptance during review outages.
+Explicit negative reviews remain rejections. Rating-only wishes skip this
+optional review. Required recommendation ranking is a separate AI stage.
+
+Browser search cancellation aborts the client request and polling, restores its
+prior result snapshot and leaves seen tracking intact. There is no server-side
+cancellation token or rollback API. A backend search already in progress may
+still write restaurant facts/history; client cancellation is not data deletion.
 
 ## AI and restaurant trust states
 
@@ -221,6 +255,47 @@ prints counts without connecting by default; writes require `--apply` and an
 exact `--confirm-database` match. It preserves IDs and refuses conflicting
 existing records. It does not migrate arbitrary old web database schemas,
 BRC's authoritative files, or credentials into public user records.
+
+## Persisted MUIS freshness and non-blocking refresh
+
+```mermaid
+flowchart TB
+  boot["BRC start or periodic refresh tick"]
+  enabled{"Automatic jobs enabled?"}
+  state{"Data Manager: persisted cleaned state"}
+  fresh["Reuse existing cleaned JSON"]
+  missing["Acquire check lock for missing-data build"]
+  stale["Refresh in background without check lock"]
+  sources["Reusable raw MUIS snapshot or fresh scrape"]
+  pipeline["BRC IO / optional AI / Logic / Data build"]
+  saved["Atomically replaced cleaned JSON and refreshed caches"]
+  failed["Log failure; retain existing persisted evidence"]
+  stop["No automatic job"]
+  boot --> enabled
+  enabled -->|No| stop
+  enabled -->|Yes| state
+  state -->|Fresh source timestamp| fresh
+  state -->|Missing or invalid| missing
+  state -->|Older than seven days| stale
+  missing --> sources
+  stale --> sources
+  sources --> pipeline
+  pipeline -->|Success| saved
+  pipeline -->|Failure| failed
+```
+
+`DatabaseRefreshService` owns scheduling and a per-instance refresh lock; HTTP
+checks retain their separate serialized-check lock. The source timestamp
+`source_fetched_at`, not the local file write time or `built_at`, determines
+freshness through `MuisSnapshot.MAX_AGE`. Data Manager caches parsed reads by
+path/mtime/size; replacing a file changes the cache stamp. The cleaned JSON
+shape and output paths remain unchanged. Persistence outlives server restarts.
+
+`BRC_AUTO_WARM=0` disables automatic jobs. Polling defaults to 3600 seconds via
+`BRC_REFRESH_CHECK_INTERVAL_SECONDS`; a nonpositive interval disables the
+watcher, not initial warm-up. Stale data remains available during refresh;
+a missing database can make checks wait for preparation. A healthy `/health`
+or `database_exists=true` from `/status` is not a freshness guarantee.
 
 ## Docker volumes and logs
 

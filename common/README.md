@@ -12,7 +12,8 @@ connection wiring, nginx configuration, and optional JSON-to-Mongo import.
 | `terminal_ui.py` | Consistent prompts, headings, fields, numbered items, status roles, and optional ANSI color. | BIS and BRNS |
 | `recommendation_ui.py` | Shared terminal result card, numbered summary, exclusion, and route formatting. | BIS and internal BRNS |
 | `debug_log.py` | Per-process file logging and trace identifiers propagated across a search. | BIS, BRNS, BRC |
-| `geocode_cache.py` | One durable location query to coordinate cache backed by MongoDB (`geocode_cache`) or JSON. | BIS, BRNS, BRC |
+| `geocode_cache.py` | Durable query/coordinate cache and filtered suggestion lookup in MongoDB or JSON. | BIS, BRNS, BRC |
+| `singapore_locations.py` | Shared Singapore syntax, seed suggestions, postcode/coordinate and geocode quality checks. | BIS Logic, location gateways and geocode cache |
 | `groq_models.py` | Compatibility wrapper delegating Groq model discovery to `ai_models.py`. | BIS, BRNS, and BRC AI managers |
 | `ai_models.py` | Discovers active chat models for Groq and NVIDIA NIM. | BIS, BRNS, and BRC AI managers |
 | `storage_dependencies.py` | Lazy process-level `mongo_connection()` factory shared by Mongo-backed stores and geocode cache. | `BIS/data_manager.py`, `BRNS/data_manager.py`, `geocode_cache.py` |
@@ -95,6 +96,13 @@ safely without discarding freshly resolved coordinates.
 Callers should cache only a successful, validated geocode. They remain
 responsible for Singapore specific interpretation and for deciding when a
 provider request is needed.
+
+Cache lookup/search rejects generic Singapore-centroid coordinates and invalid
+location aliases instead of treating them as a verified specific location.
+`singapore_locations.py` centralizes those checks for the cache and IO gateways;
+seed suggestions and Google autocomplete remain separate input sources.
+Provider/schema failures in recommendation processing still belong to each
+subsystem rather than the cache.
 
 ## Dynamic AI model discovery
 

@@ -48,7 +48,7 @@ CLI/testing, but is not an automatic database-outage fallback.
 | `logic_manager.py`, `classes/logic/` | Profile authorization, chat filter/reconciliation policy, fallback parsing, midpoint/cuisine merging and validation |
 | `data_manager.py`, `classes/data/` | Account, credential and state stores, JSON/Mongo implementations, serialization and optional sync/import tools |
 | `classes/services/cli/` | `InteractionSession`, `BISSearchWorkflow`, confirmed-preference recording and result interaction |
-| `classes/services/web/` | `BISApplicationService`, `BISChatbotService`, authentication, favorites and runtime lifecycle |
+| `classes/services/web/` | `BISApplicationService`, `BISChatbotService`, shared `PreferenceReviewService`, authentication, favorites and runtime lifecycle |
 | `classes/services/launcher/` | Mode selection and web-stack startup |
 | `sources/` | Canonical profile vocabulary, value validation, questions and prompt text |
 | `support/email_verification/classes/` | Separate challenge, SMTP delivery, service and capability contracts |
@@ -120,7 +120,8 @@ into BRC or recommendation persistence directly.
 
 - The form supports multiple Singapore origins; Logic computes the midpoint.
 - Multiple cuisines trigger separate BRNS calls and Logic-owned merge/deduplication.
-  Custom cuisine terms are handled through the web search preparation policy.
+  Custom terms pass the shared validation flow; Logic maps noncanonical preferred
+  or disliked cuisines into explicit wishes without changing the BRNS schema.
 - Direct `/api/search` is the default. `confirm_only=true` returns a stored,
   expiring proposal token. Submitting `confirmation_token` consumes that saved
   request once. The normal form currently submits a direct search.
@@ -132,6 +133,26 @@ into BRC or recommendation persistence directly.
   favorites and history deletion.
 - Web results include input origins, cuisine breakdown, matches, alternatives,
   exclusions and model metadata. Favorites and history are scoped by user ID.
+
+### Shared cuisine, wish and location validation
+
+Profile saves, chat/onboarding, search and `POST /api/validate-cuisines` use
+`PreferenceReviewService`. It coordinates optional AI capabilities and delegates
+acceptance to the Logic Manager's `PreferenceValidationPolicy`; neither service
+owns a second provider implementation or persistence layer.
+
+Known cuisines/food styles pass the shared catalog and syntax rules locally.
+Custom terms outside that catalog require a successful configured AI review;
+provider failure or AI bypass does not silently approve them. Preferred/disliked
+conflicts are rejected. Rating-only wishes skip the optional semantic review;
+other wishes keep their existing deterministic validation during provider
+outages, while an explicit negative AI review rejects them.
+
+`LocationGateway` combines Singapore syntax checks, validated cached coordinates,
+seed locations and Google lookups. Implausible postcodes, out-of-country points,
+generic Singapore centroids and unsuitable partial matches are rejected rather
+than treated as successful place resolution. Suggestion lists do not constitute
+proof that an arbitrary typed location was geocoded successfully.
 
 ## Persistence and configuration
 

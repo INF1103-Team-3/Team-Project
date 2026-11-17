@@ -64,6 +64,11 @@ processes one origin and one cuisine target per call; it does not accept the
 web transport's extra fields. See [DataFlowDiagram.md](../DataFlowDiagram.md)
 for the full JSON example.
 
+BIS validates custom cuisine names before this boundary. Noncanonical preferred
+terms become `other_preferences` wishes with `cuisine="none"`; noncanonical
+dislikes become avoidance wishes. BRNS keeps the existing ten-field schema and
+canonical cuisine enumeration, rather than accepting a second web-specific model.
+
 ## Candidate preparation and AI
 
 1. Validate the BIS request and provider configuration.
@@ -143,6 +148,11 @@ replacement. Mongo failures raise explicit
 unavailable errors. Web BIS can translate recognized no-open-restaurant errors
 into empty results with a message. Those policies are distinct from successful
 AI ranking.
+
+The browser cancel action aborts the frontend request only; BRNS exposes no
+cancellation contract, so an active pipeline may still finish and save records.
+BRC refresh remains internal to its service; BRNS still consumes the existing
+`/status` and `/check` contracts.
 
 ## Tests
 

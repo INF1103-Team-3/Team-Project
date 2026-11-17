@@ -31,6 +31,8 @@ single unexplained result.
   review counts, coordinates, distances, durations, and directions.
 - Use BRNS AI to rank only the candidates found for the current search.
 - Check halal candidates against cleaned MUIS records through BRC.
+- Keep persisted MUIS data available during background refresh after seven days.
+- Cancel an in-flight browser search while retaining the previous result view.
 - Clearly distinguish official MUIS verification from unofficial Google halal
   indications.
 - Show matches, alternatives, exclusions, cautions, and grounded reasons.
@@ -92,6 +94,8 @@ subpackages (`io/`, `ai/`, `logic/`, `data/`, `services/`) under
 
 The SOLID cleanup keeps these four roles and separates chat policy/presentation,
 Google discovery planning/transport, profile authorization and BRC job workflows.
+Shared preference review now delegates acceptance to a Logic policy; BRC refresh
+scheduling is composed into its HTTP server through `DatabaseRefreshService`.
 
 ## Detailed documentation
 
@@ -208,6 +212,36 @@ cache, keyword and exact-match paths, and Compose disables AI cuisine batch
 building. These guides describe current behavior, not proof that every
 operation meets the university's every-record AI requirement.
 
+### Shared cuisine, wish and location validation
+
+Profile saves, chat/onboarding, search and `POST /api/validate-cuisines` use
+`PreferenceReviewService`. It coordinates optional AI capabilities and delegates
+acceptance to the Logic Manager's `PreferenceValidationPolicy`; neither service
+owns a second provider implementation or persistence layer.
+
+Known cuisines/food styles pass the shared catalog and syntax rules locally.
+Custom terms outside that catalog require a successful configured AI review;
+provider failure or AI bypass does not silently approve them. Preferred/disliked
+conflicts are rejected. Rating-only wishes skip the optional semantic review;
+other wishes keep their existing deterministic validation during provider
+outages, while an explicit negative AI review rejects them.
+
+`LocationGateway` combines Singapore syntax checks, validated cached coordinates,
+seed locations and Google lookups. Implausible postcodes, out-of-country points,
+generic Singapore centroids and unsuitable partial matches are rejected rather
+than treated as successful place resolution. Suggestion lists do not constitute
+proof that an arbitrary typed location was geocoded successfully.
+
+### Search cancellation and repeat searches
+
+The search/cancel controls use an `AbortController`, including model polling.
+Cancelling restores the prior displayed results and controls, preserves seen
+restaurant tracking and ignores the cancelled response. It cancels the browser's
+request; it does not roll back a backend search already running or guarantee
+that AI/Maps work and persistence stop. There is no server cancellation endpoint.
+Different Results sends up to 200 seen venues through BIS with strict exclusion;
+exhaustion offers a reset instead of inventing new matches.
+
 ## Requirements
 
 The application is designed to run through Docker Compose. The host requires:
@@ -244,6 +278,8 @@ comments are in [`.env.example`](.env.example).
 | `OPENROUTER_API_KEY` | OpenRouter model access for BIS, BRNS, and BRC |
 | `GROQ_API_KEY` | Optional Groq models appended to each application's fallback chain |
 | `GEMINI_API_KEY` | Gemini models used independently by BIS, BRNS, and BRC |
+| `NVIDIA_API_KEY` | Optional NVIDIA NIM discovery and fallback models |
+| `GOOGLE_MAPS_JS_API_KEY` | Preferred browser Maps key exposed by `/api/map-config` |
 | `GOOGLE_MAPS_API_KEY` | Geocoding, Places, route matrices, and directions |
 | `USE_LIVE_GOOGLE=true` | Use current Google restaurant and route data |
 | `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL` | Email verification and Maps-link delivery |
@@ -253,7 +289,8 @@ comments are in [`.env.example`](.env.example).
 | `MONGO_URI` | MongoDB connection string (Compose supplies `mongodb://mongodb:27017/`) |
 | `MONGO_DATABASE` | MongoDB database name (default `bitefinder`) |
 | `BRC_BUILD_CUISINES_WITH_AI` | Compose sets `0` to skip AI cuisine batch building; ambiguous outlet matching can still use AI |
-| `BRC_AUTO_WARM` | Background preparation when BRC data is absent; set `0` to disable |
+| `BRC_AUTO_WARM` | Missing-data warm-up and stale-data refresh; set `0` to disable automatic jobs |
+| `BRC_REFRESH_CHECK_INTERVAL_SECONDS` | Staleness polling interval, default `3600`; nonpositive disables the watcher |
 | `DEBUG=true` | Mirror operational logs through terminal IO |
 
 `.env` is excluded from Git and the Docker build context. Never commit API keys
@@ -398,6 +435,12 @@ generated entrypoint.
 If the cleaned MUIS database does not exist, BRC prepares it automatically when
 started or on the first halal verification request. Completed batches are saved
 in the `brc-data` volume so interrupted builds can resume without retagging.
+
+The MUIS source timestamp has a seven-day freshness window. Stale usable data
+continues serving checks while a single background job rebuilds it. The HTTP
+server delegates scheduling to `DatabaseRefreshService`; automatic polling defaults
+to one hour. Refresh failure retains the old database. `/status` only reports file
+existence, so a healthy service or existing file does not prove fresh evidence.
 
 To build or refresh the BRC database manually:
 
