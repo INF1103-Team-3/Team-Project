@@ -39,6 +39,10 @@ separate from normal application requirements.
 
 ### UML class diagrams for Word
 
+A reviewed PNG snapshot is published in [uml/](../uml/README.md), with the class
+index and notation guide. Regeneration writes to external workfiles and does
+not automatically replace the published snapshot.
+
 ```bash
 python project_overview/test_uml.py
 ```

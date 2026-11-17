@@ -25,3 +25,6 @@ BIS/docs/
 **/*.pem
 **/*.key
 .web-deps/
+
+# Published UML PNGs are documentation, not application runtime files.
+uml/

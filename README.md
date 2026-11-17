@@ -124,6 +124,7 @@ test commands:
 | Browser UI static frontend assets | [frontend/README.md](frontend/README.md) |
 | Function, integration, black-box, and deployment tests | [tests/README.md](tests/README.md) |
 | Static and live function visualizations | [project_overview/README.md](project_overview/README.md) |
+| Published UML images and complete class index | [uml/README.md](uml/README.md) |
 | Common infrastructure (logging, geocoding, UI, storage, nginx) | [common/README.md](common/README.md) |
 | End-to-end data states, AI payloads, and database/file storage | [DataFlowDiagram.md](DataFlowDiagram.md) |
 
