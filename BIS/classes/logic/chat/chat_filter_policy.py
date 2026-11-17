@@ -8,12 +8,10 @@ from BIS.sources.profile_schema import (
     DIETARY_CHOICES,
     NUMBER_LIMITS,
     SEARCH_MODE_LIMITS,
-    extract_rating_wishes,
     normalize_cuisine_token,
     normalize_wish_text,
     strip_rating_clauses,
     validate_cuisine_list,
-    validate_english_preferences,
 )
 
 

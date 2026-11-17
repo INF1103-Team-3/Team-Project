@@ -4,7 +4,6 @@ import requests
 from bs4 import BeautifulSoup
 
 from BRC.classes.data.models.common.model_constants import (
-    EATING_ESTABLISHMENT,
     SOURCE_URL,
 )
 from BRC.classes.data.models.muis.muis_listing import MuisListing

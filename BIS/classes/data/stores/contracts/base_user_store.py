@@ -3,11 +3,9 @@
 from abc import ABC, abstractmethod
 from uuid import uuid4
 from BIS.sources.profile_schema import (
-    MINUTES_PER_KM,
     empty_preferences,
     normalize_email,
     normalize_username,
-    validate_preferences,
 )
 
 

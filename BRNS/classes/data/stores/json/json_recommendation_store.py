@@ -1,6 +1,5 @@
 """JSON-backed restaurant facts and search-history persistence."""
 
-import re
 import json
 from pathlib import Path
 

@@ -16,6 +16,9 @@ from BIS.classes.logic.contracts.bis_logic_manager_interface import (
 from BIS.classes.logic.validators.search_request_validator import (
     create_search_request_validator,
 )
+from BIS.classes.logic.validators.preference_validation_policy import (
+    PreferenceValidationPolicy,
+)
 from sources.profile_schema import (
     CUISINES,
     MINUTES_PER_KM,
@@ -40,12 +43,25 @@ COORDINATES = re.compile(
 class LogicManager(BISLogicManagerInterface):
     """Own BIS profile updates and validated search-request decisions."""
 
-    def __init__(self, search_validator=None, chat_filters=None):
+    def __init__(
+        self,
+        search_validator=None,
+        chat_filters=None,
+        preference_validation=None,
+    ):
         self._profile_access = ProfileAccessPolicy()
         self.__chat_filters = chat_filters or ChatFilterPolicy()
         self._search_validator = (
             search_validator or create_search_request_validator()
         )
+        self.__preference_validation = (
+            preference_validation or PreferenceValidationPolicy()
+        )
+
+    @property
+    def preference_validation(self):
+        """Expose deterministic acceptance policy to review coordinators."""
+        return self.__preference_validation
 
     @property
     def chat_filters(self):

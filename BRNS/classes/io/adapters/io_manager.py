@@ -2,7 +2,6 @@
 
 import json
 import math
-import re
 
 from BIS.sources.profile_schema import (
     CUISINES,

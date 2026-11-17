@@ -3768,9 +3768,7 @@ class WebIntegrationTests(unittest.TestCase):
         self.assertEqual(
             saved_user["liked_cuisines"], ["spanish", "taiwanese"]
         )
-        self.assertEqual(
-            saved_user["disliked_cuisines"], ["seafood", "ramen"]
-        )
+        self.assertEqual(saved_user["disliked_cuisines"], ["seafood", "ramen"])
 
         # Overlap shows the conflicting cuisine name.
         save_overlap = self.client.post(
@@ -3811,15 +3809,19 @@ class WebIntegrationTests(unittest.TestCase):
                 },
                 headers=headers,
             )
-            self.assertEqual(save_bad.status_code, 400, (bad_prof_c, save_bad.text))
+            self.assertEqual(
+                save_bad.status_code, 400, (bad_prof_c, save_bad.text)
+            )
 
-        # 4. Cached generic Singapore centroid (1.352083, 103.819836) is ignored.
+        # A generic cached centroid must not resolve a specific place.
         bad_cache = SimpleNamespace(
             lookup=lambda _q: (1.352083, 103.819836),
             remember=lambda *_a: None,
         )
         cached_gw = LocationGateway(
-            self.application._logic, bad_cache, "https://example.invalid/geocode"
+            self.application._logic,
+            bad_cache,
+            "https://example.invalid/geocode",
         )
         self.assertIsNone(cached_gw.lookup_cached("Compass One"))
 

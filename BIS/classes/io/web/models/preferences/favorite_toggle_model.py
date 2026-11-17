@@ -1,6 +1,6 @@
 """HTTP input schema; domain validation remains in the managers."""
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 
 class FavoriteToggleModel(BaseModel):

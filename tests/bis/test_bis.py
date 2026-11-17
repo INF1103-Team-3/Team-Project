@@ -609,7 +609,11 @@ def test_unified_cuisine_validation_and_slang_location_rejection():
         "partial_match": True,
         "geometry": {"location": {"lat": 1.2994159, "lng": 103.8496857}},
         "address_components": [
-            {"long_name": "42", "short_name": "42", "types": ["street_number"]},
+            {
+                "long_name": "42",
+                "short_name": "42",
+                "types": ["street_number"],
+            },
             {
                 "long_name": "Prinsep Street",
                 "short_name": "Prinsep St",
@@ -621,9 +625,12 @@ def test_unified_cuisine_validation_and_slang_location_rejection():
     assert not _is_valid_cached_sg_entry(
         "bad centroid", [1.352083, 103.819836]
     )
-    with patch("common.geocode_cache._use_mongo", return_value=False), patch(
-        "common.geocode_cache._read",
-        return_value={"bad centroid": [1.352083, 103.819836]},
+    with (
+        patch("common.geocode_cache._use_mongo", return_value=False),
+        patch(
+            "common.geocode_cache._read",
+            return_value={"bad centroid": [1.352083, 103.819836]},
+        ),
     ):
         assert lookup("bad centroid") is None
 

@@ -18,10 +18,117 @@ from BRNS.classes.data.stores.json.json_recommendation_store import (  # noqa: E
 
 
 class CleanupContractTests(unittest.TestCase):
+    def test_brc_missing_and_corrupt_snapshots_are_not_fresh_or_overwritten(
+        self,
+    ):
+        from BRC.classes.data.data_manager import DataManager
+        from BRC.classes.data.storage.data_unavailable_error import (
+            DataUnavailableError,
+        )
+
+        with tempfile.TemporaryDirectory() as folder:
+            data = DataManager(folder=Path(folder))
+            self.assertEqual(data.clean_database_state(), "missing")
+            with self.assertRaises(DataUnavailableError):
+                data.load_raw_snapshot()
+            raw = Path(folder) / "muis_establishments.json"
+            clean = Path(folder) / "halal_restaurants.json"
+            for content in ("{broken", '{"restaurants": []}'):
+                with self.subTest(content=content):
+                    raw.write_text(content)
+                    clean.write_text(content)
+                    with self.assertRaises(DataUnavailableError):
+                        data.load_raw_snapshot()
+                    with self.assertRaises(DataUnavailableError):
+                        data.load_clean_database()
+                    self.assertEqual(data.clean_database_state(), "missing")
+                    self.assertEqual(raw.read_text(), content)
+                    self.assertEqual(clean.read_text(), content)
+
+    def test_preference_review_preserves_outage_and_rejection_policies(self):
+        from unittest.mock import Mock
+        from BIS.classes.logic.logic_manager import LogicManager
+        from BIS.classes.services.web.preference_review_service import (
+            PreferenceReviewService,
+        )
+
+        ai = Mock()
+        config = {"nested": {"value": "original"}}
+        review = PreferenceReviewService(ai, LogicManager(), config)
+        ai.review_cuisines.side_effect = RuntimeError("unavailable")
+        with self.assertRaisesRegex(ValueError, "Cuisine: 'mauritian'"):
+            review.validate_cuisines(["mauritian"])
+        ai.review_cuisines.side_effect = None
+        self.assertEqual(
+            review.validate_cuisines(["mauritian"]), ["mauritian"]
+        )
+        # A provider may mutate its copy, never the application settings.
+        ai.review_profile_wishes.side_effect = lambda items, cfg: cfg[
+            "nested"
+        ].update(value="changed")
+        self.assertEqual(
+            review.validate_wishes(["quiet place"]), ["quiet place"]
+        )
+        self.assertEqual(config["nested"]["value"], "original")
+        ai.review_profile_wishes.side_effect = RuntimeError("unavailable")
+        self.assertEqual(
+            review.validate_wishes(["quiet place"]), ["quiet place"]
+        )
+        ai.review_profile_wishes.side_effect = ValueError(
+            "Default special wishes are invalid."
+        )
+        with self.assertRaisesRegex(
+            ValueError, "Special requests are invalid"
+        ):
+            review.validate_wishes(["quiet place"])
+
+    def test_catalog_and_rating_only_preferences_skip_optional_ai_review(self):
+        from unittest.mock import Mock
+        from BIS.classes.logic.logic_manager import LogicManager
+        from BIS.classes.services.web.preference_review_service import (
+            PreferenceReviewService,
+        )
+
+        ai = Mock()
+        review = PreferenceReviewService(ai, LogicManager(), {})
+        self.assertEqual(review.validate_cuisines(["japanese"]), ["japanese"])
+        review.validate_wishes(["at least 4.5 stars"])
+        ai.review_cuisines.assert_not_called()
+        ai.review_profile_wishes.assert_not_called()
+        bypass = PreferenceReviewService(
+            ai, LogicManager(), {"ai_bypass": True}
+        )
+        with self.assertRaises(ValueError):
+            bypass.validate_cuisines(["mauritian"])
+        ai.review_cuisines.assert_not_called()
+
+    def test_http_server_uses_injected_refresh_lifecycle(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from BRC.classes.io.http.server.brc_http_server import BRCHTTPServer
+
+        refresh = Mock()
+        transport = Mock()
+        server = BRCHTTPServer(
+            port=0,
+            handler=SimpleNamespace(),
+            refresh_service=refresh,
+            server_factory=lambda *_: transport,
+        )
+        with patch.object(server, "_install_signal_handlers"):
+            server.serve()
+        refresh.start_warm.assert_called_once_with()
+        refresh.start_watcher.assert_called_once_with()
+        refresh.stop.assert_called_once_with()
+        transport.serve_forever.assert_called_once_with()
+        transport.server_close.assert_called_once_with()
+
     def test_brc_warmup_uses_selected_handler_without_real_services(self):
         from threading import Lock
         from types import SimpleNamespace
-        from BRC.classes.io.http.server.brc_http_server import BRCHTTPServer
+        from BRC.classes.services.database_refresh_service import (
+            DatabaseRefreshService,
+        )
 
         calls = []
         handler = SimpleNamespace(
@@ -29,21 +136,17 @@ class CleanupContractTests(unittest.TestCase):
             serialized_checks=Lock,
             application_run=lambda: calls.append("selected handler"),
         )
-        server = BRCHTTPServer(
-            port=0,
-            handler=handler,
-            server_factory=lambda _address, _handler: SimpleNamespace(),
-        )
         with (
             patch.dict("os.environ", {"BRC_AUTO_WARM": "1"}),
             patch(
-                "BRC.classes.io.http.server.brc_http_server.threading.Thread",
+                "BRC.classes.services.database_refresh_service."
+                "threading.Thread",
                 side_effect=lambda target, daemon: SimpleNamespace(
                     start=target
                 ),
             ),
         ):
-            server._start_background_warm()
+            DatabaseRefreshService(handler).start_warm()
         self.assertEqual(calls, ["selected handler"])
 
     def test_halal_evidence_requires_both_official_and_verified(self):

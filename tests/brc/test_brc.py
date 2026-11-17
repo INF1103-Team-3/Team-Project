@@ -264,7 +264,7 @@ def _sample_clean_db(source_fetched_at):
 
 
 def test_data_dir_and_staleness_checks():
-    """DATA_DIR should point to BRC/data and detect missing/fresh/stale clean DBs."""
+    """Check BRC/data persistence and missing/fresh/stale database states."""
     import tempfile
     from datetime import datetime, timedelta, timezone
     from BRC.classes.data.data_manager import DATA_DIR, DataManager
@@ -313,7 +313,7 @@ def test_data_dir_and_staleness_checks():
 
 
 def test_brc_server_refresh_is_non_blocking_when_stale():
-    """A >7 day persisted DB refreshes in background without blocking /check."""
+    """Refresh a stale persisted DB without blocking /check."""
     import os
     import tempfile
     import threading
@@ -321,7 +321,9 @@ def test_brc_server_refresh_is_non_blocking_when_stale():
     from datetime import datetime, timedelta, timezone
     from types import SimpleNamespace
     from unittest.mock import patch
-    from BRC.classes.io.http.server.brc_http_server import BRCHTTPServer
+    from BRC.classes.services.database_refresh_service import (
+        DatabaseRefreshService,
+    )
 
     now = datetime.now(timezone.utc)
     fresh_ts = (now - timedelta(days=1)).isoformat(timespec="seconds")
@@ -359,31 +361,24 @@ def test_brc_server_refresh_is_non_blocking_when_stale():
             serialized_checks=serialized_checks,
             application_run=staticmethod(fake_build),
         )
-        server = BRCHTTPServer(
-            port=0,
-            handler=handler,
-            server_factory=lambda _addr, _handler: SimpleNamespace(
-                shutdown=lambda: None
-            ),
-            refresh_interval=0.05,
-        )
+        refresh = DatabaseRefreshService(handler, refresh_interval=0.05)
 
         with patch.dict(os.environ, {"BRC_AUTO_WARM": "1"}):
             # 1) Fresh DB does not trigger background build
             clean_path.write_text(
                 json.dumps(_sample_clean_db(fresh_ts)), encoding="utf-8"
             )
-            server._start_background_warm()
+            refresh.start_warm()
             assert build_calls == []
 
-            # 2) Stale DB starts background refresh WITHOUT locking serialized_checks
+            # 2) Stale refresh must not acquire the serialized-check lock.
             clean_path.write_text(
                 json.dumps(_sample_clean_db(stale_ts)), encoding="utf-8"
             )
-            server._start_background_warm()
+            refresh.start_warm()
             assert refresh_started.wait(timeout=2)
-            # Duplicate warm trigger while already refreshing must be ignored
-            server._start_background_warm()
+            # Duplicate refresh triggers must be ignored.
+            refresh.start_warm()
             with handler.serialized_checks():
                 concurrent_check_ok = True
             proceed_refresh.set()
@@ -393,9 +388,9 @@ def test_brc_server_refresh_is_non_blocking_when_stale():
             refresh_started.clear()
             refresh_done.clear()
             proceed_refresh.clear()
-            server._start_refresh_watcher()
+            refresh.start_watcher()
             assert refresh_started.wait(timeout=2)
-            server.stop()
+            refresh.stop()
             proceed_refresh.set()
             assert refresh_done.wait(timeout=2)
 
@@ -411,7 +406,7 @@ def test_brc_server_refresh_is_non_blocking_when_stale():
 
     show_case(
         "BRC-06: Non-blocking background refresh for stale MUIS DB",
-        "BRCHTTPServer._start_background_warm()",
+        "DatabaseRefreshService.start_warm()",
         "Checks that fresh DBs skip warm-up, while >7 day DBs refresh in "
         "a single background job without blocking concurrent /check calls.",
         {"stale_days": 9},

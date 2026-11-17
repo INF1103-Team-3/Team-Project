@@ -10,10 +10,11 @@ from common.singapore_locations import (
 )
 from BIS.classes.services.web.bis_chatbot_service import (
     BISChatbotService,
-    validate_cuisine_entries,
-    validate_special_preferences,
 )
 from BIS.support.config import is_smtp_bypass
+from BIS.classes.services.web.preference_review_service import (
+    PreferenceReviewService,
+)
 
 _NO_OPEN_RESTAURANTS_MESSAGE = (
     "No open restaurants found near this location right now. "
@@ -42,6 +43,7 @@ class BISApplicationService:
         model_reader=None,
         chatbot=None,
         location_gateway=None,
+        preference_review=None,
     ):
         self._locations = location_gateway
         self._data = data
@@ -50,6 +52,9 @@ class BISApplicationService:
         self._brns = brns
         self._config = config
         self._model = model_reader or self.__read_last_used_model
+        self._reviews = preference_review or PreferenceReviewService(
+            ai, logic, config
+        )
         self._chatbot = chatbot or BISChatbotService(
             ai,
             logic,
@@ -57,6 +62,7 @@ class BISApplicationService:
             model_reader=self._model,
             profile_saver=self.save_profile,
             location_gateway=self._locations,
+            preference_review=self._reviews,
         )
 
     def __read_last_used_model(self):
@@ -125,30 +131,24 @@ class BISApplicationService:
         wishes = updated["preferences"].get("other_preferences")
         if wishes:
             updated["preferences"]["other_preferences"] = (
-                validate_special_preferences(
+                self._reviews.validate_wishes(
                     wishes,
-                    ai=self._ai,
-                    config=self._config,
                     field_label="Default special wishes",
                 )
             )
         liked_cuisines = updated["preferences"].get("liked_cuisines")
         if liked_cuisines:
             updated["preferences"]["liked_cuisines"] = (
-                validate_cuisine_entries(
+                self._reviews.validate_cuisines(
                     liked_cuisines,
-                    ai=self._ai,
-                    config=self._config,
                     field_label="Default preferred cuisines",
                 )
             )
         disliked_cuisines = updated["preferences"].get("disliked_cuisines")
         if disliked_cuisines:
             updated["preferences"]["disliked_cuisines"] = (
-                validate_cuisine_entries(
+                self._reviews.validate_cuisines(
                     disliked_cuisines,
-                    ai=self._ai,
-                    config=self._config,
                     field_label="Default disliked cuisines",
                 )
             )
@@ -167,10 +167,8 @@ class BISApplicationService:
         label = (
             str(payload.get("field_label") or "Cuisine").strip() or "Cuisine"
         )
-        cleaned = validate_cuisine_entries(
+        cleaned = self._reviews.validate_cuisines(
             parsed,
-            ai=self._ai,
-            config=self._config,
             field_label=label,
         )
         return {"success": True, "valid": True, "cuisines": cleaned}
@@ -550,10 +548,8 @@ class BISApplicationService:
 
         raw_locations = self._logic.collect_search_locations(payload)
         origin, resolved_origins = self.__resolve_origins(raw_locations)
-        selected_cuisines = validate_cuisine_entries(
+        selected_cuisines = self._reviews.validate_cuisines(
             self._logic.collect_search_cuisines(payload),
-            ai=self._ai,
-            config=self._config,
             field_label="Preferred cuisines",
         )
         collect_disliked = getattr(
@@ -564,10 +560,8 @@ class BISApplicationService:
             if callable(collect_disliked)
             else (payload.get("disliked_cuisines") or [])
         )
-        normalized_disliked = validate_cuisine_entries(
+        normalized_disliked = self._reviews.validate_cuisines(
             raw_disliked,
-            ai=self._ai,
-            config=self._config,
             field_label="Disliked cuisines",
         )
         cuisine_overlap = set(selected_cuisines) & set(normalized_disliked)
@@ -577,10 +571,8 @@ class BISApplicationService:
                 "Resolve cuisines listed as both preferred and disliked: "
                 f"{joined}."
             )
-        normalized_wishes = validate_special_preferences(
+        normalized_wishes = self._reviews.validate_wishes(
             payload.get("other_preferences"),
-            ai=self._ai,
-            config=self._config,
             field_label="Special requests",
         )
         if (

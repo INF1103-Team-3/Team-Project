@@ -1,17 +1,11 @@
 """Deterministic fallback interpretation of chat input."""
 
-from copy import deepcopy
 import re
 
 from BIS.sources.profile_schema import (
     CUISINES,
     DIETARY_CHOICES,
-    NUMBER_LIMITS,
-    SEARCH_MODE_LIMITS,
-    extract_rating_wishes,
     normalize_wish_text,
-    strip_rating_clauses,
-    validate_english_preferences,
 )
 
 _COMMON_CUSTOM_CUISINES = (

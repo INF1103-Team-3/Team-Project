@@ -1,7 +1,6 @@
 """JSON-backed account and profile-state persistence for BIS."""
 
 from pathlib import Path
-from uuid import uuid4
 
 from BIS.classes.data.stores.contracts.base_json_store import BaseJsonStore
 from BIS.classes.data.stores.contracts.base_user_store import BaseUserStore
@@ -13,11 +12,6 @@ from BIS.classes.data.stores.contracts.user_store_interface import (
 )
 from common.debug_log import debug_log
 from sources.profile_schema import (
-    MINUTES_PER_KM,
-    empty_preferences,
-    normalize_email,
-    normalize_username,
-    validate_preferences,
     validate_user,
 )
 

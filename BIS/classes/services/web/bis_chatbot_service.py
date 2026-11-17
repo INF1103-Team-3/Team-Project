@@ -11,106 +11,14 @@ from BIS.classes.io.web.chat.chat_presenter import (
     _ONBOARDING_QUESTIONS,
 )
 
+from BIS.classes.services.web.preference_review_service import (
+    PreferenceReviewService,
+)
+
 from copy import deepcopy
 import re
 
 from common.singapore_locations import validate_location_syntax
-
-from BIS.sources.profile_schema import (
-    CUISINES,
-    DIETARY_CHOICES,
-    NUMBER_LIMITS,
-    SEARCH_MODE_LIMITS,
-    extract_rating_wishes,
-    is_recognized_cuisine,
-    normalize_wish_text,
-    strip_rating_clauses,
-    validate_cuisine_list,
-    validate_english_preferences,
-)
-
-
-def validate_special_preferences(
-    items, ai=None, config=None, field_label="Special requests"
-):
-    """Validate deterministic English wording and optional AI sense for
-    special wishes.
-    """
-    cleaned = [
-        normalize_wish_text(w) for w in (items or []) if normalize_wish_text(w)
-    ]
-    if not cleaned:
-        return []
-    cleaned = validate_english_preferences(cleaned, field_label=field_label)
-    non_rating_wishes = [
-        rem for item in cleaned for rem in [strip_rating_clauses(item)] if rem
-    ]
-    cfg = config or {}
-    if (
-        non_rating_wishes
-        and not cfg.get("ai_bypass")
-        and ai is not None
-        and hasattr(ai, "review_profile_wishes")
-    ):
-        try:
-            ai.review_profile_wishes(non_rating_wishes, deepcopy(cfg))
-        except RuntimeError:
-            pass
-        except ValueError as err:
-            msg = str(err).strip()
-            if (
-                msg.startswith("Default special wishes")
-                and field_label != "Default special wishes"
-            ):
-                msg = field_label + msg[len("Default special wishes"):]
-            raise ValueError(
-                msg
-                or (
-                    f"{field_label}"
-                    " must be proper, meaningful English preferences."
-                )
-            ) from err
-    return cleaned
-
-
-def validate_cuisine_entries(
-    items, ai=None, config=None, field_label="Cuisine"
-):
-    """Validate cuisine entries via catalog lookup and optional AI check."""
-    raw_items = [str(c or "").strip() for c in (items or []) if str(c or "").strip()]
-    if not raw_items:
-        return []
-    cleaned = validate_cuisine_list(raw_items, field_label=field_label)
-    unknown = [c for c in cleaned if not is_recognized_cuisine(c)]
-    if not unknown:
-        return cleaned
-    cfg = config or {}
-    if (
-        not cfg.get("ai_bypass")
-        and ai is not None
-        and hasattr(ai, "review_cuisines")
-    ):
-        try:
-            ai.review_cuisines(unknown, deepcopy(cfg))
-            return cleaned
-        except RuntimeError:
-            pass
-        except ValueError as err:
-            msg = str(err).strip()
-            if msg and not msg.lower().startswith(field_label.lower()):
-                msg = f"{field_label}: {msg}"
-            raise ValueError(
-                msg
-                or (
-                    f"{field_label}: '{unknown[0]}' is not a recognized "
-                    "cuisine or food style (e.g. Japanese, Spanish, "
-                    "Taiwanese, Seafood, Ramen)."
-                )
-            ) from err
-    raise ValueError(
-        f"{field_label}: '{unknown[0]}' is not a recognized cuisine or food "
-        "style (e.g. Japanese, Spanish, Taiwanese, Seafood, Ramen)."
-    )
 
 
 class BISChatbotService:
@@ -126,6 +34,7 @@ class BISChatbotService:
         model_reader=lambda: None,
         profile_saver=None,
         location_gateway=None,
+        preference_review=None,
     ):
         self._ai = ai
         self._logic = logic
@@ -133,6 +42,9 @@ class BISChatbotService:
         self._model = model_reader
         self._save_profile = profile_saver
         self._locations = location_gateway
+        self._reviews = preference_review or PreferenceReviewService(
+            ai, logic, config
+        )
         self._filters = (
             getattr(logic, "chat_filters", None) or ChatFilterPolicy()
         )
@@ -228,7 +140,6 @@ class BISChatbotService:
             "anything",
             "any",
         )
-        updates = {}
 
         if (
             target_field
@@ -305,10 +216,8 @@ class BISChatbotService:
                 and prefs.get("liked_cuisines")
             ):
                 try:
-                    prefs["liked_cuisines"] = validate_cuisine_entries(
+                    prefs["liked_cuisines"] = self._reviews.validate_cuisines(
                         prefs["liked_cuisines"],
-                        ai=self._ai,
-                        config=self._config,
                         field_label="Default preferred cuisines",
                     )
                 except ValueError as err:
@@ -321,11 +230,11 @@ class BISChatbotService:
                 and prefs.get("disliked_cuisines")
             ):
                 try:
-                    prefs["disliked_cuisines"] = validate_cuisine_entries(
-                        prefs["disliked_cuisines"],
-                        ai=self._ai,
-                        config=self._config,
-                        field_label="Default disliked cuisines",
+                    prefs["disliked_cuisines"] = (
+                        self._reviews.validate_cuisines(
+                            prefs["disliked_cuisines"],
+                            field_label="Default disliked cuisines",
+                        )
                     )
                 except ValueError as err:
                     accepted = False
@@ -341,10 +250,8 @@ class BISChatbotService:
                         or [p.strip() for p in text.split(",") if p.strip()]
                     )
                     try:
-                        candidate_wishes = validate_special_preferences(
+                        candidate_wishes = self._reviews.validate_wishes(
                             candidate_wishes,
-                            ai=self._ai,
-                            config=self._config,
                             field_label="Special requests",
                         )
                     except ValueError as err:
@@ -481,10 +388,8 @@ class BISChatbotService:
                     current, err, target_field="location"
                 )
             try:
-                validate_special_preferences(
+                self._reviews.validate_wishes(
                     current.get("other_preferences") or [],
-                    ai=self._ai,
-                    config=self._config,
                     field_label="Special requests",
                 )
             except ValueError as err:
@@ -611,11 +516,11 @@ class BISChatbotService:
             updates_dict.get("liked_cuisines")
         ):
             try:
-                updates_dict["liked_cuisines"] = validate_cuisine_entries(
-                    updates_dict["liked_cuisines"],
-                    ai=self._ai,
-                    config=self._config,
-                    field_label="Preferred cuisines",
+                updates_dict["liked_cuisines"] = (
+                    self._reviews.validate_cuisines(
+                        updates_dict["liked_cuisines"],
+                        field_label="Preferred cuisines",
+                    )
                 )
             except ValueError as err:
                 return self._presenter.reject_invalid_cuisines(
@@ -625,11 +530,11 @@ class BISChatbotService:
             updates_dict.get("disliked_cuisines")
         ):
             try:
-                updates_dict["disliked_cuisines"] = validate_cuisine_entries(
-                    updates_dict["disliked_cuisines"],
-                    ai=self._ai,
-                    config=self._config,
-                    field_label="Disliked cuisines",
+                updates_dict["disliked_cuisines"] = (
+                    self._reviews.validate_cuisines(
+                        updates_dict["disliked_cuisines"],
+                        field_label="Disliked cuisines",
+                    )
                 )
             except ValueError as err:
                 return self._presenter.reject_invalid_cuisines(
@@ -642,10 +547,8 @@ class BISChatbotService:
         ) and updates_dict.get("other_preferences"):
             try:
                 updates_dict["other_preferences"] = (
-                    validate_special_preferences(
+                    self._reviews.validate_wishes(
                         updates_dict["other_preferences"],
-                        ai=self._ai,
-                        config=self._config,
                         field_label="Special requests",
                     )
                 )
@@ -723,10 +626,8 @@ class BISChatbotService:
                     "saved_to_profile": False,
                 }
             try:
-                updated["other_preferences"] = validate_special_preferences(
+                updated["other_preferences"] = self._reviews.validate_wishes(
                     updated.get("other_preferences") or [],
-                    ai=self._ai,
-                    config=self._config,
                     field_label="Special requests",
                 )
             except ValueError as err:

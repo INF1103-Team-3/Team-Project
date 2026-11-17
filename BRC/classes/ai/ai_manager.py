@@ -5,7 +5,6 @@ import os
 import re
 
 from BRC.classes.ai.errors.ai_response_error import AIResponseError
-from BRC.classes.ai.errors.ai_service_error import AIServiceError
 
 
 CUISINES = (

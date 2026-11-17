@@ -121,7 +121,7 @@ class DataManager:
         return "stale"
 
     def is_clean_database_stale(self):
-        """Return True when the cleaned database is missing, invalid, or older than MAX_AGE."""
+        """Return True for missing, invalid, or older-than-MAX_AGE data."""
         return self.clean_database_state() != "fresh"
 
     def save_clean_database(self, database):

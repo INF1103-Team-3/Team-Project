@@ -25,11 +25,11 @@ class MongoConnection:
     def execute(self, operation):
         try:
             return operation(self.__db)
-        except DuplicateKeyError as error:
+        except DuplicateKeyError:
             raise ValueError(
                 "A record with this identity already exists."
             ) from None
-        except PyMongoError as error:
+        except PyMongoError:
             raise RuntimeError(
                 "MongoDB is unavailable; no alternate storage was used."
             ) from None

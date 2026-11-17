@@ -4,7 +4,6 @@ import json
 import math
 import re
 from common.debug_log import debug_log
-from BIS.sources.profile_schema import PREFERENCE_FIELDS, validate_updates
 
 
 def _has_fast_provider(config):
@@ -776,7 +775,7 @@ class BISInterpreter:
         return items
 
     def review_cuisines(self, cuisines, config):
-        """Verify custom cuisine names represent real cuisines or food styles."""
+        """Verify custom names represent real cuisines or food styles."""
         items = [
             str(c or "").strip().lower()
             for c in cuisines or []
@@ -790,12 +789,14 @@ class BISInterpreter:
                 {
                     "role": "system",
                     "content": (
-                        "Validate each item in a user's restaurant cuisine or "
+                        "Validate each item in a user's restaurant "
+                        "cuisine or "
                         "food style list. Every item must be a real world "
                         "cuisine, culinary region/nationality, dish category, "
                         "or dining style (e.g. Spanish, Taiwanese, Greek, "
                         "Georgian, Peruvian, Seafood, Ramen, Dim Sum, Fast "
-                        "Food, Bakery, Steakhouse). Reject gibberish, internet "
+                        "Food, Bakery, Steakhouse). Reject gibberish, "
+                        "internet "
                         "slang (e.g. lol, cb), profanity, insults, random "
                         "unrelated objects (e.g. chair, laptop, lampa), "
                         "numbers, or vague placeholder words (e.g. test, "

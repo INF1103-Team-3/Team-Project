@@ -1,13 +1,22 @@
 /** Offline ES-module contracts. Run with Node 22+; see tests/README.md. */
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
-import * as filters from '../../frontend/js/filters.js?v=20261116-4';
-import * as results from '../../frontend/js/results.js?v=20261116-4';
-import {
-  parseProfileLocationsInput,
-  state,
-  validateLocationSyntax,
-} from '../../frontend/js/state.js?v=20261116-4';
+import { readFileSync } from 'node:fs';
+
+// Resolve the actual browser module URLs, including cache versions. Hardcoded
+// queries create a second state singleton when the application version changes.
+const mainSource = readFileSync(new URL('../../frontend/js/main.js', import.meta.url), 'utf8');
+function importApplicationModule(name) {
+  const specifier = mainSource.match(new RegExp(`['"](\\./${name}\\.js[^'"]*)['"]`))?.[1];
+  assert.ok(specifier, `main.js must import ${name}.js`);
+  return import(new URL(`../../frontend/js/${specifier.slice(2)}`, import.meta.url));
+}
+const [filters, results, stateModule] = await Promise.all([
+  importApplicationModule('filters'),
+  importApplicationModule('results'),
+  importApplicationModule('state'),
+]);
+const { parseProfileLocationsInput, state, validateLocationSyntax } = stateModule;
 
 const elements = new Map();
 const requests = [];
@@ -107,6 +116,32 @@ test('provider outage keeps the previous search usable and restores controls', a
   assert.deepEqual(state.refreshSeenRestaurants, [item('seen').restaurant]);
   assert.equal(state.lastSearchPayload.location, 'Orchard');
   assert.equal(elements.get('refreshResultsBtn').disabled, false);
+});
+
+test('cancel aborts the browser request and restores previous results and controls', async () => {
+  const previous = state.lastMatches;
+  let started;
+  const requestStarted = new Promise((resolve) => { started = resolve; });
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url, options });
+    if (url.includes('active-model')) {
+      return { ok: true, json: async () => ({ active_model: 'fixture' }) };
+    }
+    return new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => {
+        reject(new DOMException('Cancelled', 'AbortError'));
+      }, { once: true });
+      started();
+    });
+  };
+  const pending = filters.refreshSearchResults();
+  await requestStarted;
+  filters.cancelActiveSearch();
+  await pending;
+  assert.equal(requests.find((r) => r.url === '/api/search').options.signal.aborted, true);
+  assert.deepEqual(state.lastMatches, previous);
+  assert.equal(elements.get('refreshResultsBtn').disabled, false);
+  assert.deepEqual(state.refreshSeenRestaurants, [item('seen').restaurant]);
 });
 
 test('reset clears shared UI refresh state without an HTTP request', () => {
