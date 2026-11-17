@@ -432,6 +432,10 @@ def review_profile_wishes(wishes, config):
     return manager().interpreter.review_profile_wishes(wishes, config)
 
 
+def review_cuisines(cuisines, config):
+    return manager().interpreter.review_cuisines(cuisines, config)
+
+
 def _transport():
     from BIS.classes.ai.providers.clients.provider_transport import (
         ProviderTransport,

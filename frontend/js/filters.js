@@ -7,18 +7,19 @@ import {
   RECENT_KEY,
   refreshIcons,
   state,
+  validateCuisineSyntax,
   validateEnglishWishesInput,
   validateLocationSyntax,
-} from './state.js?v=20261116-4';
-import { apiJson } from './api.js?v=20261116-4';
-import { showToast } from './toast.js?v=20261116-4';
+} from './state.js?v=20261117-5';
+import { apiJson } from './api.js?v=20261117-5';
+import { showToast } from './toast.js?v=20261117-5';
 import { attachLocationAutocomplete } from './location_autocomplete.js?v=20261116-4';
 import {
   renderExhaustedRefreshState,
   renderResults,
   renderResultsSkeleton,
   updateResultsSkeletonModel,
-} from './results.js?v=20261116-4';
+} from './results.js?v=20261117-5';
 
 let isSearchInFlight = false;
 let activeSearchAbort = null;
@@ -562,31 +563,119 @@ function toggleDislikedCuisine(c) {
   chatCallbacks.renderSummary();
 }
 
-function addCustomCuisinesToSet(inputId, ensureChipFn, targetSet, oppositeSet) {
+function setCuisineInputError(
+  inputId,
+  errorId,
+  message = '',
+  normalFocusClasses = ['focus:ring-brand-500', 'focus:border-brand-500'],
+) {
   const inputEl = document.getElementById(inputId);
-  if (!inputEl) return;
+  const errEl = document.getElementById(errorId);
+  if (!inputEl || !errEl) return;
+  const msg = String(message || '').trim();
+  if (msg) {
+    errEl.textContent = msg;
+    errEl.classList.remove('hidden');
+    inputEl.classList.add('border-rose-400', 'dark:border-rose-500', 'focus:ring-rose-500', 'focus:border-rose-500');
+    inputEl.classList.remove('border-slate-300', 'dark:border-slate-700', ...normalFocusClasses);
+  } else {
+    errEl.textContent = '';
+    errEl.classList.add('hidden');
+    inputEl.classList.remove('border-rose-400', 'dark:border-rose-500', 'focus:ring-rose-500', 'focus:border-rose-500');
+    inputEl.classList.add('border-slate-300', 'dark:border-slate-700', ...normalFocusClasses);
+  }
+}
+
+function setPreferredCuisineError(message = '') {
+  setCuisineInputError('customCuisineInput', 'preferredCuisineError', message, ['focus:ring-brand-500', 'focus:border-brand-500']);
+}
+
+function setDislikedCuisineError(message = '') {
+  setCuisineInputError('customDislikedCuisineInput', 'dislikedCuisineError', message, ['focus:ring-rose-500', 'focus:border-rose-500']);
+}
+
+async function addCustomCuisinesToSet({
+  inputId,
+  buttonId,
+  fieldLabel,
+  setErrorFn,
+  ensureChipFn,
+  targetSet,
+  oppositeSet,
+}) {
+  const inputEl = document.getElementById(inputId);
+  if (!inputEl) return true;
   const raw = inputEl.value.trim();
-  if (!raw) return;
-  raw.split(',').forEach((part) => {
-    const clean = part.trim().toLowerCase();
-    if (clean) {
-      ensureChipFn(clean);
-      targetSet.add(clean);
-      oppositeSet.delete(clean);
+  if (!raw) {
+    setErrorFn('');
+    return true;
+  }
+  const check = validateCuisineSyntax(raw, fieldLabel);
+  if (check.err) {
+    setErrorFn(check.err);
+    showToast(check.err, 'warning');
+    return false;
+  }
+  if (!check.items.length) {
+    setErrorFn('');
+    return true;
+  }
+  if (check.unknownItems.length > 0) {
+    const addBtn = document.getElementById(buttonId);
+    if (addBtn) addBtn.disabled = true;
+    try {
+      await apiJson('/api/validate-cuisines', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cuisines: check.unknownItems,
+          field_label: fieldLabel,
+        }),
+      });
+    } catch (err) {
+      const msg = err?.message || `${fieldLabel}: '${check.unknownItems[0]}' is not a recognized cuisine.`;
+      setErrorFn(msg);
+      showToast(msg, 'warning');
+      return false;
+    } finally {
+      if (addBtn) addBtn.disabled = false;
     }
+  }
+  setErrorFn('');
+  check.items.forEach((clean) => {
+    ensureChipFn(clean);
+    targetSet.add(clean);
+    oppositeSet.delete(clean);
   });
   inputEl.value = '';
   updateDislikedChipsUI();
   updatePreferredChipsUI();
   chatCallbacks.renderSummary();
+  return true;
 }
 
-export function addCustomCuisinesFromInput() {
-  addCustomCuisinesToSet('customCuisineInput', ensurePreferredChipExists, state.preferredCuisines, state.dislikedCuisines);
+export async function addCustomCuisinesFromInput() {
+  return addCustomCuisinesToSet({
+    inputId: 'customCuisineInput',
+    buttonId: 'addCustomCuisineBtn',
+    fieldLabel: 'Preferred cuisines',
+    setErrorFn: setPreferredCuisineError,
+    ensureChipFn: ensurePreferredChipExists,
+    targetSet: state.preferredCuisines,
+    oppositeSet: state.dislikedCuisines,
+  });
 }
 
-export function addCustomDislikedCuisinesFromInput() {
-  addCustomCuisinesToSet('customDislikedCuisineInput', ensureDislikedChipExists, state.dislikedCuisines, state.preferredCuisines);
+export async function addCustomDislikedCuisinesFromInput() {
+  return addCustomCuisinesToSet({
+    inputId: 'customDislikedCuisineInput',
+    buttonId: 'addCustomDislikedCuisineBtn',
+    fieldLabel: 'Disliked cuisines',
+    setErrorFn: setDislikedCuisineError,
+    ensureChipFn: ensureDislikedChipExists,
+    targetSet: state.dislikedCuisines,
+    oppositeSet: state.preferredCuisines,
+  });
 }
 
 export function getUserRecentKey() {
@@ -676,14 +765,6 @@ export function collectCurrentFormPayload(forChat = false) {
   const special = specialInput ? specialInput.value.trim() : '';
   const otherPreferences = special ? special.split(',').map(normalizeWishText).filter(Boolean) : [];
 
-  if (!forChat) {
-    if (customInput && customInput.value.trim()) {
-      addCustomCuisinesFromInput();
-    }
-    if (customDislikedInput && customDislikedInput.value.trim()) {
-      addCustomDislikedCuisinesFromInput();
-    }
-  }
   const selectedLiked = Array.from(state.preferredCuisines);
   const allLocations = getAllEnteredLocations();
   const primaryLoc = allLocations[0] || '';
@@ -902,6 +983,8 @@ export function applyFiltersToSearchForm(filters, { preserveBudgetPlus = false, 
   document.getElementById('specialInput').value = (filters.other_preferences || []).join(', ');
   searchRatingControl?.syncFromWishes();
   validateSpecialFilterInput(true);
+  setPreferredCuisineError('');
+  setDislikedCuisineError('');
   chatCallbacks.renderSummary();
 }
 
@@ -1958,6 +2041,10 @@ async function executeSearchRequest(basePayload, {
       clearRefreshTracking();
       if (/special requests?/i.test(error.message || '')) {
         setSpecialInputError(error.message);
+      } else if (/preferred cuisines?/i.test(error.message || '')) {
+        setPreferredCuisineError(error.message);
+      } else if (/disliked cuisines?/i.test(error.message || '')) {
+        setDislikedCuisineError(error.message);
       } else if (/location|postal code|coordinates within singapore/i.test(error.message || '')) {
         setLocationInputError(error.message);
       }
@@ -2214,10 +2301,18 @@ export function initFiltersControls() {
       addCustomCuisinesFromInput();
     }
   });
+  customInput?.addEventListener('input', () => {
+    const errEl = document.getElementById('preferredCuisineError');
+    if (errEl && !errEl.classList.contains('hidden')) {
+      const check = validateCuisineSyntax(customInput.value, 'Preferred cuisines');
+      setPreferredCuisineError(check.err);
+    }
+  });
 
   document.getElementById('clearPreferredBtn')?.addEventListener('click', () => {
     state.preferredCuisines.clear();
     if (customInput) customInput.value = '';
+    setPreferredCuisineError('');
     updatePreferredChipsUI();
     chatCallbacks.renderSummary();
   });
@@ -2234,10 +2329,18 @@ export function initFiltersControls() {
       addCustomDislikedCuisinesFromInput();
     }
   });
+  customDislikedInput?.addEventListener('input', () => {
+    const errEl = document.getElementById('dislikedCuisineError');
+    if (errEl && !errEl.classList.contains('hidden')) {
+      const check = validateCuisineSyntax(customDislikedInput.value, 'Disliked cuisines');
+      setDislikedCuisineError(check.err);
+    }
+  });
 
   document.getElementById('clearDislikedBtn')?.addEventListener('click', () => {
     state.dislikedCuisines.clear();
     if (customDislikedInput) customDislikedInput.value = '';
+    setDislikedCuisineError('');
     updateDislikedChipsUI();
     chatCallbacks.renderSummary();
   });
@@ -2332,6 +2435,25 @@ export function initFiltersControls() {
     if (locCheck.err) {
       failValidation(locCheck.err, locCheck.targetEl);
       return;
+    }
+
+    if (customInput && customInput.value.trim()) {
+      const okLiked = await addCustomCuisinesFromInput();
+      if (!okLiked) {
+        const errMsg = document.getElementById('preferredCuisineError')?.textContent || 'Enter a valid preferred cuisine.';
+        if (!fromChat) customInput.focus();
+        if (fromChat) chatCallbacks.postSearchOutcome({ errorMessage: errMsg, fromChat });
+        return;
+      }
+    }
+    if (customDislikedInput && customDislikedInput.value.trim()) {
+      const okDisliked = await addCustomDislikedCuisinesFromInput();
+      if (!okDisliked) {
+        const errMsg = document.getElementById('dislikedCuisineError')?.textContent || 'Enter a valid disliked cuisine.';
+        if (!fromChat) customDislikedInput.focus();
+        if (fromChat) chatCallbacks.postSearchOutcome({ errorMessage: errMsg, fromChat });
+        return;
+      }
     }
 
     const payload = collectCurrentFormPayload(false);

@@ -9,13 +9,14 @@ import {
   refreshIcons,
   setAuthToken,
   state,
+  validateCuisineSyntax,
   validateEnglishWishesInput,
   validateLocationSyntax,
-} from './state.js?v=20261116-4';
-export { validateEnglishWishesInput, validateLocationSyntax };
-import { apiJson } from './api.js?v=20261116-4';
+} from './state.js?v=20261117-5';
+export { validateCuisineSyntax, validateEnglishWishesInput, validateLocationSyntax };
+import { apiJson } from './api.js?v=20261117-5';
 import { openModal, closeModal } from './modals.js?v=20261116-4';
-import { showToast } from './toast.js?v=20261116-4';
+import { showToast } from './toast.js?v=20261117-5';
 import { attachLocationAutocomplete } from './location_autocomplete.js?v=20261116-4';
 import {
   applyFiltersToSearchForm,
@@ -24,8 +25,8 @@ import {
   getUserRecentKey,
   initRecentSearches,
   renderRecentSearches,
-} from './filters.js?v=20261117-4';
-import { formatHours, renderResults } from './results.js?v=20261116-4';
+} from './filters.js?v=20261117-5';
+import { formatHours, renderResults } from './results.js?v=20261117-5';
 
 const EMAIL_REGEX = /^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
 const PASSWORD_ALLOWED_REGEX = /^[A-Za-z0-9.,?!$]+$/;
@@ -771,6 +772,8 @@ export function initAuthAndModals() {
     if (!state.currentUser) return;
     profileAlert?.classList.add('hidden');
     setProfLocationError('');
+    setProfLikedError('');
+    setProfDislikedError('');
     try {
       const meData = await apiJson('/api/auth/me');
       if (meData.user) {
@@ -793,29 +796,60 @@ export function initAuthAndModals() {
     document.getElementById('profOtherInput').value = (state.currentUser.other_preferences || []).join(', ');
     profRatingControl?.syncFromWishes();
     setProfLocationError('');
+    setProfLikedError('');
+    setProfDislikedError('');
     openModal(profileModal, '#profUsernameInput');
   });
 
-  const profLocationInputEl = document.getElementById('profLocationInput');
-  function setProfLocationError(message = '') {
-    const errEl = document.getElementById('profLocationError');
-    if (profLocationInputEl) {
-      profLocationInputEl.classList.remove('border-rose-400', 'dark:border-rose-500', 'focus:ring-rose-500');
-      profLocationInputEl.classList.add('border-slate-300', 'dark:border-slate-700', 'focus:ring-brand-500');
+  function setProfileFieldError(inputEl, errorEl, message = '') {
+    if (inputEl) {
+      inputEl.classList.remove('border-rose-400', 'dark:border-rose-500', 'focus:ring-rose-500');
+      inputEl.classList.add('border-slate-300', 'dark:border-slate-700', 'focus:ring-brand-500');
     }
-    if (!errEl) return;
+    if (!errorEl) return;
     const msg = String(message || '').trim();
     if (msg) {
-      errEl.textContent = msg;
-      errEl.classList.remove('hidden');
-      if (profLocationInputEl) {
-        profLocationInputEl.classList.remove('border-slate-300', 'dark:border-slate-700', 'focus:ring-brand-500');
-        profLocationInputEl.classList.add('border-rose-400', 'dark:border-rose-500', 'focus:ring-rose-500');
+      errorEl.textContent = msg;
+      errorEl.classList.remove('hidden');
+      if (inputEl) {
+        inputEl.classList.remove('border-slate-300', 'dark:border-slate-700', 'focus:ring-brand-500');
+        inputEl.classList.add('border-rose-400', 'dark:border-rose-500', 'focus:ring-rose-500');
       }
     } else {
-      errEl.textContent = '';
-      errEl.classList.add('hidden');
+      errorEl.textContent = '';
+      errorEl.classList.add('hidden');
     }
+  }
+
+  const profLocationInputEl = document.getElementById('profLocationInput');
+  const profLikedInputEl = document.getElementById('profLikedInput');
+  const profDislikedInputEl = document.getElementById('profDislikedInput');
+
+  function setProfLocationError(message = '') {
+    setProfileFieldError(profLocationInputEl, document.getElementById('profLocationError'), message);
+  }
+  function setProfLikedError(message = '') {
+    setProfileFieldError(profLikedInputEl, document.getElementById('profLikedError'), message);
+  }
+  function setProfDislikedError(message = '') {
+    setProfileFieldError(profDislikedInputEl, document.getElementById('profDislikedError'), message);
+  }
+
+  if (profLikedInputEl) {
+    profLikedInputEl.addEventListener('input', () => {
+      const errEl = document.getElementById('profLikedError');
+      if (errEl && !errEl.classList.contains('hidden')) {
+        setProfLikedError(validateCuisineSyntax(profLikedInputEl.value, 'Default preferred cuisines').err);
+      }
+    });
+  }
+  if (profDislikedInputEl) {
+    profDislikedInputEl.addEventListener('input', () => {
+      const errEl = document.getElementById('profDislikedError');
+      if (errEl && !errEl.classList.contains('hidden')) {
+        setProfDislikedError(validateCuisineSyntax(profDislikedInputEl.value, 'Default disliked cuisines').err);
+      }
+    });
   }
   if (profLocationInputEl) {
     attachLocationAutocomplete({ inputEl: profLocationInputEl, multiComma: true });
@@ -847,13 +881,13 @@ export function initAuthAndModals() {
     if (!state.currentUser) return;
     profileAlert?.classList.add('hidden');
     setProfLocationError('');
+    setProfLikedError('');
+    setProfDislikedError('');
     const diet = [];
     if (document.getElementById('profHalalCheck')?.checked) diet.push('halal');
     if (document.getElementById('profVegCheck')?.checked) diet.push('vegetarian');
-    const likedRaw = document.getElementById('profLikedInput')?.value.trim() || '';
-    const likedList = likedRaw ? likedRaw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean) : [];
-    const dislikedRaw = document.getElementById('profDislikedInput')?.value.trim() || '';
-    const dislikedList = dislikedRaw ? dislikedRaw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean) : [];
+    const likedRaw = profLikedInputEl?.value.trim() || '';
+    const dislikedRaw = profDislikedInputEl?.value.trim() || '';
     const otherRaw = document.getElementById('profOtherInput')?.value.trim() || '';
     const otherList = otherRaw ? otherRaw.split(',').map(normalizeWishText).filter(Boolean) : [];
     const locVal = document.getElementById('profLocationInput')?.value.trim() || '';
@@ -900,6 +934,29 @@ export function initAuthAndModals() {
       showProfileError('Budget must be between SGD $1 and $100+.');
       return;
     }
+    const likedCheck = validateCuisineSyntax(likedRaw, 'Default preferred cuisines');
+    if (likedCheck.err) {
+      setProfLikedError(likedCheck.err);
+      showProfileError(likedCheck.err);
+      return;
+    }
+    const dislikedCheck = validateCuisineSyntax(dislikedRaw, 'Default disliked cuisines');
+    if (dislikedCheck.err) {
+      setProfDislikedError(dislikedCheck.err);
+      showProfileError(dislikedCheck.err);
+      return;
+    }
+    const likedList = likedCheck.items;
+    const dislikedList = dislikedCheck.items;
+    const cuisineOverlap = likedList.filter((c) => dislikedList.includes(c));
+    if (cuisineOverlap.length > 0) {
+      const msg = `Resolve cuisines listed as both liked and disliked: ${cuisineOverlap.join(', ')}.`;
+      setProfLikedError(msg);
+      setProfDislikedError(msg);
+      showProfileError(msg);
+      return;
+    }
+
     const wishesErr = validateEnglishWishesInput(otherList, 'Default special wishes');
     if (wishesErr) {
       showProfileError(wishesErr);
@@ -947,10 +1004,18 @@ export function initAuthAndModals() {
       showToast('Profile preferences saved.', 'success');
       setTimeout(() => closeModal(profileModal), 750);
     } catch (err) {
-      if (/location|postal code|coordinates within singapore/i.test(err.message || '')) {
-        setProfLocationError(err.message);
+      const msg = err.message || '';
+      if (/location|postal code|coordinates within singapore/i.test(msg)) {
+        setProfLocationError(msg);
+      } else if (/liked and disliked/i.test(msg)) {
+        setProfLikedError(msg);
+        setProfDislikedError(msg);
+      } else if (/default preferred cuisines?/i.test(msg)) {
+        setProfLikedError(msg);
+      } else if (/default disliked cuisines?/i.test(msg)) {
+        setProfDislikedError(msg);
       }
-      showProfileError(err.message);
+      showProfileError(msg);
     }
   });
 

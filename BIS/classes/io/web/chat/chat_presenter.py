@@ -595,3 +595,30 @@ class ChatPresenter:
             ),
             ["Quiet & cozy", "Air-conditioned", "Near MRT", "Clear wishes"],
         )
+
+    def reject_invalid_cuisines(
+        self, current, err, target_field="liked_cuisines"
+    ):
+        field = (
+            target_field
+            if target_field in ("liked_cuisines", "disliked_cuisines")
+            else "liked_cuisines"
+        )
+        prompt = (
+            "Which cuisines do you want to avoid? (e.g. 'Seafood', "
+            "'Fast Food', 'None')"
+            if field == "disliked_cuisines"
+            else "Which cuisines would you prefer? (e.g. 'Japanese', "
+            "'Spanish', 'Taiwanese', 'Seafood', or 'Any cuisine')"
+        )
+        replies = (
+            ["No restrictions", "Seafood", "Fast Food", "Japanese"]
+            if field == "disliked_cuisines"
+            else ["Any cuisine", "Japanese", "Spanish", "Seafood"]
+        )
+        return self.clarify_response(
+            current,
+            field,
+            f"{err} {prompt}",
+            replies,
+        )

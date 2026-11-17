@@ -1,4 +1,4 @@
-import { authHeaders } from './state.js?v=20261116-4';
+import { authHeaders } from './state.js?v=20261117-5';
 
 export async function apiJson(url, options = {}) {
   const res = await fetch(url, {

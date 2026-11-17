@@ -533,6 +533,101 @@ def test_location_syntax_and_country_fallback_rejection():
     assert remembered == []
 
 
+def test_unified_cuisine_validation_and_slang_location_rejection():
+    "Unified cuisine validator and hardened location/cache filters work."
+    from unittest.mock import patch
+    from BIS.sources.profile_schema import (
+        validate_cuisine_list,
+        validate_value,
+    )
+    from common.geocode_cache import _is_valid_cached_sg_entry, lookup
+    from common.singapore_locations import (
+        is_acceptable_singapore_geocode,
+        validate_location_syntax,
+    )
+
+    valid_cuisines = validate_cuisine_list(
+        [
+            "Spanish",
+            "taiwanese",
+            "Seafood",
+            "fast food",
+            "Ramen",
+            "Korean BBQ",
+            "spanish cuisine",
+        ]
+    )
+    assert valid_cuisines == [
+        "spanish",
+        "taiwanese",
+        "seafood",
+        "fast food",
+        "ramen",
+        "korean bbq",
+    ]
+    assert validate_value("liked_cuisines", ["Spanish", "Taiwanese"]) == [
+        "spanish",
+        "taiwanese",
+    ]
+
+    for bad_cuisine in (
+        "lol",
+        "lampa",
+        "idiot",
+        "cb",
+        "kontol babi",
+        "123",
+        "halal",
+        "asdfgh",
+        "qwrty",
+        "none",
+        "food",
+    ):
+        try:
+            validate_cuisine_list([bad_cuisine])
+            raise AssertionError(f"Expected ValueError for {bad_cuisine!r}")
+        except ValueError:
+            pass
+
+    for bad_loc in ("lol", "Lol", "lol, singapore", "dd112312ds", "cb"):
+        try:
+            validate_location_syntax(bad_loc)
+            raise AssertionError(f"Expected ValueError for {bad_loc!r}")
+        except ValueError:
+            pass
+
+    centroid_result = {
+        "formatted_address": "Singapore Central",
+        "types": ["establishment", "point_of_interest"],
+        "geometry": {"location": {"lat": 1.352083, "lng": 103.819836}},
+    }
+    assert not is_acceptable_singapore_geocode(centroid_result, "unknown")
+
+    noisy_bar = {
+        "formatted_address": "42 Prinsep St, Singapore 188670",
+        "types": ["bar", "establishment", "night_club", "point_of_interest"],
+        "partial_match": True,
+        "geometry": {"location": {"lat": 1.2994159, "lng": 103.8496857}},
+        "address_components": [
+            {"long_name": "42", "short_name": "42", "types": ["street_number"]},
+            {
+                "long_name": "Prinsep Street",
+                "short_name": "Prinsep St",
+                "types": ["route"],
+            },
+        ],
+    }
+    assert not is_acceptable_singapore_geocode(noisy_bar, "zxy")
+    assert not _is_valid_cached_sg_entry(
+        "bad centroid", [1.352083, 103.819836]
+    )
+    with patch("common.geocode_cache._use_mongo", return_value=False), patch(
+        "common.geocode_cache._read",
+        return_value={"bad centroid": [1.352083, 103.819836]},
+    ):
+        assert lookup("bad centroid") is None
+
+
 TESTS = (
     test_valid_singapore_coordinates_are_parsed,
     test_overseas_coordinates_are_rejected,
@@ -549,6 +644,7 @@ TESTS = (
     test_hardcoded_ai_response_can_add_soft_preferences,
     test_hardcoded_ai_response_cannot_change_confirmed_budget,
     test_location_syntax_and_country_fallback_rejection,
+    test_unified_cuisine_validation_and_slang_location_rejection,
 )
 
 

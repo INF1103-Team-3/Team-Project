@@ -21,8 +21,10 @@ from sources.profile_schema import (
     MINUTES_PER_KM,
     PREFERENCE_FIELDS,
     PROFILE_NUMBER_LIMITS,
+    normalize_cuisine_token,
     normalize_username,
     normalize_wish_text,
+    validate_cuisine_list,
     validate_english_preferences as _validate_english_preferences,
     validate_preferences,
     validate_updates,
@@ -295,7 +297,7 @@ class LogicManager(BISLogicManagerInterface):
         selected = []
         for raw_c in payload.get("liked_cuisines") or []:
             for part in str(raw_c or "").split(","):
-                clean = part.strip().lower()
+                clean = normalize_cuisine_token(part)
                 if (
                     clean
                     and clean not in ("none", "any", "any cuisine")
@@ -305,7 +307,7 @@ class LogicManager(BISLogicManagerInterface):
         single = payload.get("cuisine")
         if single:
             for part in str(single).split(","):
-                clean = part.strip().lower()
+                clean = normalize_cuisine_token(part)
                 if (
                     clean
                     and clean not in ("none", "any", "any cuisine")
@@ -313,6 +315,21 @@ class LogicManager(BISLogicManagerInterface):
                 ):
                     selected.append(clean)
         return selected
+
+    @staticmethod
+    def collect_search_disliked_cuisines(payload):
+        "Parse comma-separated disliked cuisines into an ordered unique list."
+        disliked = []
+        for raw_c in payload.get("disliked_cuisines") or []:
+            for part in str(raw_c or "").split(","):
+                clean = normalize_cuisine_token(part)
+                if (
+                    clean
+                    and clean not in ("none", "any", "any cuisine")
+                    and clean not in disliked
+                ):
+                    disliked.append(clean)
+        return disliked
 
     @staticmethod
     def compute_midpoint_origin(resolved_origins):
@@ -357,6 +374,10 @@ class LogicManager(BISLogicManagerInterface):
         _validate_english_preferences(
             other_prefs, field_label="Special requests"
         )
+        if cuisine_target:
+            cuisine_target = validate_cuisine_list(
+                [cuisine_target], field_label="Preferred cuisines"
+            )[0]
         if not cuisine_target:
             cuisine_val = "none"
         elif cuisine_target in CUISINES:
@@ -367,11 +388,18 @@ class LogicManager(BISLogicManagerInterface):
             if custom_wish not in other_prefs:
                 other_prefs = other_prefs + [custom_wish]
 
+        disliked_tokens = self.collect_search_disliked_cuisines(payload)
+        if disliked_tokens:
+            disliked_tokens = validate_cuisine_list(
+                disliked_tokens, field_label="Disliked cuisines"
+            )
+        if cuisine_target and cuisine_target in disliked_tokens:
+            raise ValueError(
+                "Resolve cuisines listed as both preferred and disliked: "
+                f"{cuisine_target}."
+            )
         disliked = []
-        for raw_c in payload.get("disliked_cuisines") or []:
-            clean_c = str(raw_c or "").strip().lower()
-            if not clean_c:
-                continue
+        for clean_c in disliked_tokens:
             if clean_c in CUISINES:
                 if clean_c not in disliked:
                     disliked.append(clean_c)

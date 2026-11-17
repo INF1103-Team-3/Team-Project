@@ -13,3 +13,7 @@ class ChatAIInterface(ABC):
     @abstractmethod
     def review_profile_wishes(self, wishes, config):
         """Validate structured AI review of profile wishes."""
+
+    @abstractmethod
+    def review_cuisines(self, cuisines, config):
+        """Validate structured AI review of custom cuisine names."""

@@ -5,6 +5,7 @@ import re
 
 SG_LAT_BOUNDS = (1.15, 1.48)
 SG_LNG_BOUNDS = (103.60, 104.10)
+SG_COUNTRY_CENTER = (1.352083, 103.819836)
 
 COORDINATE_PATTERN = re.compile(
     r"^\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)\s*$"
@@ -86,6 +87,123 @@ KNOWN_SG_ABBRS = frozenset(
         "yck",
         "iii",
     }
+)
+
+NON_LOCATION_SLANG_WORDS = frozenset(
+    {
+        "lol",
+        "lmao",
+        "lmfao",
+        "rofl",
+        "wtf",
+        "wth",
+        "omg",
+        "omfg",
+        "idk",
+        "imo",
+        "tbh",
+        "brb",
+        "yolo",
+        "fomo",
+        "bruh",
+        "yeet",
+        "idiot",
+        "stupid",
+        "dumb",
+        "moron",
+        "retard",
+        "loser",
+        "clown",
+        "trash",
+        "garbage",
+        "rubbish",
+        "nonsense",
+        "gibberish",
+        "cb",
+        "ccb",
+        "knn",
+        "knnb",
+        "knnbccb",
+        "lampa",
+        "lanjiao",
+        "cheebai",
+        "chibai",
+        "kanina",
+        "nabei",
+        "pukimak",
+        "kontol",
+        "babi",
+        "anjing",
+        "bodoh",
+        "sial",
+        "cibai",
+        "fuck",
+        "fucking",
+        "shit",
+        "bitch",
+        "asshole",
+        "dick",
+        "cock",
+        "pussy",
+        "cunt",
+        "bastard",
+        "whore",
+        "slut",
+        "test",
+        "testing",
+        "hello",
+        "hi",
+        "hey",
+        "bye",
+        "none",
+        "nothing",
+        "anything",
+        "whatever",
+        "random",
+        "stuff",
+        "null",
+        "undefined",
+        "nan",
+        "blorp",
+        "foobar",
+        "foo",
+        "baz",
+        "qwerty",
+    }
+)
+STRICT_PROFANITY_LOCATION_WORDS = frozenset(
+    {
+        "cb",
+        "ccb",
+        "knn",
+        "knnb",
+        "knnbccb",
+        "lampa",
+        "lanjiao",
+        "cheebai",
+        "chibai",
+        "kanina",
+        "nabei",
+        "pukimak",
+        "kontol",
+        "babi",
+        "anjing",
+        "cibai",
+        "fuck",
+        "fucking",
+        "shit",
+        "bitch",
+        "asshole",
+        "dick",
+        "cunt",
+        "bastard",
+        "whore",
+        "slut",
+    }
+)
+_ORDINAL_DIGIT_WORD_RX = re.compile(r"^\d+(?:st|nd|rd|th)$")
+_MIXED_GIBBERISH_DIGIT_LETTER_RX = re.compile(
+    r"^(?:[a-z]+\d{2,}[a-z]+|\d{2,}[a-z]{2,}\d*)$"
 )
 
 SG_SEED_LOCATIONS = (
@@ -265,6 +383,21 @@ def is_in_singapore(latitude, longitude):
     )
 
 
+def is_generic_singapore_centroid(latitude, longitude):
+    """Return True when coordinates match Google's generic Singapore center."""
+    try:
+        lat = float(latitude)
+        lng = float(longitude)
+    except (TypeError, ValueError):
+        return False
+    if not (math.isfinite(lat) and math.isfinite(lng)):
+        return False
+    return (
+        abs(lat - SG_COUNTRY_CENTER[0]) <= 0.0005
+        and abs(lng - SG_COUNTRY_CENTER[1]) <= 0.0005
+    )
+
+
 def extract_postal_digits(text):
     """Return digits for bare or 'Singapore ...' postal inputs."""
     clean = re.sub(r"\s+", " ", str(text or "").strip()).strip(".,;")
@@ -349,6 +482,20 @@ def validate_location_syntax(raw, label="Location"):
             )
 
     for token in tokens:
+        if token in STRICT_PROFANITY_LOCATION_WORDS:
+            raise ValueError(
+                f"'{clean}' does not look like a real Singapore location "
+                "(e.g. Bugis, Compass One, 545078)."
+            )
+        if (
+            not token.startswith("blk")
+            and not _ORDINAL_DIGIT_WORD_RX.fullmatch(token)
+            and _MIXED_GIBBERISH_DIGIT_LETTER_RX.fullmatch(token)
+        ):
+            raise ValueError(
+                f"'{clean}' does not look like a real Singapore location "
+                "(e.g. Bugis, Compass One, 545078)."
+            )
         letters = "".join(ch for ch in token if "a" <= ch <= "z")
         if not letters:
             continue
@@ -365,6 +512,18 @@ def validate_location_syntax(raw, label="Location"):
                 f"'{clean}' does not look like a real Singapore location "
                 "(e.g. Bugis, Compass One, 545078)."
             )
+
+    content_tokens = [
+        tok for tok in tokens if tok not in {"singapore", "sg"}
+    ] or tokens
+    if (
+        len(content_tokens) <= 2
+        and all(tok in NON_LOCATION_SLANG_WORDS for tok in content_tokens)
+    ):
+        raise ValueError(
+            f"'{clean}' does not look like a real Singapore location "
+            "(e.g. Bugis, Compass One, 545078)."
+        )
 
     return clean
 
@@ -426,6 +585,37 @@ def suggest_seed_locations(query, limit=6):
     return (prefix_matches + contains_matches)[:limit]
 
 
+_GEO_PRECISION_TYPES = frozenset(
+    {
+        "street_address",
+        "route",
+        "intersection",
+        "premise",
+        "subpremise",
+        "neighborhood",
+        "sublocality",
+        "sublocality_level_1",
+        "locality",
+        "postal_code",
+        "transit_station",
+        "subway_station",
+        "train_station",
+        "bus_station",
+        "light_rail_station",
+        "shopping_mall",
+        "park",
+        "university",
+        "school",
+        "hospital",
+        "airport",
+        "tourist_attraction",
+    }
+)
+_NOISY_PARTIAL_POI_TYPES = frozenset(
+    {"bar", "night_club", "liquor_store", "casino"}
+)
+
+
 def is_acceptable_singapore_geocode(result, query=""):
     """Return True if a geocode result resolves specifically in Singapore."""
     if not isinstance(result, dict):
@@ -452,6 +642,37 @@ def is_acceptable_singapore_geocode(result, query=""):
         "administrative_area_level_1",
     }:
         if not formatted or formatted.startswith("singapore"):
+            return False
+
+    if is_generic_singapore_centroid(point.get("lat"), point.get("lng")):
+        specific = {"street_address", "route", "postal_code", "premise"}
+        if not (types & specific):
+            return False
+
+    if result.get("partial_match") and not (types & _GEO_PRECISION_TYPES):
+        q_tokens = [
+            tok
+            for tok in re.findall(r"[a-z0-9]+", str(query or "").lower())
+            if tok not in {"singapore", "sg"}
+        ]
+        comp_texts = " ".join(
+            str(comp.get(field) or "").lower()
+            for comp in (result.get("address_components") or [])
+            if isinstance(comp, dict)
+            for field in ("long_name", "short_name")
+        )
+        addr_blob = f"{formatted} {comp_texts}"
+        has_token_in_address = bool(q_tokens) and any(
+            len(tok) >= 3 and tok in addr_blob for tok in q_tokens
+        )
+        if not has_token_in_address and (
+            (types & _NOISY_PARTIAL_POI_TYPES)
+            or (
+                len(q_tokens) == 1
+                and len(q_tokens[0]) <= 4
+                and q_tokens[0] not in KNOWN_SG_ABBRS
+            )
+        ):
             return False
 
     postal_digits = extract_postal_digits(query)

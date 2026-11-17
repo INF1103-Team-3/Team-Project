@@ -774,3 +774,63 @@ class BISInterpreter:
                 )
             )
         return items
+
+    def review_cuisines(self, cuisines, config):
+        """Verify custom cuisine names represent real cuisines or food styles."""
+        items = [
+            str(c or "").strip().lower()
+            for c in cuisines or []
+            if str(c or "").strip()
+        ]
+        if not items or config.get("ai_bypass"):
+            return items
+        payload = {
+            "model": config.get("openrouter_model", ""),
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Validate each item in a user's restaurant cuisine or "
+                        "food style list. Every item must be a real world "
+                        "cuisine, culinary region/nationality, dish category, "
+                        "or dining style (e.g. Spanish, Taiwanese, Greek, "
+                        "Georgian, Peruvian, Seafood, Ramen, Dim Sum, Fast "
+                        "Food, Bakery, Steakhouse). Reject gibberish, internet "
+                        "slang (e.g. lol, cb), profanity, insults, random "
+                        "unrelated objects (e.g. chair, laptop, lampa), "
+                        "numbers, or vague placeholder words (e.g. test, "
+                        "random, stuff). Return JSON only with keys: valid "
+                        "(boolean), reason (string explaining which item to "
+                        "fix when valid is false, empty string when true)."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {"cuisines": items}, ensure_ascii=False
+                    ),
+                },
+            ],
+            "temperature": 0,
+            "max_tokens": 120,
+        }
+
+        def check(parsed):
+            if not isinstance(parsed, dict) or not isinstance(
+                parsed.get("valid"), bool
+            ):
+                raise ValueError("Invalid cuisine validation response.")
+            reason = str(parsed.get("reason") or "").strip()
+            return {"valid": parsed["valid"], "reason": reason}
+
+        has_fast = _has_fast_provider(config)
+        result = self._request(payload, config, check, skip_primary=has_fast)
+        if not result["valid"]:
+            raise ValueError(
+                result["reason"]
+                or (
+                    "Enter valid cuisines or food styles (e.g. Japanese, "
+                    "Spanish, Taiwanese, Seafood, Ramen)."
+                )
+            )
+        return items

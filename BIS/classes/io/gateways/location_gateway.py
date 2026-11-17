@@ -5,6 +5,7 @@ import requests
 
 from common.singapore_locations import (
     is_acceptable_singapore_geocode,
+    is_generic_singapore_centroid,
     lookup_seed_singapore_location,
     suggest_seed_locations,
     validate_location_syntax,
@@ -31,7 +32,11 @@ class LocationGateway:
         except ValueError:
             return None
         pair = self._cache.lookup(clean)
-        if pair and self._logic.in_singapore(*pair):
+        if (
+            pair
+            and self._logic.in_singapore(*pair)
+            and not is_generic_singapore_centroid(*pair)
+        ):
             return {
                 "query": clean,
                 "label": clean,

@@ -475,6 +475,8 @@
                   + Add
                 </button>
               </div>
+              <p id="preferredCuisineError"
+                class="hidden mt-1 text-[11px] font-medium text-rose-600 dark:text-rose-400" role="alert"></p>
             </div>
 
             <!-- Disliked Cuisines -->
@@ -533,6 +535,8 @@
                   + Add
                 </button>
               </div>
+              <p id="dislikedCuisineError"
+                class="hidden mt-1 text-[11px] font-medium text-rose-600 dark:text-rose-400" role="alert"></p>
             </div>
 
             <!-- Minimum Google Rating -->
@@ -1063,15 +1067,19 @@
             <label for="profLikedInput"
               class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
               Preferred Cuisines</label>
-            <input type="text" id="profLikedInput" autocomplete="off" placeholder="e.g. chinese, japanese"
+            <input type="text" id="profLikedInput" autocomplete="off" placeholder="e.g. spanish, japanese, seafood"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+            <p id="profLikedError" class="hidden mt-1 text-[11px] font-medium text-rose-600 dark:text-rose-400"
+              role="alert"></p>
           </div>
           <div>
             <label for="profDislikedInput"
               class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Default
               Disliked Cuisines</label>
-            <input type="text" id="profDislikedInput" autocomplete="off" placeholder="e.g. western, italian"
+            <input type="text" id="profDislikedInput" autocomplete="off" placeholder="e.g. fast food, thai"
               class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 outline-none">
+            <p id="profDislikedError" class="hidden mt-1 text-[11px] font-medium text-rose-600 dark:text-rose-400"
+              role="alert"></p>
           </div>
         </div>
 
@@ -1295,7 +1303,7 @@
   </div>
 
   <!-- Modular Application Entrypoint -->
-  <script type="module" src="/js/main.js?v=20261117-4"></script>
+  <script type="module" src="/js/main.js?v=20261117-5"></script>
 </body>
 
 </html>

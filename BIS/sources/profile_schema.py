@@ -116,6 +116,7 @@ _WISH_KEYBOARD_MASH = (
     "hjkl",
     "qwer",
     "wert",
+    "qwrt",
     "erty",
     "tyui",
     "uiop",
@@ -123,6 +124,132 @@ _WISH_KEYBOARD_MASH = (
     "xcvb",
     "cvbn",
     "vbnm",
+)
+_CUISINE_TEXT_RX = re.compile(r"[a-z]+(?:[ '\-&/][a-z]+)*")
+_CUISINE_SUFFIX_RX = re.compile(r"\s+cuisines?$", re.IGNORECASE)
+_CUISINE_ACRONYMS = frozenset({"bbq", "kbbq"})
+_INVALID_CUISINE_WORDS = frozenset(
+    {
+        "none",
+        "any",
+        "all",
+        "nothing",
+        "something",
+        "anything",
+        "whatever",
+        "random",
+        "stuff",
+        "thing",
+        "things",
+        "test",
+        "testing",
+        "hello",
+        "hi",
+        "hey",
+        "bye",
+        "ok",
+        "okay",
+        "yes",
+        "no",
+        "maybe",
+        "null",
+        "undefined",
+        "nan",
+        "blorp",
+        "foobar",
+        "foo",
+        "bar",
+        "baz",
+        "xyz",
+        "abc",
+        "qwerty",
+        "food",
+        "foods",
+        "cuisine",
+        "cuisines",
+        "restaurant",
+        "restaurants",
+        "meal",
+        "meals",
+        "dish",
+        "dishes",
+        "eat",
+        "eating",
+        "lol",
+        "lmao",
+        "lmfao",
+        "rofl",
+        "wtf",
+        "wth",
+        "omg",
+        "omfg",
+        "idk",
+        "imo",
+        "tbh",
+        "brb",
+        "yolo",
+        "fomo",
+        "uwu",
+        "owo",
+        "sus",
+        "yeet",
+        "bruh",
+        "bro",
+        "sis",
+        "idiot",
+        "stupid",
+        "dumb",
+        "moron",
+        "retard",
+        "loser",
+        "clown",
+        "trash",
+        "garbage",
+        "rubbish",
+        "nonsense",
+        "gibberish",
+        "poop",
+        "fart",
+        "cb",
+        "ccb",
+        "knn",
+        "knnb",
+        "knnbccb",
+        "lampa",
+        "lanjiao",
+        "lj",
+        "cheebai",
+        "chibai",
+        "kanina",
+        "nabei",
+        "limpeh",
+        "pukimak",
+        "kontol",
+        "babi",
+        "anjing",
+        "bodoh",
+        "sial",
+        "cibai",
+        "fuck",
+        "fucking",
+        "shit",
+        "bitch",
+        "ass",
+        "asshole",
+        "dick",
+        "cock",
+        "pussy",
+        "cunt",
+        "bastard",
+        "whore",
+        "slut",
+        "damn",
+        "crap",
+        "hell",
+        "suck",
+        "porn",
+        "sex",
+    }
 )
 EMAIL_PATTERN = re.compile(
     r"^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@"
@@ -347,7 +474,12 @@ def validate_value(
     if field == OTHER_PREFERENCES:
         return normalize_list(value, allow_ratings=True)
     if field in CUISINE_FIELDS:
-        return normalize_list(value, CUISINES)
+        label = (
+            "Default preferred cuisines"
+            if field == "liked_cuisines"
+            else "Default disliked cuisines"
+        )
+        return validate_cuisine_list(value, field_label=label)
     return clean_text(value, 1000, allow_empty=True)
 
 
@@ -423,7 +555,10 @@ def validate_preferences(preferences, clamp_legacy_limits=False):
         result["disliked_cuisines"] or []
     )
     if overlap:
-        raise ValueError("Resolve cuisines listed as both liked and disliked.")
+        joined = ", ".join(sorted(overlap))
+        raise ValueError(
+            f"Resolve cuisines listed as both liked and disliked: {joined}."
+        )
     return result
 
 
@@ -470,3 +605,328 @@ UNSUPPORTED_CUISINES = {
     "taiwanese",
     "singaporean",
 }
+
+RECOGNIZED_CUISINES = frozenset(
+    {
+        *CUISINES,
+        *UNSUPPORTED_CUISINES,
+        "portuguese",
+        "swiss",
+        "austrian",
+        "belgian",
+        "dutch",
+        "irish",
+        "scottish",
+        "polish",
+        "russian",
+        "ukrainian",
+        "georgian",
+        "armenian",
+        "hungarian",
+        "czech",
+        "swedish",
+        "norwegian",
+        "danish",
+        "finnish",
+        "scandinavian",
+        "nordic",
+        "moroccan",
+        "tunisian",
+        "egyptian",
+        "nigerian",
+        "south african",
+        "african",
+        "persian",
+        "iranian",
+        "iraqi",
+        "syrian",
+        "jordanian",
+        "yemeni",
+        "israeli",
+        "arab",
+        "arabic",
+        "afghan",
+        "uzbek",
+        "tibetan",
+        "mongolian",
+        "hong kong",
+        "macanese",
+        "cantonese",
+        "sichuan",
+        "szechuan",
+        "hunan",
+        "shanghainese",
+        "beijing",
+        "teochew",
+        "hokkien",
+        "hakka",
+        "hainanese",
+        "fujian",
+        "dongbei",
+        "xinjiang",
+        "uyghur",
+        "okinawan",
+        "kyushu",
+        "hokkaido",
+        "north indian",
+        "south indian",
+        "punjabi",
+        "gujarati",
+        "kerala",
+        "chettinad",
+        "kashmiri",
+        "bengali",
+        "goan",
+        "hyderabadi",
+        "mughlai",
+        "javanese",
+        "padang",
+        "sundanese",
+        "balinese",
+        "nonya",
+        "nyonya",
+        "eurasian",
+        "malaysian",
+        "asian",
+        "southeast asian",
+        "east asian",
+        "south asian",
+        "european",
+        "latin",
+        "latin american",
+        "south american",
+        "caribbean",
+        "jamaican",
+        "cuban",
+        "peruvian",
+        "argentinian",
+        "argentine",
+        "colombian",
+        "chilean",
+        "australian",
+        "aussie",
+        "new zealand",
+        "kiwi",
+        "canadian",
+        "hawaiian",
+        "cajun",
+        "creole",
+        "tex mex",
+        "tex-mex",
+        "southern",
+        "soul food",
+        "seafood",
+        "fast food",
+        "hawker",
+        "zi char",
+        "tze char",
+        "kopitiam",
+        "mamak",
+        "local",
+        "ramen",
+        "sushi",
+        "sashimi",
+        "izakaya",
+        "udon",
+        "soba",
+        "tonkatsu",
+        "katsu",
+        "tempura",
+        "yakitori",
+        "teppanyaki",
+        "yakiniku",
+        "donburi",
+        "omakase",
+        "matcha",
+        "dim sum",
+        "yum cha",
+        "hotpot",
+        "hot pot",
+        "steamboat",
+        "mala",
+        "mala xiang guo",
+        "bbq",
+        "kbbq",
+        "korean bbq",
+        "charcoal bbq",
+        "mookata",
+        "lok lok",
+        "satay",
+        "laksa",
+        "chicken rice",
+        "bak kut teh",
+        "nasi lemak",
+        "nasi padang",
+        "briyani",
+        "biryani",
+        "prata",
+        "roti prata",
+        "murtabak",
+        "thosai",
+        "dosai",
+        "dosa",
+        "tandoori",
+        "naan",
+        "curry",
+        "banh mi",
+        "pho",
+        "pad thai",
+        "tom yum",
+        "som tam",
+        "pizza",
+        "pasta",
+        "burger",
+        "burgers",
+        "steak",
+        "steakhouse",
+        "grill",
+        "wings",
+        "fried chicken",
+        "sandwich",
+        "sandwiches",
+        "wraps",
+        "salad",
+        "salads",
+        "poke",
+        "acai",
+        "tapas",
+        "paella",
+        "risotto",
+        "gelato",
+        "ice cream",
+        "bakery",
+        "cafe",
+        "cafes",
+        "coffee",
+        "brunch",
+        "breakfast",
+        "dessert",
+        "desserts",
+        "pastry",
+        "pastries",
+        "cake",
+        "cakes",
+        "boba",
+        "bubble tea",
+        "noodle",
+        "noodles",
+        "wanton mee",
+        "bak chor mee",
+        "char kway teow",
+        "hokkien mee",
+        "roast meat",
+        "duck",
+        "roast duck",
+        "porridge",
+        "congee",
+        "soup",
+        "dumpling",
+        "dumplings",
+        "gyoza",
+        "rice bowl",
+        "bento",
+        "tacos",
+        "burrito",
+        "burritos",
+        "quesadilla",
+        "kebab",
+        "kebabs",
+        "shawarma",
+        "falafel",
+        "hummus",
+        "gyros",
+        "vegan",
+        "vegetarian",
+        "plant based",
+        "plant-based",
+        "healthy",
+        "organic",
+        "buffet",
+        "fine dining",
+        "bistro",
+        "bar",
+        "pub",
+        "gastropub",
+        "supper",
+        "street food",
+        "comfort food",
+        "home style",
+        "homestyle",
+    }
+)
+
+
+def normalize_cuisine_token(item):
+    """Normalize whitespace, casing, and trailing 'cuisine' suffix."""
+    text = " ".join(str(item or "").strip().lower().split())
+    if not text:
+        return ""
+    stripped = _CUISINE_SUFFIX_RX.sub("", text).strip()
+    return stripped or text
+
+
+def is_recognized_cuisine(item):
+    """Return True if the normalized cuisine matches the curated catalog."""
+    return normalize_cuisine_token(item) in RECOGNIZED_CUISINES
+
+
+def validate_cuisine_list(value, field_label="Cuisine"):
+    """Validate cuisine entries syntactically, rejecting gibberish/slang."""
+    if not isinstance(value, list):
+        raise ValueError("Expected a list of text entries.")
+    result = []
+    for raw in value:
+        cleaned = clean_text(raw, 40)
+        token = normalize_cuisine_token(cleaned)
+        if not token or token in {"none", "any", "any cuisine", "all"}:
+            raise ValueError(
+                f"{field_label}: enter a real cuisine or leave it blank "
+                "(e.g. Japanese, Spanish, Seafood)."
+            )
+        if token == "halal":
+            raise ValueError(
+                f"{field_label}: Halal is a dietary requirement — use the "
+                "MUIS Halal option instead."
+            )
+        if not _CUISINE_TEXT_RX.fullmatch(token):
+            raise ValueError(
+                f"{field_label}: '{cleaned}' is not a valid cuisine name "
+                "(letters only, e.g. Japanese, Spanish, Dim Sum)."
+            )
+        words = re.findall(r"[a-z]+", token)
+        if (
+            not words
+            or len(words) > 4
+            or sum(len(w) for w in words) < 3
+        ):
+            raise ValueError(
+                f"{field_label}: '{cleaned}' is not a valid cuisine name "
+                "(e.g. Japanese, Spanish, Seafood)."
+            )
+        if token in _INVALID_CUISINE_WORDS or (
+            token not in RECOGNIZED_CUISINES
+            and any(w in _INVALID_CUISINE_WORDS for w in words)
+        ):
+            raise ValueError(
+                f"{field_label}: '{cleaned}' is not a valid cuisine name "
+                "(e.g. Japanese, Spanish, Seafood)."
+            )
+        if token not in RECOGNIZED_CUISINES:
+            for word in words:
+                if (
+                    re.search(r"(.)\1\1", word)
+                    or any(seq in word for seq in _WISH_KEYBOARD_MASH)
+                    or (
+                        len(word) >= 3
+                        and word not in _CUISINE_ACRONYMS
+                        and not any(ch in "aeiouy" for ch in word)
+                    )
+                    or re.search(r"[bcdfghjklmnpqrstvwxz]{6,}", word)
+                ):
+                    raise ValueError(
+                        f"{field_label}: '{cleaned}' is not a valid "
+                        "cuisine name (e.g. Japanese, Spanish, Seafood)."
+                    )
+        if token not in result:
+            result.append(token)
+    return result

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from common.debug_log import debug_log
 from common.singapore_locations import (
+    is_generic_singapore_centroid,
     is_in_singapore,
     validate_location_syntax,
 )
@@ -67,12 +68,13 @@ def lookup(query):
     key = _key(query)
     if not key:
         return None
+    raw_point = None
     if _use_mongo():
         try:
             row = _mongo_collection().execute(
                 lambda db, k=key: db.geocode_cache.find_one({"_id": k})
             )
-            return _point(row.get("point")) if isinstance(row, dict) else None
+            raw_point = row.get("point") if isinstance(row, dict) else None
         except (RuntimeError, OSError):
             debug_log(
                 "Mongo geocode cache lookup unavailable.",
@@ -80,7 +82,12 @@ def lookup(query):
                 "common.geocode_cache.lookup",
             )
             return None
-    return _point(_read().get(key))
+    else:
+        raw_point = _read().get(key)
+    point = _point(raw_point)
+    if point is None or is_generic_singapore_centroid(point[0], point[1]):
+        return None
+    return point
 
 
 @contextmanager
@@ -213,7 +220,11 @@ def _format_cached_label(key):
 
 def _is_valid_cached_sg_entry(key, raw_point):
     point = _point(raw_point)
-    if point is None or not is_in_singapore(point[0], point[1]):
+    if (
+        point is None
+        or not is_in_singapore(point[0], point[1])
+        or is_generic_singapore_centroid(point[0], point[1])
+    ):
         return False
     try:
         validate_location_syntax(key)

@@ -9,8 +9,10 @@ from BIS.sources.profile_schema import (
     NUMBER_LIMITS,
     SEARCH_MODE_LIMITS,
     extract_rating_wishes,
+    normalize_cuisine_token,
     normalize_wish_text,
     strip_rating_clauses,
+    validate_cuisine_list,
     validate_english_preferences,
 )
 
@@ -472,32 +474,41 @@ class ChatFilterPolicy:
             if fallback_prefs is not None
             else ((user or {}).get("preferences") or {})
         )
-        supported_liked = []
         extra_other = list(filters.get("other_preferences") or [])
-        for cuisine in filters.get("liked_cuisines") or []:
-            clean = str(cuisine or "").strip().lower()
-            if clean in CUISINES:
-                if clean not in supported_liked:
-                    supported_liked.append(clean)
-            elif clean:
-                custom_wish = f"{clean} cuisine"
-                if custom_wish.casefold() not in {
-                    o.casefold() for o in extra_other
-                }:
-                    extra_other.append(custom_wish)
+        raw_liked = [
+            normalize_cuisine_token(c)
+            for c in (filters.get("liked_cuisines") or [])
+            if normalize_cuisine_token(c)
+        ]
+        supported_liked = []
+        for cuisine in raw_liked:
+            try:
+                valid_one = validate_cuisine_list(
+                    [cuisine], field_label="Default preferred cuisines"
+                )[0]
+                if valid_one not in supported_liked:
+                    supported_liked.append(valid_one)
+            except ValueError:
+                pass
 
+        raw_disliked = [
+            normalize_cuisine_token(c)
+            for c in (filters.get("disliked_cuisines") or [])
+            if normalize_cuisine_token(c)
+        ]
         supported_disliked = []
-        for cuisine in filters.get("disliked_cuisines") or []:
-            clean = str(cuisine or "").strip().lower()
-            if clean in CUISINES:
-                if clean not in supported_disliked:
-                    supported_disliked.append(clean)
-            elif clean:
-                custom_avoid = f"avoid {clean} cuisine"
-                if custom_avoid.casefold() not in {
-                    o.casefold() for o in extra_other
-                }:
-                    extra_other.append(custom_avoid)
+        for cuisine in raw_disliked:
+            try:
+                valid_one = validate_cuisine_list(
+                    [cuisine], field_label="Default disliked cuisines"
+                )[0]
+                if (
+                    valid_one not in supported_disliked
+                    and valid_one not in supported_liked
+                ):
+                    supported_disliked.append(valid_one)
+            except ValueError:
+                pass
 
         locs = filters.get("locations") or prefs.get("location")
         budget = filters.get("budget_per_person")

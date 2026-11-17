@@ -1,6 +1,6 @@
-import { escapeHtml, getPlaceKey, refreshIcons, state } from './state.js?v=20261116-4';
+import { escapeHtml, getPlaceKey, refreshIcons, state } from './state.js?v=20261117-5';
 import { openModal, closeModal } from './modals.js?v=20261116-4';
-import { apiJson } from './api.js?v=20261116-4';
+import { apiJson } from './api.js?v=20261117-5';
 import {
   buildPinMarkerIcon,
   buildPolylineOptions,

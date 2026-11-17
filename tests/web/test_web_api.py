@@ -3659,6 +3659,170 @@ class WebIntegrationTests(unittest.TestCase):
         self.assertIn("Compass One", labels)
         self.assertNotIn("Singapore", labels)
 
+    def test_unified_cuisine_validation_across_profile_search_and_endpoint(
+        self,
+    ):
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+        from BIS.classes.io.gateways.location_gateway import LocationGateway
+
+        headers, me = self.account("cuisine.guard@example.com")
+
+        # 1. /api/validate-cuisines allows international/dish cuisines while
+        # blocking slang, profanity, gibberish, numbers, and non-cuisines.
+        ok_val = self.client.post(
+            "/api/validate-cuisines",
+            json={
+                "cuisines": ["Spanish", "Taiwanese", "Greek", "Seafood"],
+                "field_label": "Preferred cuisines",
+            },
+        )
+        self.assertEqual(ok_val.status_code, 200, ok_val.text)
+        self.assertEqual(
+            ok_val.json()["cuisines"],
+            ["spanish", "taiwanese", "greek", "seafood"],
+        )
+
+        for bad in (
+            "Lampa",
+            "Lol",
+            "Idiot",
+            "Cb",
+            "Kontol Babi",
+            "1234",
+            "halal",
+            "chair",
+        ):
+            bad_val = self.client.post(
+                "/api/validate-cuisines",
+                json={"cuisines": [bad], "field_label": "Preferred cuisines"},
+            )
+            self.assertEqual(bad_val.status_code, 400, (bad, bad_val.text))
+
+        # Live AI mode validates uncommon real cuisines and rejects nonsense.
+        with patch.dict(self.application._config, {"ai_bypass": False}):
+            self.ai.review_cuisines = Mock(return_value=["mauritian"])
+            ai_ok = self.client.post(
+                "/api/validate-cuisines",
+                json={"cuisines": ["mauritian"]},
+            )
+            self.assertEqual(ai_ok.status_code, 200, ai_ok.text)
+            self.ai.review_cuisines.assert_called_once()
+
+            self.ai.review_cuisines = Mock(
+                side_effect=ValueError("'chair' is not a cuisine.")
+            )
+            ai_bad = self.client.post(
+                "/api/validate-cuisines",
+                json={"cuisines": ["chair"]},
+            )
+            self.assertEqual(ai_bad.status_code, 400, ai_bad.text)
+
+        # 2. /api/search rejects invalid cuisines, overlaps, and slang locs.
+        for bad_c in ("lampa", "cb", "kontol babi", "lol", "chair"):
+            bad_pref = self.search_payload()
+            bad_pref["liked_cuisines"] = [bad_c]
+            r = self.client.post("/api/search", json=bad_pref)
+            self.assertEqual(r.status_code, 400, (bad_c, r.text))
+
+            bad_dis = self.search_payload()
+            bad_dis["disliked_cuisines"] = [bad_c]
+            r2 = self.client.post("/api/search", json=bad_dis)
+            self.assertEqual(r2.status_code, 400, (bad_c, r2.text))
+
+        overlap_search = self.search_payload()
+        overlap_search["liked_cuisines"] = ["spanish"]
+        overlap_search["disliked_cuisines"] = ["spanish"]
+        r_ov = self.client.post("/api/search", json=overlap_search)
+        self.assertEqual(r_ov.status_code, 400, r_ov.text)
+        self.assertIn("spanish", r_ov.text.lower())
+
+        for bad_loc in ("Lol", "dd112312ds", "123123123"):
+            p_loc = self.search_payload()
+            p_loc["location"] = bad_loc
+            p_loc["locations"] = [bad_loc]
+            rl = self.client.post("/api/search", json=p_loc)
+            self.assertEqual(rl.status_code, 400, (bad_loc, rl.text))
+
+        # 3. My Profile accepts international/dish cuisines without restricting
+        # to the 20 hardcoded CUISINES, while still validating conflicts/junk.
+        save_ok = self.client.post(
+            "/api/profile",
+            json={
+                "user_id": me["user_id"],
+                "username": "ChefTester",
+                "email": me["email"],
+                "location": ["Singapore 530967"],
+                "max_distance_km": 5.0,
+                "max_travel_time_minutes": 20.0,
+                "budget_per_person": 35.0,
+                "dietary_requirements": ["halal"],
+                "liked_cuisines": ["spanish", "taiwanese"],
+                "disliked_cuisines": ["seafood", "ramen"],
+                "other_preferences": [],
+            },
+            headers=headers,
+        )
+        self.assertEqual(save_ok.status_code, 200, save_ok.text)
+        saved_user = save_ok.json()["user"]
+        self.assertEqual(
+            saved_user["liked_cuisines"], ["spanish", "taiwanese"]
+        )
+        self.assertEqual(
+            saved_user["disliked_cuisines"], ["seafood", "ramen"]
+        )
+
+        # Overlap shows the conflicting cuisine name.
+        save_overlap = self.client.post(
+            "/api/profile",
+            json={
+                "user_id": me["user_id"],
+                "username": "ChefTester",
+                "email": me["email"],
+                "location": ["Singapore 530967"],
+                "max_distance_km": 5.0,
+                "max_travel_time_minutes": 20.0,
+                "budget_per_person": 35.0,
+                "dietary_requirements": [],
+                "liked_cuisines": ["spanish"],
+                "disliked_cuisines": ["spanish"],
+                "other_preferences": [],
+            },
+            headers=headers,
+        )
+        self.assertEqual(save_overlap.status_code, 400, save_overlap.text)
+        self.assertIn("spanish", save_overlap.text.lower())
+
+        for bad_prof_c in ("lampa", "cb", "lol", "chair", "halal"):
+            save_bad = self.client.post(
+                "/api/profile",
+                json={
+                    "user_id": me["user_id"],
+                    "username": "ChefTester",
+                    "email": me["email"],
+                    "location": ["Singapore 530967"],
+                    "max_distance_km": 5.0,
+                    "max_travel_time_minutes": 20.0,
+                    "budget_per_person": 35.0,
+                    "dietary_requirements": [],
+                    "liked_cuisines": [bad_prof_c],
+                    "disliked_cuisines": [],
+                    "other_preferences": [],
+                },
+                headers=headers,
+            )
+            self.assertEqual(save_bad.status_code, 400, (bad_prof_c, save_bad.text))
+
+        # 4. Cached generic Singapore centroid (1.352083, 103.819836) is ignored.
+        bad_cache = SimpleNamespace(
+            lookup=lambda _q: (1.352083, 103.819836),
+            remember=lambda *_a: None,
+        )
+        cached_gw = LocationGateway(
+            self.application._logic, bad_cache, "https://example.invalid/geocode"
+        )
+        self.assertIsNone(cached_gw.lookup_cached("Compass One"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

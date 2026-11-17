@@ -21,6 +21,9 @@ from BIS.classes.io.web.models.preferences.favorite_toggle_model import (
 from BIS.classes.io.web.models.search.route_request_model import (
     RouteRequestModel,
 )
+from BIS.classes.io.web.models.search.validate_cuisines_model import (
+    ValidateCuisinesModel,
+)
 
 
 def get_web_io(request: Request):
@@ -103,6 +106,13 @@ def register_routes(app):
         io=Depends(get_web_io),
     ):
         return io.search(authorization, payload.model_dump())
+
+    @router.post("/validate-cuisines")
+    def validate_cuisines(
+        payload: ValidateCuisinesModel,
+        io=Depends(get_web_io),
+    ):
+        return io.validate_cuisines(payload.model_dump())
 
     @router.post("/chat")
     def chat(

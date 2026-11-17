@@ -10,6 +10,7 @@ from common.singapore_locations import (
 )
 from BIS.classes.services.web.bis_chatbot_service import (
     BISChatbotService,
+    validate_cuisine_entries,
     validate_special_preferences,
 )
 from BIS.support.config import is_smtp_bypass
@@ -131,7 +132,48 @@ class BISApplicationService:
                     field_label="Default special wishes",
                 )
             )
+        liked_cuisines = updated["preferences"].get("liked_cuisines")
+        if liked_cuisines:
+            updated["preferences"]["liked_cuisines"] = (
+                validate_cuisine_entries(
+                    liked_cuisines,
+                    ai=self._ai,
+                    config=self._config,
+                    field_label="Default preferred cuisines",
+                )
+            )
+        disliked_cuisines = updated["preferences"].get("disliked_cuisines")
+        if disliked_cuisines:
+            updated["preferences"]["disliked_cuisines"] = (
+                validate_cuisine_entries(
+                    disliked_cuisines,
+                    ai=self._ai,
+                    config=self._config,
+                    field_label="Default disliked cuisines",
+                )
+            )
         return self._data.save(updated)
+
+    def validate_cuisines(self, payload):
+        raw = payload.get("cuisines") or []
+        parsed = []
+        for entry in raw:
+            for part in str(entry or "").split(","):
+                clean = part.strip()
+                if clean:
+                    parsed.append(clean)
+        if not parsed:
+            raise ValueError("Enter a cuisine name before adding.")
+        label = (
+            str(payload.get("field_label") or "Cuisine").strip() or "Cuisine"
+        )
+        cleaned = validate_cuisine_entries(
+            parsed,
+            ai=self._ai,
+            config=self._config,
+            field_label=label,
+        )
+        return {"success": True, "valid": True, "cuisines": cleaned}
 
     def __resolve_origins(self, raw_locations):
         api_key = self._config.get("google_maps_api_key")
@@ -508,15 +550,50 @@ class BISApplicationService:
 
         raw_locations = self._logic.collect_search_locations(payload)
         origin, resolved_origins = self.__resolve_origins(raw_locations)
-        selected_cuisines = self._logic.collect_search_cuisines(payload)
+        selected_cuisines = validate_cuisine_entries(
+            self._logic.collect_search_cuisines(payload),
+            ai=self._ai,
+            config=self._config,
+            field_label="Preferred cuisines",
+        )
+        collect_disliked = getattr(
+            self._logic, "collect_search_disliked_cuisines", None
+        )
+        raw_disliked = (
+            collect_disliked(payload)
+            if callable(collect_disliked)
+            else (payload.get("disliked_cuisines") or [])
+        )
+        normalized_disliked = validate_cuisine_entries(
+            raw_disliked,
+            ai=self._ai,
+            config=self._config,
+            field_label="Disliked cuisines",
+        )
+        cuisine_overlap = set(selected_cuisines) & set(normalized_disliked)
+        if cuisine_overlap:
+            joined = ", ".join(sorted(cuisine_overlap))
+            raise ValueError(
+                "Resolve cuisines listed as both preferred and disliked: "
+                f"{joined}."
+            )
         normalized_wishes = validate_special_preferences(
             payload.get("other_preferences"),
             ai=self._ai,
             config=self._config,
             field_label="Special requests",
         )
-        if "other_preferences" in payload or normalized_wishes:
-            payload = dict(payload, other_preferences=normalized_wishes)
+        if (
+            "other_preferences" in payload
+            or normalized_wishes
+            or "disliked_cuisines" in payload
+            or normalized_disliked
+        ):
+            payload = dict(
+                payload,
+                other_preferences=normalized_wishes,
+                disliked_cuisines=normalized_disliked,
+            )
 
         if payload.get("confirm_only") and not strict_exclude:
             single_c = (

@@ -119,3 +119,6 @@ class AIManager(BISAIManagerInterface, ChatAIInterface):
 
     def review_profile_wishes(self, wishes, config):
         return self.interpreter.review_profile_wishes(wishes, config)
+
+    def review_cuisines(self, cuisines, config):
+        return self.interpreter.review_cuisines(cuisines, config)

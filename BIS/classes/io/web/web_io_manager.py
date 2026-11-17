@@ -136,6 +136,9 @@ class WebIOManager(BISWebIOInterface):
             self.user(authorization, required=False), payload
         )
 
+    def validate_cuisines(self, payload):
+        return self._application.validate_cuisines(payload)
+
     def chat(self, authorization, payload):
         return self._application.chat(
             self.user(authorization, required=False), payload
