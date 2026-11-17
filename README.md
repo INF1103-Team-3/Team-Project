@@ -44,6 +44,18 @@ single unexplained result.
 
 ## How it works
 
+![BiteFinder data-flow diagram showing BIS, BRNS, BRC, external services and storage](DataFlowDiagram.png)
+
+[Download PNG](DataFlowDiagram.png) · [Scalable SVG](DataFlowDiagram.svg) ·
+[Editable Mermaid source](DataFlowDiagram.mmd) ·
+[Data contracts and storage details](DataFlowDiagram.md)
+
+The diagram shows logical data exchanges. Browser requests reach BIS through
+nginx and the FastAPI gateway; CLI input reaches BIS directly. BIS delegates
+recommendations to BRNS, which alone requests BRC verification. D1 and D2 are
+logical record groups in the same MongoDB deployment; BRC retains its separate
+JSON store. External services are grouped by the subsystem that calls them.
+
 ```text
 User
   -> BIS I/O: account, profile, commands, and today's choices

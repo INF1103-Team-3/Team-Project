@@ -1,4 +1,11 @@
-"""BIS compatibility façade and four-manager application bootstrap."""
+"""Launch BIS and wire its IO, AI, Logic and Data managers into workflows.
+
+The CLI/web launcher and CLI dependency wiring live here. Existing function
+entry points, such as run_search() and handle_action(), delegate to workflow
+and session objects. This delegation preserves their callers' interfaces;
+the application behavior is implemented by those objects rather than copied
+into these entry points.
+"""
 
 import os
 import sys

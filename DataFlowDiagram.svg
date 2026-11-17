@@ -1,0 +1,166 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3300" height="2240" viewBox="0 0 3300 2240">
+<title>BiteFinder logical data-flow diagram</title>
+<desc>Users access BIS through CLI or web. BIS calls BRNS; only BRNS calls the independent BRC verifier. Labelled arrows show requests, returned data, external services and subsystem storage.</desc>
+<rect width="100%" height="100%" fill="white"/>
+<text x="1650" y="97" text-anchor="middle" font-family="monospace" font-size="62" fill="#18324b" font-weight="bold">BiteFinder | Logical data-flow diagram</text>
+<text x="1650" y="157" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">Current CLI + web application • requests and returned data, not control flow</text>
+<rect x="540" y="240" width="760" height="255" rx="0" fill="#fff7e7" stroke="#18324b" stroke-width="4"/>
+<text x="920.0" y="306" text-anchor="middle" font-family="monospace" font-size="44" fill="#18324b" font-weight="bold">External services for BIS</text>
+<text x="920.0" y="365" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">AI providers • Google geocoding</text>
+<text x="920.0" y="411" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">SMTP: verification / CLI links</text>
+<rect x="1490" y="240" width="760" height="255" rx="0" fill="#fff7e7" stroke="#18324b" stroke-width="4"/>
+<text x="1870.0" y="306" text-anchor="middle" font-family="monospace" font-size="44" fill="#18324b" font-weight="bold">External services for BRNS</text>
+<text x="1870.0" y="365" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">AI providers • Google Places,</text>
+<text x="1870.0" y="411" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">Routes and restaurant photos</text>
+<rect x="2440" y="240" width="760" height="255" rx="0" fill="#fff7e7" stroke="#18324b" stroke-width="4"/>
+<text x="2820.0" y="306" text-anchor="middle" font-family="monospace" font-size="44" fill="#18324b" font-weight="bold">External services for BRC</text>
+<text x="2820.0" y="365" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">MUIS directory • OneMap</text>
+<text x="2820.0" y="411" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">AI providers (conditional)</text>
+<polyline points="700,850 700,495" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="700,495 708.9707299673105,515.0879566868708 691.0292700326895,515.0879566868708" fill="#18324b"/>
+<polyline points="1140,495 1140,850" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="1140,850 1131.0292700326895,829.9120433131292 1148.9707299673105,829.9120433131292" fill="#18324b"/>
+<rect x="559" y="583" width="301" height="42" fill="white"/>
+<text x="710" y="617" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">Text / location</text>
+<rect x="578" y="626" width="264" height="42" fill="white"/>
+<text x="710" y="660" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">Email payload</text>
+<rect x="921" y="713" width="417" height="42" fill="white"/>
+<text x="1130" y="747" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">AI JSON / coordinates</text>
+<rect x="1017" y="756" width="226" height="42" fill="white"/>
+<text x="1130" y="790" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">Mail status</text>
+<polyline points="1650,850 1650,495" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="1650,495 1658.9707299673105,515.0879566868708 1641.0292700326895,515.0879566868708" fill="#18324b"/>
+<polyline points="2090,495 2090,850" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="2090,850 2081.0292700326895,829.9120433131292 2098.9707299673105,829.9120433131292" fill="#18324b"/>
+<rect x="1461" y="583" width="398" height="42" fill="white"/>
+<text x="1660" y="617" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">Candidates / queries</text>
+<rect x="1490" y="626" width="339" height="42" fill="white"/>
+<text x="1660" y="660" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">Travel parameters</text>
+<rect x="1928" y="713" width="303" height="42" fill="white"/>
+<text x="2080" y="747" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">AI ranking JSON</text>
+<rect x="1891" y="756" width="378" height="42" fill="white"/>
+<text x="2080" y="790" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">Place / route facts</text>
+<polyline points="2600,850 2600,495" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="2600,495 2608.9707299673105,515.0879566868708 2591.0292700326895,515.0879566868708" fill="#18324b"/>
+<polyline points="3040,495 3040,850" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="3040,850 3031.0292700326895,829.9120433131292 3048.9707299673105,829.9120433131292" fill="#18324b"/>
+<rect x="2422" y="583" width="376" height="42" fill="white"/>
+<text x="2610" y="617" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">Directory / address</text>
+<rect x="2458" y="626" width="304" height="42" fill="white"/>
+<text x="2610" y="660" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">Ambiguous match</text>
+<rect x="2860" y="713" width="340" height="42" fill="white"/>
+<text x="3030" y="747" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">Official listings</text>
+<rect x="2849" y="756" width="361" height="42" fill="white"/>
+<text x="3030" y="790" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">Geocodes / AI JSON</text>
+<rect x="40" y="875" width="300" height="220" rx="0" fill="#fff7e7" stroke="#18324b" stroke-width="4"/>
+<text x="190.0" y="941" text-anchor="middle" font-family="monospace" font-size="44" fill="#18324b" font-weight="bold">User</text>
+<text x="190.0" y="1000" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">CLI or web</text>
+<rect x="540" y="850" width="760" height="320" rx="35" fill="#e9f3fb" stroke="#18324b" stroke-width="4"/>
+<text x="920.0" y="916" text-anchor="middle" font-family="monospace" font-size="44" fill="#18324b" font-weight="bold">P1 · BIS</text>
+<text x="920.0" y="975" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">IO &gt; AI &gt; Logic &gt; Data</text>
+<text x="920.0" y="1021" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">Accounts, profiles, chat,</text>
+<text x="920.0" y="1067" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">validated search requests</text>
+<rect x="1490" y="850" width="760" height="320" rx="35" fill="#e9f3fb" stroke="#18324b" stroke-width="4"/>
+<text x="1870.0" y="916" text-anchor="middle" font-family="monospace" font-size="44" fill="#18324b" font-weight="bold">P2 · BRNS</text>
+<text x="1870.0" y="975" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">IO &gt; AI &gt; Logic &gt; Data</text>
+<text x="1870.0" y="1021" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">Discovery, ranking, routes,</text>
+<text x="1870.0" y="1067" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">recommendation results</text>
+<rect x="2440" y="850" width="760" height="320" rx="35" fill="#e9f3fb" stroke="#18324b" stroke-width="4"/>
+<text x="2820.0" y="916" text-anchor="middle" font-family="monospace" font-size="44" fill="#18324b" font-weight="bold">P3 · BRC</text>
+<text x="2820.0" y="975" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">IO &gt; AI &gt; Logic &gt; Data</text>
+<text x="2820.0" y="1021" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">Independent MUIS verifier</text>
+<text x="2820.0" y="1067" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">Official certificate evidence</text>
+<polyline points="340,940 540,940" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="540,940 519.9120433131292,948.9707299673105 519.9120433131292,931.0292700326895" fill="#18324b"/>
+<rect x="359" y="803" width="162" height="40" fill="white"/>
+<text x="440" y="835" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">Inputs /</text>
+<rect x="368" y="844" width="143" height="40" fill="white"/>
+<text x="440" y="876" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">actions</text>
+<polyline points="540,1070 340,1070" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="340,1070 360.08795668687077,1061.0292700326895 360.08795668687077,1078.9707299673105" fill="#18324b"/>
+<text x="440" y="1140" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">Views /</text>
+<text x="440" y="1181" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">results</text>
+<polyline points="1300,955 1490,955" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="1490,955 1469.9120433131293,963.9707299673105 1469.9120433131293,946.0292700326895" fill="#18324b"/>
+<rect x="1329" y="813" width="131" height="42" fill="white"/>
+<text x="1395" y="847" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">Search</text>
+<rect x="1348" y="856" width="93" height="42" fill="white"/>
+<text x="1395" y="890" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">JSON</text>
+<polyline points="1490,1090 1300,1090" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="1300,1090 1320.0879566868707,1081.0292700326895 1320.0879566868707,1098.9707299673105" fill="#18324b"/>
+<rect x="1301" y="1193" width="188" height="42" fill="white"/>
+<text x="1395" y="1227" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">Results /</text>
+<rect x="1329" y="1236" width="131" height="42" fill="white"/>
+<text x="1395" y="1270" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">routes</text>
+<polyline points="2250,955 2440,955" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="2440,955 2419.9120433131293,963.9707299673105 2419.9120433131293,946.0292700326895" fill="#18324b"/>
+<rect x="2289" y="813" width="112" height="42" fill="white"/>
+<text x="2345" y="847" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">Venue</text>
+<rect x="2270" y="856" width="149" height="42" fill="white"/>
+<text x="2345" y="890" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">records</text>
+<polyline points="2440,1090 2250,1090" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="2250,1090 2270.0879566868707,1081.0292700326895 2270.0879566868707,1098.9707299673105" fill="#18324b"/>
+<rect x="2269" y="1193" width="151" height="42" fill="white"/>
+<text x="2345" y="1227" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">Checked</text>
+<rect x="2261" y="1236" width="168" height="42" fill="white"/>
+<text x="2345" y="1270" text-anchor="middle" font-family="monospace" font-size="32" fill="#18324b" font-weight="normal">evidence</text>
+<rect x="540" y="1535" width="760" height="300" rx="0" fill="#ecf6ee" stroke="#18324b" stroke-width="4"/>
+<path d="M562 1535V1835" stroke="#18324b" stroke-width="4"/>
+<text x="920.0" y="1601" text-anchor="middle" font-family="monospace" font-size="44" fill="#18324b" font-weight="bold">D1 · BIS records</text>
+<text x="920.0" y="1660" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">MongoDB: users, credentials,</text>
+<text x="920.0" y="1706" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">profiles, sessions, favorites,</text>
+<text x="920.0" y="1752" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">search proposals</text>
+<rect x="1490" y="1535" width="760" height="300" rx="0" fill="#ecf6ee" stroke="#18324b" stroke-width="4"/>
+<path d="M1512 1535V1835" stroke="#18324b" stroke-width="4"/>
+<text x="1870.0" y="1601" text-anchor="middle" font-family="monospace" font-size="44" fill="#18324b" font-weight="bold">D2 · BRNS records</text>
+<text x="1870.0" y="1660" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">MongoDB: restaurants,</text>
+<text x="1870.0" y="1706" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">search history, place photos</text>
+<rect x="2440" y="1535" width="760" height="300" rx="0" fill="#ecf6ee" stroke="#18324b" stroke-width="4"/>
+<path d="M2462 1535V1835" stroke="#18324b" stroke-width="4"/>
+<text x="2820.0" y="1601" text-anchor="middle" font-family="monospace" font-size="44" fill="#18324b" font-weight="bold">D3 · BRC files</text>
+<text x="2820.0" y="1660" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">JSON: raw / cleaned MUIS,</text>
+<text x="2820.0" y="1706" text-anchor="middle" font-family="monospace" font-size="35" fill="#18324b" font-weight="normal">checked records and caches</text>
+<polyline points="690,1170 690,1535" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="690,1535 681.0292700326895,1514.9120433131293 698.9707299673105,1514.9120433131293" fill="#18324b"/>
+<polyline points="1150,1535 1150,1170" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="1150,1170 1158.9707299673105,1190.0879566868707 1141.0292700326895,1190.0879566868707" fill="#18324b"/>
+<rect x="531" y="1288" width="378" height="40" fill="white"/>
+<text x="720" y="1320" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">Account / preference</text>
+<rect x="531" y="1329" width="377" height="40" fill="white"/>
+<text x="720" y="1361" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">and web-state writes</text>
+<rect x="976" y="1408" width="287" height="40" fill="white"/>
+<text x="1120" y="1440" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">Saved profile /</text>
+<rect x="994" y="1449" width="251" height="40" fill="white"/>
+<text x="1120" y="1481" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">account state</text>
+<polyline points="1640,1170 1640,1535" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="1640,1535 1631.0292700326895,1514.9120433131293 1648.9707299673105,1514.9120433131293" fill="#18324b"/>
+<polyline points="2100,1535 2100,1170" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="2100,1170 2108.9707299673105,1190.0879566868707 2091.0292700326895,1190.0879566868707" fill="#18324b"/>
+<rect x="1481" y="1288" width="378" height="40" fill="white"/>
+<text x="1670" y="1320" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">Restaurant / history</text>
+<rect x="1516" y="1329" width="307" height="40" fill="white"/>
+<text x="1670" y="1361" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">and photo writes</text>
+<rect x="1945" y="1408" width="249" height="40" fill="white"/>
+<text x="2070" y="1440" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">Saved facts /</text>
+<rect x="1916" y="1449" width="308" height="40" fill="white"/>
+<text x="2070" y="1481" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">history / photos</text>
+<polyline points="2590,1170 2590,1535" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="2590,1535 2581.0292700326895,1514.9120433131293 2598.9707299673105,1514.9120433131293" fill="#18324b"/>
+<polyline points="3050,1535 3050,1170" fill="none" stroke="#18324b" stroke-width="4"/>
+<polygon points="3050,1170 3058.9707299673105,1190.0879566868707 3041.0292700326895,1190.0879566868707" fill="#18324b"/>
+<rect x="2430" y="1288" width="379" height="40" fill="white"/>
+<text x="2620" y="1320" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">Official snapshots /</text>
+<rect x="2440" y="1329" width="359" height="40" fill="white"/>
+<text x="2620" y="1361" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">verification writes</text>
+<rect x="2823" y="1408" width="394" height="40" fill="white"/>
+<text x="3020" y="1440" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">Cached certificates /</text>
+<rect x="2876" y="1449" width="288" height="40" fill="white"/>
+<text x="3020" y="1481" text-anchor="middle" font-family="monospace" font-size="30" fill="#18324b" font-weight="normal">previous checks</text>
+<text x="1650" y="1927" text-anchor="middle" font-family="monospace" font-size="37" fill="#18324b" font-weight="bold">BOUNDARIES AND SCOPE</text>
+<text x="1650" y="1979" text-anchor="middle" font-family="monospace" font-size="29" fill="#18324b" font-weight="normal">Web: browser &gt; nginx &gt; FastAPI gateway &gt; BIS. CLI enters BIS directly.</text>
+<text x="1650" y="2019" text-anchor="middle" font-family="monospace" font-size="29" fill="#18324b" font-weight="normal">Only BRNS requests BRC checks (HTTP /check in Compose); no direct user/BIS access.</text>
+<text x="1650" y="2059" text-anchor="middle" font-family="monospace" font-size="29" fill="#18324b" font-weight="normal">D1/D2 share MongoDB; explicit CLI JSON mode remains supported. Shared geocode cache omitted.</text>
+<text x="1650" y="2099" text-anchor="middle" font-family="monospace" font-size="29" fill="#18324b" font-weight="normal">AI output is validated before domain decisions; local/cache paths may skip AI calls.</text>
+<text x="1650" y="2139" text-anchor="middle" font-family="monospace" font-size="29" fill="#18324b" font-weight="normal">BRC refresh retains usable records while stale snapshots are updated in the background.</text>
+<text x="1650" y="2216" text-anchor="middle" font-family="monospace" font-size="26" fill="#18324b" font-weight="normal">Legend: yellow = external entities  |  rounded blue = process  |  double-line green = store  |  arrow = named data flow</text>
+</svg>

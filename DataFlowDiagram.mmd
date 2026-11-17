@@ -1,0 +1,29 @@
+flowchart LR
+  user["User: CLI or browser"]
+  bis("P1 BIS: IO / AI / Logic / Data")
+  brns("P2 BRNS: IO / AI / Logic / Data")
+  brc("P3 BRC: IO / AI / Logic / Data")
+  ebis["External: AI / Google geocoding / SMTP"]
+  ebrns["External: AI / Google Places / Routes / photos"]
+  ebrc["External: MUIS / OneMap / conditional AI"]
+  d1[("D1 BIS: accounts / profiles / web state")]
+  d2[("D2 BRNS: restaurants / history / photos")]
+  d3[("D3 BRC JSON: MUIS records / checks / caches")]
+  user -->|Inputs and actions| bis
+  bis -->|Views and results| user
+  bis -->|Validated search JSON| brns
+  brns -->|Recommendations and routes| bis
+  brns -->|Venue records: HTTP check in Compose| brc
+  brc -->|MUIS verification evidence| brns
+  bis -->|Text / location / email payload| ebis
+  ebis -->|AI JSON / coordinates / mail status| bis
+  brns -->|Candidates / queries / travel parameters| ebrns
+  ebrns -->|AI ranking JSON / place and route facts| brns
+  brc -->|Directory / address / ambiguous match| ebrc
+  ebrc -->|Official listings / geocodes / AI JSON| brc
+  bis -->|Account / preference / web-state writes| d1
+  d1 -->|Saved account and profile state| bis
+  brns -->|Restaurant / history / photo writes| d2
+  d2 -->|Saved facts / history / photos| brns
+  brc -->|Official snapshots / verification writes| d3
+  d3 -->|Cached certificates / previous checks| brc

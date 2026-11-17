@@ -1,4 +1,12 @@
-"""Compatibility façade and bootstrap for the OOP BRNS application."""
+"""Wire the four BRNS managers and expose the internal CLI entry point.
+
+This module constructs RecommendationSystem with the IO, AI, Logic and Data
+managers and its BRC dependency. Existing function entry points, such as
+search(), route_to() and sort_results(), delegate to that application object.
+They preserve callers' function interfaces without duplicating the class's
+recommendation and navigation behavior. Normal BIS integration uses the
+headless service assembled in BRNS.runtime.
+"""
 
 import os
 import sys

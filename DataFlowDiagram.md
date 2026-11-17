@@ -4,6 +4,25 @@ This document maps the current CLI/web application to its record formats,
 stores, and trust boundaries. See [ProjectFlow.md](ProjectFlow.md) for control
 flow and [README.md](README.md) for operation commands.
 
+## Printable overview
+
+![Current BiteFinder logical data-flow diagram](DataFlowDiagram.png)
+
+Use the [300 dpi PNG](DataFlowDiagram.png) in Word, or the
+[scalable SVG](DataFlowDiagram.svg) for sharp resizing. The diagram is designed
+for a landscape page. [Mermaid source](DataFlowDiagram.mmd) preserves the same
+nodes and labelled data exchanges in an editable form; its automatic layout may
+differ from the manually arranged image.
+
+Rounded blue boxes are subsystem processes, yellow rectangles group external
+entities, and green boxes with an extra vertical rule are logical data stores.
+Each arrow names data and points from its producer to its recipient. D1 and D2
+share MongoDB in Compose. Explicit CLI JSON mode remains supported; shared
+geocode caches, logs and individual helper classes are omitted at this level.
+The four manager roles are shown inside each subsystem; supporting reads and
+local/cache paths do not imply an AI request on every operation. The image
+summarizes current behavior rather than reproducing the Part 1 storage design.
+
 ## Context and subsystem boundaries
 
 ```mermaid
