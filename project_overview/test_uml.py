@@ -3,21 +3,32 @@
 Run: python project_overview/test_uml.py
 Uses Pillow; optionally uses Graphviz `dot` for automatic layout.
 No application imports, execution, external APIs, or credentials are needed.
-Outputs are local artifacts under project_overview/uml/ (ignored by Git).
+Outputs are local artifacts under the external BiteFinder workfiles directory.
 """
 
 from pathlib import Path
 import json
+import os
 import sys
 import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from uml_analysis import SourceAnalysis, SUBSYSTEMS  # noqa: E402
-from uml_rendering import graph_layout, render  # noqa: E402
+from uml_rendering import graph_layout, render, route_edges  # noqa: E402
+from uml_rendering import sources  # noqa: E402
+from uml_document_rendering import Sheet  # noqa: E402
+from document_uml import OUTPUT, WORKFILES, generate_document_set  # noqa: E402
+from document_uml import (  # noqa: E402
+    expanded_types,
+    inventory,
+    reviewed_relations,
+    summary_member,
+)
+from document_uml import organize_artifacts, png_relative_path  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_DIR = Path(__file__).resolve().parent / "uml"
+OUTPUT_DIR = OUTPUT
 
 
 def discover_classes(root=ROOT):
@@ -38,7 +49,14 @@ def generate(root=ROOT, output=OUTPUT_DIR):
     (output / "analysis.json").write_text(
         json.dumps(analysis.report(), indent=2), encoding="utf-8"
     )
-    for name in ("bitefinder", *SUBSYSTEMS):
+    generate_document_set(analysis, output)
+    # Preserve the old full diagnostic view as an explicit opt-in. The default
+    # report is split into readable, indexed sheets rather than giant images.
+    for name in (
+        ("bitefinder", *SUBSYSTEMS)
+        if os.getenv("BITEFINDER_UML_FULL") == "1"
+        else ()
+    ):
         classes = {
             key: record
             for key, record in analysis.classes.items()
@@ -50,18 +68,128 @@ def generate(root=ROOT, output=OUTPUT_DIR):
             if e[0] in classes and e[1] in classes
         ]
         render(classes, edges, output / (name + ".png"))
-    render(
-        analysis.classes,
-        sorted(analysis.edges),
-        output / "bitefinder_flow.png",
-        compact=True,
-    )
+    if os.getenv("BITEFINDER_UML_FULL") == "1":
+        render(
+            analysis.classes,
+            sorted(analysis.edges),
+            output / "bitefinder_flow.png",
+            compact=True,
+        )
+    organize_artifacts(output, replace=True)
     return analysis
 
 
 class UMLGeneratorTests(unittest.TestCase):
+    def test_standalone_types_preserve_real_qualified_classes(self):
+        aliases = {"RecommendationContext": "dict[str, Any]"}
+        self.assertEqual(
+            expanded_types("# context: BRNS.RecommendationContext", aliases),
+            "# context: BRNS.RecommendationContext",
+        )
+        self.assertEqual(
+            expanded_types("+ prepare(): RecommendationContext", aliases),
+            "+ prepare(): dict[str, Any]",
+        )
+        self.assertEqual(
+            summary_member(
+                {
+                    "text": (
+                        "+ search(request: dict): "
+                        "dict[str, str] | dict[str, int]"
+                    )
+                },
+                True,
+            ),
+            "+ search(...): dict",
+        )
+
+    def test_reconstructed_chat_and_ranking_contracts(self):
+        analysis = SourceAnalysis(ROOT).analyze()
+        records = inventory(analysis)
+        chat = records[
+            "BIS.classes.ai.contracts.chat_ai_interface.ChatAIInterface"
+        ]
+        methods = {entry["name"]: entry["text"] for entry in chat["methods"]}
+        self.assertIn(
+            "wishes: list[str], config: AppConfig",
+            methods["review_profile_wishes"],
+        )
+        self.assertIn("history: ChatHistory", methods["chat_turn"])
+        self.assertIn("): ChatDecision", methods["chat_turn"])
+        slot = chat["module"] + ".ChatAIInterface.chat_turn.return"
+        proof = analysis.uml_types.get(slot)
+        self.assertTrue(
+            any("bis_interpreter.py" in e for e in proof["evidence"])
+        )
+        ranking = records["BRNS.classes.ai.ai_manager.AIManager"]
+        public = next(
+            m for m in ranking["methods"] if m["name"] == "recommend_prepared"
+        )
+        self.assertIn("Recommendations | None", public["text"])
+        self.assertEqual(
+            analysis.uml_types.aliases["AppConfig"], "dict[str, Any]"
+        )
+        self.assertFalse(
+            any(r["name"] == "AppConfig" for r in records.values())
+        )
+
+    def test_types_follow_calls_returns_and_paired_assignments(self):
+        analysis = self.fixture(
+            {
+                "BIS/example.py": (
+                    "class Left: pass\n"
+                    "class Right: pass\n"
+                    "class Owner:\n"
+                    "    count: int = 2\n"
+                    "    def __init__(self, left, right):\n"
+                    "        self._left, self._right = left, right\n"
+                    "    def choose(self, flag):\n"
+                    "        if flag: return 'yes'\n"
+                    "    def unknown(self, value): return value\n"
+                    "owner = Owner(Left(), Right())\n"
+                    "owner.choose(True)\n"
+                )
+            }
+        )
+        record = inventory(analysis)["BIS.example.Owner"]
+        attrs = {a["name"]: a["typing"]["type"] for a in record["attributes"]}
+        self.assertEqual(attrs["_left"], "BIS.Left")
+        self.assertEqual(attrs["_right"], "BIS.Right")
+        self.assertEqual(attrs["count"], "int")
+        declared = analysis.uml_types.get("BIS.example.Owner.count")
+        self.assertEqual(declared["status"], "declared")
+        self.assertEqual(
+            analysis.uml_types.union({"str | None", "str"}), "str | None"
+        )
+        dtype = analysis.uml_types.get("BIS.example.Owner.choose.return")
+        self.assertEqual(set(dtype["type"].split(" | ")), {"str", "None"})
+        unknown = analysis.uml_types.get("BIS.example.Owner.unknown.value")
+        self.assertEqual(unknown["type"], "DynamicValue")
+        self.assertEqual(unknown["status"], "unresolved")
+
+    def test_reflexive_association_requires_a_stored_instance(self):
+        analysis = self.fixture(
+            {
+                "BIS/example.py": (
+                    "class Node:\n"
+                    "    def __init__(self, parent: 'Node | None' = None):\n"
+                    "        self.parent = parent\n"
+                    "    def recurse(self): return self.recurse()\n"
+                    "class Recursive:\n"
+                    "    def recurse(self): return self.recurse()\n"
+                )
+            }
+        )
+        loops = [r for r in reviewed_relations(analysis) if r.get("reflexive")]
+        self.assertEqual(len(loops), 1)
+        self.assertEqual(loops[0]["from"], "BIS.example.Node")
+        self.assertTrue(loops[0]["directed"])
+        self.assertIn("example.py:3", loops[0]["evidence"][0])
+
     def fixture(self, files):
-        temporary = tempfile.TemporaryDirectory()
+        directory = WORKFILES / "tests"
+        directory.mkdir(parents=True, exist_ok=True)
+        temporary = tempfile.TemporaryDirectory(dir=directory)
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         for name, source in files.items():
@@ -69,6 +197,156 @@ class UMLGeneratorTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(source, encoding="utf-8")
         return SourceAnalysis(root).analyze()
+
+    def test_full_members_include_properties_tuple_fields_and_protocols(self):
+        analysis = self.fixture(
+            {
+                "BIS/model.py": (
+                    "class Example:\n"
+                    "    FLAG = True\n"
+                    "    def __init__(self, left, right, /, "
+                    "*, count: int = 2):\n"
+                    "        self._left, self.__right = left, right\n"
+                    "    @property\n"
+                    "    def value(self) -> int: return 1\n"
+                    "    @staticmethod\n"
+                    "    def __helper(*items, **options): pass\n"
+                )
+            }
+        )
+        record = inventory(analysis)["BIS.model.Example"]
+        attributes = {
+            item["name"]: item["text"] for item in record["attributes"]
+        }
+        self.assertEqual(
+            set(attributes), {"FLAG", "_left", "__right", "value"}
+        )
+        self.assertTrue(attributes["__right"].startswith("- right:"))
+        self.assertIn("readOnly", attributes["value"])
+        methods = {item["name"]: item["text"] for item in record["methods"]}
+        self.assertIn("+ __init__", methods["__init__"])
+        self.assertIn("/, *, count: int = 2", methods["__init__"])
+        self.assertIn("- helper", methods["__helper"])
+        self.assertIn("{static}", methods["__helper"])
+        self.assertNotIn("value", methods)
+
+    def test_injected_defaults_are_not_unproven_composition(self):
+        analysis = self.fixture(
+            {
+                "BIS/example.py": (
+                    "class Helper: pass\n"
+                    "class Owner:\n"
+                    "    def __init__(self, helper=None):\n"
+                    "        self.helper = helper or Helper()\n"
+                )
+            }
+        )
+        relations = reviewed_relations(analysis)
+        stored = [
+            r
+            for r in relations
+            if r["from"] == "BIS.example.Owner"
+            and r["to"] == "BIS.example.Helper"
+            and r["kind"] != "dependency"
+        ]
+        self.assertEqual([r["kind"] for r in stored], ["association"])
+        self.assertNotIn("from_multiplicity", stored[0])
+
+    def test_routing_uses_free_side_ports_when_vertical_gap_is_tight(self):
+        boxes = {
+            "parent": (75, 225, 1450, 292, []),
+            "child": (75, 597, 1450, 864, []),
+        }
+        routes = route_edges(
+            boxes, [("child", "parent", "inherits", "")], 3200, 1980
+        )
+        points = routes[0][0]
+        self.assertEqual(points[0][0], 75)
+        self.assertEqual(points[-1][0], 75)
+        for first, last in zip(points, points[1:]):
+            middle = ((first[0] + last[0]) / 2, (first[1] + last[1]) / 2)
+            for x, y, width, height, _ in boxes.values():
+                self.assertFalse(
+                    x < middle[0] < x + width and y < middle[1] < y + height
+                )
+
+    def test_triangle_and_diamonds_are_real_hollow_and_filled_shapes(self):
+        import xml.etree.ElementTree as ET
+
+        directory = WORKFILES / "tests"
+        directory.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=directory) as temporary:
+            sheet = Sheet("Notation test", "Geometric markers")
+            sheet.line([(100, 300), (800, 300)])
+            sheet.marker((200, 300), (100, 300), "triangle")
+            sheet.marker((400, 300), (500, 300), "hollow")
+            sheet.marker((600, 300), (700, 300), "filled")
+            self.assertEqual(sheet.image.getpixel((180, 300)), (255, 255, 255))
+            self.assertEqual(sheet.image.getpixel((440, 300)), (255, 255, 255))
+            self.assertEqual(sheet.image.getpixel((640, 300)), (0, 0, 0))
+            path = Path(temporary) / "markers"
+            sheet.save(path)
+            root = ET.parse(path.with_suffix(".svg")).getroot()
+            polygons = root.findall("{http://www.w3.org/2000/svg}polygon")
+            self.assertEqual(
+                [len(p.attrib["points"].split()) for p in polygons], [3, 4, 4]
+            )
+            self.assertEqual(
+                [p.attrib["fill"] for p in polygons],
+                ["white", "white", "black"],
+            )
+            self.assertEqual(
+                polygons[0].attrib["points"].split()[0], "200,300"
+            )
+
+    def test_legacy_association_export_has_no_arrowhead(self):
+        analysis = self.fixture(
+            {"BIS/example.py": "class First: pass\nclass Second: pass\n"}
+        )
+        plant, dot = sources(
+            analysis.classes,
+            [
+                (
+                    "BIS.example.First",
+                    "BIS.example.Second",
+                    "association",
+                    "ref",
+                    "example:1",
+                )
+            ],
+        )
+        self.assertIn(" .. ", plant)
+        self.assertIn("arrowhead=none", dot)
+        self.assertIn("style=dotted", dot)
+
+    def test_association_is_dotted_without_an_endpoint_marker(self):
+        sheet = Sheet("Association convention", "Dotted, no arrowhead")
+        sheet.line([(100, 300), (400, 300)], dotted=True)
+        self.assertNotEqual(sheet.image.getpixel((100, 300)), (255, 255, 255))
+        self.assertEqual(sheet.image.getpixel((106, 300)), (255, 255, 255))
+        self.assertIn('stroke-dasharray="1 11"', sheet.svg[-1])
+        self.assertNotIn("marker-end", sheet.svg[-1])
+
+    def test_directed_association_uses_open_arrow_not_hollow_triangle(self):
+        sheet = Sheet("Directed association", "Navigability, not inheritance")
+        for key, x in (("owner", 100), ("part", 1800)):
+            sheet.box(
+                key, [key], [["field: str"], ["run(): None"]], (x, 300, 800)
+            )
+        sheet.relation(
+            {
+                "from": "owner",
+                "to": "part",
+                "kind": "association",
+                "directed": True,
+            },
+            1,
+        )
+        sheet.draw_relations()
+        self.assertFalse(any("<polygon" in item for item in sheet.svg))
+        self.assertTrue(
+            any('stroke-dasharray="1 11"' in item for item in sheet.svg)
+        )
 
     def test_duplicate_names_and_scoped_calls(self):
         analysis = self.fixture(
@@ -247,6 +525,63 @@ class UMLGeneratorTests(unittest.TestCase):
 
     def test_generate_current_repository(self):
         analysis = generate()
+        model = json.loads(
+            (OUTPUT_DIR / "json" / "class_model.json").read_text()
+        )
+        for suffix in ("png", "svg", "mmd", "json"):
+            self.assertTrue((OUTPUT_DIR / suffix).is_dir())
+            self.assertFalse(list(OUTPUT_DIR.glob("*." + suffix)))
+            for prefix, category in (
+                ("A_", "Appendix"), ("F_", "Functions"), ("M_", "Managers")
+            ):
+                self.assertTrue((OUTPUT_DIR / suffix / category).is_dir())
+                self.assertFalse(list(
+                    (OUTPUT_DIR / suffix).glob(prefix + "*." + suffix)
+                ))
+        for svg in (OUTPUT_DIR / "svg").rglob("*.svg"):
+            rendered = svg.read_text()
+            self.assertNotIn("INDEX.md", rendered, svg.name)
+            self.assertNotIn("relations.json", rendered, svg.name)
+            self.assertNotIn("module_dependencies.json", rendered, svg.name)
+            self.assertNotIn("context reference", rendered, svg.name)
+        overview = (OUTPUT_DIR / "svg" / "01_overview.svg").read_text()
+        self.assertIn("search(...)", overview)
+        self.assertIn("# brns:", overview)
+        self.assertNotIn("dict | dict", overview)
+        self.assertIn("omits parameters", overview)
+        for record in model["classes"].values():
+            for category in ("attributes", "methods"):
+                for entry in record[category]:
+                    self.assertIn("diagram_text", entry)
+                    self.assertNotIn("AppConfig", entry["diagram_text"])
+        self.assertEqual(set(model["classes"]), set(model["index"]))
+        for key, record in model["classes"].items():
+            expected = {
+                (kind, entry["name"])
+                for kind in ("attributes", "methods")
+                for entry in record[kind]
+            }
+            actual = set()
+            for page in model["pages"]:
+                focus = page["focus"]
+                if key == focus or isinstance(focus, list) and key in focus:
+                    actual.update(
+                        (entry["category"], entry["name"])
+                        for entry in page["members"]
+                        if entry.get("class", key) == key
+                    )
+                    self.assertTrue(
+                        (OUTPUT_DIR / png_relative_path(page["id"])).is_file()
+                    )
+            self.assertEqual(expected, actual, key)
+        for relation in model["relations"]:
+            if relation["kind"] in (
+                "generalisation",
+                "realisation",
+                "dependency",
+            ):
+                self.assertNotIn("from_multiplicity", relation)
+                self.assertNotIn("to_multiplicity", relation)
         self.assertEqual(
             set(SUBSYSTEMS),
             {r["subsystem"] for r in analysis.classes.values()},
@@ -291,7 +626,8 @@ class UMLGeneratorTests(unittest.TestCase):
                 f"{OUTPUT_DIR}"
                 ".\n"
                 f"{len(analysis.unresolved)}"
-                " dynamic call sites remain unresolved; see analysis.json."
+                " dynamic call sites remain unresolved; "
+                "see json/analysis.json."
             )
         )
 

@@ -37,51 +37,116 @@ separate from normal application requirements.
 
 ## Generate static graphs
 
-### UML class diagrams
+### UML class diagrams for Word
 
 ```bash
 python project_overview/test_uml.py
 ```
 
-Runs source-analysis tests and then generates:
+Runs analyzer/diagram tests and generates a presentation set under
+`../bitefinder-workfiles/uml/document/`, outside the repository. Set
+`BITEFINDER_WORKFILES` to choose a different external workfiles directory.
+Application code is read with Python's AST; providers, databases and application
+modules are never imported or called.
 
-- `uml/bitefinder.png` and `.svg`: the full UML class diagram.
-- `uml/BIS.png`, `uml/BRNS.png`, `uml/BRC.png` (and SVG): subsystem detail.
-- `uml/bitefinder_flow.png` and `.svg`: compact class/method dependencies.
-- `.puml` and `.dot` sources for editing or rendering with external tools.
-- `uml/analysis.json`: class locations, relationships with source-line evidence,
-  unresolved calls, and whether type inference converged.
-- `.edges.json` beside each view: numbered edges and their full details.
+Regenerate after pulling application changes or refactoring collaborators. The
+current graph includes `PreferenceReviewService`, the Logic-owned
+`PreferenceValidationPolicy` and BRC `DatabaseRefreshService`; old rendered
+class counts and stored evidence do not certify the updated working tree.
+The authoritative runtime and data diagrams are `ProjectFlow.md` and
+`DataFlowDiagram.md` in the repository root.
 
-The analysis reads Python ASTs without importing or executing application code.
-It resolves imports, aliases/re-exports, factory returns, constructor wiring,
-registered lambda factories, tuple unpacking, inherited methods, annotations,
-and calls through compatibility functions. It follows injected collaborators
-into stored attributes before drawing their relationships.
+Generated formats are separated within `bitefinder-workfiles/uml/document/`:
 
-Boxes show class names, inferred/declared attributes, and method signatures in
-separate compartments. `+`, `#`, and `-` indicate Python visibility conventions;
-`?` means no type was resolved. Abstract classes/interfaces are marked. Colors
-identify BIS, BRNS, and BRC.
+```text
+png/       rendered PNGs
+svg/       matching vector diagrams
+mmd/       Mermaid sources
+json/      models, evidence, sidecars and verification data
 
-Relationships distinguish inheritance, interfaces, stored construction
-(composition), injected collections (aggregation), injected references
-(association), construction dependencies, and method calls. Default construction
-is labeled `(default)` when an injected override is also possible. These ownership
-labels reflect source construction/storage, not a proof of runtime lifetimes.
-HTTP service edges are conditional matches between configured client routes and
-handler routes; they do not prove a service is currently running.
+Each format folder contains:
+  Appendix/   supporting class sheets (A_*)
+  Functions/  function/module sheets (F_*)
+  Managers/   four-manager class sheets (M_*)
 
-Graphviz's optional `dot` executable provides automatic graph layout. Otherwise
-Pillow uses connected neighborhoods in multiple rows and columns, with A* edge
-routing around class boxes. SVG files support zoom and full edge tooltips;
-numbered PNG labels refer to `.edges.json`. Dense graphs may lack space for every
-text label, so consult SVG tooltips or the edge inventory for complete details.
+INDEX.md   local navigation, with links into png/
+```
 
-This is static dependency analysis, not runtime sequence tracing. It explicitly
-reports unresolved dynamic calls instead of guessing from class names. It cannot
-prove arbitrary Python behavior or resolve every callback/reflection pattern.
-Use the existing live tracer when observed execution order is needed.
+Overview figures, preview/notation files and general metadata stay at the
+root of their format folder. Categories are retained even when a format has
+no exports for that category; currently Mermaid has only the overview source.
+
+Models/evidence are in `json/`; companion Markdown/text source exports
+remain under `sources/`. Regeneration keeps this layout, including
+optional diagnostic images.
+
+Start with `INDEX.md` and the four main images in `png/`:
+
+- `01_overview.png`: real class collaborations across BIS, BRNS and BRC.
+- `02_BIS_core.png`, `03_BRNS_core.png`, `04_BRC_core.png`: the four managers and
+  their actual coordinating workflows. The IO → AI → Logic → Data sequence is
+  workflow order; it does not imply that sibling managers own one another.
+
+Every image is standalone and contains class members and annotations. Overview
+boxes show selected attributes and operations; `(...)` explicitly indicates
+omitted parameters, and generic container arguments are shortened. Full members
+remain on the class sheets. No image references `INDEX.md`, JSON sidecars or
+lookup IDs. The index remains available for local navigation:
+
+- `M_*`: complete manager members, with numbered continuation sheets when needed.
+- `A_*`: supporting class appendices grouped by real source package. Related
+  small classes share a sheet; long classes use individual continuation sheets.
+- `F_*`: standalone function signatures in module boxes, clearly distinguished
+  from class diagrams. `json/module_dependencies.json` records their imports.
+
+Every focal class shows all locally declared attributes and operations, including
+constructors, protocol methods, class/static members and private helpers. A
+property appears once as an attribute with its read-only status. Parent sheets
+cover inherited project members; external parent names are recorded in the
+index/model, and base names are printed in full-class headers.
+`uml_types.py` reconstructs unannotated types from constructor
+wiring, call sites, returns and reviewed response validators. `AppConfig`,
+`ChatDecision` and other documented aliases describe existing dictionaries,
+not additional application classes. Full-class images expand these aliases
+to Python types directly; the local index retains the alias glossary.
+`json/type_evidence.json` records declared/reconstructed contracts and their evidence.
+Genuinely unresolved dynamic contracts use `DynamicValue` in the evidence ledger
+and `object` in images, with an on-image explanation. They remain listed for
+review. Heterogeneous JSON values retain `Any`.
+Dynamic attribute allowlists and tuple-assigned fields are included.
+
+All figures have matching SVGs and 3200 × 2200 PNGs at 300 DPI. Insert at about
+10.5 inches wide in a landscape Word section. Keep continuation sheets together;
+do not shrink a whole subsystem's full member inventory onto one portrait page.
+`class_boxes.txt` supplies unwrapped, compartment-style text boxes.
+
+Relationships use solid hollow triangles pointing at parents for
+generalisation, dashed hollow triangles for interfaces, dotted associations
+without arrowheads (the requested coursework convention), open arrows for
+reviewed navigability, hollow aggregation diamonds and filled black composition
+diamonds at the whole end. Standard UML normally uses solid associations;
+this generator follows the requested dotted-line convention. Relationship
+semantics follow the [Creately guide](https://creately.com/guides/class-diagram-relationships/).
+A reflexive association requires a stored relationship to another instance of
+the same class; recursive calls alone do not qualify. Relationships are drawn
+only where supported by code, not to demonstrate every possible symbol.
+`00_relationship_notation.png` is the visual key. Only reviewed ownership cases receive
+diamonds. Optional injected defaults are not automatically composition. Inferred
+collaborations with uncertain cardinality omit multiplicities. Generalisation,
+realisation and temporary/HTTP dependencies never carry multiplicities.
+
+`json/class_model.json` contains every class, member, indexed sheet, reviewed relation
+and source-line evidence. Detail sheets show up to three important neighbors;
+the model retains further links. Each main image has a `.relations.json` key.
+`json/analysis.json` retains unresolved calls and static-inference limitations. Neither
+member visibility nor a diagram proves HTTP caller authentication.
+
+`document_uml.py`, `uml_members.py` and `uml_document_rendering.py` implement the
+presentation views. The older giant diagnostic views remain opt-in with
+`BITEFINDER_UML_FULL=1`; they are supplementary, not the Word report figures.
+The renderer needs Pillow. For repeatable typography, optionally set
+`BITEFINDER_UML_FONT` to a local monospace TrueType font; the local workfiles font
+is used when available. No external rendering service receives project code.
 
 Run:
 
@@ -183,8 +248,8 @@ The generators are development tools excluded from the Docker build context.
 
 The full generator resolves the new chat, discovery, AI transport and BRC workflow
 locations without hand-maintained class lists. Unresolved dynamic relationships
-remain explicitly reported in `uml/analysis.json`.
+remain explicitly reported in `../bitefinder-workfiles/uml/document/json/analysis.json`.
 
-A manually reviewed subset is available locally in `uml/cleanup_reviewed.json`,
-`.txt`, `.mmd` and `.md`. It complements the full diagnostic diagrams; it does not
-claim complete runtime inference. Generated UML artifacts remain Git-ignored.
+The document presentation set and its reviewed model live in the external
+workfiles directory. They complement the source analysis and do not claim complete
+runtime inference. Generated artifacts are not staged or committed.

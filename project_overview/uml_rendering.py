@@ -6,7 +6,6 @@ from collections import defaultdict, deque
 import heapq
 import html
 import math
-from pathlib import Path
 import shutil
 import subprocess
 import textwrap
@@ -19,7 +18,7 @@ KINDS = {
     "implements": ("empty", "dashed", "..|>"),
     "composition": ("diamond", "solid", "*--"),
     "aggregation": ("odiamond", "solid", "o--"),
-    "association": ("vee", "solid", "-->"),
+    "association": ("none", "dotted", ".."),
     "creates": ("vee", "dashed", "..>"),
     "calls": ("vee", "dashed", "..>"),
     "http": ("vee", "dashed", "..>"),
@@ -289,7 +288,17 @@ def route_edges(boxes, edges, width, height):
         if source not in boxes or target not in boxes:
             continue
         start, end = min(
-            ((a, b) for a in ports(source) for b in ports(target)),
+            (
+                (a, b)
+                for a in ports(source)
+                for b in ports(target)
+                if a[0] not in blocked
+                and b[0] not in blocked
+                and 0 <= a[0][0] <= xmax
+                and 3 <= a[0][1] <= ymax
+                and 0 <= b[0][0] <= xmax
+                and 3 <= b[0][1] <= ymax
+            ),
             key=lambda pair: math.dist(pair[0][0], pair[1][0]),
         )
         first, last = start[0], end[0]
@@ -394,9 +403,15 @@ def render(classes, edges, path, compact=False):
         '<rect width="100%" height="100%" fill="white"/>',
     ]
 
-    def line(a, b, dashed=False):
+    def line(a, b, dashed=False, dotted=False):
         length = math.dist(a, b)
-        if dashed and length:
+        if dotted and length:
+            for distance in range(0, math.ceil(length), 9):
+                x, y = (
+                    a[i] + (b[i] - a[i]) * distance / length for i in (0, 1)
+                )
+                draw.ellipse((x - 1, y - 1, x + 1, y + 1), fill="#555555")
+        elif dashed and length:
             for distance in range(0, math.ceil(length), 14):
                 p = tuple(
                     a[i] + (b[i] - a[i]) * distance / length for i in (0, 1)
@@ -420,7 +435,13 @@ def render(classes, edges, path, compact=False):
                 f"{b[1]}"
                 '" stroke="#555" stroke-width="2"'
             )
-            + (' stroke-dasharray="8 6"' if dashed else "")
+            + (
+                ' stroke-dasharray="1 8" stroke-linecap="round"'
+                if dotted
+                else ' stroke-dasharray="8 6"'
+                if dashed
+                else ""
+            )
             + "/>"
         )
 
@@ -453,7 +474,7 @@ def render(classes, edges, path, compact=False):
         (40, 48),
         (
             "Triangle: inheritance / interface | Diamond: owned construction "
-            "/ injected collection | Arrow: association / dependency"
+            "/ injected collection | Dotted: association | Dashed arrow: use"
         ),
     )
     occupied_labels = []
@@ -469,7 +490,12 @@ def render(classes, edges, path, compact=False):
             + "</title>"
         )
         for a, b in zip(points, points[1:]):
-            line(a, b, kind in ("implements", "creates", "calls", "http"))
+            line(
+                a,
+                b,
+                kind in ("implements", "creates", "calls", "http"),
+                dotted=kind == "association",
+            )
         tail = kind in ("composition", "aggregation")
         end, before = (
             (points[0], points[1]) if tail else (points[-1], points[-2])
@@ -486,7 +512,7 @@ def render(classes, edges, path, compact=False):
             if kind in ("inherits", "implements", "aggregation")
             else "#555555"
         )
-        if kind in ("creates", "calls", "association", "http"):
+        if kind in ("creates", "calls", "http"):
             draw.line((arrow[1], arrow[0], arrow[-1]), fill="#555555", width=2)
             svg.append(
                 '<polyline points="'
@@ -495,7 +521,7 @@ def render(classes, edges, path, compact=False):
                 )
                 + '" fill="none" stroke="#555" stroke-width="2"/>'
             )
-        else:
+        elif kind != "association":
             draw.polygon(arrow, fill=fill, outline="#555555", width=2)
             svg.append(
                 '<polygon points="'
