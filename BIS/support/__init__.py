@@ -1,1 +1,0 @@
-"""BiteFinder support package."""

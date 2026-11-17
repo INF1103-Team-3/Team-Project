@@ -1,1 +1,0 @@
-"""BiteFinder sources package."""
