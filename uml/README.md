@@ -5,7 +5,7 @@ from GitHub and the project report. Images are copied without alteration from
 the local generator output. This README carries the original index, class
 lookup tables, relationship explanations and type-contract notes.
 
-For a two-page design section, use **01_overview.png** for class collaboration
+Use **01_overview.png** for class collaboration
 and the root [data-flow diagram](../DataFlowDiagram.png) for data movement.
 The three subsystem core figures and full class sheets provide further detail;
 they do not all need to fit in the main report.
